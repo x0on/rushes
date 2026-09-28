@@ -46,7 +46,7 @@ In dark mode, use pale mint for small accent text and icons rather than assuming
 
 ## Product context
 
-Cross-platform software intended for Mac, Windows, and compatible network storage. Media stays on the user's storage. No user accounts are intended; an installer/owner-created local admin password protects administrative file-management actions. Do not describe this as “no passwords.” Verify implementation details and platform support separately before publishing download or compatibility claims.
+Current platform: NAS with a Mac helper. Self-contained Mac and Windows applications are planned. Media stays on the user's storage. No user accounts are intended; an installer/owner-created local admin password protects administrative file-management actions. Do not describe this as “no passwords.” Verify implementation details and platform support separately before publishing download or compatibility claims.
 
 ## Included files and limits
 

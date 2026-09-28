@@ -24,7 +24,7 @@ Rushes is designed for the media collection you already have: years of shoots, c
 
 | Area | What belongs here |
 | --- | --- |
-| Archive | Original video, photos, and audio, grouped by date and shoot |
+| Archive | Original video, photos, and audio, organized by your departments, clients, or projects, then year, date, and event |
 | Projects | Editing projects, graphics, and finished exports |
 | Library | Reusable logos, fonts, templates, and music |
 
@@ -34,7 +34,7 @@ Labels let media belong to more than one category without creating extra copies.
 
 The design keeps media on your own hardware, with no cloud account, media uploads, or tracking. A local owner-created password protects maintenance actions. Cleanup moves files into a holding folder for review; space is reclaimed only when that folder is deliberately emptied.
 
-Planned platforms include Mac, Windows, and compatible NAS devices. Installation instructions and supported configurations will be added with the application.
+Today Rushes runs on a NAS with a helper on a Mac. Self-contained Mac and Windows applications are planned and do not exist yet. Installation instructions and supported configurations will be added with the application.
 
 ## Project status
 
