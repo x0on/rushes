@@ -1,0 +1,28 @@
+/* Rushes Ocean — approved palette, starter roles. */
+:root {
+  --rushes-ocean: #007f78;
+  --rushes-mint: #ddf4ef;
+  --rushes-paper: #f7faf9;
+  --rushes-ink: #132b2a;
+  --rushes-dark-surface: #1e3937;
+  --rushes-white: #ffffff;
+
+  --color-brand: var(--rushes-ocean);
+  --color-background: var(--rushes-paper);
+  --color-surface: var(--rushes-white);
+  --color-text: var(--rushes-ink);
+  --color-selection-background: var(--rushes-mint);
+  --color-selection-text: var(--rushes-ink);
+  --color-primary-button: var(--rushes-ocean);
+  --color-primary-button-text: var(--rushes-white);
+  --color-accent-text: var(--rushes-ocean);
+}
+
+[data-theme="dark"] {
+  --color-background: var(--rushes-ink);
+  --color-surface: var(--rushes-dark-surface);
+  --color-text: var(--rushes-paper);
+  --color-selection-background: var(--rushes-mint);
+  --color-selection-text: var(--rushes-ink);
+  --color-accent-text: var(--rushes-mint);
+}
