@@ -42,7 +42,7 @@ Planned platforms include Mac, Windows, and compatible NAS devices. Installation
 
 ## Website and design
 
-[Visit the Rushes website](https://rushes-media.x0on.chatgpt.site)
+[Visit the Rushes website](https://x0on.github.io/rushes/)
 
 - [Website source](website/)
 - [Vector logos](brand/logos/)
@@ -51,7 +51,7 @@ Planned platforms include Mac, Windows, and compatible NAS devices. Installation
 
 The selected identity is **Together**, the layered R symbol, with the **Ocean** palette: `#007F78`, `#DDF4EF`, `#F7FAF9`, `#132B2A`, and `#1E3937`.
 
-The website is plain HTML and CSS with a small script for the preview tabs. Open `website/index.html` locally to view it. No build step is required.
+The website is plain HTML and CSS with a small script for the preview tabs. Open `website/index.html` locally to view it. No build step is required. GitHub Pages serves the `docs/` directory on `main`; keep it synchronized with `website/` when editing.
 
 ## Contributing and licensing
 

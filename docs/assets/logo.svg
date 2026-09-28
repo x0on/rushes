@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 336 368" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Rushes logo — Together</title>
+  <desc id="desc">Layered media files forming the letter R.</desc>
+  <g fill="#007F78">
+    <path d="M43 91 Q27 85 27 104 V269 Q27 280 38 286 L116 329 Q132 338 132 319 V145 Q132 129 118 123 Z"/>
+    <path d="M84 67 Q68 61 68 79 V89 L139 117 Q155 124 155 143 V286 L165 291 Q181 300 181 280 V121 Q181 102 164 96 Z"/>
+    <path d="M130 44 Q114 38 114 56 V65 L184 92 Q204 100 204 121 V225 H224 C277 225 304 194 304 155 C304 122 285 100 249 88 Z"/>
+    <path d="M204 247 V324 Q204 329 209 329 H281 Q291 329 284 321 L215 247 Q204 236 204 247 Z"/>
+  </g>
+</svg>
