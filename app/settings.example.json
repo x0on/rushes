@@ -1,0 +1,25 @@
+{
+  "_": "Copy to settings.json and change it for this installation. Setup (in Manage) edits it for you.",
+  "name": "Rushes",
+  "archive": {
+    "label": "VIDEO",
+    "local": "/share/VIDEO",
+    "web": "/share/Web",
+    "url": "http://your-archive",
+    "as_seen_from_helper": "/Volumes/VIDEO"
+  },
+  "sources": [],
+  "helper": {
+    "mode": "built_in",
+    "label": "workstation",
+    "poll_seconds": 20
+  },
+  "holding": {
+    "duplicates": "/share/VIDEO/_duplicates",
+    "cache": "/share/VIDEO/_duplicates/_media-cache"
+  },
+  "limits": {
+    "disk_stop_free": null,
+    "disk_warn_free": null
+  }
+}

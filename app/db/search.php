@@ -1,0 +1,94 @@
+<?php
+// search.php — the query endpoint. Returns JSON, not a 102 MB download.
+//
+//   search.php?q=DJI_0002&kind=video&limit=200&offset=0
+//
+// Every word must match somewhere in the path, which is how the old page
+// behaved and what people expect. Counts per kind come back with the results
+// so the filter chips can show true numbers without a second query.
+
+header('Content-Type: application/json');
+
+// Never die silently. A PHP fatal prints nothing by default, so the page got
+// a blank body and had nothing to show. This turns any fatal — including an
+// uncaught exception — into JSON the page can print.
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        echo json_encode(['error' => $e['message'] .
+            ' (' . basename($e['file']) . ' line ' . $e['line'] . ')']);
+    }
+});
+
+require __DIR__ . '/schema.php';
+
+$q      = trim($_GET['q'] ?? '');
+$kind   = $_GET['kind'] ?? '';
+$dept   = $_GET['dept'] ?? '';
+$limit  = min(max((int)($_GET['limit'] ?? 200), 1), 1000);
+$offset = max((int)($_GET['offset'] ?? 0), 0);
+
+$where = []; $args = [];
+// Each word must appear somewhere in the path. ESCAPE goes on every LIKE, so
+// a search for "50%" or "a_b" looks for those characters rather than acting
+// as a wildcard.
+foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
+    $where[] = "path LIKE ? ESCAPE '\\'";
+    $args[]  = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
+}
+if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
+if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
+
+$sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+
+$bind = function (SQLite3Stmt $s, array $a) {
+    foreach ($a as $i => $v) $s->bindValue($i + 1, $v);
+};
+
+$db = db();
+$t0 = microtime(true);
+
+if ($where === []) {
+    echo json_encode(['q' => '', 'total' => 0, 'bytes' => 0,
+        'counts' => ['all' => 0], 'rows' => [], 'offset' => 0, 'limit' => $limit,
+        'ms' => 0, 'indexed' => (int)meta_get('files_imported', '0'),
+        'imported' => (int)meta_get('imported_at', '0')]);
+    exit;
+}
+
+// the rows
+$st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept
+                    FROM files$sql ORDER BY path LIMIT ? OFFSET ?");
+$bind($st, $args);
+$st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
+$st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
+$res = $st->execute();
+if ($res === false) { echo json_encode(['error' => 'rows query: ' . $db->lastErrorMsg()]); exit; }
+$rows = [];
+while ($r = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+
+// true totals, and per-kind counts for the chips — one scan, not five
+$counts = ['all' => 0];
+$cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files$sql GROUP BY kind");
+$bind($cs, $args);
+$cr = $cs->execute();
+if ($cr === false) { echo json_encode(['error' => 'counts query: ' . $db->lastErrorMsg()]); exit; }
+$bytes = 0;
+while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
+    $counts[$r['kind']] = (int)$r['c'];
+    $counts['all'] += (int)$r['c'];
+    $bytes += (int)$r['b'];
+}
+
+echo json_encode([
+    'q'        => $q,
+    'total'    => $counts['all'],
+    'bytes'    => $bytes,
+    'counts'   => $counts,
+    'rows'     => $rows,
+    'offset'   => $offset,
+    'limit'    => $limit,
+    'ms'       => round((microtime(true) - $t0) * 1000, 1),
+    'indexed'  => (int)meta_get('files_imported', '0'),
+    'imported' => (int)meta_get('imported_at', '0'),
+], JSON_UNESCAPED_SLASHES);

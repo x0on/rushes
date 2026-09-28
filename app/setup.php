@@ -1,0 +1,421 @@
+<?php
+// setup.php — the only page that writes settings.json.
+//
+// Everything here is "where things are on this installation". Nothing here
+// decides anything about media: that is rules.json, the same everywhere.
+//
+// No path on this page is typed. Each is picked from what one of the two
+// machines that copy actually reports it can see — the one serving this page,
+// or the helper — so it is right for the machine that will use it. On a
+// single-machine install those are the same computer, and this becomes the
+// operating system's own folder window.
+//
+// ponytail: a form that rewrites one JSON file, behind the admin lock.
+$NAV = 'admin';
+require __DIR__ . '/db/config.php';
+require __DIR__ . '/db/auth.php';
+require_sign_in();
+
+$said  = '';
+$file  = __DIR__ . '/settings.json';
+$hv    = helper_volumes();
+$hpath = helper_paths();
+$local = local_volumes();
+$lpath = [];
+foreach ($local as $v) {
+    $lpath[$v['path']] = true;
+    foreach ($v['top'] as $d) $lpath[$v['path'] . '/' . $d] = true;
+}
+
+if (($_POST['_save'] ?? '') === '1') {
+    $s = settings(); $bad = [];
+
+    $s['name']           = trim((string)($_POST['name'] ?? '')) ?: 'Rushes';
+    $s['archive']['url'] = trim((string)($_POST['a_url'] ?? ''));
+
+    // A picked path is kept only if it is still one of the choices, or is the
+    // value already saved — a drive that is unplugged today is not an error.
+    $pick = function (string $field, string $key, array $allowed) use (&$s, &$bad) {
+        $v = (string)($_POST[$field] ?? '');
+        $was = s_path($key, '');
+        if ($v === '' || $v === $was) return;
+        if (!isset($allowed[$v])) { $bad[] = "$v is not something either machine can see."; return; }
+        [$a, $b] = explode('.', $key);
+        $s[$a][$b] = $v;
+    };
+    $pick('a_local',  'archive.local',               $lpath);
+    $pick('a_helper', 'archive.as_seen_from_helper', $hpath);
+    $s['archive']['label'] = basename($s['archive']['local'] ?? '') ?: ($s['archive']['label'] ?? '');
+
+    // Existing sources: renamed, or removed by ticking.
+    $kept = [];
+    foreach (($s['sources'] ?? []) as $i => $r) {
+        if (!empty($_POST['s_drop'][$i])) continue;
+        $n = trim((string)($_POST['s_label'][$i] ?? ''));
+        if ($n !== '') $r['label'] = $n;
+        $kept[] = $r;
+    }
+    // A new one, from the picker. Which machine sees it is decided by which
+    // list it came from, so that can never be set wrong either.
+    $add = (string)($_POST['add_src'] ?? '');
+    if ($add !== '') {
+        [$who, $p] = array_pad(explode('|', $add, 2), 2, '');
+        $ok = ($who === 'helper' && isset($hpath[$p])) || ($who === 'archive' && isset($lpath[$p]));
+        if (!$ok) $bad[] = 'That source is no longer plugged in. Pick it again.';
+        elseif (!in_array($p, array_column($kept, 'path'), true)) {
+            $kept[] = ['label' => trim((string)($_POST['add_label'] ?? '')) ?: basename(str_replace('\\', '/', rtrim($p, '/\\'))) ?: $p,
+                       'path' => $p, 'seen_by' => $who];
+        }
+    }
+    $s['sources'] = $kept;
+
+    $s['helper']['mode']  = ($_POST['h_mode'] ?? '') === 'external' ? 'external' : 'built_in';
+    $s['helper']['label'] = trim((string)($_POST['h_label'] ?? '')) ?: 'workstation';
+    unset($s['helper']['enabled'], $s['helper']['command']);   // replaced by mode, and worked out live
+
+    $s['organise']['_'] = 'How media is laid out. one_place: everything is copied into the archive. '
+                        . 'in_place: each drive keeps its files and Rushes indexes them where they are.';
+    $s['organise']['shape'] = ($_POST['shape'] ?? '') === 'in_place' ? 'in_place' : 'one_place';
+
+    if ($bad) {
+        $said = implode(' ', $bad);
+    } else {
+        // Beside, then rename: a half-written settings file takes every page down.
+        $json = json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if (@file_put_contents("$file.new", $json . "\n") !== false && @rename("$file.new", $file)) {
+            header('Location: /setup.php?saved=1'); exit;
+        }
+        @unlink("$file.new");
+        $said = 'Could not write settings.json — is the web folder writable?';
+    }
+}
+if (isset($_GET['saved'])) $said = 'ok';
+
+$s     = settings(true);
+$shape = $s['organise']['shape'] ?? 'one_place';
+$h     = $s['helper'] ?? [];
+$aLoc  = s_path('archive.local', '');
+$aHlp  = s_path('archive.as_seen_from_helper', '');
+$hmode = helper_mode();
+$hname = $h['label'] ?? 'workstation';
+$hwho  = helper_name();
+$e     = fn($x) => htmlspecialchars((string)$x);
+
+// What the window offers. Cards are left out — Ingest finds those on its own —
+// and so is the archive itself, and the operating system's own clutter.
+$noise = ['System Volume Information', 'RECYCLER', 'lost+found', 'Network Trash Folder', 'Temporary Items'];
+$offer = [];
+foreach ($hv['vols'] as $v) {
+    if ($v['card'] || $v['archive']) continue;
+    $offer[] = ['who' => 'helper', 'path' => $v['path'], 'name' => $v['name'], 'size' => $v['total'],
+                'where' => $hmode === 'external' ? 'on the ' . ($h['label'] ?? 'workstation') : 'plugged in here',
+                'folders' => array_values(array_map(fn($d) => ['name' => $d, 'path' => helper_join($v['path'], $d, $hv['os'])],
+                              array_filter($v['top'], fn($d) => !in_array($d, $noise, true))))];
+}
+foreach ($local as $v) {
+    if ($v['path'] === s_path('archive.local', '')) continue;
+    $offer[] = ['who' => 'archive', 'path' => $v['path'], 'name' => $v['name'], 'size' => 0,
+                'where' => 'a share on this machine',
+                'folders' => array_map(fn($d) => ['name' => $d, 'path' => $v['path'] . '/' . $d],
+                              array_values(array_filter($v['top'], fn($d) => !in_array($d, $noise, true))))];
+}
+$tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . ' TB'
+                                       : number_format($b / 1073741824) . ' GB';
+?><!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Setup &middot; <?= $e($s['name'] ?? 'Rushes') ?></title>
+<?php require __DIR__ . '/head.php'; ?>
+<style>
+  .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+  @media (max-width: 640px) { .pick { grid-template-columns: 1fr } }
+  .opt { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
+         background: var(--bg); cursor: pointer; display: block; position: relative }
+  .opt:has(input:checked) { border-color: var(--accent); background: var(--sel-bg); color: var(--sel-fg) }
+  .opt b { display: block; font-size: 14px; margin: 0 0 5px }
+  .opt small { color: var(--muted); font-size: 12.5px; line-height: 1.5; display: block }
+  .opt:has(input:checked) small { color: var(--sel-fg); opacity: .8 }
+  .opt input { position: absolute; opacity: 0; pointer-events: none }
+  .soon { font-size: 10.5px; font-weight: 650; border-radius: 9px; padding: 1px 8px;
+          background: var(--raised); color: var(--muted); margin-left: 6px }
+  .src { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 10px; align-items: center;
+         padding: 10px 0; border-top: 1px solid var(--line-soft) }
+  .src:first-of-type { border-top: 0; padding-top: 0 }
+  .src .where { font-family: var(--mono); font-size: 12px; color: var(--muted); word-break: break-all }
+  .src .where small { display: block; font-family: var(--font); color: var(--faint); font-size: 11px }
+  .src label.x { font-size: 12.5px; color: var(--muted); white-space: nowrap; cursor: pointer }
+  .add { display: grid; grid-template-columns: 1.6fr 1fr; gap: 10px; margin-top: 14px;
+         padding-top: 14px; border-top: 1px solid var(--line) }
+  @media (max-width: 640px) { .src, .add { grid-template-columns: 1fr } }
+  .seen { font-size: 12.5px; margin: 6px 0 0; color: var(--muted) }
+  dialog#addDlg { width: min(620px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 48px));
+    border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px;
+    background: var(--surface); color: var(--fg); overflow: auto }
+  dialog#addDlg::backdrop { background: rgba(10, 22, 21, .6) }
+  .dh { display: flex; align-items: center; margin: 0 0 14px }
+  .dh b { font-size: 15px; flex: 1 }
+  .drives { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px }
+  .drv { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg);
+         padding: 12px 13px; text-align: left; cursor: pointer; font: inherit; display: grid;
+         grid-template-columns: 26px 1fr; gap: 10px; align-items: start }
+  .drv:hover { border-color: var(--accent) }
+  .drv svg { width: 22px; height: 22px; color: var(--accent-text) }
+  .drv b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .drv small { color: var(--muted); font-size: 11.5px }
+  .folders { border: 1px solid var(--line); border-radius: 10px; max-height: 280px; overflow-y: auto }
+  .fo { display: flex; gap: 10px; align-items: center; width: 100%; padding: 9px 12px; border: 0;
+        border-top: 1px solid var(--line-soft); background: transparent; color: var(--fg);
+        font: 13.5px var(--font); text-align: left; cursor: pointer }
+  .fo:first-child { border-top: 0; font-weight: 600 }
+  .fo:hover { background: var(--raised) }
+  .fo[aria-pressed="true"] { background: var(--sel-bg); color: var(--sel-fg) }
+  .fo svg { width: 16px; height: 16px; flex: none; opacity: .8 }
+  .seen.ok { color: var(--ok) } .seen.bad { color: var(--warn) }
+  .how-h { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint);
+           font-weight: 650; margin: 18px 0 8px }
+  .how { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.55 }
+  .how li { margin: 0 0 10px; padding-left: 4px }
+  .how li::marker { color: var(--accent-text); font-weight: 650 }
+</style>
+
+<div class="app">
+<div class="with-rail">
+<?php $RAIL = 'setup'; require __DIR__ . '/db/rail.php'; ?>
+
+  <main class="work">
+    <form class="pad form" method="post">
+      <div class="head"><h1>Setup</h1>
+        <span class="sub">Where things are on this installation.</span></div>
+
+      <?php if ($said === 'ok'): ?>
+        <div class="banner ok"><div class="txt">Saved. Every page reads the new settings on its next load.</div></div>
+      <?php elseif ($said): ?>
+        <div class="banner bad"><div class="txt"><b>Nothing was saved.</b><?= $e($said) ?></div></div>
+      <?php endif; ?>
+
+      <!-- ══ 01 the decision everything else follows ══ -->
+      <div class="grp">
+        <h2><span>01 /</span> How media is organised</h2>
+        <p>The one decision that changes what every other page does.</p>
+        <div class="pick">
+          <label class="opt"><input type="radio" name="shape" value="one_place" <?= $shape !== 'in_place' ? 'checked' : '' ?>>
+            <b>Bring everything to one place</b>
+            <small>Media is copied into this archive and organised on its shelves.
+                   One drive to back up, one place to look.</small></label>
+          <label class="opt"><input type="radio" name="shape" value="in_place" <?= $shape === 'in_place' ? 'checked' : '' ?>>
+            <b>Leave media on its own drives<span class="soon">next</span></b>
+            <small>Each drive keeps its files and carries its own index. Rushes searches
+                   across all of them at once, and catches a drive up whenever it comes back.</small></label>
+        </div>
+      </div>
+
+      <!-- ══ 02 the archive ══ -->
+      <div class="grp">
+        <h2><span>02 /</span> This archive</h2>
+        <p>The collection everything is measured against.</p>
+        <label class="f"><span>What to call it</span>
+          <input type="text" name="name" value="<?= $e($s['name'] ?? 'Rushes') ?>"></label>
+
+        <label class="f"><span>Where it lives, on this machine</span>
+          <select name="a_local">
+            <?php $seen = false; foreach ($local as $v): $seen = $seen || $v['path'] === $aLoc; ?>
+              <option value="<?= $e($v['path']) ?>" <?= $v['path'] === $aLoc ? 'selected' : '' ?>><?= $e($v['name']) ?> &nbsp;&mdash;&nbsp; <?= $e($v['path']) ?></option>
+            <?php endforeach; if (!$seen && $aLoc): ?>
+              <option value="<?= $e($aLoc) ?>" selected><?= $e($aLoc) ?> (not visible right now)</option>
+            <?php endif; ?>
+          </select></label>
+
+        <label class="f"><span>Address people open Rushes at</span>
+          <input type="text" name="a_url" value="<?= $e($s['archive']['url'] ?? '') ?>"></label>
+      </div>
+
+      <!-- ══ 03 sources ══ -->
+      <div class="grp">
+        <h2><span>03 /</span> Where footage comes from</h2>
+        <p>Drives and shares Rushes brings media in from. Cards do not need adding —
+           Ingest finds them when they are plugged in.</p>
+
+        <?php foreach (($s['sources'] ?? []) as $i => $r): ?>
+          <div class="src">
+            <input type="text" name="s_label[<?= $i ?>]" value="<?= $e($r['label'] ?? '') ?>" aria-label="Name">
+            <div class="where"><?= $e($r['path']) ?>
+              <small>seen by <?= ($r['seen_by'] ?? '') === 'archive' || $hmode !== 'external' ? 'this machine' : 'the ' . $e($hname) ?></small></div>
+            <label class="x"><input type="checkbox" name="s_drop[<?= $i ?>]" value="1"> remove</label>
+          </div>
+        <?php endforeach; ?>
+        <?php if (!($s['sources'] ?? [])): ?><p class="note" style="margin:0">None yet.</p><?php endif; ?>
+
+        <div class="btns" style="margin-top:14px">
+          <button type="button" class="btn quiet tab-i" id="addOpen"><?= icon('plus', 2) ?> Add a drive or folder</button>
+        </div>
+        <input type="hidden" name="add_src" id="addSrc">
+        <input type="hidden" name="add_label" id="addLabel">
+      </div>
+
+      <!-- ══ 04 helper ══ -->
+      <div class="grp">
+        <h2><span>04 /</span> Helper</h2>
+        <p>The part of Rushes that copies. It watches for cards and drives, and does
+           whatever Ingest and Transfers ask for.</p>
+        <div class="pick">
+          <label class="opt"><input type="radio" name="h_mode" value="built_in" <?= $hmode !== 'external' ? 'checked' : '' ?>>
+            <b>Built in</b>
+            <small>Runs on this machine. Cards and drives plugged in here are what it sees.
+                   What almost every installation wants.</small></label>
+          <label class="opt"><input type="radio" name="h_mode" value="external" <?= $hmode === 'external' ? 'checked' : '' ?>>
+            <b>External</b>
+            <small>Runs on another computer that can see something this one cannot &mdash;
+                   cards in a workstation, or a server on another network.</small></label>
+        </div>
+
+        <!-- Only an external helper has a name and its own view of the archive. -->
+        <div id="hExt" style="margin-top:16px" <?= $hmode !== 'external' ? 'hidden' : '' ?>>
+          <label class="f"><span>What to call that computer</span>
+            <input type="text" name="h_label" value="<?= $e($hname) ?>"></label>
+        <label class="f"><span>Where it finds the archive</span>
+          <select name="a_helper">
+            <?php $seen = false; foreach ($hv['vols'] as $v): $seen = $seen || $v['path'] === $aHlp; ?>
+              <option value="<?= $e($v['path']) ?>" <?= $v['path'] === $aHlp ? 'selected' : '' ?>><?= $e($v['name']) ?><?= $v['archive'] ? ' — this is the archive ✓' : '' ?></option>
+            <?php endforeach; if (!$seen && $aHlp): ?>
+              <option value="<?= $e($aHlp) ?>" selected><?= $e($aHlp) ?> (not reported right now)</option>
+            <?php endif; ?>
+          </select>
+          <?php $found = array_values(array_filter($hv['vols'], fn($v) => $v['archive'])); ?>
+          <?php if ($found && $found[0]['path'] === $aHlp): ?>
+            <div class="seen ok">✓ The <?= $e($hname) ?> can see the archive there.</div>
+          <?php elseif ($found): ?>
+            <div class="seen bad">The <?= $e($hname) ?> finds the archive at <b><?= $e($found[0]['path']) ?></b> — pick that.</div>
+          <?php endif; ?>
+        </label>
+
+        </div>
+
+        <div style="margin-top:14px">
+          <?php if ($hv['fresh']): ?>
+            <div class="seen ok">✓ The helper is running on <?= $e($hwho) ?> &mdash; <?= count($hv['vols']) ?> drive<?= count($hv['vols']) === 1 ? '' : 's' ?> visible.</div>
+          <?php else: ?>
+            <div class="seen bad"><?= $hv['at'] ? 'The helper stopped — last heard from ' . $e(ago_words($hv['at'])) . '.' : 'The helper is not running yet.' ?>
+              Drives are missing from the lists above until it is.</div>
+          <?php endif; ?>
+
+          <!-- Always here, not only when something is wrong: the helper has to be
+               started again after every restart, and whoever does it may never
+               have opened a terminal before. -->
+          <?php $win = helper_windows(); ?>
+          <div class="how-h"><?= $hv['fresh'] ? 'To start it again, after a restart' : 'How to start it' ?></div>
+          <ol class="how">
+            <li>On <b><?= $e($hwho) ?></b>, open
+              <?= $win ? '<b>Command Prompt</b>: press the <b>Windows</b> key, type <b>cmd</b>, press <b>Enter</b>.'
+                       : '<b>Terminal</b>: press <b>⌘ Space</b>, type <b>Terminal</b>, press <b>Return</b>.' ?></li>
+            <li>Press <b>Copy</b>, click inside that window, paste with
+              <b><?= $win ? 'Ctrl V' : '⌘ V' ?></b> and press <b><?= $win ? 'Enter' : 'Return' ?></b>.
+              <?= cmd_block(helper_command()) ?></li>
+            <li>Leave the window open. That window <i>is</i> the helper: it shows what it is doing
+              as it works, and closing it stops the copying. Anything half-copied carries on
+              when it is started again.</li>
+          </ol>
+          <p class="note" style="margin:6px 0 0">
+            <?= $win ? 'If it says Python was not found, install it from python.org first — once.'
+                     : 'The very first time, the Mac may offer to install “command line developer tools”. Say Install; it takes a few minutes and only happens once.' ?>
+            Changed the kind above? Save first &mdash; the command follows the saved setting.</p>
+        </div>
+        <script>
+          document.addEventListener('DOMContentLoaded', function () {
+            const OFFER = <?= json_encode($offer, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+            const ICON  = <?= json_encode(['drive' => icon('server', 1.6), 'folder' => icon('projects', 1.7)]) ?>;
+            const $ = function (i) { return document.getElementById(i); };
+            const esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) {
+              return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+            const size = function (b) { return b >= 1099511627776 ? (b / 1099511627776).toFixed(1) + ' TB'
+                                             : b ? Math.round(b / 1073741824) + ' GB' : ''; };
+            let drive = null, pick = null;
+
+            function drives() {
+              $('d1').hidden = false; $('d2').hidden = true;
+              $('dNone').hidden = OFFER.length > 0;
+              $('dDrives').innerHTML = OFFER.map(function (d, i) {
+                return '<button type="button" class="drv" data-i="' + i + '">' + ICON.drive +
+                  '<span><b>' + esc(d.name) + '</b><small>' + esc([size(d.size), d.where].filter(Boolean).join(' · ')) +
+                  '</small></span></button>';
+              }).join('');
+              $('dDrives').querySelectorAll('.drv').forEach(function (b) {
+                b.onclick = function () { folders(OFFER[+b.dataset.i]); };
+              });
+            }
+            function folders(d) {
+              drive = d; pick = null;
+              $('d1').hidden = true; $('d2').hidden = false;
+              $('dName').textContent = d.name;
+              const rows = [{ name: 'The whole drive', path: d.path, whole: true }].concat(d.folders);
+              $('dFolders').innerHTML = rows.map(function (f, i) {
+                return '<button type="button" class="fo" data-i="' + i + '" aria-pressed="false">' +
+                  (f.whole ? ICON.drive : ICON.folder) + esc(f.name) + '</button>';
+              }).join('');
+              $('dFolders').querySelectorAll('.fo').forEach(function (b) {
+                b.onclick = function () {
+                  $('dFolders').querySelectorAll('.fo').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+                  b.setAttribute('aria-pressed', 'true');
+                  const f = rows[+b.dataset.i];
+                  pick = f.path;
+                  $('dLabel').value = f.whole ? d.name : f.name;
+                  $('dPicked').textContent = f.whole ? d.name + ', all of it' : d.name + ' › ' + f.name;
+                  $('dAdd').disabled = false;
+                };
+              });
+              $('dLabel').value = ''; $('dPicked').textContent = 'Pick one.'; $('dAdd').disabled = true;
+            }
+            $('addOpen').onclick = function () { drives(); $('addDlg').showModal(); };
+            $('dClose').onclick = function () { $('addDlg').close(); };
+            $('dBack').onclick = drives;
+            // Adding saves straight away, and the page comes back saying so —
+            // with the new source in the list above.
+            $('dAdd').onclick = function () {
+              $('addSrc').value = drive.who + '|' + pick;
+              $('addLabel').value = $('dLabel').value.trim();
+              this.disabled = true; this.textContent = 'Saving…';
+              document.querySelector('form.form').submit();
+            };
+          });
+          document.querySelectorAll('[name=h_mode]').forEach(function (r) {
+            r.onchange = function () {
+              document.getElementById('hExt').hidden = r.value !== 'external' || !r.checked; }; });
+        </script>
+      </div>
+
+      <input type="hidden" name="_save" value="1">
+      <button class="btn" type="submit">Save settings</button>
+      <p class="note" style="margin:12px 0 0">Rules about media &mdash; what counts as cache,
+         which files are never swept, when a disk is too full &mdash; are the same everywhere
+         and live in <code>rules.json</code>, not here.</p>
+    </form>
+
+    <!-- One question at a time: which drive, then the whole of it or one
+         folder, then what to call it. Built from what the machines report, so
+         there is nothing to type and nothing that can be mistyped. -->
+    <dialog id="addDlg" aria-labelledby="dT">
+      <div class="dh"><b id="dT">Add a source</b>
+        <button type="button" class="ghost" id="dClose" aria-label="Close">Close</button></div>
+
+      <div id="d1">
+        <p class="note" style="margin:0 0 12px">Which drive is the footage on?</p>
+        <div class="drives" id="dDrives"></div>
+        <p class="note" id="dNone" hidden style="margin:0">No drives are showing. If the footage
+          is on another computer, start its helper first &mdash; see <b>04 Helper</b>.</p>
+      </div>
+
+      <div id="d2" hidden>
+        <button type="button" class="ghost" id="dBack">&larr; All drives</button>
+        <p class="note" style="margin:12px 0 8px">The whole of <b id="dName"></b>, or one folder in it?</p>
+        <div class="folders" id="dFolders"></div>
+        <label class="f" style="margin:14px 0 0"><span>Call it</span>
+          <input type="text" id="dLabel"></label>
+        <div class="btns" style="margin-top:14px">
+          <button type="button" class="btn" id="dAdd" disabled>Add and save</button>
+          <span class="note" id="dPicked"></span>
+        </div>
+      </div>
+    </dialog>
+  </main>
+</div>
+</div>

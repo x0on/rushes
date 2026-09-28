@@ -1,0 +1,38 @@
+<?php
+// report.php — where the helper machine says what it can see.
+//
+// The helper posts its list of drives and cards every twenty seconds. The page
+// builds every picker from that list, so nobody types a path the copier cannot
+// reach.
+//
+// ponytail: no password, because the helper has none. It can write exactly one
+// file, in exactly one shape. A forged list gains nothing: the helper re-checks
+// every path against its own drives before it copies a byte.
+require_once __DIR__ . '/config.php';
+header('Content-Type: application/json');
+
+$raw = (string)($_POST['volumes'] ?? '');
+if (strlen($raw) > 400000) { http_response_code(413); echo '{"error":"too big"}'; exit; }
+
+$keep = [];
+foreach (explode("\n", $raw) as $l) {
+    $f = explode("\t", $l);
+    if (str_contains($l, '..')) continue;
+    if ($f[0] === 'vol' && count($f) === 9 && $f[1] !== ''
+        && ctype_digit($f[3]) && ctype_digit($f[4]) && ctype_digit($f[7]) && ctype_digit($f[8])) {
+        $keep[] = $l;
+    } elseif ($f[0] === 'day' && count($f) === 5 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f[2])
+              && ctype_digit($f[3]) && ctype_digit($f[4])) {
+        $keep[] = $l;                         // how many files the card holds from each day
+    } elseif ($f[0] === 'dir' && count($f) === 3 && $f[2] !== ''
+              && !str_contains($f[2], '/') && !str_contains($f[2], '\\')) {
+        $keep[] = $l;
+    }
+}
+$os  = preg_replace('/[^a-z0-9]/', '', strtolower((string)($_POST['os'] ?? '')));
+$out = "at\t" . time() . "\nos\t$os\n" . implode("\n", $keep) . "\n";
+
+// Beside, then rename: a page reading half a list would offer half the drives.
+$f = web_dir() . '/helper-volumes.tsv';
+$ok = @file_put_contents("$f.new", $out) !== false && @rename("$f.new", $f);
+echo json_encode(['ok' => $ok, 'lines' => count($keep)]);

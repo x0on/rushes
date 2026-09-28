@@ -1,1 +1,7 @@
 .DS_Store
+app/settings.json
+app/*.tsv
+app/db/*.sqlite
+app/db/*.db
+__pycache__/
+*.bak
