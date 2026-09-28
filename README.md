@@ -4,11 +4,33 @@
 
 **Less lost. More made.**
 
-Rushes is a self-hosted media catalog and management tool for production archives containing video, stills, and audio. It combines search, card ingest, source-folder transfers, media selections, and archive maintenance around a shared index.
+Rushes is a self-hosted media catalog and management tool for filmmakers, photographers, and production teams working with video, stills, and audio on their own storage.
 
-The practical question behind it is: **what is on this storage, where does it belong, and what needs attention?**
+It’s built for footage scattered across drives, folders nobody remembers naming, and copies you’re afraid to delete. Whether you work alone or with a small team, Rushes helps you understand what you have, bring new media in, and see what needs attention.
 
 [Public website](https://x0on.github.io/rushes/) · [Application source and setup](app/README.md)
+
+## Built for the archive you already have
+
+You shouldn’t need to organize everything before you can start using an organizer.
+
+Years of shoots, old projects, camera-card copies, external drives, and shared storage: that is the starting point. Rushes brings search, ingest, source-folder transfers, media selections, and maintenance around a shared index. The practical question behind it is: **what is on this storage, where does it belong, and what needs attention?**
+
+## From scattered files to a searchable archive
+
+You remember the shoot. You don’t remember the filename.
+
+Search the indexed paths and narrow results by media type. Collect the files you need into a Pull, then export a Premiere XML, a list of paths, or a ZIP. Video, photos, and audio from the same work can be found together without needing a separate folder tree for each format.
+
+Your files stay on your hardware. Rushes helps you make sense of them.
+
+## Simple for everyday work
+
+Search for something you need. Bring in a new shoot. Get back to creating.
+
+**Manage** is the workspace for looking after storage: organization settings, duplicate and cache review, transfers, and job activity. It gives the person responsible for the archive a place to see what needs attention, while everyday search stays focused on finding media.
+
+The sections below describe the current implementation, setup, and limitations.
 
 ## Current status
 
