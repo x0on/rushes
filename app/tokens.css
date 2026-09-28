@@ -1,0 +1,359 @@
+/* tokens.css — the Ocean palette and the parts every Rushes page is built from.
+ *
+ * The five brand colours are authoritative and set once, here. Everything else in
+ * the app refers to a role (--surface, --line, --accent), never to a hex value, so
+ * the palette can move without touching a page.
+ *
+ * Light and dark share one layout. Dark is the default working surface because
+ * this sits open all day beside editing software; light is there for anyone who
+ * wants it, and for print.
+ */
+
+/* Greys are never new colours: they are ink (on light) or mint (on dark) at an
+ * opacity, so nothing can drift off palette by accident. */
+:root {
+  /* ── the five, exactly ─────────────────────────────────────────────────── */
+  --ocean:  #007F78;   /* signature, primary action, focus */
+  --mint:   #DDF4EF;   /* soft highlight; accent text and icons on dark */
+  --paper:  #F7FAF9;   /* light page */
+  --ink:    #132B2A;   /* text on light, and the dark page */
+  --deep:   #1E3937;   /* raised surface on dark */
+  --white:  #FFFFFF;   /* inverse logo and button text */
+
+  /* ── status ────────────────────────────────────────────────────────────── */
+  /* Not brand colours — none have been chosen yet. Never used alone: every
+   * status carries a word as well, because colour on its own excludes anyone
+   * who cannot distinguish it. */
+  --ok:     #1E7A5A;
+  --warn:   #9A6B12;
+  --bad:    #A8352C;
+  --ok-bg:  #E4F4EC;
+  --warn-bg:#FBF1DC;
+  --bad-bg: #FBEBE9;
+
+  /* ── roles: light ──────────────────────────────────────────────────────── */
+  --bg:        var(--paper);
+  --surface:   var(--white);
+  --raised:    var(--paper);
+  --fg:        var(--ink);
+  --muted:     rgba(19, 43, 42, .66);
+  --faint:     rgba(19, 43, 42, .45);
+  --line:      rgba(19, 43, 42, .13);
+  --line-soft: rgba(19, 43, 42, .07);
+  --accent:      var(--ocean);   /* fills: buttons, selected chips, focus */
+  --accent-fg:   var(--white);   /* text sitting on one of those fills */
+  --accent-text: var(--ocean);   /* the accent used as text or as an icon */
+  --sel-bg:    var(--mint);
+  --sel-fg:    var(--ink);
+  --code-bg:   rgba(19, 43, 42, .05);
+  --shadow:    0 1px 2px rgba(19,43,42,.06), 0 1px 8px rgba(19,43,42,.04);
+
+  --radius:    10px;
+  --radius-sm: 7px;
+  --rail-w:    218px;
+  --bar-h:     62px;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ── roles: dark ──────────────────────────────────────────────────────────
+ * Ocean still fills buttons, with paper on top of it. As *text* on a dark
+ * surface ocean is unreadable, so mint carries accent type and icons — which
+ * is what the brand notes ask for. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        var(--ink);
+    --surface:   var(--deep);
+    --raised:    rgba(221, 244, 239, .07);
+    --fg:        var(--paper);
+    --muted:     rgba(221, 244, 239, .66);
+    --faint:     rgba(221, 244, 239, .44);
+    --line:      rgba(221, 244, 239, .14);
+    --line-soft: rgba(221, 244, 239, .08);
+    --accent:      var(--ocean);
+    --accent-fg:   var(--paper);
+    --accent-text: var(--mint);
+    --sel-bg:    var(--mint);
+    --sel-fg:    var(--ink);
+    --code-bg:   rgba(221, 244, 239, .06);
+    --shadow:    none;
+    --ok:   #5FCB9C; --ok-bg:   rgba(95, 203, 156, .14);
+    --warn: #E0B35C; --warn-bg: rgba(224, 179, 92, .14);
+    --bad:  #E58074; --bad-bg:  rgba(229, 128, 116, .14);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: var(--ink); --surface: var(--deep); --raised: rgba(221,244,239,.07);
+  --fg: var(--paper);
+  --muted: rgba(221,244,239,.66); --faint: rgba(221,244,239,.44);
+  --line: rgba(221,244,239,.14);  --line-soft: rgba(221,244,239,.08);
+  --accent: var(--ocean); --accent-fg: var(--paper); --accent-text: var(--mint);
+  --sel-bg: var(--mint); --sel-fg: var(--ink);
+  --code-bg: rgba(221,244,239,.06); --shadow: none;
+  --ok:   #5FCB9C; --ok-bg:   rgba(95,203,156,.14);
+  --warn: #E0B35C; --warn-bg: rgba(224,179,92,.14);
+  --bad:  #E58074; --bad-bg:  rgba(229,128,116,.14);
+}
+
+/* ══ base ═══════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box }
+
+/* Several components here set display, which silently beats the hidden
+ * attribute and leaves an empty coloured bar on the page. One rule fixes it
+ * everywhere, and hidden stays the honest way to hide something. */
+[hidden] { display: none !important }
+html, body { height: 100% }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-text); text-decoration: none }
+a:hover { text-decoration: underline }
+
+/* One visible focus ring everywhere. Never removed — it is the only way some
+ * people can tell where they are on the page. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ══ the app shell ══════════════════════════════════════════════════════ */
+.app { display: grid; grid-template-rows: 1fr; height: calc(100vh - var(--bar-h)); overflow: hidden }
+
+.topbar {
+  display: flex; align-items: center; gap: 6px; padding: 0 18px;
+  height: var(--bar-h); background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; margin-right: 20px;
+         font-weight: 650; font-size: 16.5px; letter-spacing: -.015em; color: var(--fg) }
+.brand:hover { text-decoration: none }
+.brand .mk { width: 25px; height: 25px; display: block; color: var(--accent-text) }
+
+.tab {
+  color: var(--muted); border-radius: var(--radius-sm); padding: 8px 15px;
+  font-size: 14px; cursor: pointer; border: 0; background: transparent;
+  font-family: inherit; line-height: 1.4;
+}
+.tab:hover { color: var(--fg); background: var(--raised); text-decoration: none }
+.tab[aria-current] { color: var(--sel-fg); font-weight: 600; background: var(--sel-bg) }
+.topbar .tab { align-self: stretch; display: inline-flex; align-items: center;
+               border-radius: 0; position: relative; padding: 0 16px }
+.topbar .tab:hover { background: transparent }
+.topbar .tab[aria-current] { color: var(--fg); background: transparent }
+.topbar .tab[aria-current]::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px;
+  height: 3px; border-radius: 3px 3px 0 0; background: var(--accent-text) }
+
+.grow { flex: 1 }
+
+/* the transfer indicator: a word, not just a colour */
+.pulse { display: inline-flex; align-items: center; gap: 7px;
+         font-size: 12.5px; color: var(--muted); white-space: nowrap }
+.pulse .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none }
+.pulse .dot.busy { background: var(--accent-text); animation: throb 1.6s ease-in-out infinite }
+.pulse .dot.off  { background: var(--bad) }
+@keyframes throb { 50% { opacity: .35 } }
+
+/* ══ rail ═══════════════════════════════════════════════════════════════ */
+.with-rail { display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 0 }
+.rail {
+  background: var(--bg); border-right: 1px solid var(--line);
+  padding: 12px 9px 14px; display: flex; flex-direction: column; min-height: 0;
+  overflow-y: auto;
+}
+.rail h2 {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--faint); font-weight: 650; margin: 16px 8px 6px;
+}
+.rail h2:first-child { margin-top: 2px }
+.nav {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border-radius: var(--radius-sm); color: var(--muted); font-size: 13.5px;
+  cursor: pointer; border: 0; background: transparent; width: 100%;
+  font-family: inherit; text-align: left;
+}
+.nav:hover { background: var(--raised); color: var(--fg); text-decoration: none }
+.nav[aria-current] { background: var(--sel-bg); color: var(--sel-fg); font-weight: 600 }
+.nav[aria-current] .count, .nav[aria-current] .ico { color: var(--sel-fg); opacity: .8 }
+.nav .ico { width: 17px; height: 17px; flex: none; opacity: .8; display: block }
+.nav .ico svg { width: 17px; height: 17px; display: block; stroke-width: 1.6 }
+.nav[aria-current] .ico { opacity: 1 }
+.nav .count { margin-left: auto; font-size: 11px; color: var(--faint);
+              font-variant-numeric: tabular-nums }
+.nav .badge { margin-left: auto; font-size: 10.5px; font-weight: 650;
+              background: var(--accent); color: var(--accent-fg);
+              border-radius: 9px; padding: 1px 7px }
+.nav .badge.bad { background: var(--bad); color: var(--white) }
+
+.rail-foot { margin-top: auto; padding: 12px 9px 4px; border-top: 1px solid var(--line-soft);
+             font-size: 11.5px; color: var(--muted); flex: none }
+.meter { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 7px 0 5px }
+.meter i { display: block; height: 100%; background: var(--ok); transition: width .5s }
+.meter i.hot { background: var(--warn) }
+.meter i.full { background: var(--bad) }
+
+/* ══ work area ══════════════════════════════════════════════════════════ */
+.work { min-width: 0; overflow-y: auto; display: flex; flex-direction: column }
+.pad { padding: 18px 20px 48px; max-width: 1400px; width: 100% }
+.head { display: flex; align-items: center; gap: 12px; margin: 0 0 16px }
+.head h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.01em }
+.head .sub { color: var(--muted); font-size: 12.5px }
+
+/* ══ tiles ══════════════════════════════════════════════════════════════
+ * Two are always true. The rest appear only when they are, and those are
+ * buttons: the tile IS the action, not a label pointing at one. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+         gap: 10px; margin: 0 0 18px }
+.tile {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 13px 15px; box-shadow: var(--shadow); text-align: left;
+  font-family: inherit; color: inherit;
+}
+button.tile { cursor: pointer }
+button.tile:hover { border-color: var(--accent) }
+.tile .lab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+             color: var(--faint); font-weight: 650 }
+.tile .big { font-size: 23px; font-weight: 650; margin-top: 6px; letter-spacing: -.02em;
+             font-variant-numeric: tabular-nums; line-height: 1.1 }
+.tile .sub { font-size: 12px; color: var(--muted); margin-top: 3px }
+.tile .go  { font-size: 12px; color: var(--accent-text); margin-top: 8px; font-weight: 600 }
+.tile.act  { border-color: var(--accent) }
+.tile.warn { border-color: var(--warn); background: var(--warn-bg) }
+.tile.warn .big { color: var(--warn) }
+.tile.bad  { border-color: var(--bad);  background: var(--bad-bg) }
+.tile.bad .big  { color: var(--bad) }
+
+/* ══ banner ═════════════════════════════════════════════════════════════ */
+.banner { display: flex; align-items: flex-start; gap: 10px; border-radius: var(--radius);
+          padding: 11px 14px; font-size: 13px; margin: 0 0 12px;
+          border: 1px solid var(--line); background: var(--surface) }
+.banner.bad  { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad) }
+.banner.warn { border-color: var(--warn); background: var(--warn-bg); color: var(--warn) }
+.banner.ok   { border-color: var(--ok);   background: var(--ok-bg);   color: var(--ok) }
+.banner .txt { flex: 1; min-width: 0; color: var(--fg) }
+.banner b { display: block; margin-bottom: 2px }
+.banner .btn { flex: none }
+
+/* ══ buttons ════════════════════════════════════════════════════════════ */
+.btn {
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg);
+  border-radius: var(--radius-sm); padding: 7px 14px; font: 600 13.5px var(--font);
+  cursor: pointer; white-space: nowrap;
+}
+.btn:hover { filter: brightness(1.06) }
+.btn.quiet { background: transparent; color: var(--fg); border-color: var(--line); font-weight: 400 }
+.btn.quiet:hover { border-color: var(--accent); filter: none }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: var(--white) }
+.btn:disabled { opacity: .45; cursor: default; filter: none }
+.btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
+
+/* ══ panels and rows ════════════════════════════════════════════════════ */
+.panel { background: var(--surface); border: 1px solid var(--line);
+         border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow) }
+.panel > header { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px;
+                  border-bottom: 1px solid var(--line) }
+.panel > header b { font-size: 13px; font-weight: 650 }
+.panel > header .n { margin-left: auto; font-size: 11.5px; color: var(--muted);
+                     font-variant-numeric: tabular-nums }
+.scroll { max-height: 460px; overflow-y: auto }
+
+.row { display: flex; align-items: center; gap: 10px; padding: 7px 14px;
+       border-top: 1px solid var(--line-soft); font-size: 13.5px }
+.row:first-child { border-top: 0 }
+.row.pick { cursor: pointer }
+.row.pick:hover { background: var(--raised) }
+.row.on { background: var(--sel-bg); color: var(--sel-fg) }
+.row.on .n, .row.on .sz, .row.on .when, .row.on .nm small { color: var(--sel-fg); opacity: .72 }
+.row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.row .nm small { display: block; font-size: 11px; color: var(--faint); font-weight: 400 }
+.row .n, .row .sz, .row .when {
+  color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums }
+.row .sz { width: 68px; text-align: right }
+.row .n  { width: 76px; text-align: right }
+
+.tick { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--faint);
+        flex: none; display: grid; place-items: center; font-size: 10px; color: transparent }
+.row.on .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-fg) }
+
+.pill { font-size: 10.5px; border-radius: 9px; padding: 2px 8px; white-space: nowrap;
+        font-weight: 650; background: var(--raised); color: var(--muted) }
+.pill.run  { background: var(--accent); color: var(--accent-fg) }
+.pill.wait { background: var(--raised); color: var(--muted); animation: throb 1.8s ease-in-out infinite }
+.pill.done { background: var(--ok-bg); color: var(--ok) }
+.ghost { border: 1px solid var(--line); background: transparent; color: var(--muted);
+         border-radius: 5px; font: 11px var(--font); padding: 2px 8px; cursor: pointer }
+.ghost:hover { color: var(--fg); border-color: var(--accent) }
+
+.empty { padding: 34px 16px; text-align: center; color: var(--muted); font-size: 13px }
+.note  { color: var(--muted); font-size: 12.5px }
+code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-bg);
+              border-radius: 5px; padding: 2px 7px; color: var(--muted) }
+.cmd { display: flex; align-items: center; gap: 8px; margin-top: 8px; max-width: 100%;
+       background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--radius-sm);
+       padding: 5px 5px 5px 11px }
+.cmd code { flex: 1; min-width: 0; background: none; padding: 4px 0; color: var(--fg);
+            white-space: nowrap; overflow-x: auto; font-size: 12.5px }
+.cmd .ghost { flex: none; padding: 5px 12px; font-size: 12px }
+.code.block { display: block; padding: 9px 11px; margin-top: 8px; word-break: break-all }
+
+/* ══ forms (Setup, Structure) ═══════════════════════════════════════════ */
+  .form { max-width: 760px }
+  .grp { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+         padding: 18px 20px 20px; margin: 0 0 14px }
+  .grp > h2 { font-size: 14px; font-weight: 650; margin: 0 0 3px }
+  .grp > h2 span { color: var(--muted); font-weight: 500; margin-right: 4px }
+  .grp > p  { color: var(--muted); font-size: 12.5px; margin: 0 0 14px }
+  label.f { display: block; margin: 0 0 12px }
+  label.f:last-child { margin-bottom: 0 }
+  label.f > span { display: block; font-size: 11px; text-transform: uppercase;
+                   letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 0 0 5px }
+  input[type=text], select {
+    width: 100%; padding: 9px 11px; font: 13.5px var(--font); color: var(--fg);
+    border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg) }
+
+/* ══ activity ═══════════════════════════════════════════════════════════ */
+.ev { display: flex; gap: 10px; padding: 8px 14px; font-size: 12.5px;
+      border-top: 1px solid var(--line-soft); align-items: flex-start }
+.ev:first-child { border-top: 0 }
+.ev .ico { width: 19px; height: 19px; border-radius: 50%; flex: none; display: grid;
+           place-items: center; font-size: 10px; background: var(--raised); color: var(--muted) }
+.ev .ico.ok  { background: var(--ok-bg);  color: var(--ok) }
+.ev .ico.bad { background: var(--bad-bg); color: var(--bad) }
+.ev .t { flex: 1; min-width: 0 }
+.ev .t small { display: block; color: var(--faint); font-size: 11px; margin-top: 1px }
+.ev .when { color: var(--faint); font-size: 11px; white-space: nowrap }
+
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px }
+.bar i { display: block; height: 100%; background: var(--accent); transition: width .6s }
+.bar.wait i { width: 32%; animation: sweep 1.6s ease-in-out infinite }
+@keyframes sweep { 0% { margin-left: -32% } 100% { margin-left: 100% } }
+
+@media (max-width: 900px) {
+  /* minmax(0,1fr), not 1fr: a plain 1fr column grows to fit the widest thing
+     in it — here the sidebar laid out as one long row — and the whole page
+     ends up wider than the phone. This keeps the page to the screen and lets
+     that row scroll sideways on its own. */
+  .with-rail { grid-template-columns: minmax(0, 1fr) }
+  .rail { border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row;
+          overflow-x: auto; padding: 8px }
+  .rail h2, .rail-foot { display: none }
+  .nav { width: auto; white-space: nowrap }
+  .app { height: auto; overflow: visible }
+}
+/* On a phone the top bar keeps what you tap and drops what you read:
+   the dot still says whether something is moving, the words wait for a
+   wider screen. */
+@media (max-width: 640px) {
+  .topbar { padding: 0 8px; gap: 0 }
+  .brand { margin-right: 6px; font-size: 0; gap: 0 }
+  .brand .mk { width: 24px; height: 24px }
+  .topbar .tab { padding: 0 11px; font-size: 14px }
+  .topbar .pulse { padding-right: 8px; border: 0 }
+  .topbar .pulse #hWhat { display: none }
+  .topbar .tab-i { gap: 0; font-size: 0 }
+  .topbar .tab-i svg { width: 17px; height: 17px }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
