@@ -42,6 +42,8 @@ Planned platforms include Mac, Windows, and compatible NAS devices. Installation
 
 ## Website and design
 
+[Visit the Rushes website](https://rushes-media.x0on.chatgpt.site)
+
 - [Website source](website/)
 - [Vector logos](brand/logos/)
 - [Brand direction and palette](brand/references/README.md)
