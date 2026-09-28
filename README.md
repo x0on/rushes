@@ -1,4 +1,4 @@
-<p align="center"><img src="brand/logos/rushes-together-ocean.svg" width="100" alt="Rushes logo"></p>
+<p align="center"><img src="docs/assets/logo.svg" width="100" alt="Rushes logo"></p>
 
 # Rushes
 
@@ -34,25 +34,15 @@ Labels let media belong to more than one category without creating extra copies.
 
 The design keeps media on your own hardware, with no cloud account, media uploads, or tracking. A local owner-created password protects maintenance actions. Cleanup moves files into a holding folder for review; space is reclaimed only when that folder is deliberately emptied.
 
-Today Rushes runs on a NAS with a helper on a Mac. Self-contained Mac and Windows applications are planned and do not exist yet. Installation instructions and supported configurations will be added with the application.
+Today Rushes runs on a NAS with a helper on a Mac. Self-contained Mac and Windows applications are planned and do not exist yet. See the application documentation for setup details.
 
-## Project status
+## Get started
 
-**In development.** This repository currently contains the public website, brand assets, and interface direction. The application source and installable releases are not included yet. The pictured interfaces illustrate the product direction; small labels in older concept images may differ from the current Search · Ingest · Manage terminology.
+**In development.** Rushes currently runs on a NAS with a Mac helper.
 
-## Website and design
-
-[Visit the Rushes website](https://x0on.github.io/rushes/)
-
-- [Website source](website/)
-- [Vector logos](brand/logos/)
-- [Brand direction and palette](brand/references/README.md)
-- [Interface notes](brand/references/INTERFACE.md)
-
-The selected identity is **Together**, the layered R symbol, with the **Ocean** palette: `#007F78`, `#DDF4EF`, `#F7FAF9`, `#132B2A`, and `#1E3937`.
-
-The website is plain HTML and CSS with a small script for the preview tabs. Open `website/index.html` locally to view it. No build step is required. GitHub Pages serves the `docs/` directory on `main`; keep it synchronized with `website/` when editing.
+- [Visit the Rushes website](https://x0on.github.io/rushes/)
+- [Application source and setup](app/README.md)
 
 ## Contributing and licensing
 
-Feedback on the product direction is welcome through GitHub issues. Contribution and installation guidance will accompany the application code. Rushes is intended to be open source; a license has not yet been selected in this repository.
+Feedback on the product direction is welcome through GitHub issues. Rushes is intended to be open source; a license has not yet been selected in this repository.
