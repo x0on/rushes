@@ -20,7 +20,7 @@ How it avoids reading 40 TB to answer "do we already have this?":
 Same shape as everything else: preview, look, apply, log, undo.
 """
 
-import argparse, hashlib, json, os, platform, shutil, subprocess, sys, threading, time
+import argparse, hashlib, json, os, platform, re, shutil, subprocess, sys, threading, time
 import urllib.parse, urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -461,17 +461,34 @@ def leave_a_note(folder, o, source, name):
         print(f"  ! could not leave the note in {folder} ({e}) — the full record is still in {o.path}")
 
 
-def load_origins():
-    """source path -> where that exact file is in the archive, from every record.
-    Checked before copying anything, so a file brought over once is never
-    brought over again — whatever layout it landed in, and however stale the
-    archive's file list is."""
-    known = {}
+def replay():
+    """Every record, oldest first, played forward: for each file a record
+    knows, where it is NOW -> [(what, original, bytes)]. A tidy-up's "moved"
+    line carries the file's origin along with it, so after any number of
+    tidy-ups (and undos) each file still knows where it first came from."""
+    at = {}
     for f in sorted(ORIGIN.glob("*.tsv")) if ORIGIN.exists() else []:
         for l in open(f, errors="replace"):
             p = l.rstrip("\n").split("\t")
-            if len(p) >= 4 and p[0] in ("copied", "traced", "already") and p[1] and p[2]:
-                known[p[1]] = (p[2], p[3])
+            if len(p) < 4 or not p[1] or not p[2]:
+                continue
+            if p[0] == "moved":
+                if p[1] in at:
+                    at.setdefault(p[2], []).extend(at.pop(p[1]))
+            elif p[0] in ("copied", "traced", "already"):
+                at.setdefault(p[2], []).append((p[0], p[1], p[3]))
+    return at
+
+
+def load_origins():
+    """source path -> where that exact file is in the archive, from every record.
+    Checked before copying anything, so a file brought over once is never
+    brought over again — whatever layout it landed in, wherever a tidy-up has
+    since moved it, and however stale the archive's file list is."""
+    known = {}
+    for arch, rows in replay().items():
+        for _, src, size in rows:
+            known[src] = (arch, size)
     return known
 
 
@@ -548,6 +565,209 @@ def trace(src_root, archive):
     print(f"\n{tn:,} file{'' if tn == 1 else 's'} traced to {'its' if tn == 1 else 'their'} original, "
           f"{un:,} not found on {name}.")
     print(f"record: _rushes/origin/{o.path.name}")
+
+
+# ───────────────────────────── the tidy-up ─────────────────────────────────
+# Moves what the copies brought into ARCHIVE onto the shelf, by the plan
+# Structure shows and the admin approves. The plan says only "this source
+# folder -> that shelf folder"; everything below it keeps its layout. Every
+# file is moved by name on the same share (a rename, so nothing is re-copied),
+# never over another file, never while its folder is still being copied, and
+# every move is a line in a record, so it can be undone and relinked.
+
+NOTE = "Where this came from.txt"
+
+
+def _fetch(url):
+    with urllib.request.urlopen(url, timeout=30) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def _shelf():
+    return os.path.join(NAS_MOUNT, (setting("organise.shelves") or "Library").strip("/\\"))
+
+
+def _mark_done(key):
+    HOME.mkdir(exist_ok=True)
+    with open(DONE, "a") as f:
+        f.write(key + "\n")
+
+
+def clear_out(paths, stop, o, examples=None):
+    """Remove the folders a tidy-up emptied, deepest first — never `stop` or
+    anything above it. A folder's note goes with its files; Finder's
+    .DS_Store is the only thing ever thrown away."""
+    stop = stop.rstrip("/\\")
+    dirs = set()
+    for p in paths:
+        d = os.path.dirname(p)
+        while d.startswith(stop + os.sep) and d not in dirs:
+            dirs.add(d); d = os.path.dirname(d)
+    gone = 0
+    for d in sorted(dirs, key=len, reverse=True):
+        try: left = [n for n in os.listdir(d) if n != ".DS_Store"]
+        except OSError: continue
+        if left == [NOTE] and examples and d in examples:
+            old, new = examples[d]
+            tail = old[len(d):]
+            if new.endswith(tail):              # the folder's twin on the shelf
+                here, there = os.path.join(d, NOTE), os.path.join(new[:len(new) - len(tail)], NOTE)
+                try:
+                    if os.path.exists(there):   # two notes: keep both, in one file
+                        with open(here, errors="replace") as a, open(there, "a") as b:
+                            b.write(a.read())
+                        os.remove(here)
+                        o.add("note", here, there, 0, "its words were added to the note already there")
+                    else:
+                        size = os.path.getsize(here)
+                        os.rename(here, there)
+                        o.add("moved", here, there, size, "the folder's note")
+                    left = []
+                except OSError:
+                    pass
+        if left:
+            continue
+        try:
+            if os.path.exists(os.path.join(d, ".DS_Store")):
+                os.remove(os.path.join(d, ".DS_Store"))
+            os.rmdir(d); gone += 1
+        except OSError:
+            pass
+    return gone
+
+
+def tell_moved(pairs):
+    """Search and Pulls follow the files to where they are now."""
+    n = 0
+    for i in range(0, len(pairs), 2000):
+        rows = "\n".join(f"{a}\t{b}" for a, b in pairs[i:i + 2000] if "\t" not in a + b and "\n" not in a + b)
+        try:
+            body = urllib.parse.urlencode({"moves": rows}).encode()
+            with urllib.request.urlopen(NAS_URL + "/db/moved.php", data=body, timeout=120) as r:
+                n += json.loads(r.read().decode("utf-8", "replace")).get("updated", 0)
+        except Exception as e:
+            print(f"  ! could not tell search about the moves ({e})")
+            print("    The files are moved and recorded. Manage → Jobs and tools → Rebuild search settles it.")
+            return
+    print(f"  search and pulls updated: {n:,} file{'s' if n != 1 else ''} ✓")
+
+
+def tidy(plan_id):
+    t0 = time.time()
+    shelf = _shelf()
+    area = ARCHIVE.rstrip("/\\") + os.sep
+    _mark_done(f"tidy {plan_id}")               # asked once: a refusal is not retried every 20 s
+    try:
+        body = _fetch(f"{NAS_URL}/tidy-{plan_id}.tsv")
+        queue = _fetch(QUEUE_URL)
+    except Exception as e:
+        print(f"Cannot read the tidy-up plan from Rushes ({e}). Nothing moved — approve it again.")
+        history("refused", f"tidy {plan_id}", 0, 0, 0, "could not read the plan")
+        return
+    maps = []
+    for l in body.splitlines():
+        f = l.split("\t")
+        if len(f) == 3 and f[0] == "map" and f[1] and f[2]:
+            to = f[2].rstrip("/\\")
+            # The one boundary that matters: nothing is moved anywhere but the shelf.
+            if not to.startswith(shelf + os.sep) or ".." in to.split(os.sep):
+                print(f"  ! refused a line of the plan: {to} is not on the shelf ({shelf})"); continue
+            maps.append((f[1].rstrip("/\\"), to))
+    maps.sort(key=lambda m: -len(m[0]))          # the most specific line wins
+
+    done = {l.strip() for l in open(DONE) if l.strip()} if DONE.exists() else set()
+    busy = [f[1].rstrip("/\\") for f in (l.split("\t") for l in queue.splitlines())
+            if len(f) >= 2 and f[0] == "copy" and f[1] not in done]
+    inside = lambda p, d: p == d or p.startswith(d + os.sep)
+
+    print(f"reading every record to see what came from where …")
+    work = []
+    for arch, rows in replay().items():
+        if not arch.startswith(area):
+            continue                             # on the shelf already, or never in ARCHIVE
+        src = next((s for w, s, _ in rows if w != "already"), rows[0][1])
+        for frm, to in maps:
+            if inside(src, frm):
+                work.append((arch, to + src[len(frm):], src, int(rows[0][2] or 0))); break
+    print(f"{len(work):,} files to move, by {len(maps)} line{'s' if len(maps) != 1 else ''} of the plan\n")
+
+    o = Origin("tidy", f"tidy-up plan {plan_id}", ARCHIVE, "archive", shelf)
+    status(phase="tidying", source=plan_id, copied=0, of=len(work))
+    moved, examples, mb = [], {}, 0
+    for i, (old, new, src, size) in enumerate(work, 1):
+        if any(inside(src, b) for b in busy):
+            o.add("skipped", old, new, size, "its folder is still being copied — the next tidy-up takes it")
+        elif not os.path.isfile(old):
+            o.add("skipped", old, new, size, "not there any more")
+        elif os.path.lexists(new):
+            o.add("skipped", old, new, size, "a file of that name is already there — left where it was")
+        else:
+            try:
+                os.makedirs(os.path.dirname(new), exist_ok=True)
+                os.rename(old, new)
+                o.add("moved", old, new, size, src)
+                moved.append((old, new)); mb += size
+                d = os.path.dirname(old)
+                while d.startswith(area) and d not in examples:
+                    examples[d] = (old, new); d = os.path.dirname(d)
+            except OSError as e:
+                o.add("failed", old, new, size, str(e))
+        if i % 500 == 0:
+            print(f"  {i:,} of {len(work):,} — {len(moved):,} moved")
+            status(phase="tidying", source=plan_id, copied=len(moved), of=len(work))
+    rm = clear_out([a for a, _ in moved], ARCHIVE, o, examples)
+    o.close()
+    left = o.n["skipped"] + o.n["failed"]
+    print(f"\nmoved {len(moved):,} files onto the shelf, {left:,} left where they were"
+          + (f" ({o.n['failed']} could not be moved)" if o.n["failed"] else "")
+          + f", {rm:,} emptied folders removed")
+    print(f"  every move: _rushes/origin/{o.path.name}")
+    if moved:
+        tell_moved(moved)
+    history("tidied", f"tidy {plan_id}", len(moved), mb, time.time() - t0,
+            f"{left} left where they were" if left else "")
+    status(phase="done", source=f"tidy-up {plan_id}", copied=len(moved), of=len(work), failed=o.n["failed"])
+
+
+def untidy(name):
+    """Put back exactly what one tidy-up moved, newest move first."""
+    t0 = time.time()
+    _mark_done(f"untidy {name}")
+    rec = ORIGIN / name
+    if os.sep in name or "/" in name or not name.endswith(" tidy.tsv") or not rec.is_file():
+        print(f"There is no tidy-up record called {name}. Nothing moved.")
+        history("refused", f"untidy {name}", 0, 0, 0, "no such record"); return
+    rows = []
+    for l in open(rec, errors="replace"):
+        p = l.rstrip("\n").split("\t")
+        if len(p) >= 4 and p[0] == "moved" and p[1] and p[2]:
+            rows.append((p[1], p[2], int(p[3] or 0)))
+    o = Origin("untidy", f"undo of {name}", ARCHIVE, "archive", ARCHIVE)
+    status(phase="tidying", source=f"undo {name}", copied=0, of=len(rows))
+    back, mb = [], 0
+    for old, new, size in reversed(rows):
+        if not os.path.isfile(new):
+            o.add("skipped", new, old, size, "not where the tidy-up put it any more")
+        elif os.path.lexists(old):
+            o.add("skipped", new, old, size, "something is in its old place already")
+        else:
+            try:
+                os.makedirs(os.path.dirname(old), exist_ok=True)
+                os.rename(new, old)
+                o.add("moved", new, old, size, "undo"); back.append((new, old)); mb += size
+            except OSError as e:
+                o.add("failed", new, old, size, str(e))
+    # Empty folders the tidy-up made on the shelf go; the department folders stay.
+    shelf = _shelf()
+    for dept in {os.path.join(shelf, n[len(shelf) + 1:].split(os.sep)[0]) for n, _ in back if n.startswith(shelf + os.sep)}:
+        clear_out([n for n, _ in back if n.startswith(dept + os.sep)], dept, o)
+    o.close()
+    print(f"put back {len(back):,} files, {o.n['skipped'] + o.n['failed']:,} could not be")
+    print(f"  record: _rushes/origin/{o.path.name}")
+    if back:
+        tell_moved(back)
+    history("untidied", f"untidy {name}", len(back), mb, time.time() - t0, "")
+    status(phase="done", source=f"undo {name}", copied=len(back), of=len(rows))
 
 
 def tell_search(paths):
@@ -719,6 +939,8 @@ def watch(root, every=20):
             f = line.split("\t")
             if len(f) >= 2 and f[0] in ("copy", "list") and f[1].startswith("/"):
                 want.append((f[0], f[1], ""))
+            elif len(f) >= 2 and f[0] in ("tidy", "untidy") and f[1]:
+                want.append((f[0], f[1], ""))
             elif len(f) >= 3 and f[0] == "ingest" and f[1] and f[2]:
                 # a card, the folder it goes in, and — for a card that spans
                 # several days — which day's files belong in that folder
@@ -747,20 +969,23 @@ def watch(root, every=20):
         # A card is finished when its FOLDER is, not the card path: the same
         # /Volumes/EOS_DIGITAL comes back every week holding a different shoot.
         finished = lambda v, p, i: ((v == "copy" and p in done) or (v == "ingest" and i.split("\t")[0] in done)
-                                    or (v == "list" and p in listed))
+                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy") and f"{v} {p}" in done))
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
-        gone = [p for _, p, _ in pending if not os.path.isdir(p)]
-        if pending and len(gone) == len(pending):
+        # A tidy-up works inside the archive, so a source going away does not stop it.
+        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy")]
+        gone = [p for p in copies if not os.path.isdir(p)]
+        if copies and len(gone) == len(copies):
             root = os.path.commonpath(gone) if len(gone) > 1 else os.path.dirname(gone[0])
             if not blocked:
                 print(f"\n*** STOPPED: cannot see {root}")
-                print("    Nothing queued can run. Re-mount it in Finder and this carries")
+                print("    No copy can run. Re-mount it in Finder and this carries")
                 print("    on by itself — nothing is lost, and part-copied folders resume.")
                 blocked = True
             status(phase="blocked", source=root,
                    note=f"cannot see {root} — waiting for it to come back")
-            time.sleep(every); continue
-        if blocked:
+            if len(copies) == len(pending):
+                time.sleep(every); continue
+        elif blocked:
             print(f"\n{time.strftime('%H:%M:%S')}  source is back — carrying on")
             blocked = False
 
@@ -768,8 +993,19 @@ def watch(root, every=20):
         for verb, path, into in want:
             if finished(verb, path, into):            # already finished, ever
                 continue
+            if verb == "tidy":
+                did = True
+                print(f"\n=== tidy-up {path}: moving what the copies brought onto the shelf ===")
+                status(phase="tidying", source=path, copied=0, of=0)
+                run_self("--tidy", path); break
+            if verb == "untidy":
+                did = True
+                print(f"\n=== undoing tidy-up {path} ===")
+                run_self("--untidy", path); break
             if not os.path.isdir(path):
-                print(f"  ! {path} is not mounted — skipping"); continue
+                if not blocked:
+                    print(f"  ! {path} is not mounted — skipping")
+                continue
             if verb == "ingest" and not visible(path):
                 # The page only offers what this machine reported, so this means
                 # a forged or stale request. Refuse once, record it, move on.
@@ -837,6 +1073,8 @@ def main():
                     help="for footage copied before the origin record existed: work out, "
                          "file by file, where each copy in the archive came from")
     ap.add_argument("--root", default=ARCHIVE, help="archive root on the NAS")
+    ap.add_argument("--tidy", metavar="PLAN", help="move copied footage onto the shelf by an approved plan")
+    ap.add_argument("--untidy", metavar="RECORD", help="put back what one tidy-up moved")
     ap.add_argument("--into", help="copy the whole source into exactly this folder, "
                                    "keeping its layout (a card into its shoot folder)")
     ap.add_argument("--day", help="with --into: only the files recorded on this day (YYYY-MM-DD)")
@@ -868,12 +1106,16 @@ def main():
     # Anything that copies or lists needs to know where things are. Without
     # Rushes' settings it would be guessing, and a guessed path is how files
     # land somewhere nobody looks. Stop and say why instead.
-    if (a.sections or a.source or a.trace) and not SETTINGS:
+    if (a.sections or a.source or a.trace or a.tidy or a.untidy) and not SETTINGS:
         sys.exit(f"Cannot reach Rushes at {NAS_URL} — nothing copied.\n"
                  "Stop the helper (Ctrl-C) and start it again with the command from Setup.")
     if a.trace:
         HOME.mkdir(exist_ok=True); load_cache()
         return trace(a.trace, a.root)
+    if a.tidy:
+        if not re.fullmatch(r"[0-9-]+", a.tidy): sys.exit("That is not a tidy-up plan.")
+        return tidy(a.tidy)
+    if a.untidy:   return untidy(a.untidy)
     if a.sections: return sections(a.sections, a.fresh)
     if a.undo:     return undo()
     if not a.source: sys.exit("need --source")
@@ -1050,6 +1292,17 @@ def selftest():
     assert already_here("/nope", 123, {}) is None
     assert calls == [], "hashed a file whose size was unique — that is the whole point"
     digest = real
+
+    # a tidy-up's move carries a file's origin along, and an undo brings it back
+    import tempfile
+    global ORIGIN
+    keep, ORIGIN = ORIGIN, Path(tempfile.mkdtemp())
+    (ORIGIN / "1 a folder.tsv").write_text("copied\t/S/a.mov\t/A/x/a.mov\t5\t\n")
+    (ORIGIN / "2 archive tidy.tsv").write_text("moved\t/A/x/a.mov\t/V/P/a.mov\t5\t/S/a.mov\n")
+    assert load_origins() == {"/S/a.mov": ("/V/P/a.mov", "5")}, load_origins()
+    (ORIGIN / "3 archive untidy.tsv").write_text("moved\t/V/P/a.mov\t/A/x/a.mov\t5\tundo\n")
+    assert load_origins() == {"/S/a.mov": ("/A/x/a.mov", "5")}, load_origins()
+    ORIGIN = keep
     print("all checks pass")
 
 

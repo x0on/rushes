@@ -69,13 +69,14 @@ $NAV = $NAV ?? '';
         if (s.error) { $('hDot').className = 'dot off'; $('hWhat').textContent = 'needs setting up'; return; }
         // A copy on the helper counts as running. Saying "idle" while a
         // transfer is moving is the one lie this indicator must never tell.
-        var c = s.copy, copying = c && c.phase === 'copying' && !c.stale;
+        var c = s.copy, copying = c && (c.phase === 'copying' || c.phase === 'tidying') && !c.stale;
         var busy = !!s.running || copying;
         $('hDot').className = 'dot' + (busy ? ' busy' : (s.runner && s.runner.ok ? '' : ' off'));
         $('hWhat').textContent = s.running
           ? (s.progress ? s.running + ' · ' + s.progress.pct + '%' : s.running)
           : copying
-          ? 'copying ' + (c.source || '').split('/').pop() + ' · ' + (c.of ? Math.round(c.copied / c.of * 100) : 0) + '%'
+          ? (c.phase === 'tidying' ? 'tidying up' : 'copying ' + (c.source || '').split('/').pop())
+            + ' · ' + (c.of ? Math.round(c.copied / c.of * 100) : 0) + '%'
           : (c && c.phase === 'copying' && c.stale) ? 'a copy stopped'
           : (s.runner && s.runner.ok ? 'nothing running' : 'not picking up jobs');
       })
