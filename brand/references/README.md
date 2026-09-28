@@ -6,6 +6,12 @@ Rushes is an open-source media manager for professional production work: video, 
 
 The chosen logo is **01 / Together**, the LEFTMOST mark in both reference images: layered upright files forming an R. The chosen color scheme is **01 / Ocean**, also the LEFTMOST column. The other concepts are not selected.
 
+## Brand tagline
+
+**Less lost. More made.**
+
+Use beside the logo and as the website closing headline. Supporting section lines: “Find your files. Find your flow.” for Search; “Find the footage. Make the story.” for search benefits; “Clear the clutter. Keep creating.” for Manage; “Bring order. Make room for ideas.” for organization. Keep explanatory text concrete.
+
 ## Approved public copy
 
 **Your shoots. Your projects. One organized system.**

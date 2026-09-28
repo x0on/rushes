@@ -4,7 +4,7 @@
 
 **Your shoots. Your projects. One organized system.**
 
-Less time hunting. More time creating.
+Less lost. More made.
 
 Rushes is an open-source media manager being built for filmmakers, photographers, and production teams. Find video, photos, and audio, bring in new shoots, and keep your archive organized—on storage you control.
 
