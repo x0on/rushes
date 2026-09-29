@@ -395,7 +395,7 @@ function oops(msg) {
 }
 
 // ── the transfer ───────────────────────────────────────────────────────────
-function drawTransfer(j) {
+function drawTransfer(j, copy) {
   latestTransfer = j;
   const el = $('transferSummary');
   el.hidden = !j || !['overview', 'transfers'].includes(pane);
@@ -413,7 +413,15 @@ function drawTransfer(j) {
     : j.phase === 'queued' ? 'Your selection is saved. Start the helper to begin or continue.'
     : j.phase === 'done' ? 'All selected files are accounted for. Any pending search updates will catch up automatically.'
     : 'New files become searchable as the transfer progresses.';
-  el.innerHTML = '<div class="job-top"><div><h2>' + esc(labels[j.phase] || 'Transfer') + '</h2>' +
+  // The last report can be older than what the helper is doing now: it said
+  // "interrupted" at 1:38, then came back and is busy on the next step. The
+  // live status wins, and the stop is told as history, with its time.
+  const live = helperNow(copy), back = live && live.busy && ['interrupted', 'queued', 'blocked', 'stopped', 'paused'].includes(j.phase);
+  const when = j.updated ? new Date(j.updated*1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : '';
+  const title = back ? 'Transfer running again' : (labels[j.phase] || 'Transfer');
+  const say = back ? 'It stopped' + (when ? ' at ' + when : '') + ' and is back at it — right now: ' +
+      live.title.charAt(0).toLowerCase() + live.title.slice(1) + '.' + (pane === 'overview' ? ' The live box above has the numbers.' : '') : detail;
+  el.innerHTML = '<div class="job-top"><div><h2>' + esc(title) + '</h2>' +
     '<p class="note">Selected transfer · ' + j.folders + ' folders</p></div>' +
     '<strong class="job-percent">' + pct + (j.pct === null ? '' : ' <small>complete</small>') + '</strong></div>' +
     '<progress max="100"' + (j.pct === null ? '' : ' value="' + j.pct + '"') + ' aria-label="Overall transfer completion"></progress>' +
@@ -422,8 +430,8 @@ function drawTransfer(j) {
     '<p class="note">' + tb(j.copied_bytes) + ' copied · ' + tb(j.already_bytes) + ' already present · ' +
     j.folders_done + ' of ' + j.folders + ' folders finished</p>' +
     (j.source ? '<p class="note">Current folder: ' + esc(j.source.split('/').pop()) + '</p>' : '') +
-    '<p>' + esc(detail) + '</p>' +
-    (j.updated ? '<p class="note">Last report: ' + esc(new Date(j.updated*1000).toLocaleString()) + '</p>' : '');
+    '<p>' + esc(say) + '</p>' +
+    (j.updated && !back ? '<p class="note">Last report: ' + esc(new Date(j.updated*1000).toLocaleString()) + '</p>' : '');
 }
 
 function drawMove(d) {
@@ -587,7 +595,7 @@ function drawNow(d) {
 let armed = { what: '', until: 0 }, said = { text: '', until: 0 };
 function drawHelper(d) {
   const h = d.helper || {}, el = $('hctl');
-  el.hidden = pane !== 'overview' || !h.label;
+  el.hidden = !['overview', 'transfers'].includes(pane) || !h.label;   // Pause wherever the transfer shows
   if (el.hidden) return;
   const how = h.how === 'service' ? 'runs in the background' : h.how === 'window' ? 'runs in a Terminal window' : '';
   const seen = h.seen ? (h.fresh ? 'seen ' + h.seen_ago : 'not heard from since ' + h.seen_ago) : 'not started yet';
@@ -636,7 +644,7 @@ async function load() {
 
   secs = (d.sections || []).filter(x => x.state !== 'done');
   ticked = new Set([...ticked].filter(p => secs.some(x => x.path === p)));
-  drawTransfer(d.transfer);
+  drawTransfer(d.transfer, d.copy);
   if (!seeded) {                        // the tick starts as whatever is queued
     secs.forEach(function (x) { if (x.state === 'queued') ticked.add(x.path); });
     seeded = true;
