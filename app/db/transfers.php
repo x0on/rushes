@@ -57,10 +57,31 @@ function transfer_select(array $paths, array $sizes): void {
     } catch (Throwable $e) { $db->exec('ROLLBACK'); throw $e; }
 }
 
+// Bytes each folder's runs actually copied, from the history (one line per run).
+function history_copied(): array {
+    $b = [];
+    foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
+        $f = explode("\t", rtrim($l, "\n"));
+        if (($f[1] ?? '') === 'copied' && isset($f[2])) $b[$f[2]] = ($b[$f[2]] ?? 0) + (int)($f[4] ?? 0);
+    }
+    return $b;
+}
+
 function transfer_summary(?array $j): ?array {
     if (!$j) return null;
     $items = array_values(array_filter($j['items'], fn($i) => $i['phase'] !== 'removed'));
     if (!$items) return null;
+    // A folder finished before transfers kept their own numbers arrives with a
+    // total only. Its copied share is in the history; the rest was already here.
+    $old = fn($i) => $i['phase'] === 'done' && $i['done_bytes'] && !$i['copied_bytes'] && !$i['already_bytes'];
+    if (array_filter($items, $old)) {
+        $hc = history_copied();
+        foreach ($items as &$i) if ($old($i)) {
+            $i['copied_bytes'] = min((int)$i['done_bytes'], $hc[$i['source']] ?? 0);
+            $i['already_bytes'] = $i['done_bytes'] - $i['copied_bytes'];
+        }
+        unset($i);
+    }
     $sum = fn($k) => array_sum(array_column($items, $k));
     $done = count(array_filter($items, fn($i) => $i['phase'] === 'done'));
     $last = max(array_column($items, 'updated'));

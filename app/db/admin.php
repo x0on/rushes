@@ -414,7 +414,7 @@ function liveFor(j, c) {
 }
 function clock(t) { return t ? new Date(t*1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : ''; }
 
-function drawTransfer(j, c) {
+function drawTransfer(j, c, paused) {
   latestTransfer = j;
   const el = $('transferSummary'), hc = $('hctl');
   el.hidden = !j || !['overview', 'transfers'].includes(pane);
@@ -443,6 +443,12 @@ function drawTransfer(j, c) {
         'It only reads. Copying carries on by itself when it is done.'
       : 'New files become searchable as the transfer progresses.';
     if (j.reported === 'interrupted' && j.updated) say = 'It stopped at ' + clock(j.updated) + ' and is back at it. ' + say;
+    if (paused) {
+      title = 'Transfer pausing';
+      say = 'Paused from Manage. The step running now stops at its next safe point' +
+        (c.phase === 'tracing' ? ' (it only reads, so nothing is half-done)' : ' — between files, never in the middle of one') +
+        ', and nothing new starts until Resume.';
+    }
   }
   hc.remove();                                        // kept across the redraw, put back at the bottom
   el.innerHTML = '<div class="job-top"><div><h2>' + esc(title) + '</h2>' +
@@ -661,7 +667,7 @@ function drawHelper(d) {
       try {
         const r = await (await fetch('helper.php', { method: 'POST', body: body })).json();
         said = { until: Date.now() + 8000, text: r.error ? 'Did not happen: ' + r.error
-          : { pause: 'Paused ✓ The file being copied finishes; nothing new starts until Resume.',
+          : { pause: 'Paused ✓ What is running stops at its next safe point; nothing new starts until Resume.',
               resume: 'Resumed ✓ It carries on within a few seconds.',
               nudge: 'Asked ✓ It stops waiting and looks again now.',
               skip: 'Skipped ✓ That folder is out of this transfer. Tick it again in Transfers to bring it back.' }[what] };
@@ -681,7 +687,7 @@ async function load() {
 
   secs = (d.sections || []).filter(x => x.state !== 'done');
   ticked = new Set([...ticked].filter(p => secs.some(x => x.path === p)));
-  drawTransfer(d.transfer, d.copy);
+  drawTransfer(d.transfer, d.copy, (d.helper || {}).paused);
   if (!seeded) {                        // the tick starts as whatever is queued
     secs.forEach(function (x) { if (x.state === 'queued') ticked.add(x.path); });
     seeded = true;

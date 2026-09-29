@@ -62,4 +62,9 @@ db()->exec("UPDATE transfer_items SET phase='done',done_bytes=70,copied_bytes=70
 check(transfer_summary(transfer_latest())['pct'] === 100, 'only fully completed selection reaches 100 percent');
 transfer_select(['/source/C'], ['/source/C'=>[0,0]]);
 check(transfer_latest()['id'] !== $job && transfer_summary(transfer_latest())['pct'] === null, 'new unknown-size job does not inherit a completed percentage');
+db()->exec("INSERT INTO transfer_items (job_id,source,total_bytes,done_bytes,phase) VALUES ('old','/source/D',100,100,'done')");
+db()->exec("INSERT INTO transfer_jobs VALUES ('old'," . (time()+10) . ")");
+file_put_contents("$root/app/ingest-history.tsv", "2026-09-20 10:00\tcopied\t/source/D\t3\t40\t9\t\n2026-09-21 10:00\tcopied\t/source/D\t1\t20\t9\t\n");
+$s = transfer_summary(transfer_latest());
+check($s['copied_bytes'] === 60 && $s['already_bytes'] === 40, 'folders finished before this transfer show what was copied and what was already there');
 echo "Server tests complete. Fixture: $root\n";
