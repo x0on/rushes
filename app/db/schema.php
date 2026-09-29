@@ -25,6 +25,11 @@ function db(): SQLite3 {
     $db->busyTimeout(30000);          // imports and searches can overlap
     $db->exec('PRAGMA journal_mode = WAL');   // readers never block on a writer
     $db->exec('PRAGMA synchronous = NORMAL');
+    // Sorting (building an index over every file) needs scratch space. SQLite
+    // puts it in /tmp by default, and on a QNAP /tmp is a small RAM disk that
+    // fills long before the archive's disk does — "database or disk is full".
+    // Keep that scratch space in memory instead.
+    $db->exec('PRAGMA temp_store = MEMORY');
     return $db;
 }
 
