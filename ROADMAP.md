@@ -46,7 +46,6 @@ with everything the final stage needs inside it.
 
 ### Not built yet
 
-- Rushes Helper following a change of the Rushes address by itself.
 - Premiere relinking after tidy-up.
 - Proxies, then vision-model descriptions of the footage (the final stage; the
   descriptions also replace separately built previews).
