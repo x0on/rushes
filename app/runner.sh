@@ -200,7 +200,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
     case "$STILLS" in 1) ;; *) STILLS=0 ;; esac
     # exclusions are plain relative folder names; strip anything else
     EXCLUDE=$(printf '%s' "$EXCLUDE" | tr -cd 'A-Za-z0-9 ,_./-')
-    QUERY=$(printf '%s' "$QUERY" | tr -cd 'A-Za-z0-9 _./-' | cut -c1-200)
+    QUERY=$(printf '%s' "$QUERY" | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
     case "$DEST" in
         /share/VIDEO/*) case "$DEST" in *..*) DEST=/share/VIDEO/_duplicates ;; esac ;;
         *) DEST=/share/VIDEO/_duplicates ;;
@@ -282,7 +282,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             df -h /share/VIDEO >> "$LOG" 2>&1
             ;;
         proxy-plan)
-            sh /share/Web/proxy.sh >> "$LOG" 2>&1
+            PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh >> "$LOG" 2>&1
             ;;
         proxy-build)
             # Hours to days, so in the background: the runner stays free for
@@ -292,7 +292,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
                 echo "proxies are already being made (proxy.log)" >> "$LOG"
             else
-                nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
+                PROXY_ONLY="$QUERY" nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
                 echo $! > /share/Web/proxy.pid
                 echo "making proxies in the background: progress in Manage → Describe, detail in proxy.log" >> "$LOG"
             fi

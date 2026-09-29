@@ -210,6 +210,11 @@ if (isset($_POST['_newpass'])) {
               same paths as the originals, so nothing mixes with the footage, and they can always be made again.
               Made on this machine, at low priority; a file that arrived in the last two hours is left for the
               next run, so nothing still being copied is touched.</p>
+            <p class="note" style="margin:0 0 8px">One folder at a time, in the order you choose: pick a folder
+              (or leave it empty for the whole archive), press Plan to see what it would do, then Make proxies.</p>
+            <input id="pxPath" list="anFolders" placeholder="a folder in the archive, e.g. PARK COLLECTION — or empty for everything"
+                   style="width:100%;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
+                          border-radius:var(--radius-sm);background:var(--bg);color:var(--fg);margin-bottom:10px">
             <div id="pxState" class="note"></div>
             <div class="btns" style="margin-top:10px">
               <button class="btn quiet" data-px="proxy-plan">Plan (changes nothing)</button>
@@ -859,10 +864,11 @@ function drawProxies(p) {
   el.innerHTML = p.state === 'no-ffmpeg'
       ? '<span class="warnline" style="display:block">This machine has no ffmpeg, the tool that makes video, so it cannot make proxies yet.</span>'
     : p.state === 'planned'
-      ? n(p.have) + ' videos already have a proxy · <b>' + n(p.missing) + ' to make</b>, about ' + p.source_tb + ' TB to read · ' +
+      ? (p.only ? '<b>' + esc(p.only) + '</b>: ' : 'Whole archive: ') +
+        n(p.have) + ' videos already have a proxy · <b>' + n(p.missing) + ' to make</b>, about ' + p.source_tb + ' TB to read · ' +
         (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software: slow, the hardware encoder was not found')
     : p.state === 'building' && p.running
-      ? '<b>Making proxies</b> · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed · ' +
+      ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed · ' +
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
     : p.state === 'building'
       ? '<span class="warnline" style="display:block">The proxy build stopped without finishing (the machine restarted?) at ' +
@@ -873,7 +879,21 @@ function drawProxies(p) {
       ? '✓ Finished · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed' + (+p.later ? ' · ' + n(p.later) + ' were still arriving: press Make proxies again later for those' : '')
     : esc(p.state || '');
 }
-document.querySelectorAll('[data-px]').forEach(function (b) { b.onclick = function () { act(b.dataset.px, b); }; });
+// Proxy buttons: the same runner jobs, for the folder typed above (or all of it).
+document.querySelectorAll('[data-px]').forEach(function (b) {
+  b.onclick = async function () {
+    const what = b.dataset.px, folder = $('pxPath').value.trim().replace(/\/+$/, '');
+    const where = folder ? ' — only ' + folder : ' — the whole archive';
+    if (!confirm(ASK[what] + (what === 'proxy-stop' ? '' : where))) return;
+    const was = b.textContent; b.disabled = true; b.textContent = 'Asking…';
+    try {
+      const j = await (await fetch('../run.php', { method: 'POST',
+        body: new URLSearchParams({ action: what, query: folder }) })).json();
+      b.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓ within a minute';
+    } catch (e) { b.textContent = 'Could not reach the archive'; }
+    setTimeout(function () { b.textContent = was; b.disabled = false; load(); }, 3000);
+  };
+});
 function drawDescribeTools(h) {
   const an = (h && h.analysis) || {};
   $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'

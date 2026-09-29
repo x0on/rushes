@@ -23,7 +23,7 @@ $keep_side = $_POST['keep_side'] ?? 'project';
 $dest      = $_POST['dest']      ?? '/share/VIDEO/_duplicates';
 $stills    = ($_POST['stills'] ?? '0') === '1' ? '1' : '0';
 $exclude   = preg_replace('/[^A-Za-z0-9 ,_.\/-]/', '', $_POST['exclude'] ?? '');
-$query     = substr(preg_replace('/[^A-Za-z0-9 _.\/-]/', '', $_POST['query'] ?? ''), 0, 200);
+$query     = substr(preg_replace('/[^A-Za-z0-9 _.\/&(),+-]/', '', $_POST['query'] ?? ''), 0, 200);
 
 // A signed-in admin session is enough; a password in the request also works,
 // so a script can still drive this without a browser.

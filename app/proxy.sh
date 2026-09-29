@@ -28,6 +28,8 @@ HEIGHT=${HEIGHT:-1080}
 BITRATE=${BITRATE:-2M}
 TAB=$(printf '\t')
 MODE=${1:-plan}
+ONLY=${PROXY_ONLY:-}     # one folder of the archive (e.g. "PARK COLLECTION"), or empty for all of it
+ONLY=${ONLY%/}
 STATE=${STATE:-/share/Web/proxy-status.txt}
 RECENT=${RECENT:-7200}   # seconds: a file written this recently may still be arriving; left for the next run
 
@@ -74,9 +76,10 @@ fi
 # ---------- what is missing ----------
 [ -f "$INDEX" ] || { echo "no index at $INDEX"; exit 1; }
 
-awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" '
+awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" -v only="$ONLY" '
 {
     rel = $0
+    if (only != "" && index(rel, only "/") != 1) next
     if (rel ~ /^(PROXIES|_duplicates)\//) next
     if (rel ~ /(^|\/)@Recycle\//) next
     if (rel !~ /\.(mxf|MXF|mov|MOV|mp4|MP4|avi|AVI|mts|MTS|m4v|M4V|braw|BRAW|r3d|R3D)$/) next
@@ -118,7 +121,7 @@ fi
 if [ "$MODE" != "--build" ]; then
     src_tb=$(awk -F"$TAB" '{print $1}' "$PLAN" | head -2000 | xargs -r -d '\n' stat -c %s 2>/dev/null |
              awk -v n="$missing" '{ s += $1; c++ } END { if (c) printf "%.1f", s / c * n / 1099511627776; else print 0 }')
-    state "state${TAB}planned" "have${TAB}$have" "missing${TAB}$missing" "source_tb${TAB}$src_tb" \
+    state "state${TAB}planned" "only${TAB}$ONLY" "have${TAB}$have" "missing${TAB}$missing" "source_tb${TAB}$src_tb" \
           "hw${TAB}$HW" "height${TAB}$HEIGHT"
     echo
     echo "nothing encoded. re-run with --build."
@@ -144,7 +147,7 @@ while IFS="$TAB" read -r src out; do
     # two hours is left alone and made on the next run.
     mt=$(stat -c %Y "$src" 2>/dev/null || echo 0)
     if [ $(( $(date +%s) - mt )) -lt "$RECENT" ]; then later=$((later + 1)); continue; fi
-    state "state${TAB}building" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" \
+    state "state${TAB}building" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" \
           "later${TAB}$later" "file${TAB}${src#$SHARE/}" "hw${TAB}$HW"
     mkdir -p "$(dirname "$out")"
     # encode to a temp name so an interrupted run never leaves a playable-looking
@@ -168,7 +171,7 @@ while IFS="$TAB" read -r src out; do
 done < "$PLAN"
 
 ff=""; tmp=""
-state "state${TAB}done" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later"
+state "state${TAB}done" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later"
 echo "built $ok proxies, $failed failed, $later left for the next run (still arriving)"
 [ "$failed" -gt 0 ] && echo "errors in $LOG.err"
 echo "proxies: $PROXY_ROOT"
