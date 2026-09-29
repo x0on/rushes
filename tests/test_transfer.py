@@ -83,33 +83,58 @@ class CopyTests(unittest.TestCase):
 
     def run_copy(self):
         args = ['ingest.py','--source',str(self.source),'--into',str(self.dest),'--apply','--job','test-job']
-        with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO): self.mod.main()
+        with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO):
+            try: self.mod.main()
+            except SystemExit as e: return e.code      # a stopped folder exits non-zero
+        return 0
 
-    def test_interrupted_copy_resumes_with_same_total_and_search_reports(self):
+    def test_a_file_that_fails_once_is_tried_again_and_lands(self):
         (self.source / 'a.mov').write_bytes(b'a' * 10)
         (self.source / 'b.mov').write_bytes(b'b' * 20)
         rename = os.rename
         calls = [0]
-        def disconnect(src, dst):
+        def hiccup(src, dst):
             calls[0] += 1
-            if calls[0] == 2: raise OSError('network disconnected')
+            if calls[0] == 2: raise OSError('network hiccup')
             return rename(src, dst)
-        with patch.object(self.mod.os, 'rename', side_effect=disconnect): self.run_copy()
-        self.assertEqual(self.reports[-1]['phase'], 'interrupted')
-        self.assertLess(self.reports[-1]['done_bytes'], 30)
-        self.assertFalse(self.mod.DONE.exists())
-        self.run_copy()
+        with patch.object(self.mod.os, 'rename', side_effect=hiccup), patch.object(self.mod.time, 'sleep'):
+            self.assertEqual(self.run_copy(), 0)
         self.assertEqual(self.reports[-1]['phase'], 'done')
+        self.assertEqual(self.reports[-1]['failed'], 0)
         self.assertEqual(self.reports[-1]['done_bytes'], 30)
         self.assertEqual(self.reports[-1]['copied_bytes'], 30)
         self.assertEqual((self.dest / 'b.mov').read_bytes(), b'b' * 20)
         self.assertEqual(self.mod._CHECKPOINTS.db.execute('SELECT COUNT(*) FROM search').fetchone()[0], 0)
 
+    def test_disconnection_stops_the_folder_and_it_resumes(self):
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        (self.source / 'b.mov').write_bytes(b'b' * 20)
+        away = self.root / 'away'
+        rename = os.rename
+        calls = [0]
+        def unplug(src, dst):
+            calls[0] += 1
+            if calls[0] == 2:
+                rename(self.source, away)             # the share drops mid-copy
+                raise OSError('network disconnected')
+            return rename(src, dst)
+        with patch.object(self.mod.os, 'rename', side_effect=unplug):
+            self.assertEqual(self.run_copy(), 1)
+        self.assertEqual(self.reports[-1]['phase'], 'interrupted')
+        self.assertLess(self.reports[-1]['done_bytes'], 30)
+        self.assertFalse(self.mod.DONE.exists())
+        os.rename(away, self.source)                   # it comes back
+        self.assertEqual(self.run_copy(), 0)
+        self.assertEqual(self.reports[-1]['phase'], 'done')
+        self.assertEqual(self.reports[-1]['done_bytes'], 30)
+        self.assertEqual((self.dest / 'b.mov').read_bytes(), b'b' * 20)
+
     def test_same_name_different_content_is_not_completed_or_overwritten(self):
         (self.source / 'a.mov').write_bytes(b'new')
         self.dest.mkdir(); (self.dest / 'a.mov').write_bytes(b'old')
-        self.run_copy()
-        self.assertEqual(self.reports[-1]['phase'], 'interrupted')
+        with patch.object(self.mod.time, 'sleep'): self.run_copy()
+        # written down as a failure, never counted as done, never overwritten
+        self.assertEqual(self.reports[-1]['failed'], 1)
         self.assertEqual(self.reports[-1]['done_bytes'], 0)
         self.assertEqual((self.dest / 'a.mov').read_bytes(), b'old')
 
@@ -119,13 +144,23 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(self.reports[-1]['phase'], 'blocked')
         self.assertFalse(self.mod.DONE.exists())
 
-    def test_unreadable_walk_does_not_finish(self):
+    def test_an_unreadable_folder_is_recorded_not_skipped(self):
         def bad_walk(*args, **kwargs):
-            kwargs['onerror'](OSError('disconnected during scan'))
+            kwargs['onerror'](OSError(13, 'Permission denied', str(self.source / 'locked')))
             return iter(())
-        with patch.object(self.mod.os, 'walk', side_effect=bad_walk):
-            with self.assertRaises(OSError): self.run_copy()
-        self.assertNotIn('done', [x['phase'] for x in self.reports])
+        with patch.object(self.mod.os, 'walk', side_effect=bad_walk): self.run_copy()
+        self.assertEqual(self.reports[-1]['failed'], 1)
+        record = next(self.mod.ORIGIN.glob('*.tsv')).read_text()
+        self.assertIn('failed\t' + str(self.source / 'locked'), record)
+
+    def test_a_copy_aimed_outside_the_archive_is_refused(self):
+        (self.source / 'a.mov').write_bytes(b'a')
+        outside = self.root / 'elsewhere'
+        args = ['ingest.py','--source',str(self.source),'--into',str(outside),'--apply']
+        with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as e: self.mod.main()
+        self.assertEqual(e.exception.code, 1)
+        self.assertFalse(outside.exists())
 
     def test_unreadable_hashes_are_not_duplicate_matches(self):
         self.assertIsNone(self.mod.already_here('/missing/source', 10, {10: ['/missing/archive']}))

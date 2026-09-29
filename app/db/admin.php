@@ -83,6 +83,9 @@ if (isset($_POST['_newpass'])) {
       <!-- always true, then only what is -->
       <div class="tiles" id="tiles"></div>
 
+      <!-- what the helper is doing this second -->
+      <div class="now" id="now" hidden></div>
+
       <section id="transferSummary" class="transfer-summary" aria-label="Transfer job" hidden></section>
       <div id="cards"></div>
 
@@ -289,7 +292,18 @@ const ASK = {
 };
 
 async function act(name, btn) {
-  if (name === 'import')    { location.href = 'import.php'; return; }
+  if (name === 'import') {
+    // Same rebuild the scheduled runner does; the old search keeps working
+    // until the new one is complete. Say how it went, on the button itself.
+    const was = btn.textContent; btn.disabled = true; btn.textContent = 'Rebuilding search…';
+    try {
+      const r = await (await fetch('import.php')).json();
+      btn.textContent = r.state === 'retrying' ? 'Kept the old search — ' + (r.error || 'try again')
+                      : r.state === 'updating' ? 'Already rebuilding — give it a minute' : 'Search is up to date ✓';
+    } catch (e) { btn.textContent = 'Could not reach the archive'; }
+    setTimeout(function () { btn.textContent = was; btn.disabled = false; load(); }, 3000);
+    return;
+  }
   if (name === 'cachejunk') { return moveCache(btn); }
   if (name === '#transfers'){ show('transfers'); return; }
   if (ASK[name] && !confirm(ASK[name])) return;
@@ -531,6 +545,20 @@ function drawTiles(d) {
   });
 }
 
+// ── live: what the helper is doing, with its numbers ─────────────────────────
+function drawNow(d) {
+  const h = (pane === 'overview') ? helperNow(d.copy) : null;
+  $('now').hidden = !h || h.bad;
+  if (!h || h.bad) return;
+  const secs = d.copy.secs == null ? '' : d.copy.secs < 10 ? 'live' : 'updated ' + d.copy.secs + ' s ago';
+  $('now').innerHTML =
+    '<div class="now-h"><span class="dot busy"></span><b>' + esc(h.title) + '</b><span>' + esc(secs) + '</span></div>' +
+    (h.pct != null ? '<div class="bar"><i style="width:' + h.pct + '%"></i><em>' + h.pct + '%</em></div>' : '') +
+    '<div class="facts">' + (h.facts || []).map(function (f) {
+      return '<div><b>' + esc(f[0]) + '</b><span>' + esc(f[1]) + '</span></div>'; }).join('') + '</div>' +
+    (h.file ? '<div class="file">now: ' + esc(h.file) + '</div>' : '');
+}
+
 // ── what the page shows ────────────────────────────────────────────────────
 async function load() {
   let d;
@@ -558,6 +586,7 @@ async function load() {
   $('nOverview').hidden = !bad; $('nOverview').textContent = bad || '';
 
   drawTiles(d);
+  drawNow(d);
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {

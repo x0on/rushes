@@ -125,6 +125,19 @@ $opts = function (string $cur) use ($folders, $e) {
           border-radius: var(--radius-sm); border: 1px solid var(--line) }
   .path b { color: var(--accent-text); font-weight: 600 }
   @media (max-width: 640px) { .dep, .dep-h { grid-template-columns: 1fr } .dep-h { display: none } }
+  .tg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,260px); gap: 14px; padding: 10px 0;
+        border-top: 1px solid var(--line-soft); align-items: start }
+  .dep-h.tg { border-top: 0; padding: 0 }
+  .tg b { font-size: 13.5px; font-weight: 600; word-break: break-word }
+  .tg small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 3px; word-break: break-word }
+  .tg small.flag { color: var(--warn, var(--accent-text)) }
+  .tg select { width: 100% }
+  .tg .to { color: var(--accent-text) }
+  .tg .to.stay { color: var(--faint) }
+  .run { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0;
+         border-top: 1px solid var(--line-soft); font-size: 13px }
+  .run small { display: block; color: var(--faint); font-size: 11.5px; font-family: var(--mono) }
+  @media (max-width: 640px) { .tg { grid-template-columns: 1fr } .dep-h.tg { display: none } }
 </style>
 
 <div class="app">
@@ -244,13 +257,145 @@ $opts = function (string $cur) use ($folders, $e) {
     </div>
 
     <!-- ══ the tidy-up ══ -->
-    <div class="grp">
+    <div class="grp" id="tidy">
       <h2><span>04 /</span> Tidy-up</h2>
-      <p style="margin:0">Next: move what is already on disk to follow this plan &mdash; shown in
-         full before anything moves, never touching a folder that is still being copied, and
-         with every move recorded so Premiere projects can be relinked. Not built yet; nothing
-         here moves files.</p>
+      <p>Moves what the copies brought into ARCHIVE onto the shelf. Where each file goes is read
+         from where it <i>came from</i>, not where the copy put it &mdash; and everything below the
+         <?= $e($one) ?> keeps the layout it had. Nothing is copied, renamed or deleted, every
+         move is recorded so Premiere projects can be relinked, and a tidy-up can be put back.</p>
+      <div id="tWait" class="banner warn" hidden><div class="txt"></div></div>
+      <div id="tList"><p class="note" style="margin:0">Reading the records of what was copied &hellip;</p></div>
+      <div id="tGo" class="btns" style="margin-top:14px" hidden>
+        <button class="btn" type="button" id="tAsk"></button>
+        <span class="note" id="tSum"></span>
+      </div>
+      <div id="tSure" class="banner warn" hidden><div class="txt">
+        <b id="tSureWhat"></b>
+        The helper on <span class="tHelper"></span> moves them one file at a time, never over another
+        file and never while its folder is still being copied. It shows its progress in the top bar.
+        <div class="btns" style="margin-top:10px">
+          <button class="btn" type="button" id="tYes">Yes, move them</button>
+          <button class="btn quiet" type="button" id="tNo">Not yet</button>
+        </div></div></div>
+      <div id="tRuns"></div>
     </div>
+    <script>
+    (function () {
+      var SHELF = <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>, data = null;
+      var $ = function (id) { return document.getElementById(id); };
+      var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
+      var num = function (n) { return n.toLocaleString(); };
+      var shown = function (r) {       // share / Departments / Parks & Recreation / 2024
+        var from = r.root.slice(0, r.root.lastIndexOf('/') + 1);
+        return r.key.slice(from.length).split('/').join(' / ');
+      };
+      var dest = function (r, dept) {
+        var d = data.depts.filter(function (x) { return x.name === dept; })[0];
+        if (!d) return '';
+        var tail = r.base !== '' ? r.key.slice(r.base.length)
+                 : '/' + (r.key.slice(r.root.length + 1) || r.root.split('/').pop());
+        return (SHELF + '/' + d.folder + tail).split('/').join(' / ');
+      };
+
+      function sum() {
+        var n = 0, b = 0, rows = 0;
+        data.groups.forEach(function (r, i) {
+          var v = $('tp' + i).value;
+          $('td' + i).innerHTML = v ? '&rarr; ' + esc(dest(r, v)) : 'stays in ARCHIVE';
+          $('td' + i).className = 'to' + (v ? '' : ' stay');
+          if (v) { n += r.n; b += r.bytes; rows++; }
+        });
+        $('tGo').hidden = !data.groups.length;
+        $('tAsk').disabled = !n;
+        $('tAsk').textContent = n ? 'Move ' + num(n) + ' files (' + size(b) + ')' : 'Nothing picked to move';
+        $('tSum').textContent = n ? 'from ' + rows + ' folder' + (rows > 1 ? 's' : '') + '. Asks first.' : '';
+        $('tSure').hidden = true;
+        return {n: n, b: b, rows: rows};
+      }
+
+      function draw(d) {
+        data = d;
+        document.querySelectorAll('.tHelper').forEach(function (x) { x.textContent = d.helper; });
+        $('tWait').hidden = !d.waiting.length;
+        $('tWait').querySelector('.txt').innerHTML = d.waiting.length
+          ? '<b>A tidy-up is waiting for the helper.</b> It runs next, before any copy, as soon as the helper on '
+            + esc(d.helper) + ' is running. Moving more now adds another one behind it.' : '';
+        if (!d.groups.length) {
+          $('tList').innerHTML = '<p class="note" style="margin:0">' + (d.records
+            ? 'Nothing to tidy &mdash; everything the copies brought in is on the shelf already.'
+            : 'Nothing to tidy yet. Every copy writes a record of where each file came from, and the tidy-up works from those &mdash; none has been written so far.') + '</p>';
+        } else {
+          var opts = '<option value="">— leave it in ARCHIVE —</option>' + d.depts.map(function (x) {
+            return '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>'; }).join('');
+          $('tList').innerHTML = '<div class="dep-h tg"><span>Came from</span><span>Goes to</span></div>'
+            + d.groups.map(function (r, i) {
+              return '<div class="tg' + (r.busy ? ' busy' : '') + '"><div><b>' + esc(shown(r)) + '</b>'
+                + '<small>' + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
+                + (r.eg ? ' · e.g. …' + esc(r.eg) : '') + '</small>'
+                + (r.busy ? '<small class="flag">Still being copied &mdash; those files wait for the next tidy-up.</small>' : '')
+                + (r.dept ? '' : '<small>No ' + <?= json_encode(strtolower($one)) ?> + ' in its path &mdash; pick one, or leave it.</small>')
+                + '</div><div><select id="tp' + i + '" aria-label="Goes to">' + opts + '</select>'
+                + '<small id="td' + i + '" class="to"></small></div></div>';
+            }).join('');
+          d.groups.forEach(function (r, i) { $('tp' + i).value = r.dept || ''; $('tp' + i).onchange = sum; });
+        }
+        $('tRuns').innerHTML = d.runs.length ? '<p style="margin:18px 0 6px;color:var(--fg);font-size:13px"><b>Done so far</b></p>'
+          + d.runs.map(function (r) {
+            return '<div class="run"><span>' + esc(r.ago) + ' &mdash; ' + num(r.moved) + ' moved (' + size(r.bytes) + ')'
+              + (r.left ? ', ' + num(r.left) + ' left where they were' : '') + '<small>' + esc(r.record) + '</small></span>'
+              + (r.undone ? '<span class="note">put back</span>'
+                          : '<button class="btn quiet sm" type="button" data-undo="' + esc(r.record) + '">Put back</button>') + '</div>';
+          }).join('') : '';
+        if (d.groups.length) sum(); else $('tGo').hidden = true;
+      }
+
+      function load() {
+        fetch('/db/tidy.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.error) throw new Error(d.error);
+          draw(d);
+        }).catch(function (e) {
+          $('tList').innerHTML = '<div class="banner bad"><div class="txt"><b>Could not read the records.</b> ' + esc(e.message) + '</div></div>';
+        });
+      }
+
+      function post(body, done) {
+        fetch('/db/tidy.php', {method: 'POST', body: body}).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.error) throw new Error(d.error);
+          done(d); load();
+        }).catch(function (e) {
+          $('tWait').hidden = false; $('tWait').className = 'banner bad';
+          $('tWait').querySelector('.txt').innerHTML = '<b>Nothing was queued.</b> ' + esc(e.message);
+        });
+      }
+
+      $('tAsk').onclick = function () {
+        var s = sum();
+        $('tSureWhat').textContent = 'Move ' + num(s.n) + ' files (' + size(s.b) + ') from ' + s.rows + ' folder' + (s.rows > 1 ? 's' : '') + ' onto ' + SHELF + '?';
+        $('tSure').hidden = false; $('tYes').focus();
+      };
+      $('tNo').onclick = function () { $('tSure').hidden = true; };
+      $('tYes').onclick = function () {
+        var f = new FormData(), picks = {}; f.append('go', '1');
+        data.groups.forEach(function (r, i) { if ($('tp' + i).value) picks[r.key] = $('tp' + i).value; });
+        f.append('picks', JSON.stringify(picks));
+        $('tYes').disabled = true; $('tYes').textContent = 'Queuing…';
+        post(f, function (d) {
+          $('tYes').disabled = false; $('tYes').textContent = 'Yes, move them';
+          $('tWait').className = 'banner ok'; $('tWait').hidden = false;
+          $('tWait').querySelector('.txt').innerHTML = '<b>Queued ✓</b> ' + num(d.files) + ' files. The helper on ' + esc(data.helper) + ' does it next &mdash; watch the top bar.';
+        });
+      };
+      $('tRuns').onclick = function (ev) {
+        var b = ev.target.closest('[data-undo]'); if (!b) return;
+        if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Sure? Put them back'; return; }
+        var f = new FormData(); f.append('undo', b.dataset.undo);
+        b.disabled = true; b.textContent = 'Queuing…';
+        post(f, function () { b.textContent = 'Queued ✓'; });
+      };
+      load();
+    })();
+    </script>
   </div>
   </main>
 </div>

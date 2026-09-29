@@ -8,9 +8,12 @@
 //
 // A condition appears only when it applies. No conditions is itself an answer.
 
-require __DIR__ . '/transfers.php';
+require_once __DIR__ . '/transfers.php';
 db_init();
 $transfer = transfer_summary(transfer_current());
+// An unfinished transfer tells its own story (its card says blocked, stopped,
+// interrupted); a finished one must not hide what happens after it.
+$transferOpen = $transfer && $transfer['phase'] !== 'done';
 header('Content-Type: application/json');
 
 $WEB = web_dir();
@@ -70,7 +73,7 @@ $mac_stale = $mac_at && ($now - $mac_at) > limit('copy_stalled_seconds', 900);
 // The source going away is the failure that cost a whole weekend in September:
 // the Mac kept saying "not mounted, skipping" into a terminal nobody was
 // watching, and this page sat there looking content.
-if (!$transfer && ($mac['phase'] ?? '') === 'blocked') {
+if (!$transferOpen && ($mac['phase'] ?? '') === 'blocked') {
     // a tile: the headline number, and the tile itself is the button
     $c[] = ['level' => 'bad',
         'tile' => ['lab' => 'Copying stopped', 'big' => 'Source gone',
@@ -80,7 +83,7 @@ if (!$transfer && ($mac['phase'] ?? '') === 'blocked') {
                 . ' Re-mount it and copying carries on by itself. '
                 . 'Nothing is lost — a part-copied folder picks up where it stopped.',
         'act' => null];
-} elseif (!$transfer && ($mac['phase'] ?? '') === 'copying' && $mac_stale) {
+} elseif (!$transferOpen && ($mac['phase'] ?? '') === 'copying' && $mac_stale) {
     $done_n = (int)($mac['copied'] ?? 0); $of = (int)($mac['of'] ?? 0);
     $c[] = ['level' => 'bad',
         'tile' => ['lab' => 'Needs you', 'big' => 'A copy stopped',
@@ -186,7 +189,7 @@ if (is_readable("$WEB/ingest-sections.tsv")) {
         if (($hist[$f[1]] ?? '') === 'copied' || ($f[4] ?? '') === 'done') $done++;
         else $left_b += (int)($f[3] ?? 0);
     }
-    if (!$transfer && $secs && $done < count($secs))
+    if (!$transferOpen && $secs && $done < count($secs))
         $c[] = ['level' => 'info',
             'tile' => ['lab' => 'Still to bring over', 'big' => (string)(count($secs) - $done),
                        'sub' => 'folders · ' . tb($left_b)],
@@ -296,8 +299,12 @@ if (is_readable("$WEB/ingest-history.tsv")) {
     foreach (array_reverse($lines) as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if (count($f) < 6) continue;
-        $recent[] = ['when' => $f[0], 'what' => $f[1] === 'copied' ? 'brought over' : ($f[1] === 'interrupted' ? 'interrupted' : 'looked at'),
-                     'target' => basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
+        // a tidy-up is named for what it did, not for its plan's number
+        $tidy = preg_match('/^(un)?tidy /', $f[2]);
+        $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
+                 'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted'][$f[1]] ?? 'looked at';
+        $recent[] = ['when' => $f[0], 'what' => $what,
+                     'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
                      'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
     }
 }
@@ -343,6 +350,13 @@ echo json_encode([
         'copied' => (int)($mac['copied'] ?? 0), 'of' => (int)($mac['of'] ?? 0),
         'failed' => (int)($mac['failed'] ?? 0), 'bytes' => (int)($mac['new_bytes'] ?? 0),
         'note'   => $mac['note'] ?? '', 'ago' => $ago($mac_at), 'stale' => $mac_stale,
+        // live detail: how far, how fast, what file — whichever the phase has
+        'done_bytes' => (int)($mac['done_bytes'] ?? 0), 'rate' => (int)($mac['rate'] ?? 0),
+        'eta'    => ($mac['eta'] ?? '') === '' ? null : (int)$mac['eta'], 'file' => $mac['file'] ?? '',
+        'checked' => (int)($mac['checked'] ?? 0), 'new' => (int)($mac['new'] ?? 0),
+        'already' => (int)($mac['already'] ?? 0), 'step' => $mac['step'] ?? '',
+        'traced' => (int)($mac['traced'] ?? 0), 'untraced' => (int)($mac['untraced'] ?? 0),
+        'originals' => (int)($mac['originals'] ?? 0), 'secs' => $mac_at ? $now - $mac_at : null,
     ] : null,
     'helper'   => [
         'mode'    => helper_mode(),

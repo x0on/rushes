@@ -112,8 +112,9 @@ function sign_in_page(string $why): void {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Manage &middot; <?= htmlspecialchars(settings()['name'] ?? 'Rushes') ?></title>
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
-<link rel="stylesheet" href="/tokens.css">
-<link rel="icon" type="image/svg+xml" href="<?= favicon_href() ?>">
+<link rel="stylesheet" href="/tokens.css?v=<?= @filemtime(__DIR__ . '/../tokens.css') ?>">
+<link rel="icon" type="image/png" sizes="64x64" href="<?= favicon_href() ?>">
+<link rel="apple-touch-icon" href="<?= home_icon_href() ?>">
 <style>
   body { display: grid; place-items: center; min-height: 100vh }
   .card { width: 340px; background: var(--surface); border: 1px solid var(--line);

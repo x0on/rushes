@@ -7,7 +7,7 @@
 - `db/find.php` — search the archive, collect clips into Pulls
 - `ingest.php` — copy camera cards into the archive, one folder per shooting day
 - `pull.php`, `db/pulls.php`, `db/pull-export.php` — Pulls: shareable clip lists, downloadable as a Premiere XML, a list of paths, or a zip
-- `db/admin.php`, `structure.php`, `setup.php` — Manage: activity, duplicates, cache, how media is organised, sources, helper
+- `db/admin.php`, `structure.php`, `setup.php` — Manage: activity, duplicates, cache, how media is organised (and the tidy-up that moves copied footage into it), sources, helper
 - `ingest.py` — the helper that does the copying. Runs on the archive machine itself (built in) or on another computer (external).
 - `runner.sh` and the scripts it calls — background jobs (dedupe, proxies, verify)
 - `rules.json` — rules that are the same everywhere; `settings.example.json` — what changes per installation
@@ -25,7 +25,7 @@ Open http://localhost:8080 and go to Manage → Setup.
 
 ## Not built yet
 
-Tidy-up (moving archived folders into the organisation plan), Premiere relinking, thumbnails and preview copies, one-click installers for Mac and Windows.
+Premiere relinking, thumbnails and preview copies, one-click installers for Mac and Windows.
 
 ## Transfer progress and automatic search updates
 
@@ -50,26 +50,27 @@ index maintenance. Repeated import failures surface a request to check Activity.
 
 ### Upgrading an existing NAS installation
 
-1. Stop the existing helper before replacing its files. Keep the installation's
-   `settings.json`, database, queue/history files, and the helper's `archive-pilot`
-   directory. Back up the SQLite database with SQLite's backup facility or while
-   its writers are stopped (do not copy just the main file while WAL writes run).
-2. Deploy the changed PHP pages, including the new `db/transfers.php`,
-   `db/transfer.php`, and `db/sync.php`, and replace `runner.sh`.
-3. Put **both** `ingest.py` and **`transfer_state.py`** together in the helper's
-   `_rushes` directory. Python needs its standard-library SQLite module.
-4. Ensure the existing cron runner is active and can reach the app at
-   `http://127.0.0.1`. If the NAS uses a different web address or port, set
-   `RUSHES_URL` in the runner's cron environment. Automatic imports use curl
-   (or wget). Keep this on the trusted local network as before.
-5. Restart the helper with the command shown in Setup. An older queue is adopted
-   automatically. Its historical percentage cannot be reconstructed from the
-   old zero-file activity records; the helper checks the selected folders and
-   establishes accurate progress as it resumes.
+1. Stop the helper (Ctrl-C). Keep `settings.json`, the database, the queue and
+   history files, and the helper's `archive-pilot` folder.
+2. Pages: drop the changed `.php`/`.css`/`.json` files into `_rushes/deploy` on the
+   archive share; the runner publishes them within a minute.
+3. Helper: put **both** `ingest.py` and **`transfer_state.py`** in `_rushes`.
+4. Runner: `runner.sh` is never published from the share, on purpose (it runs as
+   root). Copy it by hand on the NAS: `cp /share/VIDEO/_rushes/runner.sh /share/Web/runner.sh`.
+   Until then search still updates as files land, and Manage → Jobs and tools →
+   Rebuild search does a full rebuild on demand.
+5. Start the helper again with the command from Setup. The existing queue is
+   adopted as a transfer; folders this computer had already finished are marked
+   done without being walked again.
 
-Changing an unfinished selection retains its completed folders in the same job;
-removed unfinished folders leave that job's total. A new selection after a
-completed job creates a new job. One watcher should operate an archive at a time.
+### What happens when something goes wrong
+
+- A file that fails is tried once more at the end of its folder. If it fails
+  again it is written in the origin record and shown as "could not be copied";
+  the rest of the folder carries on. Select the folder again to retry it.
+- If the source or the archive disconnects, the folder stops, is marked
+  interrupted, and resumes from where it was once both are back.
+- A copy aimed anywhere outside the archive is refused before anything is copied.
 
 ### Regression checks
 
@@ -78,6 +79,7 @@ From the repository root:
 ```sh
 python3 -m unittest discover -s tests -v
 php tests/test_server.php
+php tests/test_pages.php
 sh -n app/runner.sh
 ```
 
