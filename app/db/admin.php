@@ -200,6 +200,25 @@ if (isset($_POST['_newpass'])) {
 
       <!-- ══ jobs and tools ══ -->
       <section id="pane-describe" hidden>
+        <!-- Proxies: made on the archive machine itself, in the background. -->
+        <div class="panel" style="margin-top:8px">
+          <header><b>Proxies</b></header>
+          <div style="padding:14px">
+            <p style="margin:0 0 10px">A proxy is a small, light copy of a video (1080p, H.264) that plays in any browser
+              and reads much faster than the camera original. Search plays them, describing reads them, and
+              editors can cut with them in Premiere. They live in their own folder, <code>PROXIES</code>, with the
+              same paths as the originals, so nothing mixes with the footage, and they can always be made again.
+              Made on this machine, at low priority; a file that arrived in the last two hours is left for the
+              next run, so nothing still being copied is touched.</p>
+            <div id="pxState" class="note"></div>
+            <div class="btns" style="margin-top:10px">
+              <button class="btn quiet" data-px="proxy-plan">Plan (changes nothing)</button>
+              <button class="btn" data-px="proxy-build">Make proxies</button>
+              <button class="btn quiet" data-px="proxy-stop">Stop</button>
+            </div>
+          </div>
+        </div>
+
         <!-- What the helper can describe with, and how far the archive has got. -->
         <div class="panel" style="margin-top:8px">
           <header><b>Describing footage</b></header>
@@ -353,6 +372,9 @@ const ASK = {
   'organize-apply': 'Carry out the layout you were shown. Every move can be undone.',
   'organize-undo':  'Put the moved folders back where they were.',
   import:   'Rebuild search from the file list. About ten seconds.',
+  'proxy-plan':  'Count the videos that have no proxy yet, and how much there is to read. Makes nothing.',
+  'proxy-build': 'Make the missing proxies, in the background on the archive machine. It takes hours to days; stopping and starting again loses nothing.',
+  'proxy-stop':  'Stop making proxies. The one being made is thrown away; everything finished is kept.',
   manifest: 'Write down every file and its size, then rebuild search. A few minutes.',
   verify:   'Check every file in the holding folder still has a twin in the archive. Moves nothing.',
   df:       'Measure free space.'
@@ -758,6 +780,7 @@ async function load() {
   drawNow(d);
   drawHelper(d);
   drawDescribeTools(d.helper);
+  drawProxies(d.proxies);
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {
@@ -829,6 +852,28 @@ async function load() {
 // Asks, and says what happened; the helper does the work and the live box shows it.
 let anArmed = 0;
 function tcode(v) { v = Math.floor(v || 0); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); }
+function drawProxies(p) {
+  const el = $('pxState');
+  if (!p) { el.textContent = 'Not planned yet. Press Plan to see how many videos need one.'; return; }
+  const n = function (x) { return (+x || 0).toLocaleString(); };
+  el.innerHTML = p.state === 'no-ffmpeg'
+      ? '<span class="warnline" style="display:block">This machine has no ffmpeg, the tool that makes video, so it cannot make proxies yet.</span>'
+    : p.state === 'planned'
+      ? n(p.have) + ' videos already have a proxy · <b>' + n(p.missing) + ' to make</b>, about ' + p.source_tb + ' TB to read · ' +
+        (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software: slow, the hardware encoder was not found')
+    : p.state === 'building' && p.running
+      ? '<b>Making proxies</b> · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed · ' +
+        n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
+    : p.state === 'building'
+      ? '<span class="warnline" style="display:block">The proxy build stopped without finishing (the machine restarted?) at ' +
+        n(p.done) + ' of ' + n(p.total) + '. Press Make proxies to carry on; finished ones are kept.</span>'
+    : p.state === 'stopped'
+      ? 'Stopped from Manage at ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made. Make proxies carries on from there.'
+    : p.state === 'done'
+      ? '✓ Finished · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed' + (+p.later ? ' · ' + n(p.later) + ' were still arriving: press Make proxies again later for those' : '')
+    : esc(p.state || '');
+}
+document.querySelectorAll('[data-px]').forEach(function (b) { b.onclick = function () { act(b.dataset.px, b); }; });
 function drawDescribeTools(h) {
   const an = (h && h.analysis) || {};
   $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'

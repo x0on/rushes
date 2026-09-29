@@ -19,7 +19,7 @@
 
 set -u
 
-SHARE=/share/VIDEO
+SHARE=${SHARE:-/share/VIDEO}
 PROXY_ROOT=${PROXY_ROOT:-$SHARE/PROXIES}
 INDEX=${INDEX:-/share/Web/index.txt}
 PLAN=${PLAN:-/share/Web/proxy-plan.tsv}
@@ -28,6 +28,14 @@ HEIGHT=${HEIGHT:-1080}
 BITRATE=${BITRATE:-2M}
 TAB=$(printf '\t')
 MODE=${1:-plan}
+STATE=${STATE:-/share/Web/proxy-status.txt}
+RECENT=${RECENT:-7200}   # seconds: a file written this recently may still be arriving; left for the next run
+
+# What the page shows: one small file, rewritten whole, so it is never half-read.
+state() {
+    { printf 'at\t%s\n' "$(date +%s)"; for kv in "$@"; do printf '%s\n' "$kv"; done; } > "$STATE.new"
+    mv -f "$STATE.new" "$STATE"
+}
 
 # ---------- find ffmpeg ----------
 # QTS hides it; Container Station may be the only place it exists.
@@ -43,6 +51,7 @@ fi
 [ -z "$FFMPEG" ] && FFMPEG=$(command -v ffmpeg 2>/dev/null || true)
 
 if [ -z "$FFMPEG" ]; then
+    state "state${TAB}no-ffmpeg"
     echo "no ffmpeg found on the NAS."
     echo "install one in Container Station, then re-run with:"
     echo "  FFMPEG='docker run --rm --device /dev/dri -v $SHARE:$SHARE linuxserver/ffmpeg' sh $0 --build"
@@ -50,7 +59,11 @@ if [ -z "$FFMPEG" ]; then
 fi
 
 # ---------- hardware or software ----------
-if [ -e /dev/dri/renderD128 ]; then
+# A render device can be there and still not work (no driver for this ffmpeg):
+# try one tiny frame before trusting it, or every proxy would fail.
+if [ -e /dev/dri/renderD128 ] && [ -n "$FFMPEG" ] && $FFMPEG -nostdin -loglevel error \
+        -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=320x240:d=0.2 \
+        -vf 'format=nv12|vaapi,hwupload' -c:v h264_vaapi -f null - 2>/dev/null; then
     HW=1
     ENC="-vaapi_device /dev/dri/renderD128 -vf format=nv12|vaapi,hwupload,scale_vaapi=w=-2:h=$HEIGHT -c:v h264_vaapi"
 else
@@ -103,6 +116,10 @@ if [ "$missing" -gt 0 ]; then
 fi
 
 if [ "$MODE" != "--build" ]; then
+    src_tb=$(awk -F"$TAB" '{print $1}' "$PLAN" | head -2000 | xargs -r -d '\n' stat -c %s 2>/dev/null |
+             awk -v n="$missing" '{ s += $1; c++ } END { if (c) printf "%.1f", s / c * n / 1099511627776; else print 0 }')
+    state "state${TAB}planned" "have${TAB}$have" "missing${TAB}$missing" "source_tb${TAB}$src_tb" \
+          "hw${TAB}$HW" "height${TAB}$HEIGHT"
     echo
     echo "nothing encoded. re-run with --build."
     exit 0
@@ -110,18 +127,33 @@ fi
 
 # ---------- build ----------
 total=$missing
-done_n=0; ok=0; failed=0
+done_n=0; ok=0; failed=0; later=0; tmp=""; ff=""
 : > "$LOG"
 echo "building $total proxies..."
+# Low priority: copies, search and editors reading the share come first.
+NICE=""; command -v nice >/dev/null 2>&1 && NICE="nice -n 15"
+# Stop (from Manage) ends the proxy being made and leaves no half file.
+trap '[ -n "$ff" ] && kill "$ff" 2>/dev/null; [ -n "$tmp" ] && rm -f "$tmp";
+      state "state${TAB}stopped" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later";
+      echo "stopped from Manage after $ok proxies"; exit 1' TERM INT
 
 while IFS="$TAB" read -r src out; do
     done_n=$((done_n + 1))
+    [ -f "$out" ] && continue                      # made meanwhile, e.g. by a second run
+    # Still arriving? A copy writes its files over hours; one written in the last
+    # two hours is left alone and made on the next run.
+    mt=$(stat -c %Y "$src" 2>/dev/null || echo 0)
+    if [ $(( $(date +%s) - mt )) -lt "$RECENT" ]; then later=$((later + 1)); continue; fi
+    state "state${TAB}building" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" \
+          "later${TAB}$later" "file${TAB}${src#$SHARE/}" "hw${TAB}$HW"
     mkdir -p "$(dirname "$out")"
     # encode to a temp name so an interrupted run never leaves a playable-looking
     # but truncated file behind
     tmp="$out.part.mp4"
-    if $FFMPEG -nostdin -loglevel error -y -i "$src" \
-        $ENC -b:v "$BITRATE" -c:a aac -b:a 128k -movflags +faststart "$tmp" 2>>"$LOG.err"; then
+    $NICE $FFMPEG -nostdin -loglevel error -y -i "$src" \
+        $ENC -b:v "$BITRATE" -c:a aac -b:a 128k -movflags +faststart "$tmp" 2>>"$LOG.err" &
+    ff=$!
+    if wait "$ff"; then
         mv -f "$tmp" "$out"
         printf '%s\t%s\n' "$src" "$out" >> "$LOG"
         ok=$((ok + 1))
@@ -135,6 +167,8 @@ while IFS="$TAB" read -r src out; do
     fi
 done < "$PLAN"
 
-echo "built $ok proxies, $failed failed"
+ff=""; tmp=""
+state "state${TAB}done" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later"
+echo "built $ok proxies, $failed failed, $later left for the next run (still arriving)"
 [ "$failed" -gt 0 ] && echo "errors in $LOG.err"
 echo "proxies: $PROXY_ROOT"

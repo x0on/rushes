@@ -390,6 +390,16 @@ echo json_encode([
         'n' => (int)($mac['n'] ?? 0), 'shot' => (int)($mac['shot'] ?? 0), 'shots' => (int)($mac['shots'] ?? 0),
         'per_shot' => $mac['per_shot'] ?? '',
     ] : null,
+    // Proxies being made on this machine (proxy.sh writes this as it goes).
+    'proxies'  => (function () use ($WEB) {
+        $p = [];
+        foreach (@file("$WEB/proxy-status.txt") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $p[$f[0]] = $f[1] ?? ''; }
+        if (!$p) return null;
+        $pid = (int)@file_get_contents("$WEB/proxy.pid");
+        $p['running'] = $pid > 0 && @file_exists("/proc/$pid");
+        $p['ago'] = isset($p['at']) ? time() - (int)$p['at'] : null;
+        return $p;
+    })(),
     'helper'   => (function () use ($ago, $WEB, $mac, $mac_stale) {
         $hv = helper_volumes(); $ctl = helper_control();
         return [

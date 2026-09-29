@@ -285,11 +285,25 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             sh /share/Web/proxy.sh >> "$LOG" 2>&1
             ;;
         proxy-build)
-            # Hours to days depending on how much is missing, but resumable:
-            # every proxy that already exists is skipped, so stopping and
-            # starting again costs nothing.
-            sh /share/Web/proxy.sh --build >> "$LOG" 2>&1
-            refresh_state
+            # Hours to days, so in the background: the runner stays free for
+            # everything else (deploys, search, other jobs). Resumable: every
+            # proxy already made is skipped, so stopping and starting costs nothing.
+            pid=$(cat /share/Web/proxy.pid 2>/dev/null)
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                echo "proxies are already being made (proxy.log)" >> "$LOG"
+            else
+                nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
+                echo $! > /share/Web/proxy.pid
+                echo "making proxies in the background: progress in Manage → Describe, detail in proxy.log" >> "$LOG"
+            fi
+            ;;
+        proxy-stop)
+            pid=$(cat /share/Web/proxy.pid 2>/dev/null)
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                kill "$pid"; echo "asked the proxy build to stop" >> "$LOG"
+            else
+                echo "no proxy build was running" >> "$LOG"
+            fi
             ;;
         holding)
             # how much sits in the holding folder — what emptying it would give back
