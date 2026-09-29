@@ -67,4 +67,26 @@ db()->exec("INSERT INTO transfer_jobs VALUES ('old'," . (time()+10) . ")");
 file_put_contents("$root/app/ingest-history.tsv", "2026-09-20 10:00\tcopied\t/source/D\t3\t40\t9\t\n2026-09-21 10:00\tcopied\t/source/D\t1\t20\t9\t\n");
 $s = transfer_summary(transfer_latest());
 check($s['copied_bytes'] === 60 && $s['already_bytes'] === 40, 'folders finished before this transfer show what was copied and what was already there');
+require_once "$root/app/db/analysis.php";
+$fp = str_repeat('ab', 12);
+@mkdir("$root/archive/_rushes/analysis/ab", 0777, true);
+file_put_contents("$root/archive/_rushes/analysis/ab/$fp.json", json_encode(['fingerprint' => $fp,
+    'file' => "$root/archive/park/loop.mp4", 'seen_at' => ["$root/archive/park/loop.mp4"], 'model' => 'qwen',
+    'part_of_day' => 'afternoon', 'whisper' => 'w',
+    'shots' => [['shot' => 0, 'start' => 0, 'end' => 7.6, 'description' => 'An aerial view of a water park',
+                 'text_on_screen' => ['RIVERTON', 'CENTRAL PARK'], 'themes' => ['Parks & Recreation'], 'tags' => ['aerial'],
+                 'shot_size' => 'wide', 'people' => 'few', 'light' => 'daylight', 'mood' => 'calm'],
+                ['shot' => 1, 'parse_error' => true, 'description' => '']],
+    'speech' => ['language' => 'es', 'segments' => [['start' => 3.2, 'end' => 5, 'text' => 'Bienvenidos al parque central']]]]));
+touch("$root/archive/_rushes/analysis/ab/$fp.json", time() - 100);
+@mkdir("$root/archive/_rushes/analysis/cd", 0777, true);
+file_put_contents("$root/archive/_rushes/analysis/cd/" . str_repeat('cd', 12) . ".json",
+    json_encode(['fingerprint' => str_repeat('cd', 12), 'file' => "$root/archive/x.mov", 'shots' => []]));
+check(analysis_import()['described_files'] === 2, 'descriptions in _rushes/analysis are imported into search');
+$m = analysis_search('central park');
+check($m['count'] === 1 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['what'] === 'An aerial view of a water park',
+      'words on screen find the shot');
+check(analysis_search('parque bienvenidos')['rows'][0]['kind'] === 'speech', 'spoken words find the moment they were said');
+check(analysis_search('parks recreation')['count'] === 1 && analysis_search('nothing here')['count'] === 0, 'themes are searchable; nothing invented');
+check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
 echo "Server tests complete. Fixture: $root\n";

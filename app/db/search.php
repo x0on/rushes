@@ -80,7 +80,15 @@ while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
     $bytes += (int)$r['b'];
 }
 
+// What the footage shows and what was said, when it has been described.
+$moments = ['count' => 0, 'rows' => []];
+if ($q !== '' && ($kind === '' || $kind === 'all' || $kind === 'video')) {
+    require_once __DIR__ . '/analysis.php';
+    try { $moments = analysis_search($q); } catch (Throwable $e) { $moments['error'] = $e->getMessage(); }
+}
+
 echo json_encode([
+    'moments'  => $moments,
     'q'        => $q,
     'total'    => $counts['all'],
     'bytes'    => $bytes,

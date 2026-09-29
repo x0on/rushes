@@ -33,6 +33,11 @@ with everything the final stage needs inside it.
 
 ### Built, not yet proven on real data
 
+- Describing footage: Manage → Jobs and tools → Describe footage queues a folder;
+  the helper runs the vision model and speech on it, one file at a time after any
+  copies, with live progress; one description per file in `_rushes/analysis`,
+  named by content so it survives moves; search shows matching shots and spoken
+  lines with their time and picture ("In the footage"). Themes in `rules.json`.
 - The Rushes address for any installation: Setup fills it in from the address
   the page was opened at, warns when it is a number that can change and offers
   the machine's name when that works, and Rushes Helper learns every address
@@ -50,8 +55,9 @@ with everything the final stage needs inside it.
 ### Not built yet
 
 - Premiere relinking after tidy-up.
-- Proxies, then vision-model descriptions of the footage (the final stage; the
-  descriptions also replace separately built previews).
+- Proxies (the plan can be run from Jobs and tools; building them is next).
+- Faces.
+- The analysis tools in the installer (today they are the pilot's, on the Mac).
 - Rushes Helper for Windows.
 
 ## Vision model: notes from the pilot

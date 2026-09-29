@@ -102,6 +102,18 @@ require __DIR__ . '/config.php';
   .row.on .thumb { background: rgba(19,43,42,.12); color: var(--sel-fg) }
   .k-video, .k-image, .k-audio { color: var(--accent-text) }
   .row { padding-top: 6px; padding-bottom: 6px }
+  /* moments: what the footage shows and what was said, found inside the files */
+  .moments { margin: 0 0 16px }
+  .moments > header { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 0 16px 16px }
+  .mo { border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg) }
+  .mo img, .mo .said { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--line) }
+  .mo .said { display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--muted) }
+  .mo .b { padding: 8px 10px 10px; font-size: 13px; line-height: 1.45 }
+  .mo .tc { font: 11.5px var(--mono, monospace); color: var(--accent-text) }
+  .mo .ons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px }
+  .mo .ons span { font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
+  .mo small { display: block; margin-top: 6px; color: var(--faint); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 </style>
 
 <div class="app" style="grid-template-rows:1fr">
@@ -187,7 +199,7 @@ const trail = function (p) {
 };
 
 const KINDS = ['all', 'video', 'image', 'audio', 'project', 'sidecar', 'other'];
-let kind = 'all', scope = '', rows = [], total = 0, offset = 0, seq = 0, timer = null;
+let kind = 'all', scope = '', rows = [], total = 0, offset = 0, seq = 0, timer = null, moments = { count: 0, rows: [] };
 
 document.querySelectorAll('.rail [data-scope]').forEach(function (b) {
   b.onclick = function () {
@@ -217,6 +229,7 @@ async function run(more) {
   if (my !== seq) return;                         // a newer keystroke already won
 
   total = d.total; rows = more ? rows.concat(d.rows) : d.rows;
+  if (!more) moments = d.moments || { count: 0, rows: [] };
   $('ms').textContent = d.ms + ' ms';
 
   $('chips').innerHTML = KINDS.filter(function (k) { return k === 'all' || d.counts[k]; })
@@ -242,7 +255,30 @@ function fail(what, detail) {
     '<div class="code block" style="text-align:left;margin-top:10px">' + esc(detail) + '</div></div></div>';
 }
 
+// Moments: shots whose description, on-screen text or themes match, and lines
+// of speech — each with its time in the file and the picture of that shot.
+function tcode(s) { s = Math.floor(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function momentsHTML() {
+  if (!moments.rows.length) return '';
+  return '<div class="panel moments"><header><b>In the footage</b><span class="note">' +
+    moments.count.toLocaleString() + ' moment' + (moments.count === 1 ? '' : 's') +
+    (moments.count > moments.rows.length ? ' · the first ' + moments.rows.length : '') + '</span></header><div class="mgrid">' +
+    moments.rows.map(function (m) {
+      const speech = m.kind === 'speech';
+      const tags = [].concat(m.on_screen ? m.on_screen.split(' · ') : [], m.themes ? m.themes.split(' · ') : []);
+      return '<div class="mo">' +
+        (speech ? '<div class="said">“ ”</div>'
+                : '<img loading="lazy" alt="" src="thumb.php?fp=' + encodeURIComponent(m.fp) + '&shot=' + m.shot + '">') +
+        '<div class="b"><div class="tc">' + tcode(m.start_s) + ' → ' + tcode(m.end_s) +
+        (speech ? ' · said' + (m.language ? ' (' + esc(m.language) + ')' : '') : ' · shot ' + m.shot) + '</div>' +
+        (speech ? '“' + esc(m.what) + '”' : esc(m.what)) +
+        (tags.length ? '<div class="ons">' + tags.slice(0, 5).map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
+        '<small title="' + esc(m.path) + '">' + esc(m.path.split('/').pop()) + '</small></div></div>';
+    }).join('') + '</div></div>';
+}
+
 function draw() {
+  if (!rows.length && moments.rows.length) { $('out').innerHTML = momentsHTML(); return; }
   if (!rows.length) {
     $('out').innerHTML = '<div class="panel"><div class="empty">' +
       ($('q').value.trim() ? 'Nothing matches.' : 'Type a few words above.') + '</div></div>';
@@ -257,7 +293,7 @@ function draw() {
     if (g && g.ev === ev) g.rows.push(r); else groups.push({ ev: ev, year: r.year, rows: [r] });
   });
 
-  let html = '';
+  let html = momentsHTML();
   groups.forEach(function (g) {
     const gb = g.rows.reduce(function (n, r) { return n + (r.bytes || 0); }, 0);
     // The shoot header carries the folder trail once. Repeating the whole path
