@@ -103,7 +103,11 @@ echo "  press Return, then Open — and make sure its switch is on:"
 echo "    $ALLOW"
 printf '%s' "$ALLOW" | pbcopy 2>/dev/null && echo "  (That path is already copied, ready to paste.)"
 echo "  The helper notices within a minute; Manage shows it carrying on."
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" 2>/dev/null || true
+# Newer macOS names the page differently; try that first.
+open "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles" 2>/dev/null \
+  || open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" 2>/dev/null || true
+echo "  If System Settings did not open there: Apple menu → System Settings → Privacy & Security"
+echo "  → Full Disk Access."
 SH, 'text/plain; charset=utf-8');
     }
     bail(400, 'nothing asked');
