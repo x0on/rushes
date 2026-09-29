@@ -91,6 +91,22 @@ description quality. What it taught, to build in:
 - **Stills use the same pipeline:** a photo is one shot, so descriptions, text,
   themes and faces work on images too, which is where faces work best.
 
+### Models are swappable, not built in
+
+- **Version 1:** which model to use is a setting, never code. What the model is
+  asked (the prompt) and what it must answer (the fields) are fixed, so any
+  model that answers in those fields fits. Every result records which model and
+  which prompt made it, so an archive can hold results from two models and a
+  re-run replaces only what is asked. The installer checks the machine and
+  offers the few models that suit it, with size and speed, one marked as the
+  default.
+- **Version 2:** try another model on a sample (say 20 shots) and see its
+  answers beside the current ones before switching; add any compatible model by
+  name; re-describe the archive, or only new footage, with the new one.
+- **Faces are different:** a new face model means re-reading every face, since
+  its fingerprints do not match the old one's. Names are kept and carried over
+  to the new groups.
+
 ## Order
 
 1. **Finish the loop on a real archive.** The copy completes, then tidy-up,
