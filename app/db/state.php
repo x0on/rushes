@@ -336,7 +336,10 @@ if (is_readable("$WEB/ingest-history.tsv")) {
 $log = '';
 if (is_readable("$WEB/job.log")) {
     $sz = filesize("$WEB/job.log");
-    $log = (string)@file_get_contents("$WEB/job.log", false, null, max(0, $sz - 14000));
+    // Older runners wrote the search check's "nothing changed" answer every
+    // minute; left in, it fills the view. Removed here, not from the file.
+    $log = str_replace('{"state":"current"}', '', (string)@file_get_contents("$WEB/job.log", false, null, max(0, $sz - 200000)));
+    $log = substr($log, -14000);
 }
 
 function tb(int $b): string {
