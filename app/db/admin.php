@@ -54,6 +54,14 @@ if (isset($_POST['_newpass'])) {
   .transfer-summary .job-percent small { font-size:14px; font-weight:500; color:var(--muted) }
   .transfer-summary p { margin:5px 0; line-height:1.5 }
   .side .ev { padding: 9px 14px }
+  .hctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; padding: 10px 14px;
+          border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; background: var(--surface) }
+  .hctl .t { flex: 1; min-width: 220px; color: var(--muted) }
+  .hctl .t b { color: var(--fg); font-weight: 600 }
+  .hctl .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none }
+  .hctl .dot.ok { background: var(--ok) } .hctl .dot.off { background: var(--bad) }
+  .hctl .btn { padding: 6px 12px; font-size: 12.5px }
+  .hctl .note { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--muted) }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
   @media (max-width: 900px)  { .with-side { grid-template-columns: 1fr } }
@@ -85,6 +93,8 @@ if (isset($_POST['_newpass'])) {
 
       <!-- what the helper is doing this second -->
       <div class="now" id="now" hidden></div>
+      <!-- the helper itself: is it there, which version, and its buttons -->
+      <div class="hctl" id="hctl" hidden></div>
 
       <section id="transferSummary" class="transfer-summary" aria-label="Transfer job" hidden></section>
       <div id="cards"></div>
@@ -305,6 +315,15 @@ async function act(name, btn) {
     return;
   }
   if (name === 'cachejunk') { return moveCache(btn); }
+  if (name === 'scripts') {
+    if (!confirm('Install the updated scripts? They run with full rights on this machine. The runner installs exactly the files you see listed.')) return;
+    btn.disabled = true; btn.textContent = 'Asking…';
+    try {
+      const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: 'scripts' }) })).json();
+      btn.textContent = r.error ? 'Did not happen: ' + r.error : 'Queued ✓ installed within a minute';
+    } catch (e) { btn.textContent = 'Could not reach the archive'; }
+    setTimeout(load, 3000); return;
+  }
   if (name === '#transfers'){ show('transfers'); return; }
   if (ASK[name] && !confirm(ASK[name])) return;
   const was = btn.textContent;
@@ -382,9 +401,12 @@ function drawTransfer(j) {
   el.hidden = !j || !['overview', 'transfers'].includes(pane);
   if (!j) return;
   const labels = {queued:'Waiting for the helper', checking:'Checking selected files', copying:'Transferring',
-    done:'Transfer complete', interrupted:'Transfer interrupted', blocked:'Waiting for the source drive', stopped:'Waiting for space'};
+    done:'Transfer complete', interrupted:'Transfer interrupted', blocked:'Waiting for the source drive', stopped:'Waiting for space',
+    paused:'Transfer paused'};
   const pct = j.pct === null ? 'Preparing…' : j.pct + '%';
-  const detail = j.phase === 'interrupted'
+  const detail = j.phase === 'paused'
+    ? 'Paused from Manage. Press Resume below and it carries on from where it stopped.'
+    : j.phase === 'interrupted'
     ? 'Progress is saved. Check that the source and archive are connected and the helper is running. It will retry automatically.'
     : j.phase === 'blocked' ? 'Reconnect the source drive. The helper will continue automatically.'
     : j.phase === 'stopped' ? 'Make room on the archive. The helper will check again automatically.'
@@ -559,6 +581,51 @@ function drawNow(d) {
     (h.file ? '<div class="file">now: ' + esc(h.file) + '</div>' : '');
 }
 
+// ── the helper and its buttons ─────────────────────────────────────────────
+// Every button asks once more on the button itself ("Sure?"), then says what
+// happened. The answer is read back from the helper, never assumed.
+let armed = { what: '', until: 0 }, said = { text: '', until: 0 };
+function drawHelper(d) {
+  const h = d.helper || {}, el = $('hctl');
+  el.hidden = pane !== 'overview' || !h.label;
+  if (el.hidden) return;
+  const how = h.how === 'service' ? 'runs in the background' : h.how === 'window' ? 'runs in a Terminal window' : '';
+  const seen = h.seen ? (h.fresh ? 'seen ' + h.seen_ago : 'not heard from since ' + h.seen_ago) : 'not started yet';
+  const updating = h.fresh && h.ver && h.current && h.ver !== h.current ? ' · updating itself to the new version' : '';
+  const cur = d.transfer && d.transfer.phase !== 'done' ? d.transfer.source : '';
+  const btns = [];
+  if (h.fresh) btns.push(h.paused ? ['resume', 'Resume'] : ['pause', 'Pause']);
+  btns.push(['nudge', 'Try again now']);
+  if (cur && h.fresh) btns.push(['skip', 'Skip ' + cur.split('/').pop()]);
+  const now = Date.now();
+  el.innerHTML = '<span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span>' +
+    '<span class="t"><b>Helper on ' + esc(h.label) + '</b> · ' + esc([how, seen].filter(Boolean).join(' · ')) +
+    esc(updating) + (h.paused ? ' · <b>paused</b>' : '') + '</span>' +
+    btns.map(function (b) {
+      const sure = armed.what === b[0] && now < armed.until;
+      return '<button class="btn quiet" data-h="' + b[0] + '">' + esc(sure ? 'Sure? ' + b[1] : b[1]) + '</button>'; }).join('') +
+    (now < said.until ? '<p class="note">' + esc(said.text) + '</p>' : '') +
+    (!h.fresh && h.how !== 'service' && h.mode === 'external'
+      ? '<p class="note">Start it from Setup → 04 Helper, or install it there once so it starts by itself.</p>' : '');
+  el.querySelectorAll('[data-h]').forEach(function (b) {
+    b.onclick = async function () {
+      const what = b.dataset.h;
+      if (armed.what !== what || Date.now() > armed.until) { armed = { what: what, until: Date.now() + 5000 }; drawHelper(d); return; }
+      armed = { what: '', until: 0 }; b.disabled = true; b.textContent = 'Asking…';
+      const body = new URLSearchParams({ action: what }); if (what === 'skip') body.set('path', cur);
+      try {
+        const r = await (await fetch('helper.php', { method: 'POST', body: body })).json();
+        said = { until: Date.now() + 8000, text: r.error ? 'Did not happen: ' + r.error
+          : { pause: 'Paused ✓ The file being copied finishes; nothing new starts until Resume.',
+              resume: 'Resumed ✓ It carries on within a few seconds.',
+              nudge: 'Asked ✓ It stops waiting and looks again now.',
+              skip: 'Skipped ✓ That folder is out of this transfer. Tick it again in Transfers to bring it back.' }[what] };
+      } catch (e) { said = { until: Date.now() + 8000, text: 'Could not reach the archive: ' + e.message }; }
+      load();
+    };
+  });
+}
+
 // ── what the page shows ────────────────────────────────────────────────────
 async function load() {
   let d;
@@ -587,6 +654,7 @@ async function load() {
 
   drawTiles(d);
   drawNow(d);
+  drawHelper(d);
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {

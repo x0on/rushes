@@ -110,7 +110,10 @@ if (isset($_POST['ingest_src'])) {
     foreach ((array)($_POST['copy'] ?? []) as $p) if (isset($known[$p])) $others[] = "copy\t$p";
     $list = trim((string)($_POST['list'] ?? ''));
     if ($list !== '' && str_starts_with($list, '/') && !str_contains($list, '..')) $others[] = "list\t$list";
-    transfer_select(array_values(array_filter((array)($_POST['copy'] ?? []), fn($p) => isset($known[$p]))), $sizes);
+    $picked = array_values(array_filter((array)($_POST['copy'] ?? []), fn($p) => isset($known[$p])));
+    transfer_select($picked, $sizes);
+    $ctl = helper_control();              // ticked again after "Skip": wanted again
+    if (array_intersect($ctl['skip'], $picked)) { $ctl['skip'] = array_values(array_diff($ctl['skip'], $picked)); helper_control_save($ctl); }
     $said = ['queued' => count($others)];
 }
 

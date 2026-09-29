@@ -285,6 +285,28 @@ $landed = array_values($landed);
 $from = $secs ? explode('/', ltrim(dirname($secs[0]), '/'))[1] ?? '' : '';
 $to   = settings()['archive']['label'] ?? basename(archive_dir());
 
+// The helper stopped while there is work for it. A background helper comes
+// back by itself; one in a Terminal window needs starting again.
+$hvNow = helper_volumes();
+if ($transferOpen && !$hvNow['fresh']) {
+    $c[] = ['level' => 'bad', 'title' => 'The helper is not running',
+        'body' => ($hvNow['how'] === 'service'
+            ? 'It runs in the background on ' . helper_name() . ' and restarts by itself within a minute. If it does not come back: is that computer on, awake and logged in?'
+            : 'The transfer waits until it is started again: Setup → 04 Helper.')
+            . ($hvNow['at'] ? ' Last heard from ' . $ago($hvNow['at']) . '.' : ''),
+        'act' => null];
+}
+// Updated scripts wait for a yes: they run with full rights on this machine.
+if ($sw = scripts_waiting())
+    $c[] = ['level' => 'warn', 'title' => count($sw) . ' updated script' . (count($sw) > 1 ? 's are' : ' is') . ' waiting to be installed',
+        'body' => implode(', ', array_column($sw, 'name')) . '. They run with full rights on this machine, so they are only installed when you say so.',
+        'act' => ['scripts', 'Install ' . (count($sw) > 1 ? 'them' : 'it')]];
+// The QNAP's scratch space (/tmp) is small and shared with the system.
+if (preg_match('/(\d+)%/', (string)@file_get_contents("$WEB/tmp-disk.txt"), $tm) && (int)$tm[1] >= 80)
+    $c[] = ['level' => 'warn', 'title' => 'The system scratch space is ' . $tm[1] . '% full',
+        'body' => 'That is /tmp on the archive machine, not the archive. Rushes no longer uses it, but the system does; if it fills, odd errors follow.',
+        'act' => null];
+
 // nothing wrong is worth saying out loud
 if (!$c) $c[] = ['level' => 'good', 'title' => 'Everything is in order',
     'body' => 'Search is current, nothing is waiting, no job needs you.', 'act' => null];
@@ -358,10 +380,20 @@ echo json_encode([
         'traced' => (int)($mac['traced'] ?? 0), 'untraced' => (int)($mac['untraced'] ?? 0),
         'originals' => (int)($mac['originals'] ?? 0), 'secs' => $mac_at ? $now - $mac_at : null,
     ] : null,
-    'helper'   => [
-        'mode'    => helper_mode(),
-        'label'   => helper_name(),
-        'command' => helper_command(),
-    ],
+    'helper'   => (function () use ($ago, $WEB) {
+        $hv = helper_volumes(); $ctl = helper_control();
+        return [
+            'mode'    => helper_mode(),
+            'label'   => helper_name(),
+            'command' => helper_command(),
+            'seen'    => $hv['at'], 'seen_ago' => $ago($hv['at']), 'fresh' => $hv['fresh'],
+            'how'     => $hv['how'], 'ver' => $hv['ver'],
+            // the version on the archive; a helper with another one updates itself
+            'current' => substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),
+            'paused'  => (bool)$ctl['paused'],
+            'builtin' => trim((string)@file_get_contents("$WEB/helper-builtin.txt")),
+        ];
+    })(),
+    'scripts'  => scripts_waiting(),
     'now'      => $now,
 ], JSON_UNESCAPED_SLASHES);

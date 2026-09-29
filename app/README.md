@@ -63,6 +63,25 @@ index maintenance. Repeated import failures surface a request to check Activity.
    adopted as a transfer; folders this computer had already finished are marked
    done without being walked again.
 
+### The helper runs itself
+
+- **Built in** (on the archive machine): the runner starts it, and starts it again
+  within a minute if it stops. Needs Python 3 on that machine (QNAP: App Center).
+- **External, on a Mac:** installed once from Setup → 04 Helper with one pasted
+  line (`curl … /db/helper.php?install | sh`). It becomes a background service:
+  starts at login, restarts if it stops, keeps the Mac awake only while a step
+  runs, and updates itself from the archive's copy between steps. Only one helper
+  runs per computer; a second one says so and exits.
+- **Manage → Overview** shows whether it is there, which version, and has
+  **Pause / Resume**, **Try again now** and **Skip this folder**.
+
+### Scripts that run as root
+
+`runner.sh` and the scripts it calls are never published from the share on
+their own. Put new versions in `_rushes/scripts/`; Manage lists them and asks.
+On a yes, the runner installs exactly the files approved (by fingerprint). The
+very first runner with this ability has to be copied by hand, once.
+
 ### What happens when something goes wrong
 
 - A file that fails is tried once more at the end of its folder. If it fails
@@ -80,6 +99,7 @@ From the repository root:
 python3 -m unittest discover -s tests -v
 php tests/test_server.php
 php tests/test_pages.php
+PHPBIN=php sh tests/test_helper.sh
 sh -n app/runner.sh
 ```
 

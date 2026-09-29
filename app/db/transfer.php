@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 // instruct file operations. Like landed.php, this is a local-network endpoint.
 $j = (string)($_POST['job'] ?? ''); $p = (string)($_POST['source'] ?? '');
 $phase = (string)($_POST['phase'] ?? '');
-if (!in_array($phase, ['checking','copying','done','interrupted','blocked','stopped'], true)) {
+if (!in_array($phase, ['checking','copying','done','interrupted','blocked','stopped','paused'], true)) {
     http_response_code(400); echo '{"error":"invalid phase"}'; exit;
 }
 $sets = ['phase = ?', 'updated = ?']; $args = [$phase, time()];

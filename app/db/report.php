@@ -30,7 +30,10 @@ foreach (explode("\n", $raw) as $l) {
     }
 }
 $os  = preg_replace('/[^a-z0-9]/', '', strtolower((string)($_POST['os'] ?? '')));
-$out = "at\t" . time() . "\nos\t$os\n" . implode("\n", $keep) . "\n";
+$ver  = preg_replace('/[^a-f0-9]/', '', (string)($_POST['ver'] ?? ''));
+$how  = in_array($_POST['how'] ?? '', ['service', 'window'], true) ? $_POST['how'] : '';
+$host = substr(preg_replace('/[^A-Za-z0-9 ._-]/', '', (string)($_POST['host'] ?? '')), 0, 60);
+$out = "at\t" . time() . "\nos\t$os\nver\t$ver\nhow\t$how\nhost\t$host\n" . implode("\n", $keep) . "\n";
 
 // Beside, then rename: a page reading half a list would offer half the drives.
 $f = web_dir() . '/helper-volumes.tsv';

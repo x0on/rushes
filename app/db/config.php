@@ -213,11 +213,14 @@ function shelf_dir(): string {
 // What the helper reported. 'fresh' is false once it has been quiet for a
 // minute and a half — the helper stopped, so the list may be out of date.
 function helper_volumes(): array {
-    $vols = []; $at = 0; $os = '';
+    $vols = []; $at = 0; $os = ''; $ver = ''; $how = ''; $host = '';
     foreach (@file(web_dir() . '/helper-volumes.tsv') ?: [] as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if ($f[0] === 'at') $at = (int)$f[1];
         elseif ($f[0] === 'os') $os = $f[1];
+        elseif ($f[0] === 'ver') $ver = $f[1] ?? '';
+        elseif ($f[0] === 'how') $how = $f[1] ?? '';
+        elseif ($f[0] === 'host') $host = $f[1] ?? '';
         elseif ($f[0] === 'vol' && count($f) === 9) {
             $vols[$f[1]] = ['path' => $f[1], 'name' => $f[2], 'total' => (int)$f[3],
                             'free' => (int)$f[4], 'card' => $f[5] === '1',
@@ -230,6 +233,7 @@ function helper_volumes(): array {
         }
     }
     return ['at' => $at, 'os' => $os, 'fresh' => $at && time() - $at < 90,
+            'ver' => $ver, 'how' => $how, 'host' => $host,
             'vols' => array_values($vols)];
 }
 
@@ -427,4 +431,28 @@ function shelf_name_problem(string $n, array $existing = []): string {
     if (mb_strlen($n) > 80) return "“{$n}” is too long for a folder name.";
     foreach ($existing as $e) if (strcasecmp($e, $n) === 0) return "“{$n}” is already in the list.";
     return '';
+}
+
+// ── the helper's remote controls, and scripts waiting to be installed ────────
+// Written by the buttons in Manage, read by the helper every few seconds.
+function helper_control(): array {
+    $c = json_decode((string)@file_get_contents(web_dir() . '/helper-control.json'), true);
+    return (is_array($c) ? $c : []) + ['paused' => false, 'nudge' => 0, 'skip' => [], 'by' => '', 'at' => 0];
+}
+function helper_control_save(array $c): bool {
+    $f = web_dir() . '/helper-control.json';
+    return @file_put_contents("$f.new", json_encode($c, JSON_UNESCAPED_SLASHES)) !== false && @rename("$f.new", $f);
+}
+// Scripts run as root on this machine, so they are never published from the
+// share on their own: they wait in _rushes/scripts until the admin says yes,
+// and the runner installs exactly the files approved (checked by fingerprint).
+function scripts_waiting(): array {
+    $out = [];
+    foreach (glob(archive_dir() . '/_rushes/scripts/*.sh') ?: [] as $f) {
+        $n = basename($f);
+        if (!preg_match('/^[a-z][a-z0-9-]*\.sh$/', $n)) continue;
+        $new = hash_file('sha256', $f); $old = @hash_file('sha256', web_dir() . "/$n") ?: '';
+        if ($new !== $old) $out[] = ['name' => $n, 'hash' => $new, 'new' => $old === '', 'changed' => filemtime($f)];
+    }
+    return $out;
 }

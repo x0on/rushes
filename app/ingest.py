@@ -885,8 +885,9 @@ def report_forever(every=20):
                 lines += ["\t".join(["day", v["path"], d, str(c[0]), str(c[1])])
                           for d, c in sorted(days.items())]
                 lines += ["\t".join(["dir", v["path"], d]) for d in v["top"] if ok(d)]
-            body = urllib.parse.urlencode({"volumes": "\n".join(lines),
-                                           "os": sys.platform}).encode()
+            body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
+                                           "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
+                                           "host": platform.node()}).encode()
             urllib.request.urlopen(NAS_URL + "/db/report.php", data=body, timeout=15).read()
             if failing:
                 print(f"{time.strftime('%H:%M:%S')}  telling Rushes what is plugged in again ✓")
@@ -971,6 +972,105 @@ def sections(roots, fresh=False):
 
 QUEUE_URL = NAS_URL + "/ingest-queue.tsv"
 
+
+# ── what Manage asks of the helper: pause, "try again now", folders to skip ──
+_control = [0.0, {}]
+
+def control():
+    """Rushes' buttons for this helper, asked for at most every 5 seconds. If
+    Rushes cannot be reached, the last answer stands: never stop over this."""
+    if time.time() - _control[0] >= 5:
+        _control[0] = time.time()
+        try:
+            with urllib.request.urlopen(NAS_URL + "/db/helper.php?control", timeout=5) as r:
+                _control[1] = json.loads(r.read().decode("utf-8", "replace")) or {}
+        except Exception:
+            pass
+    return _control[1]
+
+
+def wait(seconds):
+    """Sleep, but wake at once for "Try again now", Pause or Resume."""
+    c = control(); start = (c.get("nudge", 0), c.get("paused", False))
+    end = time.time() + seconds
+    while time.time() < end:
+        time.sleep(min(2, max(0.0, end - time.time())))
+        c = control()
+        if (c.get("nudge", 0), c.get("paused", False)) != start:
+            return
+
+
+_LOCK = None
+try:
+    with open(os.path.abspath(__file__), "rb") as _me:
+        VERSION = hashlib.sha256(_me.read()).hexdigest()[:12]
+except OSError:
+    VERSION = ""
+
+def only_one():
+    """One helper per computer. A second one — say a Terminal window while the
+    background one runs — would copy the same folders twice."""
+    global _LOCK
+    try:
+        import fcntl
+    except ImportError:
+        return                                   # Windows: no locking here yet
+    HOME.mkdir(parents=True, exist_ok=True)
+    _LOCK = open(HOME / "helper.lock", "w")
+    try:
+        fcntl.flock(_LOCK, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit("Another Rushes helper is already running on this computer — most likely\n"
+                 "the background one, which Manage in Rushes shows. Nothing to do here.")
+
+
+_checked = [0.0]
+
+def update_self():
+    """Stay the same as the helper on the archive. Checked between steps,
+    never during a copy; after an update it restarts itself in place, so a
+    change to the archive's copy reaches every computer without anyone
+    touching it. A half-downloaded or broken file is never put in place."""
+    if time.time() - _checked[0] < 300:
+        return
+    _checked[0] = time.time()
+    try:
+        with urllib.request.urlopen(NAS_URL + "/db/helper.php?hash", timeout=10) as r:
+            want = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    stale = {}
+    for f, h in (want or {}).items():
+        if f not in ("ingest.py", "transfer_state.py") or not h:
+            continue
+        try: mine = hashlib.sha256(open(os.path.join(here, f), "rb").read()).hexdigest()
+        except OSError: mine = ""
+        if mine != h:
+            stale[f] = h
+    if not stale:
+        return
+    try:
+        got = {}
+        for f, h in stale.items():
+            with urllib.request.urlopen(NAS_URL + "/db/helper.php?code=" + f, timeout=60) as r:
+                data = r.read()
+            if hashlib.sha256(data).hexdigest() != h:
+                return                           # changed while downloading: next time
+            compile(data, f, "exec")             # a broken file never goes in
+            got[f] = data
+        for f, data in got.items():
+            with open(os.path.join(here, f + ".new"), "wb") as fh:
+                fh.write(data)
+        for f in got:
+            os.replace(os.path.join(here, f + ".new"), os.path.join(here, f))
+    except Exception as e:
+        print(f"  ! could not update the helper ({e}) — carrying on with this version")
+        return
+    print(f"\n{time.strftime('%H:%M:%S')}  a new version of the helper is on the archive — updated, restarting …")
+    sys.stdout.flush()
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
 # Stop before the archive is full, not after. A copy that dies at 100% leaves
 # the NAS with no room to write anything at all — including its own logs and
 # the search index — and that is a far worse evening than a queue that paused.
@@ -1000,23 +1100,22 @@ def free_bytes(path=NAS_MOUNT):
 
 def watch(root, every=20):
     print(f"watching {QUEUE_URL}")
-    print("Leave this window open. Tick folders in Manage → Transfers, or queue a card in Ingest, and they run here.")
-    print("Ctrl-C to stop; anything half-copied picks up where it left off.\n")
+    if "--service" in sys.argv:
+        print("Running in the background: it starts at login and restarts if it stops.")
+        print("Manage in Rushes shows what it is doing; this log keeps the detail.\n")
+    else:
+        print("Leave this window open. Tick folders in Manage → Transfers, or queue a card in Ingest, and they run here.")
+        print("Ctrl-C to stop; anything half-copied picks up where it left off.\n")
     last = None
     blocked = False        # said the source was gone; do not say it again
     threading.Thread(target=report_forever, daemon=True).start()
-    # A copy that runs overnight must not stop because the Mac dozed off: the
-    # network drops with it, and the archive and the source both unmount.
-    # caffeinate keeps it awake exactly as long as this window runs.
     if sys.platform == "darwin":
-        try:
-            subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
-            print("Keeping this Mac awake while the helper runs (the screen can still sleep).\n")
-        except OSError:
-            pass
+        print("The Mac is kept awake while a copy runs (the screen can still sleep).\n")
+    paused = False         # said it was paused; once
     lost = False           # said the archive was gone; do not say it again
     jobless = False        # said the saved transfer could not be read; once
     while True:
+        update_self()                  # between steps only; restarts itself if it did
         checkpoints().flush()          # search updates still waiting, if any
         try:
             with urllib.request.urlopen(QUEUE_URL, timeout=15) as r:
@@ -1026,11 +1125,11 @@ def watch(root, every=20):
             # looks like before anything has ever been ticked. Not an error.
             if e.code != 404:
                 print(f"  the NAS answered {e.code} — trying again in {every}s")
-                time.sleep(every); continue
+                wait(every); continue
             body = ""
         except Exception as e:
             print(f"  cannot reach the NAS ({e}) — trying again in {every}s")
-            time.sleep(every); continue
+            wait(every); continue
 
         want = []
         for line in body.splitlines():
@@ -1107,7 +1206,7 @@ def watch(root, every=20):
             for p in gone:
                 checkpoints().report(job_id, p, "blocked", force=True)
             if len(copies) == len(pending):
-                time.sleep(every); continue
+                wait(every); continue
         elif blocked:
             print(f"\n{time.strftime('%H:%M:%S')}  source is back — carrying on")
             blocked = False
@@ -1123,10 +1222,22 @@ def watch(root, every=20):
                 lost = True
             status(phase="blocked", source=NAS_MOUNT,
                    note=f"cannot see the archive at {NAS_MOUNT} — waiting for it to come back")
-            time.sleep(every); continue
+            wait(every); continue
         if lost:
             print(f"\n{time.strftime('%H:%M:%S')}  the archive is back — carrying on")
             lost = False
+
+        # Paused from Manage: nothing new starts until Resume.
+        c = control()
+        if c.get("paused"):
+            if not paused:
+                print(f"\n{time.strftime('%H:%M:%S')}  paused from Manage — nothing new starts until Resume")
+                paused = True
+            status(phase="paused", source="", note="paused from Manage")
+            wait(every); continue
+        if paused:
+            print(f"\n{time.strftime('%H:%M:%S')}  resumed from Manage — carrying on")
+            paused = False
 
         did = False
         for verb, path, into in want:
@@ -1141,6 +1252,8 @@ def watch(root, every=20):
                 did = True
                 print(f"\n=== undoing tidy-up {path} ===")
                 run_self("--untidy", path); break
+            if verb == "copy" and path in c.get("skip", []):
+                continue                               # skipped from Manage
             item = job_items.get(path) if verb == "copy" else None
             # Finished before progress was saved per transfer: say so, from
             # this computer's own list, instead of walking it all again.
@@ -1171,7 +1284,7 @@ def watch(root, every=20):
                     status(phase="stopped", source=path,
                            note=f"only {free / 1024 ** 3:.0f} GB free — waiting for room")
                     checkpoints().report(job_id, path, "stopped", force=True)
-                    time.sleep(300)      # check again in five minutes
+                    wait(300)            # check again in five minutes, or on "Try again now"
                     did = True           # do not fall through to the idle sleep
                     break
             did = True
@@ -1195,18 +1308,20 @@ def watch(root, every=20):
             else:
                 print(f"\n=== {path} ===")
                 if run_self("--source", path, "--root", root, "--apply", "--job", job_id):
-                    checkpoints().report(job_id, path, "interrupted", force=True)
+                    checkpoints().report(job_id, path, "paused" if control().get("paused") else "interrupted", force=True)
                 time.sleep(5)      # a folder that did not finish is never retried in a tight loop
             break                                      # one at a time, in order
 
         if not did:
             status(phase="waiting", source="", note="nothing queued")
-            time.sleep(every)
+            wait(every)
 
 
 def run_self(*args):
     """Run one section in its own process, so a failure cannot stop the watch."""
     cmd = [sys.executable, os.path.abspath(__file__), *args, "--url", NAS_URL]
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        cmd = ["caffeinate", "-i"] + cmd       # awake while this step runs, and only then
     t0 = time.time()
     try:
         rc = subprocess.run(cmd, check=False).returncode
@@ -1218,13 +1333,14 @@ def run_self(*args):
     # once, for ever, as fast as the machine can go. Wait before the next try.
     if rc not in (0, 130) and time.time() - t0 < 10:
         print("  that step stopped straight away — trying again in a minute")
-        time.sleep(60)
+        wait(60)
     return rc
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--job", default="", help=argparse.SUPPRESS)   # the saved transfer this belongs to
+    ap.add_argument("--job", default="", help=argparse.SUPPRESS)
+    ap.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # started by the Mac itself   # the saved transfer this belongs to
     ap.add_argument("--source", help="folder to ingest from (mounted server, or a card)")
     ap.add_argument("--url", help="where Rushes is, e.g. http://192.168.1.20")
     ap.add_argument("--trace", metavar="SOURCE",
@@ -1259,7 +1375,9 @@ def main():
         if not SETTINGS:
             sys.exit(f"Cannot reach Rushes at {NAS_URL}.\n"
                      "Copy the start command from Setup in Rushes — it has the right --url.")
-        print(f"helper: {'built in' if BUILT_IN else 'external'} · archive at {NAS_MOUNT} · Rushes at {NAS_URL}")
+        only_one()
+        print(f"helper: {'built in' if BUILT_IN else 'external'} · archive at {NAS_MOUNT} · Rushes at {NAS_URL}"
+              + (" · running in the background" if a.service else ""))
         return watch(a.root)
     # Anything that copies or lists needs to know where things are. Without
     # Rushes' settings it would be guessing, and a guessed path is how files
@@ -1459,6 +1577,11 @@ def main():
         for f in todo:
             if gone():
                 stopped = "the source or the archive disconnected"; break
+            c = control()
+            if c.get("paused"):
+                stopped = "paused from Manage"; break
+            if a.source.rstrip("/") in c.get("skip", []):
+                stopped = "skipped from Manage"; break
             try:
                 bring(f)
             except OSError as e:
@@ -1489,7 +1612,7 @@ def main():
         why = stopped or "the source or the archive disconnected"
         print(f"\n*** stopped part-way: {why}")
         print("    Everything copied so far is kept. This folder carries on from here next time.")
-        progress("", force=True, phase="interrupted")
+        progress("", force=True, phase="paused" if why == "paused from Manage" else "interrupted")
         cp.flush(force=True)
         history("interrupted", key, copied, copied_b, time.time() - t0, why)
         sys.exit(1)

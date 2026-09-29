@@ -76,7 +76,8 @@ $NAV = $NAV ?? '';
         // No live helper, but a selection is unfinished: say where it stands,
         // from the progress saved on the archive (it survives restarts).
         var jw = !h && j && j.phase !== 'done' ? ({copying: 'transferring', checking: 'checking files', queued: 'transfer waiting for the helper',
-            interrupted: 'transfer interrupted', blocked: 'waiting for the source', stopped: 'waiting for space'}[j.phase] || 'transfer')
+            interrupted: 'transfer interrupted', blocked: 'waiting for the source', stopped: 'waiting for space',
+            paused: 'transfer paused'}[j.phase] || 'transfer')
             + (j.pct === null ? '' : ' · ' + j.pct + '%') : '';
         $('hDot').className = 'dot' + (h && h.bad ? ' off' : busy ? ' busy'
           : jw && /interrupted|blocked|stopped/.test(j.phase) ? ' off' : (s.runner && s.runner.ok ? '' : ' off'));
@@ -121,6 +122,7 @@ window.helperNow = function (c) {
     return {busy: true, pct: p2, title: 'Tidying up', short: 'tidying up · ' + p2 + '%',
       facts: [[num(c.copied) + ' / ' + num(c.of), 'files moved']]};
   }
+  if (c.phase === 'paused') return {short: 'paused', title: 'Paused from Manage — nothing new starts until Resume'};
   if (c.phase === 'blocked') return {bad: true, short: 'copying stopped · source gone', title: c.note || 'The helper cannot see the source'};
   if (c.phase === 'stopped') return {bad: true, short: 'copying paused · archive nearly full', title: c.note || ''};
   return null;

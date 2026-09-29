@@ -293,32 +293,63 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
 
         <div style="margin-top:14px">
           <?php if ($hv['fresh']): ?>
-            <div class="seen ok">✓ The helper is running on <?= $e($hwho) ?> &mdash; <?= count($hv['vols']) ?> drive<?= count($hv['vols']) === 1 ? '' : 's' ?> visible.</div>
+            <div class="seen ok">✓ The helper is running on <?= $e($hwho) ?><?= $hv['how'] === 'service' ? ' in the background' : ($hv['how'] === 'window' ? ' in a Terminal window' : '') ?> &mdash; <?= count($hv['vols']) ?> drive<?= count($hv['vols']) === 1 ? '' : 's' ?> visible.</div>
           <?php else: ?>
             <div class="seen bad"><?= $hv['at'] ? 'The helper stopped — last heard from ' . $e(ago_words($hv['at'])) . '.' : 'The helper is not running yet.' ?>
               Drives are missing from the lists above until it is.</div>
           <?php endif; ?>
 
-          <!-- Always here, not only when something is wrong: the helper has to be
-               started again after every restart, and whoever does it may never
-               have opened a terminal before. -->
-          <?php $win = helper_windows(); ?>
+          <?php $win = helper_windows(); $url = rtrim((string)(settings()['archive']['url'] ?? ''), '/'); ?>
+          <?php if ($hmode !== 'external'): $bi = trim((string)@file_get_contents(web_dir() . '/helper-builtin.txt')); ?>
+            <!-- Built in: the runner starts it and starts it again. Nothing to open. -->
+            <div class="how-h">Rushes keeps it running on this machine</div>
+            <p class="note" style="margin:0">It starts by itself, and again within a minute if it ever stops.
+               Nothing to open and no window to keep open.</p>
+            <?php if ($bi === 'no-python'): ?>
+              <div class="seen bad">Python 3 is not installed on this machine yet. Install <b>Python 3</b> from the App
+                Center once; the helper starts by itself a minute later.</div>
+            <?php endif; ?>
+          <?php elseif (!$win && $url !== ''): ?>
+            <!-- A Mac: installed once as a background service. It starts at login,
+                 restarts itself, stays awake only while copying, and updates
+                 itself from here — the terminal is needed exactly once. -->
+            <div class="how-h">Install it on <?= $e($hwho) ?> — once</div>
+            <p class="note" style="margin:0 0 8px">After that it runs in the background: it starts when <?= $e($hwho) ?> is on
+               and logged in, starts again if it stops, keeps the Mac awake only while it copies, and updates itself
+               whenever Rushes has a new version. No window to keep open.</p>
+            <ol class="how">
+              <li>On <b><?= $e($hwho) ?></b>, open <b>Terminal</b>: press <b>⌘ Space</b>, type <b>Terminal</b>, press <b>Return</b>.</li>
+              <li>Press <b>Copy</b>, click inside that window, paste with <b>⌘ V</b> and press <b>Return</b>.
+                It says what it does, step by step, and ends with ✓.
+                <?= cmd_block("curl -fsS " . $url . "/db/helper.php?install | sh") ?></li>
+              <li>If the Mac asks whether <b>python3</b> may use files on a network or removable volume, press <b>Allow</b>.</li>
+            </ol>
+            <?php if ($hv['fresh'] && $hv['how'] === 'window'): ?>
+              <div class="seen">Right now it runs in a Terminal window. Install it as above, then close that window:
+                the background one takes over. Only one ever runs at a time.</div>
+            <?php elseif ($hv['fresh'] && $hv['how'] === 'service'): ?>
+              <div class="seen ok">✓ Installed: it runs in the background on <?= $e($hwho) ?>.</div>
+            <?php endif; ?>
+            <details class="note" style="margin-top:8px"><summary>Take it off this Mac, or run it in a window instead</summary>
+              <p>To remove the background helper: <?= cmd_block("curl -fsS " . $url . "/db/helper.php?remove | sh") ?></p>
+              <p>To run it in a Terminal window instead — it stops when the window closes: <?= cmd_block(helper_command()) ?></p>
+            </details>
+          <?php elseif (!$win): ?>
+            <div class="seen bad">Save the archive's web address in <b>02 · Archive</b> first — the install command is built from it.</div>
+          <?php else: ?>
           <div class="how-h"><?= $hv['fresh'] ? 'To start it again, after a restart' : 'How to start it' ?></div>
           <ol class="how">
-            <li>On <b><?= $e($hwho) ?></b>, open
-              <?= $win ? '<b>Command Prompt</b>: press the <b>Windows</b> key, type <b>cmd</b>, press <b>Enter</b>.'
-                       : '<b>Terminal</b>: press <b>⌘ Space</b>, type <b>Terminal</b>, press <b>Return</b>.' ?></li>
-            <li>Press <b>Copy</b>, click inside that window, paste with
-              <b><?= $win ? 'Ctrl V' : '⌘ V' ?></b> and press <b><?= $win ? 'Enter' : 'Return' ?></b>.
+            <li>On <b><?= $e($hwho) ?></b>, open <b>Command Prompt</b>: press the <b>Windows</b> key, type <b>cmd</b>, press <b>Enter</b>.</li>
+            <li>Press <b>Copy</b>, click inside that window, paste with <b>Ctrl V</b> and press <b>Enter</b>.
               <?= cmd_block(helper_command()) ?></li>
             <li>Leave the window open. That window <i>is</i> the helper: it shows what it is doing
               as it works, and closing it stops the copying. Anything half-copied carries on
               when it is started again.</li>
           </ol>
-          <p class="note" style="margin:6px 0 0">
-            <?= $win ? 'If it says Python was not found, install it from python.org first — once.'
-                     : 'The very first time, the Mac may offer to install “command line developer tools”. Say Install; it takes a few minutes and only happens once.' ?>
-            Changed the kind above? Save first &mdash; the command follows the saved setting.</p>
+          <p class="note" style="margin:6px 0 0">If it says Python was not found, install it from python.org first — once.
+            On Windows it runs in a window for now; starting by itself comes later.</p>
+          <?php endif; ?>
+          <p class="note" style="margin:6px 0 0">Changed the kind above? Save first &mdash; these instructions follow the saved setting.</p>
         </div>
         <script>
           document.addEventListener('DOMContentLoaded', function () {

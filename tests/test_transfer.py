@@ -162,6 +162,32 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(e.exception.code, 1)
         self.assertFalse(outside.exists())
 
+    def test_pause_from_manage_stops_between_files_and_resumes(self):
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        (self.source / 'b.mov').write_bytes(b'b' * 20)
+        state = {'paused': False}
+        rename = os.rename
+        def press_pause_after_first(src, dst):
+            rename(src, dst); state['paused'] = True       # someone presses Pause mid-folder
+        with patch.object(self.mod, 'control', side_effect=lambda: dict(state)), \
+             patch.object(self.mod.os, 'rename', side_effect=press_pause_after_first):
+            self.assertEqual(self.run_copy(), 1)
+        self.assertEqual(self.reports[-1]['phase'], 'paused')
+        self.assertEqual(len(list(self.dest.iterdir())), 1)
+        self.assertFalse(self.mod.DONE.exists())
+        with patch.object(self.mod, 'control', return_value={}):   # Resume
+            self.assertEqual(self.run_copy(), 0)
+        self.assertEqual(self.reports[-1]['phase'], 'done')
+        self.assertEqual(self.reports[-1]['done_bytes'], 30)
+
+    def test_a_second_helper_on_the_same_computer_refuses_to_start(self):
+        self.mod.only_one()
+        spec = importlib.util.spec_from_file_location('rushes_ingest_second', APP / 'ingest.py')
+        other = importlib.util.module_from_spec(spec)
+        with patch('urllib.request.urlopen', side_effect=OSError('offline')): spec.loader.exec_module(other)
+        other.HOME = self.mod.HOME
+        with self.assertRaises(SystemExit): other.only_one()
+
     def test_unreadable_hashes_are_not_duplicate_matches(self):
         self.assertIsNone(self.mod.already_here('/missing/source', 10, {10: ['/missing/archive']}))
 
@@ -178,6 +204,8 @@ class CopyTests(unittest.TestCase):
         with patch.object(m, '_remote_json', return_value=job), \
              patch.object(m.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(f'copy\t{self.source}\n'.encode())), \
              patch.object(m.threading.Thread, 'start'), patch.object(m.time, 'sleep', side_effect=sleep), \
+             patch.object(m, 'wait', side_effect=sleep), patch.object(m, 'update_self'), \
+             patch.object(m, 'control', return_value={}), \
              patch.object(m, 'free_bytes', return_value=10**15), patch.object(m, 'needs_trace', return_value=False), \
              patch.object(m, 'run_self', return_value=0) as run, patch('sys.stdout', new_callable=io.StringIO):
             with self.assertRaises(StopIteration): m.watch(str(self.archive))
@@ -205,6 +233,36 @@ class RunnerTests(unittest.TestCase):
                        TEST_CALLS=str(root/'calls'), RUSHES_URL='http://fixture.invalid:8080')
             subprocess.run(['sh', str(runner)], env=env, check=True, capture_output=True)
             self.assertIn('http://fixture.invalid:8080/db/import.php', (root/'calls').read_text())
+
+
+class ScriptUpdateTests(unittest.TestCase):
+    def test_runner_installs_exactly_the_approved_scripts(self):
+        import hashlib, subprocess
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            web = root / 'web'; (web / 'queue').mkdir(parents=True)
+            archive = root / 'archive'; scripts = archive / '_rushes' / 'scripts'; scripts.mkdir(parents=True)
+            bins = root / 'bin'; bins.mkdir()
+            (bins / 'curl').write_text('#!/bin/sh\necho no\n'); (bins / 'curl').chmod(0o755)
+            (bins / 'mount').write_text('#!/bin/sh\nexit 0\n'); (bins / 'mount').chmod(0o755)
+            good = scripts / 'verify.sh'; good.write_text('#!/bin/sh\necho approved\n')
+            bad = scripts / 'dedupe.sh'; bad.write_text('#!/bin/sh\necho approved\n')
+            h = lambda f: hashlib.sha256(f.read_bytes()).hexdigest()
+            (web / 'queue' / 'x.job').write_text(f'ACTION=update-scripts\nSCRIPT=verify.sh:{h(good)}\n'
+                                                 f'SCRIPT=dedupe.sh:{h(bad)}\nSCRIPT=../evil.sh:{h(good)}\n')
+            bad.write_text('#!/bin/sh\necho swapped after approval\n')          # changed after the yes
+            source = (APP / 'runner.sh').read_text().replace('/share/Web', str(web)).replace('/share/VIDEO', str(archive))
+            source = source.replace('/tmp/.archive-runner.lock', str(root / 'lock'))
+            (root / 'runner.sh').write_text(source)
+            env = dict(os.environ, PATH=str(bins) + os.pathsep + os.environ['PATH'])
+            subprocess.run(['sh', str(root / 'runner.sh')], env=env, check=True, capture_output=True)
+            self.assertEqual((web / 'verify.sh').read_text(), '#!/bin/sh\necho approved\n')
+            self.assertFalse((web / 'dedupe.sh').exists())
+            self.assertFalse((root / 'evil.sh').exists())
+            log = (web / 'job.log').read_text()
+            self.assertIn('installed verify.sh', log)
+            self.assertIn('refused dedupe.sh', log)
+            self.assertIn('refused ../evil.sh', log)
 
 
 if __name__ == '__main__': unittest.main()

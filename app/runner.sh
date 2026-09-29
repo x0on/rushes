@@ -25,6 +25,34 @@ mkdir -p "$Q"
 date '+%s' > /share/Web/runner-alive.txt
 df -P /share/VIDEO | tail -1 > /share/Web/disk.txt
 
+# /tmp on a QNAP is a 64 MB RAM disk shared with the system. Give it room (it
+# only uses memory for what is actually in it), and say how full it is.
+tmp_kb=$(df -Pk /tmp | awk 'NR==2 {print $2}')
+if [ -n "$tmp_kb" ] && [ "$tmp_kb" -lt 262144 ]; then
+    mount -o remount,size=256M /tmp 2>/dev/null && echo "$(date '+%Y-%m-%d %H:%M:%S')  gave /tmp 256 MB (it had $((tmp_kb / 1024)) MB)" >> "$LOG"
+fi
+df -P /tmp | tail -1 > /share/Web/tmp-disk.txt
+
+# The built-in helper: when Setup says the helper runs on this machine, keep
+# it running. Started again within a minute if it stops; its output goes to
+# /share/Web/helper.log, which is kept small.
+RUSHES="${RUSHES_URL:-http://127.0.0.1}"
+if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "yes" ]; then
+    PY=$(command -v python3 2>/dev/null)
+    pid=$(cat /share/Web/helper.pid 2>/dev/null)
+    if [ -z "$PY" ]; then
+        echo "no-python" > /share/Web/helper-builtin.txt
+    elif [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "running" > /share/Web/helper-builtin.txt
+    else
+        [ -f /share/Web/helper.log ] && [ "$(wc -c < /share/Web/helper.log)" -gt 5000000 ] && mv /share/Web/helper.log /share/Web/helper.log.old
+        nohup "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
+        echo $! > /share/Web/helper.pid
+        echo "started" > /share/Web/helper-builtin.txt
+        echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper" >> "$LOG"
+    fi
+fi
+
 # The Mac writes ingest progress onto the VIDEO share (the only place both
 # machines can reach). Mirror it into the web folder so the page can read it
 # without the Mac needing any extra mount or service.
@@ -162,6 +190,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
     STILLS=$(field STILLS "$job")
     EXCLUDE=$(field EXCLUDE "$job")
     QUERY=$(field QUERY "$job")
+    SCRIPTS=$(grep '^SCRIPT=' "$job" 2>/dev/null | cut -d= -f2-)
     rm -f "$job"
 
     # ---- validate everything; never trust the queue file ----
@@ -297,6 +326,23 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             else
                 echo "scan finished but no results file at $CZK" >> "$LOG"
             fi
+            ;;
+        update-scripts)
+            # Only what the admin approved in Manage: each name with the
+            # fingerprint it had then. A file changed since is refused.
+            for s in $SCRIPTS; do
+                name=${s%%:*}; want=${s#*:}
+                case "$name" in *[!a-z0-9.-]*|.*|*/*|"") echo "  refused $name (not a script name)" >> "$LOG"; continue ;; esac
+                case "$name" in *.sh) ;; *) echo "  refused $name (not a .sh)" >> "$LOG"; continue ;; esac
+                src="/share/VIDEO/_rushes/scripts/$name"
+                have=$(sha256sum "$src" 2>/dev/null | cut -d' ' -f1)
+                if [ -z "$have" ] || [ "$have" != "$want" ]; then
+                    echo "  refused $name: it changed after it was approved (or cannot be read)" >> "$LOG"; continue
+                fi
+                # beside, then renamed: a script that is running keeps its old copy
+                cp "$src" "/share/Web/.$name.new" && chmod 755 "/share/Web/.$name.new" && mv "/share/Web/.$name.new" "/share/Web/$name" \
+                    && echo "  installed $name" >> "$LOG" || echo "  could not install $name" >> "$LOG"
+            done
             ;;
         *)
             echo "unknown action: $ACTION" >> "$LOG"
