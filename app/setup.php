@@ -321,7 +321,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
               <li>On <b><?= $e($hwho) ?></b>, open <b>Terminal</b>: press <b>⌘ Space</b>, type <b>Terminal</b>, press <b>Return</b>.</li>
               <li>Press <b>Copy</b>, click inside that window, paste with <b>⌘ V</b> and press <b>Return</b>.
                 It says what it does, step by step, and ends with ✓.
-                <?= cmd_block("curl -fsS " . $url . "/db/helper.php?install | sh") ?></li>
+                <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?install\" | sh") ?></li>
               <li>If the Mac asks whether <b>python3</b> may use files on a network or removable volume, press <b>Allow</b>.</li>
             </ol>
             <?php if ($hv['fresh'] && $hv['how'] === 'window'): ?>
@@ -331,7 +331,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
               <div class="seen ok">✓ Installed: it runs in the background on <?= $e($hwho) ?>.</div>
             <?php endif; ?>
             <details class="note" style="margin-top:8px"><summary>Take it off this Mac, or run it in a window instead</summary>
-              <p>To remove the background helper: <?= cmd_block("curl -fsS " . $url . "/db/helper.php?remove | sh") ?></p>
+              <p>To remove the background helper: <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?remove\" | sh") ?></p>
               <p>To run it in a Terminal window instead — it stops when the window closes: <?= cmd_block(helper_command()) ?></p>
             </details>
           <?php elseif (!$win): ?>
