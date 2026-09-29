@@ -54,6 +54,27 @@ with everything the final stage needs inside it.
   descriptions also replace separately built previews).
 - Rushes Helper for Windows.
 
+## Vision model: notes from the pilot
+
+The pilot (Qwen3-VL 8B, 4-bit, through MLX on the Mac; PySceneDetect cutting each
+file into shots; two frames per shot at 768 px; about 6 s per shot) passed on
+description quality. What it taught, to build in:
+
+- **Never lose a shot to bad JSON.** 7 of 276 shots came back unparseable. Six
+  were near-JSON with unquoted keys and are recovered from the saved raw text
+  without re-running the model. One was a repetition loop (the same word over
+  and over until cut off): cap list lengths, penalise repetition, retry the shot
+  once, and flag it if it still fails. The raw answer is always kept.
+- **On-screen text is evidence, tags are opinion.** Kept apart on purpose. Merge
+  what several frames read (a title caught mid-animation reads short), drop
+  duplicates, and keep tags from repeating the on-screen text.
+- **Themes: a fixed list, not free words.** Each shot gets one to three themes
+  from a list kept in `rules.json` (Events, Sports, Education, Parks & Recreation,
+  Public Safety, …), so filtering is consistent and anyone can edit the list.
+- **Shot size and people already come back.** Shot size gains *full* (head to
+  toe) between wide and medium; people become none / one / a few / a crowd,
+  since an exact count from a drone is a guess.
+
 ## Order
 
 1. **Finish the loop on a real archive.** The copy completes, then tidy-up,
