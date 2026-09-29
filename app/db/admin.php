@@ -750,9 +750,11 @@ async function load() {
   })();
 
   const h = d.helper || {};
-  $('watchhint').innerHTML = h.command
-    ? 'Nothing moves until the helper machine is listening. Once per session:' +
-      cmdHTML(h.command)
+  // Only when something is wrong: the helper runs by itself now, so a start
+  // command here was a leftover. If it has gone quiet, say so and where to fix it.
+  $('watchhint').innerHTML = h.label && !h.fresh
+    ? '<div class="seen bad">The helper on <b>' + esc(h.label) + '</b> is not running, so nothing copies. ' +
+      '<a href="/setup.php">Setup → 04 Helper</a> shows how to install or start it.</div>'
     : '';
 
   drawMove(d);
