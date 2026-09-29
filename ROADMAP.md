@@ -102,4 +102,10 @@ description quality. What it taught, to build in:
    installation.
 3. **Package A · Mac, then B · Server, then C · Windows**, once proxies and the
    vision model work, so ffmpeg and the model runtime go into each package once.
+   The installer carries the whole analysis stage, not just the app: ffmpeg for
+   proxies, shot detection, the vision model's runtime, the face model, the
+   theme list. It checks the machine first (Apple chip, NVIDIA card, or neither)
+   and picks what runs there; the large model files download inside the
+   installer with progress shown, and can be added later. Nobody installs any
+   of it by hand.
 
