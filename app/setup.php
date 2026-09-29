@@ -174,8 +174,11 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
   .seen.ok { color: var(--ok) } .seen.bad { color: var(--warn) }
   .how-h { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint);
            font-weight: 650; margin: 18px 0 8px }
-  .how { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.55 }
-  .how li { margin: 0 0 10px; padding-left: 4px }
+  .how { margin: 14px 0 0; padding-left: 22px; font-size: 13.5px; line-height: 1.6 }
+  .how li { margin: 0 0 22px; padding-left: 6px }
+  .how li > .note { display: block; margin-top: 6px }          /* the why, under the step */
+  .how li .cmd { margin-top: 10px }
+  .how + .seen { margin-top: 4px }
   .how li::marker { color: var(--accent-text); font-weight: 650 }
 </style>
 
