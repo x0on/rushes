@@ -14,6 +14,7 @@
 
 Q=/share/Web/queue
 LOG=/share/Web/job.log
+log() { printf '%s\n' "$*" >> "$LOG"; }     # one line into the job log
 STATUS=/share/Web/job-status.txt
 LOCKDIR=/tmp/.archive-runner.lock
 
@@ -360,9 +361,15 @@ done
 # attempt retains the old catalog and is retried by the next scheduled run.
 # Set RUSHES_URL when the web application is served from a different address.
 if command -v curl >/dev/null 2>&1; then
-    curl --silent --show-error --fail --max-time 3600 "${RUSHES_URL:-http://127.0.0.1}/db/import.php" >> "$LOG" 2>&1
+    SYNC=$(curl --silent --show-error --fail --max-time 3600 "${RUSHES_URL:-http://127.0.0.1}/db/import.php" 2>&1)
 elif command -v wget >/dev/null 2>&1; then
-    wget -q -O - "${RUSHES_URL:-http://127.0.0.1}/db/import.php" >> "$LOG" 2>&1
+    SYNC=$(wget -q -O - "${RUSHES_URL:-http://127.0.0.1}/db/import.php" 2>&1)
 else
-    echo "Search update needs curl or wget on the archive host" >> "$LOG"
+    SYNC="Search update needs curl or wget on the archive host"
 fi
+# Every minute it answers "current" when nothing changed. That is not news:
+# written to the log each time, it buried the real jobs in a wall of it.
+case "$SYNC" in
+    ''|*'"state":"current"'*) ;;
+    *) log "$(date '+%Y-%m-%d %H:%M:%S')  search update: $SYNC" ;;
+esac
