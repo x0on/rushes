@@ -68,6 +68,7 @@ if (isset($_POST['_newpass'])) {
   .hctl .alarm { flex-basis: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px;
                  border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 8px; color: var(--fg) }
   .hctl .alarm p { margin: 0; flex: 1; min-width: 240px; line-height: 1.5 }
+  .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
   @media (max-width: 900px)  { .with-side { grid-template-columns: 1fr } }
@@ -753,7 +754,7 @@ async function load() {
   // Only when something is wrong: the helper runs by itself now, so a start
   // command here was a leftover. If it has gone quiet, say so and where to fix it.
   $('watchhint').innerHTML = h.label && !h.fresh
-    ? '<div class="seen bad">The helper on <b>' + esc(h.label) + '</b> is not running, so nothing copies. ' +
+    ? '<div class="warnline">The helper on <b>' + esc(h.label) + '</b> is not running, so nothing copies. ' +
       '<a href="/setup.php">Setup → 04 Helper</a> shows how to install or start it.</div>'
     : '';
 
