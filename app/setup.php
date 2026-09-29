@@ -337,8 +337,9 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
                 Privacy &amp; Security</b>, scroll down to <i>“Rushes Helper was blocked”</i>, press <b>Open Anyway</b> and
                 confirm. macOS asks this once.</li>
               <li>From there it explains itself: it moves into Applications, asks where Rushes is, starts in the
-                background, and walks you through the one switch macOS needs a person for — <b>Full Disk Access</b> —
-                and says ✓ when it is on.</li>
+                background, and walks you through the two permissions macOS needs a person for. When macOS asks whether
+                Rushes Helper may <i>“find and connect to devices on your local network”</i>, press <b>Allow</b> — that is
+                how it talks to Rushes. Then <b>Full Disk Access</b>, one switch, and it says ✓ when it is on.</li>
             </ol>
             <?php if ($hv['fresh'] && $hv['how'] === 'window'): ?>
               <div class="seen">Right now it runs in a Terminal window. Install it as above, then close that window:

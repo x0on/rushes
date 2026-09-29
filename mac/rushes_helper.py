@@ -24,6 +24,8 @@ HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
 ICON = os.path.join(APP, "Contents", "Resources", "AppIcon.icns")
 FILES = ("ingest.py", "transfer_state.py")
 TCC = os.path.join(HOME, "Library", "Application Support", "com.apple.TCC", "TCC.db")
+LAN_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
 FDA_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
 UID = str(os.getuid())
@@ -101,11 +103,18 @@ def saved_url():
 
 
 def reachable(url):
+    """(ok, why, blocked): blocked means macOS itself refused — Local Network is off."""
     try:
         with urllib.request.urlopen(url.rstrip("/") + "/db/helper.php?hash", timeout=8) as r:
-            return r.status == 200 and b"ingest.py" in r.read(), ""
+            return r.status == 200 and b"ingest.py" in r.read(), "", False
     except Exception as e:
-        return False, str(getattr(e, "reason", e))
+        why = getattr(e, "reason", e)
+        return False, str(why), getattr(why, "errno", None) == 65      # EHOSTUNREACH
+
+
+def open_pane(pane):
+    if subprocess.run(["open", pane[0]]).returncode:
+        subprocess.run(["open", pane[1]])
 
 
 def guess_url():
@@ -189,7 +198,7 @@ WELCOME = """Rushes Helper copies footage into your Rushes archive in the backgr
 
 It carries its own copy of Python — the free, open-source programming language the helper is written in, and one of the most widely used in the world. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.
 
-Setting up takes a minute: where Rushes is, and one switch in System Settings."""
+Setting up takes a minute: where Rushes is, and two permissions from macOS — to talk to your network (press Allow when it asks), and one switch in System Settings."""
 
 FDA = """One switch left: Full Disk Access.
 
@@ -258,9 +267,13 @@ def setup():
 
     if ask(WELCOME, ("Cancel", "Set up"), default="Set up") != "Set up":
         log("setup cancelled at the start"); return 0
+    # The first try makes macOS ask about Local Network now, before the address
+    # question, instead of failing the address silently.
+    url = url or guess_url()
+    if url:
+        reachable(url)
 
     # 1 · where Rushes is
-    url = url or guess_url()
     while True:
         a = ask("Where is Rushes? The address you open it at in the browser.\n\n"
                 "Setup → 04 Helper in Rushes has it, with a Copy button.",
@@ -270,9 +283,20 @@ def setup():
         url = a[1].strip().rstrip("/").split("/db/")[0]
         if "://" not in url:
             url = "http://" + url
-        ok, why = reachable(url)
+        ok, why, blocked = reachable(url)
         if ok:
             break
+        if blocked:
+            log(f"macOS refused the connection to {url}: Local Network is off for Rushes Helper")
+            if ask("macOS is not letting Rushes Helper talk to your network yet.\n\n"
+                   "If it asked whether Rushes Helper may “find and connect to devices on your local network”, "
+                   "press Allow, then Next again.\n\n"
+                   "If it did not ask: open Local Network settings, turn on Rushes Helper, then Next again.",
+                   ("Try again", "Open Local Network settings"), default="Open Local Network settings") \
+                    == "Open Local Network settings":
+                open_pane(LAN_PANE)
+            continue
+        log(f"could not reach {url}: {why}")
         say(f"Could not reach Rushes at\n{url}\n\n{why or 'It answered, but not like Rushes.'}\n\n"
             "Check the address, and that this Mac is on the same network.")
     log(f"Rushes is at {url}")
@@ -294,8 +318,7 @@ def setup():
             say("Rushes Helper is installed, but cannot reach the drives until Full Disk Access is on.\n\n"
                 "Open Rushes Helper again any time to finish.")
             log("stopped before Full Disk Access"); return 0
-        if subprocess.run(["open", FDA_PANE[0]]).returncode:
-            subprocess.run(["open", FDA_PANE[1]])
+        open_pane(FDA_PANE)
         subprocess.run(["open", "-R", HOMEAPP])
         log("waiting for Full Disk Access")
         if not wait_for_access():

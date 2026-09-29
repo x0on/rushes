@@ -98,6 +98,9 @@ with open(os.path.join(C, "Info.plist"), "wb") as f:
         "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
         "LSMinimumSystemVersion": "11.0",
         "LSUIElement": True,                     # no Dock icon: it has no windows of its own
+        # Without this line macOS refuses local-network connections without asking ("No route to host").
+        "NSLocalNetworkUsageDescription": "Rushes Helper talks to Rushes on your network: it asks what to copy "
+                                          "and reports what it is doing.",
         "NSHumanReadableCopyright": "Rushes — open source",
     }, f)
 
