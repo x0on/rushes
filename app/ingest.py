@@ -984,7 +984,10 @@ def sections(roots, fresh=False):
 # itself down and the watcher carries on with the next one.
 
 QUEUE_URL = NAS_URL + "/ingest-queue.tsv"
-DENIED = ("macOS is not letting the helper open the archive. Give python3 Full Disk Access: "
+DENIED = ("macOS is not letting the helper open the archive. Turn on Rushes Helper in Full Disk Access: "
+          "open Rushes Helper from Applications and it walks you through it."
+          if os.environ.get("RUSHES_APP") else
+          "macOS is not letting the helper open the archive. Give python3 Full Disk Access: "
           "System Settings → Privacy & Security → Full Disk Access (Setup → 04 Helper shows how).")
 
 

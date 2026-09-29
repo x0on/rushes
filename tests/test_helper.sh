@@ -19,8 +19,11 @@ call() { $PHPBIN "$HERE/helper_call.php" "$ROOT/app" "$@" 2>&1; }
 check() { if eval "$1"; then echo "PASS $2"; else echo "FAIL $2"; exit 1; fi; }
 
 out=$(call GET '{"install":""}')
-check 'echo "$out" | grep -q "URL='"'"'http://nas.test'"'"'" && echo "$out" | grep -q "launchctl bootstrap" && echo "$out" | grep -q -- "--service"' \
-      'install script carries this archive and starts a background service'
+check 'echo "$out" | grep -q "URL='"'"'http://nas.test'"'"'" && echo "$out" | grep -q "helper.php?app" && echo "$out" | grep -q "open \"\$APP\""' \
+      'install script carries this archive, fetches the app and opens it'
+check 'call GET "{\"app\":\"\"}" | grep -q "not on the archive yet"' 'no app on the archive: says so'
+printf 'PK-fake' > "$ROOT/archive/_rushes/Rushes Helper.zip"
+check 'call GET "{\"app\":\"\"}" | grep -q "PK-fake"' 'the app is served from the archive'
 check 'call GET "{\"remove\":\"\"}" | grep -q "launchctl bootout"' 'remove script takes it off again'
 want=$(sha256sum "$ROOT/archive/_rushes/ingest.py" | cut -d" " -f1)
 check 'call GET "{\"hash\":\"\"}" | grep -q "$want"' 'the helper can compare itself with the archive copy'

@@ -313,19 +313,29 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <!-- A Mac: installed once as a background service. It starts at login,
                  restarts itself, stays awake only while copying, and updates
                  itself from here — the terminal is needed exactly once. -->
-            <div class="how-h">Install it on <?= $e($hwho) ?> — once</div>
+            <div class="how-h">Install Rushes Helper on <?= $e($hwho) ?> — once</div>
             <p class="note" style="margin:0 0 8px">After that it runs in the background: it starts when <?= $e($hwho) ?> is on
                and logged in, starts again if it stops, keeps the Mac awake only while it copies, and updates itself
                whenever Rushes has a new version. No window to keep open.</p>
+            <?php if (!is_readable(archive_dir() . '/_rushes/Rushes Helper.zip')): ?>
+              <div class="seen bad">Rushes Helper for Mac is not on the archive yet: it goes in <b>_rushes/Rushes Helper.zip</b>.</div>
+            <?php endif; ?>
             <ol class="how">
-              <li>On <b><?= $e($hwho) ?></b>, open <b>Terminal</b>: press <b>⌘ Space</b>, type <b>Terminal</b>, press <b>Return</b>.</li>
-              <li>Press <b>Copy</b>, click inside that window, paste with <b>⌘ V</b> and press <b>Return</b>.
-                It says what it does, step by step, and ends with ✓.
-                <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?install\" | sh") ?></li>
-              <li>Once, allow it to open the drives: at the end the installer opens <b>System Settings → Privacy &amp; Security
-                → Full Disk Access</b> and copies the path it needs. Press <b>+</b>, then <b>⌘⇧G</b>, paste with <b>⌘ V</b>,
-                press <b>Return</b>, then <b>Open</b>, and make sure its switch is on. Without this, macOS keeps a program
-                that runs in the background away from network and removable drives.</li>
+              <li>On <b><?= $e($hwho) ?></b>, open this page and download it:
+                <a class="btn" href="<?= $e($url) ?>/db/helper.php?app">Download Rushes Helper</a>
+                <br><span class="note">About 30 MB. It carries its own copy of Python — the free, open-source language the
+                helper is written in — so nothing else has to be installed or updated on the Mac. Safari unpacks it into
+                Downloads.</span></li>
+              <li>Copy this address. Rushes Helper asks for it, and usually fills it in by itself:
+                <?= cmd_block($url) ?></li>
+              <li>Open <b>Rushes Helper</b> from Downloads. The first time, macOS stops it with
+                <i>“Apple could not verify Rushes Helper…”</i> — press <b>Done</b>. That is because it is not signed with a
+                paid Apple developer account, not because anything is wrong with it. Then open <b>System Settings →
+                Privacy &amp; Security</b>, scroll down to <i>“Rushes Helper was blocked”</i>, press <b>Open Anyway</b> and
+                confirm. macOS asks this once.</li>
+              <li>From there it explains itself: it moves into Applications, asks where Rushes is, starts in the
+                background, and walks you through the one switch macOS needs a person for — <b>Full Disk Access</b> —
+                and says ✓ when it is on.</li>
             </ol>
             <?php if ($hv['fresh'] && $hv['how'] === 'window'): ?>
               <div class="seen">Right now it runs in a Terminal window. Install it as above, then close that window:
@@ -333,8 +343,11 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <?php elseif ($hv['fresh'] && $hv['how'] === 'service'): ?>
               <div class="seen ok">✓ Installed: it runs in the background on <?= $e($hwho) ?>.</div>
             <?php endif; ?>
-            <details class="note" style="margin-top:8px"><summary>Take it off this Mac, or run it in a window instead</summary>
-              <p>To remove the background helper: <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?remove\" | sh") ?></p>
+            <details class="note" style="margin-top:8px"><summary>Install from Terminal instead, take it off, or run it in a window</summary>
+              <p>From Terminal — the same app, and macOS does not stop it the first time:
+                <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?install\" | sh") ?></p>
+              <p>To take it off: open Rushes Helper from Applications and press <b>Remove…</b>, or
+                <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?remove\" | sh") ?></p>
               <p>To run it in a Terminal window instead — it stops when the window closes: <?= cmd_block(helper_command()) ?></p>
             </details>
           <?php elseif (!$win): ?>

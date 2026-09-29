@@ -3,7 +3,8 @@
 //
 //   GET  ?code=ingest.py | transfer_state.py   the helper's own files, from _rushes
 //   GET  ?hash                                  what the current files are (for updates)
-//   GET  ?install / ?remove                     a Mac: set it up as a background service, or take it off
+//   GET  ?app                                   Rushes Helper for Mac, as a zip (from _rushes)
+//   GET  ?install / ?remove                     a Mac, from Terminal: fetch the app and open it, or take it off
 //   GET  ?control                               pause, "try again now", folders to skip
 //   GET  ?builtin                               "yes" when this machine should run it (for runner.sh)
 //   POST action=pause|resume|nudge|skip [path]  the buttons in Manage (signed in)
@@ -37,6 +38,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['hash']))    out(helper_hashes());
     if (isset($_GET['control'])) out(helper_control());
     if (isset($_GET['builtin'])) out(helper_mode() === 'built_in' ? 'yes' : 'no', 'text/plain');
+    if (isset($_GET['app'])) {
+        // Built by mac/build.py and put next to the helper on the archive.
+        $z = archive_dir() . '/_rushes/Rushes Helper.zip';
+        if (!is_readable($z)) bail(404, 'Rushes Helper for Mac is not on the archive yet (_rushes/Rushes Helper.zip).');
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="Rushes Helper.zip"');
+        header('Content-Length: ' . filesize($z));
+        header('Cache-Control: no-store');
+        readfile($z); exit;
+    }
 
     if (isset($_GET['install']) || isset($_GET['remove'])) {
         // A shell script for a Mac, with this archive's address written in.
@@ -47,67 +58,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $label = 'org.rushes.helper';
         $common = "set -e\nLABEL=$label\nPLIST=\"\$HOME/Library/LaunchAgents/\$LABEL.plist\"\nDIR=\"\$HOME/Library/Application Support/Rushes\"\n";
         if (isset($_GET['remove'])) out("#!/bin/sh\n$common" . <<<'SH'
+APP="$HOME/Applications/Rushes Helper.app"
 echo "Stopping the Rushes helper …"
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 rm -f "$PLIST"
+[ -d "$APP" ] && rm -rf "$APP" && echo "Removed $APP"
 echo "✓ Removed. It will not start again at login."
 echo "  Its files are still in: $DIR  (delete that folder too, if you like)"
+echo "  Switch it off in System Settings → Privacy & Security → Full Disk Access too."
 SH, 'text/plain; charset=utf-8');
 
+        // The app does the setting up, with its own windows. This only fetches it —
+        // downloaded by curl, macOS does not stop it the first time it opens.
         out("#!/bin/sh\n$common" . 'URL=' . $q($url) . "\n" . <<<'SH'
-LOGS="$HOME/Library/Logs/Rushes"
-mkdir -p "$DIR" "$LOGS" "$HOME/Library/LaunchAgents"
-PY=$(command -v python3 || true)
-# The program macOS actually runs for python3 is Python.app, inside Apple's
-# developer tools. Run that directly: it is what Full Disk Access is given to.
-[ -n "$PY" ] && PY=$("$PY" -c 'import os, sys; p = os.path.join(sys.base_prefix, "Resources/Python.app/Contents/MacOS/Python"); print(p if os.path.exists(p) else os.path.realpath(sys.executable))')
-ALLOW=$(echo "$PY" | sed 's#/Contents/MacOS/Python$##')
-if [ -z "$PY" ]; then
-  echo "Python 3 is not on this Mac yet. Type python3 in Terminal once and let the Mac"
-  echo "install its developer tools (a few minutes), then run this again."; exit 1
-fi
-echo "1/3  Downloading the helper from Rushes at $URL …"
-for f in ingest.py transfer_state.py; do
-  curl -fsS "$URL/db/helper.php?code=$f" -o "$DIR/$f.new"
-  mv "$DIR/$f.new" "$DIR/$f"
-done
-"$PY" -c "import sqlite3" && "$PY" -m py_compile "$DIR/ingest.py"
-echo "2/3  Setting it to start by itself …"
-cat > "$PLIST" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>$LABEL</string>
-  <key>ProgramArguments</key><array>
-    <string>$PY</string><string>-u</string><string>$DIR/ingest.py</string>
-    <string>--watch</string><string>--url</string><string>$URL</string><string>--service</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>30</integer>
-  <key>StandardOutPath</key><string>$LOGS/helper.log</string>
-  <key>StandardErrorPath</key><string>$LOGS/helper.log</string>
-</dict></plist>
-EOF
-echo "3/3  Starting it …"
-launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST"
+APPS="$HOME/Applications"; APP="$APPS/Rushes Helper.app"; TMP=$(mktemp -d)
+echo "1/3  Downloading Rushes Helper from $URL (about 30 MB) …"
+curl -fS --progress-bar "$URL/db/helper.php?app" -o "$TMP/rh.zip"
+echo "2/3  Putting it in $APPS …"
+mkdir -p "$APPS" "$DIR"
+rm -rf "$APP"
+ditto -x -k "$TMP/rh.zip" "$APPS"
+rm -rf "$TMP"
+printf '%s\n' "$URL" > "$DIR/url"
+echo "3/3  Opening it …"
+open "$APP"
 echo ""
-echo "✓ The Rushes helper is installed and running in the background."
-echo "  It starts when you log in, restarts if it stops, and updates itself from Rushes."
-echo "  Manage in Rushes shows what it is doing. Its log: $LOGS/helper.log"
-echo ""
-echo "One more step, once: macOS has to allow it to open the drives."
-echo "  System Settings opens at Full Disk Access. Press +, then ⌘⇧G, paste (⌘V),"
-echo "  press Return, then Open — and make sure its switch is on:"
-echo "    $ALLOW"
-printf '%s' "$ALLOW" | pbcopy 2>/dev/null && echo "  (That path is already copied, ready to paste.)"
-echo "  The helper notices within a minute; Manage shows it carrying on."
-# Newer macOS names the page differently; try that first.
-open "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles" 2>/dev/null \
-  || open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" 2>/dev/null || true
-echo "  If System Settings did not open there: Apple menu → System Settings → Privacy & Security"
-echo "  → Full Disk Access."
+echo "✓ Rushes Helper is open. Its windows walk you through the rest: the background"
+echo "  service, and one switch in System Settings (Full Disk Access)."
 SH, 'text/plain; charset=utf-8');
     }
     bail(400, 'nothing asked');
