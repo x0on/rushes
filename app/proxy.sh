@@ -65,13 +65,24 @@ fi
 # ---------- hardware or software ----------
 # A render device can be there and still not work (no driver for this ffmpeg):
 # try one tiny frame before trusting it, or every proxy would fail.
-if [ -e /dev/dri/renderD128 ] && [ -n "$FFMPEG" ] && $FFMPEG -nostdin -loglevel error \
+# When it does not work, say which of the three reasons it is: no video chip
+# the system offers, an ffmpeg built without hardware encoding, or the chip
+# refusing (driver). Each has a different fix, so guessing helps nobody.
+CPU=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')
+HW_WHY=""
+if [ ! -e /dev/dri/renderD128 ]; then
+    HW_WHY="this machine offers no video chip to programs (no /dev/dri): its processor may not have one"
+elif [ -n "$FFMPEG" ] && ! $FFMPEG -hide_banner -encoders 2>/dev/null | grep -q h264_vaapi; then
+    HW_WHY="the video chip is there, but this ffmpeg ($FFMPEG) was built without hardware encoding"
+fi
+if [ -z "$HW_WHY" ] && [ -n "$FFMPEG" ] && hw_err=$($FFMPEG -nostdin -loglevel error \
         -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=320x240:d=0.2 \
-        -vf 'format=nv12|vaapi,hwupload' -c:v h264_vaapi -f null - 2>/dev/null; then
+        -vf 'format=nv12|vaapi,hwupload' -c:v h264_vaapi -f null - 2>&1); then
     HW=1
     ENC="-vaapi_device /dev/dri/renderD128 -vf format=nv12|vaapi,hwupload,scale_vaapi=w=-2:h=$HEIGHT -c:v h264_vaapi"
 else
     HW=0
+    [ -z "$HW_WHY" ] && HW_WHY="the video chip is there and this ffmpeg can use it, but the chip refused a test frame: $(printf '%s' "${hw_err:-no ffmpeg}" | head -1 | cut -c1-160)"
     ENC="-vf scale=-2:$HEIGHT -c:v libx264 -preset veryfast -crf 23"
 fi
 
@@ -100,7 +111,7 @@ list | awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" -v only="$ONLY
     out = proot "/" rel
     sub(/\.[^.\/]*$/, ".mp4", out)
     print src, out
-}' "$INDEX" > "$PLAN.all"
+}' > "$PLAN.all"
 
 # only the ones that do not exist yet — this is what makes it resumable
 : > "$PLAN"
@@ -118,7 +129,8 @@ while IFS="$TAB" read -r src out; do
 done < "$PLAN.all"
 rm -f "$PLAN.all"
 
-echo "encoder: $([ "$HW" = 1 ] && echo 'hardware (QuickSync)' || echo 'software (libx264)')   ${HEIGHT}p @ $BITRATE"
+echo "encoder: $([ "$HW" = 1 ] && echo 'hardware (QuickSync)' || echo "software (libx264), because $HW_WHY")   ${HEIGHT}p @ $BITRATE"
+echo "processor: ${CPU:-unknown} · ffmpeg: ${FFMPEG:-none}"
 echo "proxies already built: $have"
 echo "proxies to build:      $missing"
 
@@ -139,7 +151,8 @@ if [ "$MODE" != "--build" ]; then
     src_tb=$(sizes |
              awk -v n="$missing" '{ s += $1; c++ } END { if (c) printf "%.0f", s / c * n / 1073741824; else print 0 }')
     state "state${TAB}planned" "only${TAB}$ONLY" "have${TAB}$have" "missing${TAB}$missing" "source_gb${TAB}$src_tb" \
-          "hw${TAB}$HW" "height${TAB}$HEIGHT" "videos${TAB}$videos"
+          "hw${TAB}$HW" "height${TAB}$HEIGHT" "videos${TAB}$videos" \
+          "hw_why${TAB}$HW_WHY" "cpu${TAB}$CPU" "ffmpeg${TAB}$FFMPEG"
     echo
     echo "nothing encoded. re-run with --build."
     exit 0

@@ -884,7 +884,9 @@ function drawProxies(p) {
       ? (p.only ? '<b>' + esc(p.only) + '</b>: ' : 'Whole archive: ') +
         '<b>' + n(p.videos) + ' videos</b> · ' + n(p.have) + ' already have a proxy · <b>' + n(p.missing) + ' to make</b>' +
         (+p.missing ? ', about ' + size(p.source_gb) + ' to read' : '') + ' · ' +
-        (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software: slow, the hardware encoder was not found') + when
+        (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software, which is slow') + when +
+        (p.hw !== '1' && p.hw_why ? '<br><span class="note">Why not the video chip: ' + esc(p.hw_why) + '.' +
+          (p.cpu ? ' Processor: ' + esc(p.cpu) + '.' : '') + '</span>' : '')
     : p.state === 'building' && p.running
       ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed · ' +
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
