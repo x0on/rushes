@@ -111,11 +111,13 @@ Mounted-share credentials are managed by the operating system or NAS, outside Ru
 
 ## Known gaps
 
-The application documentation currently lists organization tidy-up, Premiere relinking, thumbnails/preview copies, and one-click Mac/Windows installers as unfinished. Scripts and rules are still being generalized from the existing NAS installation. Confirm supported behavior in the app source and setup documentation before relying on a feature shown in website mockups.
+See the [roadmap](ROADMAP.md) for what is proven, what is not, and the order Rushes is being finished and packaged in (Mac app, server, Windows). The application documentation currently lists organization tidy-up, Premiere relinking, thumbnails/preview copies, and one-click Mac/Windows installers as unfinished. Scripts and rules are still being generalized from the existing NAS installation. Confirm supported behavior in the app source and setup documentation before relying on a feature shown in website mockups.
 
 ## Repository layout
 
 - `app/` — executable application source and setup notes.
+- `mac/` — Rushes Helper for Mac: the app, its launcher and how to build it.
+- `ROADMAP.md` — status and order of work.
 - `docs/` — public website served by GitHub Pages.
 - `website/` — matching website source; keep it synchronized with `docs/` when editing the site.
 
