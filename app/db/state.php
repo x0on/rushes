@@ -403,6 +403,7 @@ echo json_encode([
             // the version on the archive; a helper with another one updates itself
             'current' => substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),
             'paused'  => (bool)$ctl['paused'],
+            'analysis' => $hv['analysis'],          // can it describe footage, and with what
             'builtin' => trim((string)@file_get_contents("$WEB/helper-builtin.txt")),
         ];
     })(),

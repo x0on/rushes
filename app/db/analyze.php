@@ -52,6 +52,16 @@ foreach (array_reverse(@file(web_dir() . '/ingest-history.tsv') ?: []) as $l) {
     if (($f[1] ?? '') === 'analysed' && count($done) < 20)
         $done[] = ['path' => ltrim(substr($f[2], strlen($helperRoot)), '/'), 'files' => (int)$f[3], 'when' => $f[0], 'note' => $f[6] ?? ''];
 }
-$described = count(glob("$root/_rushes/analysis/*/*.json") ?: []);
-out(['folders' => folders($root), 'waiting' => $waiting, 'done' => $done, 'described' => $described,
-     'helper' => helper_name()]);
+// How far it has got, and the latest shots to check by eye.
+require_once __DIR__ . '/analysis.php';
+analysis_init(); $db = db();
+$one = fn(string $sql) => (int)($db->querySingle($sql) ?? 0);
+$stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
+          'shots' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'shot'"),
+          'speech' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'speech'"),
+          'failed' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'failed'")];
+$latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
+    language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
+while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
+out(['folders' => folders($root), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
+     'stats' => $stats, 'latest' => $latest, 'helper' => helper_name()]);

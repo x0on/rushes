@@ -213,7 +213,7 @@ function shelf_dir(): string {
 // What the helper reported. 'fresh' is false once it has been quiet for a
 // minute and a half — the helper stopped, so the list may be out of date.
 function helper_volumes(): array {
-    $vols = []; $at = 0; $os = ''; $ver = ''; $how = ''; $host = '';
+    $vols = []; $at = 0; $os = ''; $ver = ''; $how = ''; $host = ''; $an = [];
     foreach (@file(web_dir() . '/helper-volumes.tsv') ?: [] as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if ($f[0] === 'at') $at = (int)$f[1];
@@ -221,6 +221,8 @@ function helper_volumes(): array {
         elseif ($f[0] === 'ver') $ver = $f[1] ?? '';
         elseif ($f[0] === 'how') $how = $f[1] ?? '';
         elseif ($f[0] === 'host') $host = $f[1] ?? '';
+        elseif ($f[0] === 'an' && ($f[1] ?? '') !== '')
+            $an = ['ready' => $f[1] === 'ready', 'model' => $f[2] ?? '', 'speech' => $f[3] ?? ''];
         elseif ($f[0] === 'vol' && count($f) === 9) {
             $vols[$f[1]] = ['path' => $f[1], 'name' => $f[2], 'total' => (int)$f[3],
                             'free' => (int)$f[4], 'card' => $f[5] === '1',
@@ -233,7 +235,7 @@ function helper_volumes(): array {
         }
     }
     return ['at' => $at, 'os' => $os, 'fresh' => $at && time() - $at < 90,
-            'ver' => $ver, 'how' => $how, 'host' => $host,
+            'ver' => $ver, 'how' => $how, 'host' => $host, 'analysis' => $an,
             'vols' => array_values($vols)];
 }
 

@@ -68,6 +68,16 @@ if (isset($_POST['_newpass'])) {
   .hctl .alarm { flex-basis: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px;
                  border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 8px; color: var(--fg) }
   .hctl .alarm p { margin: 0; flex: 1; min-width: 240px; line-height: 1.5 }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px }
+  .mo { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); font-size: 12.5px }
+  .mo img, .mo .said { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--line) }
+  .mo .said { display: flex; align-items: center; justify-content: center; font-size: 24px; color: var(--muted) }
+  .mo .b { padding: 8px 10px 10px; line-height: 1.45 }
+  .mo .tc { font-size: 11px; color: var(--accent-text) }
+  .mo .ons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px }
+  .mo .ons span { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
+  .mo .ons span.txt { background: var(--warn-bg); border-color: var(--warn) }
+  .mo small { display: block; margin-top: 6px; color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
@@ -189,18 +199,22 @@ if (isset($_POST['_newpass'])) {
       </section>
 
       <!-- ══ jobs and tools ══ -->
-      <section id="pane-tools" hidden>
+      <section id="pane-describe" hidden>
+        <!-- What the helper can describe with, and how far the archive has got. -->
         <div class="panel" style="margin-top:8px">
-          <header><b>Run something by hand</b></header>
+          <header><b>Describing footage</b></header>
           <div style="padding:14px">
-            <div class="btns" id="tools"></div>
-            <p class="note" style="margin:12px 0 0">
-              These run whether or not anything above says you need them.</p>
+            <p style="margin:0 0 10px">The helper looks at every shot and writes down what it shows (a sentence, the
+              text on screen, shot size, people, light, themes and tags) and everything that is said, in the
+              language it was said. That is what lets search find a moment by what is <i>in</i> it, not only by
+              its file name. Nothing is moved or changed: the descriptions are kept beside the archive, in
+              <code>_rushes/analysis</code>.</p>
+            <div id="anTools" class="note"></div>
+            <div class="tiles" id="anTiles" style="margin-top:12px"></div>
           </div>
         </div>
-
         <div class="panel" style="margin-top:14px">
-          <header><b>Describe footage</b> <span class="note">· the vision model and speech, run by the helper</span></header>
+          <header><b>Describe a folder</b></header>
           <div style="padding:14px">
             <p class="note" style="margin:0 0 10px">Each shot gets a sentence, the text on screen, shot size, people,
               themes and tags; everything said is written down, in the language it was said. One file at a time,
@@ -214,6 +228,23 @@ if (isset($_POST['_newpass'])) {
             </div>
             <p class="note" id="anSaid" style="margin:10px 0 0"></p>
             <div id="anList" class="note" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+
+        <div class="panel" style="margin-top:14px">
+          <header><b>Latest described</b> <span class="note">· to check the quality, shot by shot</span></header>
+          <div id="anLatest" class="mgrid" style="padding:14px"><div class="note">Nothing described yet.</div></div>
+        </div>
+      </section>
+
+      <section id="pane-tools" hidden>
+        <div class="panel" style="margin-top:8px">
+          <header><b>Run something by hand</b></header>
+          <div style="padding:14px">
+            <div class="btns" id="tools"></div>
+            <p class="note" style="margin:12px 0 0">
+              These run whether or not anything above says you need them.</p>
           </div>
         </div>
 
@@ -284,7 +315,7 @@ let pane = 'overview', latestTransfer = null, quiet = 0;
 
 // ── moving between sections ────────────────────────────────────────────────
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
-                 duplicates: 'Duplicates',
+                 duplicates: 'Duplicates', describe: 'Describe',
                  activity: 'Activity', tools: 'Jobs and tools' };
 
 function show(which) {
@@ -294,7 +325,7 @@ function show(which) {
     if (b.dataset.go === which) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  ['transfers', 'duplicates', 'cache', 'activity', 'tools'].forEach(function (p) {
+  ['transfers', 'duplicates', 'cache', 'describe', 'activity', 'tools'].forEach(function (p) {
     $('pane-' + p).hidden = (p !== which);
   });
   // Overview shows the tiles and the cards; a section shows its own thing.
@@ -726,6 +757,7 @@ async function load() {
   drawTiles(d);
   drawNow(d);
   drawHelper(d);
+  drawDescribeTools(d.helper);
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {
@@ -796,9 +828,37 @@ async function load() {
 // ── describing footage ─────────────────────────────────────────────────────
 // Asks, and says what happened; the helper does the work and the live box shows it.
 let anArmed = 0;
+function tcode(v) { v = Math.floor(v || 0); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); }
+function drawDescribeTools(h) {
+  const an = (h && h.analysis) || {};
+  $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'
+    : !an.model ? 'The helper on <b>' + esc(h.label) + '</b> has not said yet whether it can describe footage.'
+    : an.ready ? '✓ The helper on <b>' + esc(h.label) + '</b> can describe footage · vision model <b>' + esc(an.model) +
+                 '</b> · speech <b>' + esc(an.speech ? an.speech.split('/').pop() : 'off') + '</b>'
+    : '<span class="warnline" style="display:block">The helper on <b>' + esc(h.label) + '</b> does not have the analysis ' +
+      'tools installed, so nothing can be described there yet.</span>';
+}
 async function loadAnalysis() {
   try {
     const a = await (await fetch('analyze.php?t=' + Date.now())).json();
+    const st = a.stats || {};
+    $('anTiles').innerHTML = [[st.files, 'files described'], [st.shots, 'shots'], [st.speech, 'lines of speech'],
+                              [st.failed, 'shots it could not read']].map(function (t) {
+      return '<div class="tile"><div class="big">' + (t[0] || 0).toLocaleString() + '</div><div class="sub">' + t[1] + '</div></div>'; }).join('');
+    $('anLatest').innerHTML = (a.latest || []).length ? a.latest.map(function (m) {
+      const speech = m.kind === 'speech';
+      const ons = (m.on_screen ? m.on_screen.split(' · ').map(function (t) { return '<span class="txt">' + esc(t) + '</span>'; }) : [])
+        .concat(m.themes ? m.themes.split(' · ').map(function (t) { return '<span>' + esc(t) + '</span>'; }) : []);
+      return '<div class="mo">' + (speech ? '<div class="said">“ ”</div>'
+          : '<img loading="lazy" alt="" src="thumb.php?fp=' + encodeURIComponent(m.fp) + '&shot=' + m.shot + '">') +
+        '<div class="b"><div class="tc">' + tcode(m.start_s) + ' → ' + tcode(m.end_s) +
+        (speech ? ' · said' + (m.language ? ' (' + esc(m.language) + ')' : '') : ' · ' + esc(m.shot_size || '') + (m.people ? ' · people: ' + esc(m.people) : '') +
+        (m.light ? ' · ' + esc(m.light) : '')) + '</div>' +
+        (speech ? '“' + esc(m.what) + '”' : esc(m.what)) +
+        (ons.length ? '<div class="ons">' + ons.join('') + '</div>' : '') +
+        (m.tags ? '<small>' + esc(m.tags) + '</small>' : '') +
+        '<small title="' + esc(m.path) + '">' + esc(m.path.split('/').pop()) + '</small></div></div>';
+    }).join('') : '<div class="note">Nothing described yet.</div>';
     $('anFolders').innerHTML = (a.folders || []).map(function (f) { return '<option value="' + esc(f) + '">'; }).join('');
     $('anList').innerHTML =
       (a.waiting.length ? '<div><b>Waiting</b> · ' + a.waiting.map(esc).join(' · ') + '</div>' : '') +

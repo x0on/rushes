@@ -1042,7 +1042,9 @@ def report_forever(every=20):
                 lines += ["\t".join(["day", v["path"], d, str(c[0]), str(c[1])])
                           for d, c in sorted(days.items())]
                 lines += ["\t".join(["dir", v["path"], d]) for d in v["top"] if ok(d)]
+            py, model, speech = analysis_tools()
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
+                                           "an": ("ready" if py else "missing") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
                                            "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
                                            "host": platform.node()}).encode()
             urllib.request.urlopen(NAS_URL + "/db/report.php", data=body, timeout=15).read()

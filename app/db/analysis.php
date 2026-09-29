@@ -50,7 +50,11 @@ function analysis_import(): array {
             $ins->execute(); $ins->reset();
         };
         foreach ($r['shots'] ?? [] as $s) {
-            if (!empty($s['parse_error'])) continue;          // kept in the file, not searchable
+            if (!empty($s['parse_error'])) {                  // counted, never searchable; the raw answer stays in the file
+                $row([$fp, $path, 'failed', (int)$s['shot'], (float)($s['start'] ?? 0), (float)($s['end'] ?? 0),
+                      '', '', '', '', '', '', '', '', '', '', '', $r['model'] ?? '', '']);
+                continue;
+            }
             $j = fn($k) => implode(' · ', (array)($s[$k] ?? []));
             $row([$fp, $path, 'shot', (int)$s['shot'], (float)$s['start'], (float)$s['end'],
                   (string)($s['description'] ?? ''), $j('text_on_screen'), $j('themes'), $j('tags'),
