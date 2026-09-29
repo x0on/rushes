@@ -589,6 +589,16 @@ def needs_trace(src_root, archive):
     return True
 
 
+def trace_paused():
+    """Pause from Manage stops the matching too. It only reads, so nothing is
+    half-done: after Resume it starts over, and the record it leaves unfinished
+    never counts (needs_trace wants "# finished")."""
+    if control().get("paused"):
+        print("\n*** paused from Manage — the matching starts over after Resume (it only reads)")
+        status(phase="paused", source="", note="paused from Manage")
+        sys.exit(1)
+
+
 def trace(src_root, archive):
     """For footage copied before the record existed: pair each file in the
     archive with its original on the source, and write the record it should
@@ -617,7 +627,9 @@ def trace(src_root, archive):
             try: by_size[os.path.getsize(p)].append(p); n += 1
             except OSError: pass
             if n % 2000 == 0: print(f"  {n:,} originals listed")
-            if n % 50 == 0: status(phase="tracing", source=src_root, step="listing", checked=n)
+            if n % 50 == 0:
+                status(phase="tracing", source=src_root, step="listing", checked=n)
+                trace_paused()
     print(f"  {n:,} originals listed\n")
 
     # Everything in the archive's copied area EXCEPT the exact-copy folders,
@@ -638,6 +650,7 @@ def trace(src_root, archive):
             if match: o.add("traced", match, p, size, "copied before the record existed; matched by content")
             else:     o.add("untraced", "", p, size, "no identical original found")
             if i % 20 == 0:
+                trace_paused()
                 status(phase="tracing", source=src_root, step="matching", checked=i,
                        traced=o.n["traced"], untraced=o.n["untraced"], originals=n)
             if i % 500 == 0:
@@ -1321,6 +1334,7 @@ def watch(root, every=20):
                 print("    Older copies were sorted by date and lost their original folder.")
                 print("    This matches each one to its original, so nothing is copied twice.")
                 status(phase="tracing", source=sr, note="matching earlier copies to their originals")
+                checkpoints().report(job_id, path, "checking", force=True)   # not "interrupted": it is working
                 run_self("--trace", sr, "--root", root)
             elif verb == "ingest":
                 dest, _, day = into.partition("\t")
