@@ -282,6 +282,36 @@ class ReconnectTests(unittest.TestCase):
         self.assertIn('connect it again in Finder', d.note())
 
 
+class DescribeTests(unittest.TestCase):
+    """Describing a folder: the analysis tools run, progress reaches the page, the result is recorded."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_progress_lines_become_status_and_the_run_is_recorded(self):
+        m = self.mod
+        stub = self.root / 'fake-python'
+        stub.write_text('#!/bin/sh\necho "loading"\n'
+                        'echo \'@@ {"file": "a.mov", "n": 1, "of": 2, "shot": 3, "shots": 9, "per_shot": 5.9}\'\n'
+                        'echo \'@@ {"finished": true, "done": 1, "already": 1, "failed": 0}\'\n')
+        stub.chmod(0o755)
+        m.SETTINGS['analysis'] = {'python': str(stub), 'model': 'm', 'whisper': ''}
+        seen = []
+        with patch.object(m, 'status', side_effect=lambda **kw: seen.append(kw)), \
+             patch.object(m, 'control', return_value={}), patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(m.describe_folder(str(self.archive)), 0)
+        live = [s for s in seen if s.get('shot')]
+        self.assertEqual((live[0]['n'], live[0]['of'], live[0]['shot'], live[0]['shots']), (1, 2, 3, 9))
+        self.assertIn(f'analysed\t{self.archive}\t2\t0', (m.STATUS / 'ingest-history.tsv').read_text())
+
+    def test_no_tools_on_this_computer_says_so(self):
+        m = self.mod
+        m.SETTINGS['analysis'] = {'python': str(self.root / 'nowhere')}
+        seen = []
+        with patch.object(m, 'status', side_effect=lambda **kw: seen.append(kw)), patch.object(m, 'wait'), \
+             patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(m.describe_folder(str(self.archive)), 2)
+        self.assertIn('not installed', seen[-1]['note'])
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

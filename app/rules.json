@@ -7,18 +7,87 @@
     "If you are about to write an 'if' that decides something about a file, it belongs here.",
     "Edit it freely — nothing here is code, and your camera or editing suite may differ."
   ],
-
   "kinds": {
     "_": "Extension → what sort of thing it is. Used for the search filter chips.",
-    "video":   ["mxf","mov","mp4","avi","mts","m4v","braw","r3d","mkv","wmv","m2ts","avchd"],
-    "image":   ["jpg","jpeg","png","tif","tiff","psd","ai","eps","svg","dng","cr2","cr3",
-                "arw","heic","gif","bmp","webp"],
-    "audio":   ["wav","aif","aiff","mp3","m4a","aac","flac","ogg"],
-    "project": ["prproj","aep","drp","fcpxml","xml","sesx","veg","kdenlive"],
-    "sidecar": ["xmp","sii","cpf","ppn","bim","bdm","cpi","mpl","smi","md5","srt","thm","vtt",
-                "pek","cfa","ims","cof","cop","cot","cos","coa","plist","ini"]
+    "video": [
+      "mxf",
+      "mov",
+      "mp4",
+      "avi",
+      "mts",
+      "m4v",
+      "braw",
+      "r3d",
+      "mkv",
+      "wmv",
+      "m2ts",
+      "avchd"
+    ],
+    "image": [
+      "jpg",
+      "jpeg",
+      "png",
+      "tif",
+      "tiff",
+      "psd",
+      "ai",
+      "eps",
+      "svg",
+      "dng",
+      "cr2",
+      "cr3",
+      "arw",
+      "heic",
+      "gif",
+      "bmp",
+      "webp"
+    ],
+    "audio": [
+      "wav",
+      "aif",
+      "aiff",
+      "mp3",
+      "m4a",
+      "aac",
+      "flac",
+      "ogg"
+    ],
+    "project": [
+      "prproj",
+      "aep",
+      "drp",
+      "fcpxml",
+      "xml",
+      "sesx",
+      "veg",
+      "kdenlive"
+    ],
+    "sidecar": [
+      "xmp",
+      "sii",
+      "cpf",
+      "ppn",
+      "bim",
+      "bdm",
+      "cpi",
+      "mpl",
+      "smi",
+      "md5",
+      "srt",
+      "thm",
+      "vtt",
+      "pek",
+      "cfa",
+      "ims",
+      "cof",
+      "cop",
+      "cot",
+      "cos",
+      "coa",
+      "plist",
+      "ini"
+    ]
   },
-
   "card_junk": {
     "_": [
       "Folder names that describe the camera or the card, not the shoot. When working out",
@@ -30,7 +99,7 @@
     "patterns": [
       "DCIM([ _-]*[IVX0-9]+)?",
       "\\d{3}[A-Z]*MEDIA",
-  "[1-9]\\d{2}[A-Z0-9_]{5}",
+      "[1-9]\\d{2}[A-Z0-9_]{5}",
       "CLIPS?|PRIVATE|XDROOT|AVCHD|BDMV|CONTENTS|CLPR|SUB|MISC",
       "CANON|SONY|PANASONIC|NIKON|FUJIFILM|BLACKMAGIC|GENERAL|MEDIA|STREAM|THMBNL|CLIPINF|PLAYLIST",
       "[AB][ _-]?CAM|CAM[ _-]?[AB0-9]|CARD[ _-]?[0-9]*",
@@ -40,15 +109,27 @@
       "FINAL[ _-]?CUT[ _-]?.*|DAVINCI[ _-]?RESOLVE.*"
     ]
   },
-
   "system_junk": {
     "_": "Never indexed, never counted, never moved. The OS and the NAS make these.",
-    "path_contains": ["/@Recycle/", "/@eaDir/", "/.@__thumb/", "/.@upload_cache/",
-                      "/.Trashes/", "/$RECYCLE.BIN/", "/System Volume Information/"],
-    "name_is": [".DS_Store", "Thumbs.db", "desktop.ini", ".localized"],
-    "name_starts": ["._"]
+    "path_contains": [
+      "/@Recycle/",
+      "/@eaDir/",
+      "/.@__thumb/",
+      "/.@upload_cache/",
+      "/.Trashes/",
+      "/$RECYCLE.BIN/",
+      "/System Volume Information/"
+    ],
+    "name_is": [
+      ".DS_Store",
+      "Thumbs.db",
+      "desktop.ini",
+      ".localized"
+    ],
+    "name_starts": [
+      "._"
+    ]
   },
-
   "cache": {
     "_": [
       "Editing scratch that regenerates itself from the originals. Large, worthless,",
@@ -56,35 +137,74 @@
       "'sweep' is offered for removal. 'keep' is reported and never touched."
     ],
     "sweep": [
-      { "label": "Premiere cache",      "ext": ["pek", "cfa", "ims"] },
-      { "label": "Capture One",         "ext": ["cof","cop","cot","cos","coa"],
-                                        "path_contains": ["/CaptureOne/"] },
-      { "label": "Media cache folders", "path_contains": ["/Media Cache"] },
-      { "label": "Resolve cache",       "path_contains": ["/CacheClip/", "/.gallery/"] }
+      {
+        "label": "Premiere cache",
+        "ext": [
+          "pek",
+          "cfa",
+          "ims"
+        ]
+      },
+      {
+        "label": "Capture One",
+        "ext": [
+          "cof",
+          "cop",
+          "cot",
+          "cos",
+          "coa"
+        ],
+        "path_contains": [
+          "/CaptureOne/"
+        ]
+      },
+      {
+        "label": "Media cache folders",
+        "path_contains": [
+          "/Media Cache"
+        ]
+      },
+      {
+        "label": "Resolve cache",
+        "path_contains": [
+          "/CacheClip/",
+          "/.gallery/"
+        ]
+      }
     ],
     "keep": [
-      { "label": "Premiere auto-save",
-        "path_contains": ["Adobe Premiere Pro Auto-Save"],
-        "why": "This is what you open when a project will not. Never swept." },
-      { "label": "Resolve project backups",
-        "path_contains": ["/.ProjectBackups/"],
-        "why": "Same reason." }
+      {
+        "label": "Premiere auto-save",
+        "path_contains": [
+          "Adobe Premiere Pro Auto-Save"
+        ],
+        "why": "This is what you open when a project will not. Never swept."
+      },
+      {
+        "label": "Resolve project backups",
+        "path_contains": [
+          "/.ProjectBackups/"
+        ],
+        "why": "Same reason."
+      }
     ]
   },
-
   "structure": {
     "_": "How a file's owner and event are worked out from its path.",
     "skip_years": true,
     "year_pattern": "^(19|20)\\d\\d$",
     "trees": {
-      "archive":  "source material, by date and event. Video, audio and stills together.",
+      "archive": "source material, by date and event. Video, audio and stills together.",
       "projects": "the job: editing projects, graphics, exports.",
-      "library":  "reusable material: logos, fonts, templates, music."
+      "library": "reusable material: logos, fonts, templates, music."
     },
     "event_folder": "YYYY/YYYY-MM-DD_event-name",
-    "date_from": ["folder name", "file name", "file modified time"]
+    "date_from": [
+      "folder name",
+      "file name",
+      "file modified time"
+    ]
   },
-
   "duplicates": {
     "_": [
       "A duplicate is content, never a filename. Cameras reuse names, so every card",
@@ -94,19 +214,42 @@
     "head_tail_bytes": 1048576,
     "full_read_available": true
   },
-
   "conditions": {
     "_": [
       "What the admin screen is allowed to say, and when. A condition appears only when",
       "it is true. Levels: good, info, warn, bad. Sizes are in bytes."
     ],
-    "disk_stop_free":  5497558138880,
-    "disk_warn_free":  8796093022208,
+    "disk_stop_free": 5497558138880,
+    "disk_warn_free": 8796093022208,
     "cache_min_files": 100,
     "holding_min_bytes": 1073741824,
     "runner_silent_seconds": 180,
     "copy_stalled_seconds": 900,
     "index_stale_seconds": 60,
     "split_folder_over_bytes": 1099511627776
+  },
+  "analysis": {
+    "_": "Describing footage. themes: the only words a shot's themes can be, one to three per shot. Edit freely; shots described before a change keep their old themes until described again.",
+    "themes": [
+      "Events",
+      "Sports",
+      "Education",
+      "Health & Fitness",
+      "Parks & Recreation",
+      "Public Safety",
+      "Government & Meetings",
+      "Community",
+      "Infrastructure & Construction",
+      "Arts & Culture",
+      "Business",
+      "Holidays & Celebrations",
+      "Environment",
+      "Transportation",
+      "Technology",
+      "Food & Beverage",
+      "Music",
+      "Friends & Family",
+      "Animals"
+    ]
   }
 }

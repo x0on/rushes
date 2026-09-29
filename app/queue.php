@@ -25,14 +25,17 @@ foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
     $f = explode("\t", rtrim($l, "\n"));
     if (count($f) >= 3 && in_array($f[1], ['copied', 'refused'], true)) $landed[$f[2]] = true;
     if (count($f) >= 3 && in_array($f[1], ['tidied', 'untidied', 'refused'], true)) $landed[preg_replace('/ /', "\t", $f[2], 1)] = true;
+    if (count($f) >= 3 && $f[1] === 'analysed') $landed["analyze\t" . $f[2]] = true;
 }
 // A tidy-up (Structure → Tidy-up) is its own door, db/tidy.php. Kept here
 // untouched, and dropped once the helper has done it.
-$ingests = []; $tidies = []; $others = [];
+$ingests = []; $tidies = []; $others = []; $describes = [];
 foreach (@file($OUT) ?: [] as $l) {
     $l = rtrim($l, "\n");
     if ($l === '') continue;
     if (preg_match('/^(un)?tidy\t/', $l)) { if (!isset($landed[$l])) $tidies[] = $l; continue; }
+    // Describing footage (db/analyze.php) is its own door too, and runs after the copies.
+    if (str_starts_with($l, "analyze\t")) { if (!isset($landed[$l])) $describes[] = $l; continue; }
     if (!str_starts_with($l, "ingest\t")) { $others[] = $l; continue; }
     // A card that has landed leaves the list, or the list grows for ever.
     if (!isset($landed[explode("\t", $l)[2] ?? ''])) $ingests[] = $l;
@@ -119,7 +122,7 @@ if (isset($_POST['ingest_src'])) {
 
 // Cards first. Someone standing there with a card should not wait behind a
 // week-long migration; whatever is already copying still finishes first.
-$all = array_merge($ingests, $tidies, $others);
+$all = array_merge($ingests, $tidies, $others, $describes);
 if (@file_put_contents("$OUT.new", $all ? implode("\n", $all) . "\n" : '') === false || !@rename("$OUT.new", $OUT))
     bail(500, "could not write $OUT — is the web folder writable?");
 echo json_encode($said);

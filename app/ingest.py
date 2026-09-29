@@ -1267,7 +1267,7 @@ def update_self():
     here = os.path.dirname(os.path.abspath(__file__))
     stale = {}
     for f, h in (want or {}).items():
-        if f not in ("ingest.py", "transfer_state.py") or not h:
+        if f not in ("ingest.py", "transfer_state.py", "analyze.py") or not h:
             continue
         try: mine = hashlib.sha256(open(os.path.join(here, f), "rb").read()).hexdigest()
         except OSError: mine = ""
@@ -1371,6 +1371,8 @@ def watch(root, every=20):
             f = line.split("\t")
             if len(f) >= 2 and f[0] in ("copy", "list") and f[1].startswith("/"):
                 want.append((f[0], f[1], ""))
+            elif len(f) >= 2 and f[0] == "analyze" and f[1].startswith("/"):
+                want.append(("analyze", f[1], ""))
             elif len(f) >= 2 and f[0] in ("tidy", "untidy") and f[1]:
                 want.append((f[0], f[1], ""))
             elif len(f) >= 3 and f[0] == "ingest" and f[1] and f[2]:
@@ -1421,7 +1423,7 @@ def watch(root, every=20):
         # one the transfer does not know is finished when this computer did it.
         item_done = lambda p: job_items[p]["phase"] in ("done", "removed")
         finished = lambda v, p, i: ((v == "copy" and (item_done(p) if p in job_items else p in done)) or (v == "ingest" and i.split("\t")[0] in done)
-                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy") and f"{v} {p}" in done))
+                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy", "analyze") and f"{v} {p}" in done))
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
         # A tidy-up works inside the archive, so a source going away does not stop it.
         copies = [p for v, p, _ in pending if v not in ("tidy", "untidy")]
@@ -1505,6 +1507,15 @@ def watch(root, every=20):
                 did = True
                 print(f"\n=== undoing tidy-up {path} ===")
                 run_self("--untidy", path); break
+            if verb == "analyze":
+                if not os.path.exists(path):
+                    continue                          # not there right now: the next thing goes first
+                did = True
+                print(f"\n=== describing {path} (vision model and speech) ===")
+                if describe_folder(path) == 0:
+                    _mark_done(f"analyze {path}")
+                time.sleep(5)
+                break
             if verb == "copy" and path in c.get("skip", []):
                 continue                               # skipped from Manage
             item = job_items.get(path) if verb == "copy" else None
@@ -1569,6 +1580,63 @@ def watch(root, every=20):
         if not did:
             status(phase="waiting", source="", note="nothing queued")
             wait(every)
+
+
+# ── describing footage: the vision model and speech ─────────────────────────
+# The models run in their own Python (the analysis tools: mlx-vlm, mlx-whisper,
+# scenedetect), never this one. Which Python and which models are settings in
+# Rushes (analysis.python / .model / .whisper), with the machine's own install
+# as the default. analyze.py writes one description per file into the
+# archive's _rushes/analysis, and reports progress as "@@ {json}" lines.
+def analysis_tools():
+    a = SETTINGS.get("analysis") or {}
+    py = os.path.expanduser(a.get("python") or "~/archive-pilot/venv/bin/python")
+    local = os.path.expanduser("~/archive-pilot/qwen3vl8b")
+    model = a.get("model") or (local if os.path.isdir(local) else "mlx-community/Qwen3-VL-8B-Instruct-4bit")
+    return (py if os.path.exists(py) else ""), model, a.get("whisper", "mlx-community/whisper-large-v3-turbo")
+
+
+def describe_folder(path):
+    py, model, whisper = analysis_tools()
+    name = os.path.basename(path.rstrip("/")) or path
+    if not py:
+        print("  the analysis tools are not installed on this computer — nothing described")
+        status(phase="blocked", source=path, note="the analysis tools are not installed on this computer")
+        wait(300)
+        return 2
+    cmd = [py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), path,
+           "--store", os.path.join(NAS_MOUNT, "_rushes", "analysis"), "--url", NAS_URL,
+           "--model", model, "--whisper", whisper]
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        cmd = ["caffeinate", "-i"] + cmd
+    status(phase="analysing", source=path, label=name, step="loading the model")
+    t0, done, stopped = time.time(), {}, ""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    for line in p.stdout:
+        if line.startswith("@@ "):
+            try:
+                d = json.loads(line[3:])
+            except ValueError:
+                continue
+            if d.get("finished"):
+                done = d; continue
+            status(phase="analysing", source=path, label=name, file=d.get("file", ""),
+                   n=d.get("n", 0), of=d.get("of", 0), shot=d.get("shot", 0), shots=d.get("shots", 0),
+                   per_shot=d.get("per_shot", ""), failed=d.get("failed", 0), step=d.get("step", "shots"))
+        else:
+            print(line.rstrip(), flush=True)
+        c = control()                         # Pause stops it between lines; a file part-done is redone
+        if c.get("paused") or path in c.get("skip", []):
+            stopped = "paused from Manage" if c.get("paused") else "skipped from Manage"
+            p.terminate(); break
+    rc = p.wait()
+    secs = time.time() - t0
+    if stopped:
+        print(f"*** {stopped} — the files already described are kept")
+        return 1
+    history("analysed", path, done.get("done", 0) + done.get("already", 0), 0, secs,
+            f"{done.get('failed', 0)} could not be described" if done.get("failed") else "")
+    return 0 if rc == 0 and done else 1
 
 
 def run_self(*args):

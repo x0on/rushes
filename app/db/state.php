@@ -325,7 +325,7 @@ if (is_readable("$WEB/ingest-history.tsv")) {
         $tidy = preg_match('/^(un)?tidy /', $f[2]);
         $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
                  'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted',
-                 'dropped' => 'dropped'][$f[1]] ?? 'looked at';
+                 'dropped' => 'dropped', 'analysed' => 'described'][$f[1]] ?? 'looked at';
         $recent[] = ['when' => $f[0], 'what' => $what,
                      'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
                      'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
@@ -386,6 +386,9 @@ echo json_encode([
         // matching earlier copies: how many folders of originals, and copies to check
         'folders' => (int)($mac['folders'] ?? 0), 'folders_read' => (int)($mac['folders_read'] ?? 0),
         'copies' => (int)($mac['copies'] ?? 0),
+        // describing footage: which file of how many, which shot of how many
+        'n' => (int)($mac['n'] ?? 0), 'shot' => (int)($mac['shot'] ?? 0), 'shots' => (int)($mac['shots'] ?? 0),
+        'per_shot' => $mac['per_shot'] ?? '',
     ] : null,
     'helper'   => (function () use ($ago, $WEB, $mac, $mac_stale) {
         $hv = helper_volumes(); $ctl = helper_control();

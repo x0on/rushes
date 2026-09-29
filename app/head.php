@@ -127,6 +127,16 @@ window.helperNow = function (c) {
         .concat(c.folders ? [[c.folders_read + ' of ' + c.folders, 'folders read — kept if it stops']] : [])
         .concat(c.copies ? [[num(c.copies), 'earlier copies to check next']] : [])
         .concat([['reading only', 'nothing moves']])};
+  if (c.phase === 'analysing') {
+    var p3 = c.of ? Math.floor(((c.n || 1) - 1 + (c.shots ? c.shot / c.shots : 0)) / c.of * 100) : null;
+    return {busy: true, pct: p3, file: c.file, title: 'Describing ' + name + ' · vision model and speech',
+      short: 'describing ' + name + (c.of ? ' · ' + c.n + ' of ' + c.of : ''),
+      facts: c.of ? [[num(c.n) + ' / ' + num(c.of), 'files'],
+                     [c.step === 'speech' ? 'listening' : num(c.shot) + ' / ' + num(c.shots), c.step === 'speech' ? 'writing down what is said' : 'shots in this file'],
+                     [c.per_shot ? c.per_shot + ' s' : '—', 'per shot'],
+                     [num(c.failed), 'shots it could not read']]
+                 : [[c.step || 'starting', 'loading the model']]};
+  }
   if (c.phase === 'tidying') {
     var p2 = c.of ? Math.floor(c.copied / c.of * 100) : 0;
     return {busy: true, pct: p2, title: 'Tidying up', short: 'tidying up · ' + p2 + '%',

@@ -200,6 +200,24 @@ if (isset($_POST['_newpass'])) {
         </div>
 
         <div class="panel" style="margin-top:14px">
+          <header><b>Describe footage</b> <span class="note">· the vision model and speech, run by the helper</span></header>
+          <div style="padding:14px">
+            <p class="note" style="margin:0 0 10px">Each shot gets a sentence, the text on screen, shot size, people,
+              themes and tags; everything said is written down, in the language it was said. One file at a time,
+              after any copies; a file already described is skipped. About 6 seconds per shot.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <input id="anPath" list="anFolders" placeholder="a folder in the archive, e.g. PARK COLLECTION"
+                     style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
+                            border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
+              <datalist id="anFolders"></datalist>
+              <button class="btn" id="anGo" type="button">Describe it</button>
+            </div>
+            <p class="note" id="anSaid" style="margin:10px 0 0"></p>
+            <div id="anList" class="note" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:14px">
           <header><b>Admin password</b></header>
           <form method="post" style="padding:14px;max-width:360px">
             <?php if ($pw_said === 'ok'): ?>
@@ -765,7 +783,7 @@ async function load() {
   drawMove(d);
 
   $('tools').innerHTML = [['manifest', 'Rebuild the file list'], ['import', 'Rebuild search'],
-    ['verify', 'Check the holding folder'], ['df', 'Measure free space']]
+    ['verify', 'Check the holding folder'], ['df', 'Measure free space'], ['proxy-plan', 'Plan proxies (changes nothing)']]
     .map(function (a) { return '<button class="btn quiet" data-t="' + a[0] + '">' + a[1] + '</button>'; })
     .join('');
   $('tools').querySelectorAll('[data-t]').forEach(function (b) {
@@ -774,6 +792,34 @@ async function load() {
 
   if (busy && !d.running) busy = null;
 }
+
+// ── describing footage ─────────────────────────────────────────────────────
+// Asks, and says what happened; the helper does the work and the live box shows it.
+let anArmed = 0;
+async function loadAnalysis() {
+  try {
+    const a = await (await fetch('analyze.php?t=' + Date.now())).json();
+    $('anFolders').innerHTML = (a.folders || []).map(function (f) { return '<option value="' + esc(f) + '">'; }).join('');
+    $('anList').innerHTML =
+      (a.waiting.length ? '<div><b>Waiting</b> · ' + a.waiting.map(esc).join(' · ') + '</div>' : '') +
+      (a.done.length ? '<div style="margin-top:4px"><b>Described</b> · ' + a.done.map(function (d) {
+        return esc(d.path) + ' (' + d.files + ' files' + (d.note ? ', ' + esc(d.note) : '') + ')'; }).join(' · ') + '</div>' : '') +
+      '<div style="margin-top:4px">' + (a.described || 0).toLocaleString() + ' files described in the archive so far.</div>';
+  } catch (e) { $('anList').textContent = 'Could not read what is waiting: ' + e.message; }
+}
+$('anGo').onclick = async function () {
+  const path = $('anPath').value.trim(), b = this;
+  if (!path) { $('anSaid').textContent = 'Type or pick a folder first.'; return; }
+  if (Date.now() > anArmed) { anArmed = Date.now() + 5000; b.textContent = 'Sure? Describe ' + path.split('/').pop(); return; }
+  anArmed = 0; b.disabled = true; b.textContent = 'Asking…';
+  try {
+    const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ path: path }) })).json();
+    $('anSaid').textContent = r.error ? 'Did not happen: ' + r.error
+      : 'Queued ✓ ' + r.queued + ' — the helper describes it after anything already waiting. The live box shows it.';
+  } catch (e) { $('anSaid').textContent = 'Could not reach the archive: ' + e.message; }
+  b.disabled = false; b.textContent = 'Describe it'; loadAnalysis();
+};
+loadAnalysis(); setInterval(loadAnalysis, 30000);
 
 show((location.hash || '#overview').slice(1));
 load(); setInterval(load, 4000);

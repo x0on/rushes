@@ -1,7 +1,7 @@
 <?php
 // helper.php — everything about the helper that is not copying.
 //
-//   GET  ?code=ingest.py | transfer_state.py   the helper's own files, from _rushes
+//   GET  ?code=ingest.py | transfer_state.py | analyze.py   the helper's own files, from _rushes
 //   GET  ?hash                                  what the current files are (for updates)
 //   GET  ?app                                   Rushes Helper for Mac, as a zip (from _rushes)
 //   GET  ?install / ?remove                     a Mac, from Terminal: fetch the app and open it, or take it off
@@ -16,7 +16,7 @@
 // and the one thing a GET can change is nothing.
 require_once __DIR__ . '/auth.php';
 
-const HELPER_FILES = ['ingest.py', 'transfer_state.py'];
+const HELPER_FILES = ['ingest.py', 'transfer_state.py', 'analyze.py'];
 function helper_src(string $f): string { return archive_dir() . '/_rushes/' . $f; }
 function helper_hashes(): array {
     $h = [];
