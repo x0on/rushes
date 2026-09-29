@@ -322,7 +322,10 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
               <li>Press <b>Copy</b>, click inside that window, paste with <b>⌘ V</b> and press <b>Return</b>.
                 It says what it does, step by step, and ends with ✓.
                 <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?install\" | sh") ?></li>
-              <li>If the Mac asks whether <b>python3</b> may use files on a network or removable volume, press <b>Allow</b>.</li>
+              <li>Once, allow it to open the drives: at the end the installer opens <b>System Settings → Privacy &amp; Security
+                → Full Disk Access</b> and copies the path it needs. Press <b>+</b>, then <b>⌘⇧G</b>, paste with <b>⌘ V</b>,
+                press <b>Return</b>, then <b>Open</b>, and make sure its switch is on. Without this, macOS keeps a program
+                that runs in the background away from network and removable drives.</li>
             </ol>
             <?php if ($hv['fresh'] && $hv['how'] === 'window'): ?>
               <div class="seen">Right now it runs in a Terminal window. Install it as above, then close that window:

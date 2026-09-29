@@ -58,6 +58,7 @@ SH, 'text/plain; charset=utf-8');
 LOGS="$HOME/Library/Logs/Rushes"
 mkdir -p "$DIR" "$LOGS" "$HOME/Library/LaunchAgents"
 PY=$(command -v python3 || true)
+[ -n "$PY" ] && PY=$("$PY" -c 'import os, sys; print(os.path.realpath(sys.executable))')
 if [ -z "$PY" ]; then
   echo "Python 3 is not on this Mac yet. Type python3 in Terminal once and let the Mac"
   echo "install its developer tools (a few minutes), then run this again."; exit 1
@@ -92,7 +93,14 @@ echo ""
 echo "✓ The Rushes helper is installed and running in the background."
 echo "  It starts when you log in, restarts if it stops, and updates itself from Rushes."
 echo "  Manage in Rushes shows what it is doing. Its log: $LOGS/helper.log"
-echo "  If the Mac asks whether python3 may use network or removable volumes: Allow."
+echo ""
+echo "One more step, once: macOS has to allow it to open the drives."
+echo "  System Settings opens at Full Disk Access. Press +, then ⌘⇧G, paste (⌘V),"
+echo "  press Return, then Open — and make sure its switch is on:"
+echo "    $PY"
+printf '%s' "$PY" | pbcopy 2>/dev/null && echo "  (That path is already copied, ready to paste.)"
+echo "  The helper notices within a minute; Manage shows it carrying on."
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" 2>/dev/null || true
 SH, 'text/plain; charset=utf-8');
     }
     bail(400, 'nothing asked');

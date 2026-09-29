@@ -971,6 +971,8 @@ def sections(roots, fresh=False):
 # itself down and the watcher carries on with the next one.
 
 QUEUE_URL = NAS_URL + "/ingest-queue.tsv"
+DENIED = ("macOS is not letting the helper open the archive. Give python3 Full Disk Access: "
+          "System Settings → Privacy & Security → Full Disk Access (Setup → 04 Helper shows how).")
 
 
 # ── what Manage asks of the helper: pause, "try again now", folders to skip ──
@@ -1112,6 +1114,7 @@ def watch(root, every=20):
     if sys.platform == "darwin":
         print("The Mac is kept awake while a copy runs (the screen can still sleep).\n")
     paused = False         # said it was paused; once
+    denied = False         # said macOS would not let it in; once
     lost = False           # said the archive was gone; do not say it again
     jobless = False        # said the saved transfer could not be read; once
     while True:
@@ -1226,6 +1229,24 @@ def watch(root, every=20):
         if lost:
             print(f"\n{time.strftime('%H:%M:%S')}  the archive is back — carrying on")
             lost = False
+
+        # There, but not allowed in: macOS keeps a background program away from
+        # network and removable drives until it is given Full Disk Access.
+        # Nothing can be copied or checked like this, so nothing is tried.
+        try:
+            os.listdir(STATUS); open(STATUS / "ingest-sections.tsv", "rb").close()
+            if denied:
+                print(f"\n{time.strftime('%H:%M:%S')}  allowed in now — carrying on")
+            denied = False
+        except FileNotFoundError:
+            denied = False
+        except PermissionError:
+            if not denied:
+                print(f"\n*** STOPPED: {DENIED}")
+                print("    Nothing is copied until then. It notices within a minute once allowed.")
+                denied = True
+            status(phase="blocked", source=NAS_MOUNT, note=DENIED)
+            wait(every); continue
 
         # Paused from Manage: nothing new starts until Resume.
         c = control()
@@ -1407,6 +1428,12 @@ def main():
     HOME.mkdir(exist_ok=True)
     load_cache()
     cp = checkpoints()
+    try:
+        os.listdir(a.source); os.listdir(STATUS)
+    except PermissionError:
+        print(DENIED); cp.report(a.job, a.source, "blocked", force=True); sys.exit(1)
+    except OSError:
+        pass                                      # missing: handled just below
     gone = lambda: not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT)
     if gone():
         # Missing is not empty. Nothing is marked done; the watcher waits.
