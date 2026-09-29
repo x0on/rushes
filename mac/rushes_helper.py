@@ -206,6 +206,8 @@ macOS keeps apps away from network drives and other disks until you allow it. Ru
 
 Next, System Settings opens at Full Disk Access, and Finder shows Rushes Helper. Turn Rushes Helper on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).
 
+If System Settings opens somewhere else, type Full Disk Access into its search field, top left.
+
 Then come back here: this window notices the switch by itself."""
 
 
@@ -231,21 +233,35 @@ def move_to_applications():
     return True
 
 
+def show_fda():
+    """Settings at Full Disk Access, and the app in Finder to drag into the list."""
+    open_pane(FDA_PANE)
+    subprocess.run(["open", "-R", HOMEAPP])
+
+
 def wait_for_access():
-    """A waiting window that closes itself when the switch is on."""
-    w = subprocess.Popen(["osascript", "-e", dialog_script(
-        "Waiting for Full Disk Access to be turned on for Rushes Helper …\n\n"
-        "This window closes by itself when it is on.", ("Stop waiting",), wait=1800)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
-        while w.poll() is None:
-            if has_full_disk_access():
-                return True
-            time.sleep(2)
-        return has_full_disk_access()
-    finally:
-        if w.poll() is None:
-            w.terminate()
+    """A waiting window that closes itself when the switch is on. Its button
+    takes you back to the right place, as often as needed."""
+    while True:
+        w = subprocess.Popen(["osascript", "-e", dialog_script(
+            "Waiting for Full Disk Access to be turned on for Rushes Helper …\n\n"
+            "Lost the place? Press Show me where. If System Settings does not land on it, type "
+            "Full Disk Access into its search field, top left.\n\n"
+            "This window closes by itself when it is on.",
+            ("Stop waiting", "Show me where"), default="Show me where", wait=1800)],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        try:
+            while w.poll() is None:
+                if has_full_disk_access():
+                    return True
+                time.sleep(2)
+        finally:
+            if w.poll() is None:
+                w.terminate()
+        if (w.stdout.read() or "").strip() != "Show me where":
+            return has_full_disk_access()
+        log("showing Full Disk Access again")
+        show_fda()
 
 
 def setup():
@@ -318,8 +334,7 @@ def setup():
             say("Rushes Helper is installed, but cannot reach the drives until Full Disk Access is on.\n\n"
                 "Open Rushes Helper again any time to finish.")
             log("stopped before Full Disk Access"); return 0
-        open_pane(FDA_PANE)
-        subprocess.run(["open", "-R", HOMEAPP])
+        show_fda()
         log("waiting for Full Disk Access")
         if not wait_for_access():
             say("Full Disk Access is not on yet.\n\nOpen Rushes Helper again any time to finish.")
