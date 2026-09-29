@@ -321,11 +321,11 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
               <div class="seen bad">Rushes Helper for Mac is not on the archive yet: it goes in <b>_rushes/Rushes Helper.zip</b>.</div>
             <?php endif; ?>
             <ol class="how">
-              <li>On <b><?= $e($hwho) ?></b>, open this page and download it:
-                <a class="btn" href="<?= $e($url) ?>/db/helper.php?app">Download Rushes Helper</a>
-                <br><span class="note">About 30 MB. It carries its own copy of Python — the free, open-source language the
+              <li>On <b><?= $e($hwho) ?></b>, open this page and download it.
+                <span class="note">About 30 MB. It carries its own copy of Python — the free, open-source language the
                 helper is written in — so nothing else has to be installed or updated on the Mac. Safari unpacks it into
-                Downloads.</span></li>
+                Downloads.</span>
+                <p style="margin:12px 0 6px"><a class="btn" href="<?= $e($url) ?>/db/helper.php?app">Download Rushes Helper</a></p></li>
               <li>Copy this address. Rushes Helper asks for it, and usually fills it in by itself:
                 <?= cmd_block($url) ?></li>
               <li>Open <b>Rushes Helper</b> from Downloads. The first time, macOS stops it with
