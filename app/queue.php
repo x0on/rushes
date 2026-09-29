@@ -14,6 +14,7 @@
 
 header('Content-Type: application/json');
 require_once __DIR__ . '/db/auth.php';
+require_once __DIR__ . '/db/transfers.php';
 
 $OUT = web_dir() . '/ingest-queue.tsv';
 function bail(int $code, string $why) { http_response_code($code); echo json_encode(['error' => $why]); exit; }
@@ -96,15 +97,16 @@ if (isset($_POST['ingest_src'])) {
     // Paths come from the section list the helper itself wrote, so they are
     // already known-good. Checked anyway: a path is the one thing this hands
     // to another machine.
-    $known = [];
+    $known = []; $sizes = [];
     foreach (@file(web_dir() . '/ingest-sections.tsv') ?: [] as $l) {
         $f = explode("\t", rtrim($l, "\n"));
-        if (($f[0] ?? '') === 'section' && str_starts_with($f[1] ?? '', '/')) $known[$f[1]] = true;
+        if (($f[0] ?? '') === 'section' && str_starts_with($f[1] ?? '', '/')) { $known[$f[1]] = true; $sizes[$f[1]] = [(int)($f[2] ?? 0), (int)($f[3] ?? 0)]; }
     }
     $others = [];
     foreach ((array)($_POST['copy'] ?? []) as $p) if (isset($known[$p])) $others[] = "copy\t$p";
     $list = trim((string)($_POST['list'] ?? ''));
     if ($list !== '' && str_starts_with($list, '/') && !str_contains($list, '..')) $others[] = "list\t$list";
+    transfer_select(array_values(array_filter((array)($_POST['copy'] ?? []), fn($p) => isset($known[$p]))), $sizes);
     $said = ['queued' => count($others)];
 }
 

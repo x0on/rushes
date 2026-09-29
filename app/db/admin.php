@@ -41,6 +41,18 @@ if (isset($_POST['_newpass'])) {
   .side-body { flex: 1; overflow-y: auto; min-height: 0 }
   .side-f { border-top: 1px solid var(--line); padding: 10px 14px; font-size: 11.5px;
             color: var(--muted); flex: none }
+  .transfer-summary { margin: 16px 0; padding: 20px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--surface) }
+  .transfer-summary .job-top { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap }
+  .transfer-summary h2 { margin:0; font-size:15px }
+  .transfer-summary .job-percent { font-size:28px; font-weight:650; font-variant-numeric:tabular-nums }
+  .transfer-summary progress { display:block; width:100%; height:8px; margin:14px 0;
+    border:0; border-radius:4px; overflow:hidden; appearance:none; background:var(--line); color:var(--accent) }
+  .transfer-summary progress::-webkit-progress-bar { background:var(--line); border-radius:4px }
+  .transfer-summary progress::-webkit-progress-value { background:var(--accent); border-radius:4px }
+  .transfer-summary progress::-moz-progress-bar { background:var(--accent); border-radius:4px }
+  .transfer-summary .job-percent small { font-size:14px; font-weight:500; color:var(--muted) }
+  .transfer-summary p { margin:5px 0; line-height:1.5 }
   .side .ev { padding: 9px 14px }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
@@ -71,6 +83,7 @@ if (isset($_POST['_newpass'])) {
       <!-- always true, then only what is -->
       <div class="tiles" id="tiles"></div>
 
+      <section id="transferSummary" class="transfer-summary" aria-label="Transfer job" hidden></section>
       <div id="cards"></div>
 
       <!-- ══ transfers ══ -->
@@ -228,7 +241,7 @@ const tb  = function (b) {
 };
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
-let pane = 'overview';
+let pane = 'overview', latestTransfer = null;
 
 // ── moving between sections ────────────────────────────────────────────────
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
@@ -248,11 +261,12 @@ function show(which) {
   // Overview shows the tiles and the cards; a section shows its own thing.
   $('tiles').hidden = (which !== 'overview');
   $('cards').hidden = (which !== 'overview');
+  $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
   if (which === 'cache') loadCache();
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
 }
 document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
-  b.onclick = function () { show(b.dataset.go); };
+  b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
 $('sideMore').onclick = function () { show('activity'); };
 // The fixed buttons in Duplicates and Structure use the same path as everything
@@ -348,6 +362,34 @@ function oops(msg) {
 }
 
 // ── the transfer ───────────────────────────────────────────────────────────
+function drawTransfer(j) {
+  latestTransfer = j;
+  const el = $('transferSummary');
+  el.hidden = !j || !['overview', 'transfers'].includes(pane);
+  if (!j) return;
+  const labels = {queued:'Waiting for the helper', checking:'Checking selected files', copying:'Transferring',
+    done:'Transfer complete', interrupted:'Transfer interrupted', blocked:'Waiting for the source drive', stopped:'Waiting for space'};
+  const pct = j.pct === null ? 'Preparing…' : j.pct + '%';
+  const detail = j.phase === 'interrupted'
+    ? 'Progress is saved. Check that the source and archive are connected and the helper is running. It will retry automatically.'
+    : j.phase === 'blocked' ? 'Reconnect the source drive. The helper will continue automatically.'
+    : j.phase === 'stopped' ? 'Make room on the archive. The helper will check again automatically.'
+    : j.phase === 'queued' ? 'Your selection is saved. Start the helper to begin or continue.'
+    : j.phase === 'done' ? 'All selected files are accounted for. Any pending search updates will catch up automatically.'
+    : 'New files become searchable as the transfer progresses.';
+  el.innerHTML = '<div class="job-top"><div><h2>' + esc(labels[j.phase] || 'Transfer') + '</h2>' +
+    '<p class="note">Selected transfer · ' + j.folders + ' folders</p></div>' +
+    '<strong class="job-percent">' + pct + (j.pct === null ? '' : ' <small>complete</small>') + '</strong></div>' +
+    '<progress max="100"' + (j.pct === null ? '' : ' value="' + j.pct + '"') + ' aria-label="Overall transfer completion"></progress>' +
+    '<p>' + tb(j.done_bytes) + ' of ' + tb(j.total_bytes) + ' accounted for · ' +
+    tb(Math.max(0,j.total_bytes-j.done_bytes)) + ' remaining' + (j.estimated ? ' (estimated)' : '') + '</p>' +
+    '<p class="note">' + tb(j.copied_bytes) + ' copied · ' + tb(j.already_bytes) + ' already present · ' +
+    j.folders_done + ' of ' + j.folders + ' folders finished</p>' +
+    (j.source ? '<p class="note">Current folder: ' + esc(j.source.split('/').pop()) + '</p>' : '') +
+    '<p>' + esc(detail) + '</p>' +
+    (j.updated ? '<p class="note">Last report: ' + esc(new Date(j.updated*1000).toLocaleString()) + '</p>' : '');
+}
+
 function drawMove(d) {
   const landed = d.landed || [];
   $('nTransfers').textContent = secs.length ? secs.length : '';
@@ -497,13 +539,15 @@ async function load() {
   if (d.error) { oops(d.error); return; }
   $('err').hidden = true;
 
-  secs = d.sections || [];
+  secs = (d.sections || []).filter(x => x.state !== 'done');
+  ticked = new Set([...ticked].filter(p => secs.some(x => x.path === p)));
+  drawTransfer(d.transfer);
   if (!seeded) {                        // the tick starts as whatever is queued
     secs.forEach(function (x) { if (x.state === 'queued') ticked.add(x.path); });
     seeded = true;
   }
 
-  $('built').textContent = 'search built ' + (d.archive.imported_ago || 'never');
+  $('built').textContent = d.search && d.search.state !== 'current' ? 'Search updating automatically' : 'Search updated ' + (d.archive.imported_ago || 'never');
   $('fFiles').textContent = d.archive.files.toLocaleString() + ' files · ' + tb(d.archive.bytes);
   $('fFree').textContent  = tb(d.disk.free) + ' free · ' + (d.disk.pct || 0) + '% used';
   const m = $('fMeter');
@@ -530,7 +574,7 @@ async function load() {
   // Activity: what happened, as events. Same markup in the pane and in the
   // side column, so the two can never tell different stories.
   const evs = (d.recent || []).map(function (r) {
-    return '<div class="ev"><span class="ico ok">✓</span><div class="t">' +
+    return '<div class="ev"><span class="ico">' + (r.what === 'interrupted' ? 'Ⅱ' : '✓') + '</span><div class="t">' +
       esc(r.target) + ' ' + esc(r.what) +
       '<small>' + r.files.toLocaleString() + ' files · ' + tb(r.bytes) +
       (r.secs ? ' · ' + Math.round(r.secs / 60) + ' min' : '') + '</small></div>' +
@@ -544,7 +588,7 @@ async function load() {
         ((d.progress && d.progress.pct) || 0) + '%"></i></div></div></div>'
       : '') + (evs.length ? evs.slice(0, 12).join('') : '<div class="empty">Nothing yet.</div>');
   $('sideNow').textContent = d.runner && d.runner.ok
-    ? 'Picking up jobs · checked ' + (d.runner.ago || 0) + 's ago'
+    ? 'Picking up jobs · checked ' + (d.runner.ago || 'just now')
     : 'Not picking up jobs';
   const lg = $('log'), stuck = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 30;
   lg.textContent = d.log || 'nothing logged yet';

@@ -14,24 +14,28 @@ if (strlen($raw) > 4000000) { http_response_code(413); echo '{"error":"send fewe
 
 db_init();
 $db    = db();
+$db->enableExceptions(true);
 $from  = helper_archive();          // how the helper names the archive
 $to    = archive_dir();             // how this machine does
 $shelf = shelf_dir();
-$ins = $db->prepare('INSERT OR REPLACE INTO files (path,name,ext,kind,bytes,dept,year,event,why,seen_at)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)');
-$added = 0; $refused = 0; $now = time();
+$ins = $db->prepare('INSERT INTO files (path,name,ext,kind,bytes,dept,year,event,why,seen_at)
+                     VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET
+                     bytes=excluded.bytes, dept=excluded.dept, seen_at=excluded.seen_at');
+$accepted = []; $added = 0; $refused = 0; $now = time();
 
-$db->exec('BEGIN');
+$db->exec('BEGIN IMMEDIATE');
 foreach (explode("\n", $raw) as $l) {
     if ($l === '') continue;
     [$p, $size] = array_pad(explode("\t", $l, 2), 2, '');
     // The helper's name for the file, turned into this machine's — including a
     // Windows helper's backslashes.
-    if ($from === '' || !str_starts_with($p, $from) || !ctype_digit($size)) { $refused++; continue; }
+    if ($from === '' || !str_starts_with(str_replace('\\', '/', $p), rtrim(str_replace('\\', '/', $from), '/') . '/') || !ctype_digit($size)) { $refused++; continue; }
     $local = $to . str_replace('\\', '/', substr($p, strlen($from)));
     if (!str_starts_with($local, $to . '/') || str_contains($local, '/../')
+        || !str_starts_with((string)realpath($local), (string)realpath($to) . '/')
         || !is_file($local) || filesize($local) !== (int)$size) { $refused++; continue; }
 
+    if (is_system_junk($local) || str_contains($local, '/_rushes/') || str_ends_with($local, '.part')) { $accepted[] = $p; continue; }
     $c = classify($local);
     // A card brought in through Ingest landed under its department's shelf, so
     // here the department is known, not guessed.
@@ -45,7 +49,9 @@ foreach (explode("\n", $raw) as $l) {
         $ins->bindValue($i + 1, $v);
     }
     $ins->execute(); $ins->reset();
-    $added++;
+    $added++; $accepted[] = $p;
 }
+meta_set('files_imported', (string)$db->querySingle('SELECT COUNT(*) FROM files'));
+if ($added) meta_set('search_updated_at', (string)$now);
 $db->exec('COMMIT');
-echo json_encode(['added' => $added, 'refused' => $refused]);
+echo json_encode(['added' => $added, 'refused' => $refused, 'accepted' => $accepted]);

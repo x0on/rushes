@@ -66,25 +66,8 @@ if [ -d "$DROP" ]; then
     done
 fi
 
-# When the Mac finishes bringing a section over, the archive has files in it
-# that nothing knows about yet. Same rule as every other job here: after
-# something moves files, look again — without being asked.
-#
-# The Mac cannot queue a job itself (it has no business writing to the queue),
-# but it does leave a finished-at timestamp. Noticing that is the NAS's job.
-if [ -f /share/Web/ingest-status.tsv ]; then
-    phase=$(grep '^phase' /share/Web/ingest-status.tsv | cut -f2)
-    at=$(grep '^at' /share/Web/ingest-status.tsv | cut -f2)
-    if [ "$phase" = "done" ] && [ -n "$at" ]; then
-        seen=$(cat /share/Web/.ingest-seen 2>/dev/null)
-        if [ "$at" != "$seen" ]; then
-            printf '%s' "$at" > /share/Web/.ingest-seen
-            printf 'ACTION=reindex\n' > "$Q/after-ingest.job"
-            echo "$(date '+%Y-%m-%d %H:%M:%S')  a section finished on the Mac at $at" >> "$LOG"
-            echo "  making the new files searchable, unasked" >> "$LOG"
-        fi
-    fi
-fi
+# Transfers add files incrementally through landed.php. A finished folder no
+# longer triggers another full archive walk.
 
 # ponytail: mkdir is the portable atomic lock; busybox has no flock
 mkdir "$LOCKDIR" 2>/dev/null || exit 0
@@ -98,29 +81,33 @@ trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT INT TERM
 # nothing. An empty manifest is worse than none: it tells the Mac the archive
 # is empty and every file is new. Try the fast way, check it worked, fall back.
 build_manifest() {
-    M=/share/Web/manifest.tsv
-    T=$(printf '\t')      # stat does not turn \t into a tab; pass a real one
-    : > "$M"
-
-    # 1. GNU find. Fastest by far when it exists.
-    find -L /share/VIDEO -type f -not -path '*/@Recycle/*' \
-        -printf '%s\t%p\n' > "$M" 2>/dev/null
-    if [ -s "$M" ]; then echo "find -printf"; return; fi
-
-    # 2. busybox find with batched stat. Still one pass, still quick.
-    find -L /share/VIDEO -type f -not -path '*/@Recycle/*' \
-        -exec stat -c "%s${T}%n" {} + > "$M" 2>/dev/null
-    if [ -s "$M" ]; then echo "find -exec stat"; return; fi
-
-    # 3. One stat per file. Slow — minutes, not seconds — but it works on
-    #    anything that has a shell, and a slow correct list beats a fast empty one.
-    find -L /share/VIDEO -type f -not -path '*/@Recycle/*' 2>/dev/null |
-    while IFS= read -r f; do
-        printf '%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null || echo 0)" "$f"
-    done > "$M"
-    if [ -s "$M" ]; then echo "stat per file"; return; fi
-
-    echo "ALL THREE METHODS FAILED"
+    M=/share/Web/manifest.tsv.new
+    date +%s > /share/Web/manifest-started.txt.new
+    T=$(printf '\t')
+    if find -L /share/VIDEO -type f -not -path '*/@Recycle/*' \
+        -printf '%s\t%p\n' > "$M" 2>/dev/null && [ -s "$M" ]; then
+        method='find -printf'
+    elif find -L /share/VIDEO -type f -not -path '*/@Recycle/*' \
+        -exec stat -c "%s${T}%n" {} + > "$M" 2>/dev/null && [ -s "$M" ]; then
+        method='find -exec stat'
+    else
+        # Check the walk and every stat; a partial inventory must not replace
+        # the last complete snapshot just because it contains some rows.
+        P=/share/Web/manifest-paths.tmp
+        find -L /share/VIDEO -type f -not -path '*/@Recycle/*' > "$P" 2>/dev/null || return 1
+        failed=0
+        : > "$M"
+        while IFS= read -r f; do
+            size=$(stat -c %s "$f" 2>/dev/null) || { failed=1; break; }
+            printf '%s\t%s\n' "$size" "$f" >> "$M"
+        done < "$P"
+        rm -f "$P"
+        [ "$failed" -eq 0 ] && [ -s "$M" ] || return 1
+        method='stat per file'
+    fi
+    mv /share/Web/manifest-started.txt.new /share/Web/manifest-started.txt
+    mv "$M" /share/Web/manifest.tsv
+    echo "$method"
 }
 
 
@@ -132,7 +119,7 @@ build_manifest() {
 # list comes out short, the old one stays and the log says so, rather than
 # leaving someone with a search that silently finds nothing.
 build_index() {
-    m=$(build_manifest)
+    m=$(build_manifest) || { echo "File scan interrupted; keeping the previous inventory" >> "$LOG"; return 1; }
     n=$(wc -l < /share/Web/manifest.tsv)
     if [ "$n" -lt 1000 ]; then
         echo "  file list came back with only $n files — keeping the old search index" >> "$LOG"
@@ -321,3 +308,14 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
 done
 
 [ -f "$STATUS" ] || echo "idle" > "$STATUS"
+
+# Reconcile newer inventories even when nobody has the browser open. A failed
+# attempt retains the old catalog and is retried by the next scheduled run.
+# Set RUSHES_URL when the web application is served from a different address.
+if command -v curl >/dev/null 2>&1; then
+    curl --silent --show-error --fail --max-time 3600 "${RUSHES_URL:-http://127.0.0.1}/db/import.php" >> "$LOG" 2>&1
+elif command -v wget >/dev/null 2>&1; then
+    wget -q -O - "${RUSHES_URL:-http://127.0.0.1}/db/import.php" >> "$LOG" 2>&1
+else
+    echo "Search update needs curl or wget on the archive host" >> "$LOG"
+fi

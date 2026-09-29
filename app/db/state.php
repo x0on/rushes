@@ -8,7 +8,9 @@
 //
 // A condition appears only when it applies. No conditions is itself an answer.
 
-require __DIR__ . '/schema.php';
+require __DIR__ . '/transfers.php';
+db_init();
+$transfer = transfer_summary(transfer_current());
 header('Content-Type: application/json');
 
 $WEB = web_dir();
@@ -68,7 +70,7 @@ $mac_stale = $mac_at && ($now - $mac_at) > limit('copy_stalled_seconds', 900);
 // The source going away is the failure that cost a whole weekend in September:
 // the Mac kept saying "not mounted, skipping" into a terminal nobody was
 // watching, and this page sat there looking content.
-if (($mac['phase'] ?? '') === 'blocked') {
+if (!$transfer && ($mac['phase'] ?? '') === 'blocked') {
     // a tile: the headline number, and the tile itself is the button
     $c[] = ['level' => 'bad',
         'tile' => ['lab' => 'Copying stopped', 'big' => 'Source gone',
@@ -78,7 +80,7 @@ if (($mac['phase'] ?? '') === 'blocked') {
                 . ' Re-mount it and copying carries on by itself. '
                 . 'Nothing is lost — a part-copied folder picks up where it stopped.',
         'act' => null];
-} elseif (($mac['phase'] ?? '') === 'copying' && $mac_stale) {
+} elseif (!$transfer && ($mac['phase'] ?? '') === 'copying' && $mac_stale) {
     $done_n = (int)($mac['copied'] ?? 0); $of = (int)($mac['of'] ?? 0);
     $c[] = ['level' => 'bad',
         'tile' => ['lab' => 'Needs you', 'big' => 'A copy stopped',
@@ -116,19 +118,27 @@ if ($disk['free'] && $disk['free'] < $FLOOR) {
                   tb($disk['free']), $disk['pct'], tb($FLOOR)), 'act' => null];
 }
 
-// index age vs what has happened since
-if (!$files) {
-    $c[] = ['level' => 'bad', 'title' => 'Nothing is indexed yet',
-        'body' => 'Search has nothing to look at. Build the file list, then import it.',
-        'act' => ['manifest', 'Build the file list']];
-} else {
-    $manifest = $mtime('manifest.tsv');
-    if ($manifest > $imported + limit('index_stale_seconds', 60)) {
-        $c[] = ['level' => 'warn', 'title' => 'Search is out of date',
-            'body' => 'The NAS looked at itself ' . $ago($manifest) . ', but search is still showing what it knew '
-                      . $ago($imported) . '. Files that moved since will be wrong.',
-            'act' => ['import', 'Bring search up to date']];
-    }
+// Routine indexing belongs to the runner, not to the person using Search.
+$sync = meta_get('search_sync_state', 'current');
+$manifest = $mtime('manifest.tsv');
+$pendingSearch = $manifest > (int)meta_get('source_written', '0');
+$searchAt = max($imported, (int)meta_get('search_updated_at', '0'));
+if ($sync === 'retrying' && (int)meta_get('search_sync_failures', '0') >= 3) {
+    $c[] = ['level' => 'warn', 'title' => 'Search needs a check',
+        'body' => 'Several automatic updates could not finish. Existing results are still available. Check the job log in Activity; automatic retries will continue.',
+        'act' => null];
+} elseif ($sync === 'retrying') {
+    $c[] = ['level' => 'info', 'title' => 'Search will update again automatically',
+        'body' => 'The last update could not finish. Your existing search results are still available; Rushes will retry.',
+        'act' => null];
+} elseif ($pendingSearch) {
+    $c[] = ['level' => 'info', 'title' => $sync === 'updating' ? 'Updating search' : 'Search update queued',
+        'body' => 'Rushes is catching up with the latest file information. You can keep using the archive.',
+        'act' => null];
+} elseif (!$files) {
+    $c[] = ['level' => 'info', 'title' => 'Ready to index your archive',
+        'body' => 'Build the first file list to get started. After that, Rushes keeps search updated automatically.',
+        'act' => ['manifest', 'Build the first file list']];
 }
 
 // regenerable junk sitting in the archive
@@ -176,7 +186,7 @@ if (is_readable("$WEB/ingest-sections.tsv")) {
         if (($hist[$f[1]] ?? '') === 'copied' || ($f[4] ?? '') === 'done') $done++;
         else $left_b += (int)($f[3] ?? 0);
     }
-    if ($secs && $done < count($secs))
+    if (!$transfer && $secs && $done < count($secs))
         $c[] = ['level' => 'info',
             'tile' => ['lab' => 'Still to bring over', 'big' => (string)(count($secs) - $done),
                        'sub' => 'folders · ' . tb($left_b)],
@@ -217,6 +227,15 @@ if (is_readable("$WEB/ingest-sections.tsv")) {
     }
 }
 
+$latestJob = transfer_latest();
+$checkpoints = [];
+foreach ($latestJob['items'] ?? [] as $item) $checkpoints[$item['source']] = $item;
+foreach ($sections as &$section) {
+    $item = $checkpoints[$section['path']] ?? null;
+    if ($item && $item['phase'] !== 'removed') $section['state'] = $item['phase'] === 'done' ? 'done' : 'queued';
+}
+unset($section);
+
 $paths = array_column($sections, 'path');
 $sections = array_values(array_filter($sections, function ($s) use ($paths) {
     foreach ($paths as $p) if ($p !== $s['path'] && str_starts_with($p, $s['path'] . '/')) return false;
@@ -244,18 +263,24 @@ $landed = [];
 if (is_readable("$WEB/ingest-history.tsv")) {
     foreach (array_reverse(file("$WEB/ingest-history.tsv")) as $l) {
         $f = explode("\t", rtrim($l, "\n"));
-        if (count($f) < 6 || $f[1] !== 'copied') continue;
+        if (count($f) < 6 || $f[1] !== 'copied' || ((int)$f[3] === 0 && (int)$f[4] === 0)) continue;
         if (isset($landed[$f[2]])) continue;                 // a folder lands once
         $landed[$f[2]] = ['name' => basename($f[2]), 'path' => $f[2],
                           'files' => (int)$f[3], 'bytes' => (int)$f[4], 'when' => $f[0]];
     }
+}
+foreach ($checkpoints as $path => $item) {
+    if ($item['phase'] !== 'done') continue;
+    $landed[$path] = ['name' => basename($path), 'path' => $path,
+        'files' => (int)$item['total_files'], 'bytes' => (int)$item['total_bytes'],
+        'when' => date('Y-m-d H:i', (int)$item['updated'])];
 }
 $landed = array_values($landed);
 
 // where it is coming from and going to. Derived, not configured — the day this
 // becomes an app for other people, these two lines are what turn into settings.
 $from = $secs ? explode('/', ltrim(dirname($secs[0]), '/'))[1] ?? '' : '';
-$to   = 'VIDEO';
+$to   = settings()['archive']['label'] ?? basename(archive_dir());
 
 // nothing wrong is worth saying out loud
 if (!$c) $c[] = ['level' => 'good', 'title' => 'Everything is in order',
@@ -264,11 +289,14 @@ if (!$c) $c[] = ['level' => 'good', 'title' => 'Everything is in order',
 // ── what has been done lately ─────────────────────────────────────────────
 $recent = [];
 if (is_readable("$WEB/ingest-history.tsv")) {
-    $lines = array_slice(array_filter(file("$WEB/ingest-history.tsv")), -12);
+    $lines = array_slice(array_filter(file("$WEB/ingest-history.tsv"), function ($l) {
+        $f = explode("\t", $l);
+        return !(($f[1] ?? '') === 'copied' && (int)($f[3] ?? 0) === 0 && (int)($f[4] ?? 0) === 0);
+    }), -12);
     foreach (array_reverse($lines) as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if (count($f) < 6) continue;
-        $recent[] = ['when' => $f[0], 'what' => $f[1] === 'copied' ? 'brought over' : 'looked at',
+        $recent[] = ['when' => $f[0], 'what' => $f[1] === 'copied' ? 'brought over' : ($f[1] === 'interrupted' ? 'interrupted' : 'looked at'),
                      'target' => basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
                      'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
     }
@@ -288,8 +316,10 @@ function tb(int $b): string {
 }
 
 echo json_encode([
+    'transfer' => $transfer,
+    'search' => ['state' => $pendingSearch ? ($sync === 'retrying' ? 'retrying' : 'updating') : 'current', 'updated' => $searchAt],
     'archive'  => ['files' => $files, 'bytes' => $bytes,
-                   'imported' => $imported, 'imported_ago' => $ago($imported)],
+                   'imported' => $imported, 'imported_ago' => $ago($searchAt)],
     'disk'     => $disk,
     'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive)],
     'running'  => $running, 'progress' => $progress,

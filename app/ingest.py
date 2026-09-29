@@ -22,6 +22,7 @@ Same shape as everything else: preview, look, apply, log, undo.
 
 import argparse, hashlib, json, os, platform, shutil, subprocess, sys, threading, time
 import urllib.parse, urllib.request
+from transfer_state import TransferState
 from collections import defaultdict
 from pathlib import Path
 
@@ -89,19 +90,38 @@ STATUS  = Path(os.environ.get("STATUS_DIR", NAS_MOUNT + "/_rushes"))
 DONE    = HOME / "ingest-done.txt"
 LISTED  = HOME / "ingest-listed.txt"   # folders already split into subfolders
 
+_CHECKPOINTS = None
+
+def checkpoints():
+    global _CHECKPOINTS
+    if _CHECKPOINTS is None:
+        HOME.mkdir(parents=True, exist_ok=True)
+        key = hashlib.sha256(NAS_URL.encode()).hexdigest()[:16]
+        _CHECKPOINTS = TransferState(HOME / ("transfer-" + key + ".sqlite"), NAS_URL)
+    return _CHECKPOINTS
+
+
 def history(kind, source, files, byts, secs, note=""):
     """One line per run, appended, never rewritten. This is the answer to
     "where did I leave off" — the section list shows state, this shows order."""
     try:
         STATUS.mkdir(parents=True, exist_ok=True)
-        with open(STATUS / "ingest-history.tsv", "a") as f:
-            f.write(f"{time.strftime('%Y-%m-%d %H:%M')}\t{kind}\t{source}\t"
-                    f"{files}\t{byts}\t{int(secs)}\t{note}\n")
+        event = f"{kind}\t{source}\t{files}\t{byts}"
+        path = STATUS / "ingest-history.tsv"
+        if files == 0 and path.exists():
+            with open(path, "rb") as recent:
+                recent.seek(max(0, path.stat().st_size - 4096))
+                lines = recent.read().decode("utf-8", "replace").splitlines()
+            if lines and "\t".join(lines[-1].split("\t")[1:5]) == event:
+                return
+        with open(path, "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M')}\t{event}\t{int(secs)}\t{note}\n")
     except OSError:
         pass
 
 
 def status(**kw):
+    if not os.path.isdir(NAS_MOUNT): return
     try:
         STATUS.mkdir(parents=True, exist_ok=True)
         with open(STATUS / "ingest-status.tsv", "w") as f:
@@ -231,6 +251,10 @@ def load_manifest(refresh=False):
             "missing and copy the whole server back over footage you already have.\n\n"
             "Rebuild it: Manage \u2192 Jobs and tools \u2192 Rebuild the file list.\n"
             "Check the log says a number in the hundreds of thousands, then run this again.\n")
+    # New arrivals are also duplicate candidates for subsequent folders, even
+    # though the full on-disk manifest is deliberately not rebuilt per folder.
+    for path, size in checkpoints().db.execute('SELECT path,bytes FROM arrivals'):
+        by_size[size].append(path)
     print(f"the archive holds {total:,} files, {len(by_size):,} distinct sizes")
     return by_size
 
@@ -245,6 +269,8 @@ def save_cache():
     except Exception: pass
 
 
+_HEARTBEAT = lambda: None
+
 def digest(path, full=False):
     """Hash the ends of a file, or all of it. Cached by path+size+mtime."""
     try: st = os.stat(path)
@@ -255,7 +281,8 @@ def digest(path, full=False):
     try:
         with open(path, "rb") as f:
             if full or st.st_size <= HEAD_TAIL * 2:
-                for chunk in iter(lambda: f.read(8 << 20), b""): h.update(chunk)
+                for chunk in iter(lambda: f.read(8 << 20), b""):
+                    h.update(chunk); _HEARTBEAT()
             else:
                 h.update(f.read(HEAD_TAIL))
                 f.seek(-HEAD_TAIL, os.SEEK_END)
@@ -274,7 +301,9 @@ def already_here(src, size, by_size):
     remote = setting("archive.local", "/share/VIDEO")
     local = {c.replace(remote, NAS_MOUNT, 1) for c in candidates}
     sp = digest(src)
+    if sp is None: return None
     for c in local:
+        _HEARTBEAT()
         if digest(c) == sp:                     # same size, same first and last MB
             if not PARANOID or digest(src, True) == digest(c, True):
                 return c
@@ -287,7 +316,7 @@ def walk(source, everything=False):
     # A card is copied whole. The XML and index files beside the clips are what
     # Premiere and Resolve use to read some cameras' footage at all; dropping
     # them makes a copy that looks complete and is not.
-    for root, dirs, files in os.walk(source):
+    for root, dirs, files in os.walk(source, onerror=lambda e: (_ for _ in ()).throw(e)):
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in
                    ("@Recycle", "$RECYCLE.BIN", "System Volume Information")]
         for n in files:
@@ -551,25 +580,13 @@ def trace(src_root, archive):
 
 
 def tell_search(paths):
-    """Make what just landed searchable now, not at the next full rebuild."""
-    added = refused = 0
-    for i in range(0, len(paths), 2000):
-        rows = []
-        for p in paths[i:i + 2000]:
-            if "\t" in p or "\n" in p: continue
-            try: rows.append(f"{p}\t{os.path.getsize(p)}")
-            except OSError: refused += 1
-        try:
-            body = urllib.parse.urlencode({"files": "\n".join(rows)}).encode()
-            with urllib.request.urlopen(NAS_URL + "/db/landed.php", data=body, timeout=120) as r:
-                got = json.loads(r.read().decode("utf-8", "replace"))
-            added += got.get("added", 0); refused += got.get("refused", 0)
-        except Exception as e:
-            print(f"  ! could not add them to search ({e})")
-            print("    They are safely in the archive. Manage → Jobs and tools → Rebuild search will pick them up.")
-            return
-    print(f"  {added:,} file{'s' if added != 1 else ''} added to search ✓"
-          + (f"  ({refused} Rushes could not find — Rebuild search will settle it)" if refused else ""))
+    """Durably enqueue files; failed HTTP requests are retried by the watcher."""
+    cp = checkpoints()
+    for p in paths:
+        if "\t" in p or "\n" in p: continue
+        try: cp.landed(p, os.path.getsize(p))
+        except OSError: pass
+    cp.flush(force=True)
 
 
 def report_forever(every=20):
@@ -700,6 +717,7 @@ def watch(root, every=20):
     blocked = False        # said the source was gone; do not say it again
     threading.Thread(target=report_forever, daemon=True).start()
     while True:
+        checkpoints().flush()
         try:
             with urllib.request.urlopen(QUEUE_URL, timeout=15) as r:
                 body = r.read().decode("utf-8", "replace")
@@ -714,6 +732,9 @@ def watch(root, every=20):
             print(f"  cannot reach the NAS ({e}) — trying again in {every}s")
             time.sleep(every); continue
 
+        job = _remote_json("db/transfer.php") or {}
+        job_id = job.get("id", "")
+        job_items = {i["source"]: i for i in job.get("items", [])}
         want = []
         for line in body.splitlines():
             f = line.split("\t")
@@ -748,17 +769,21 @@ def watch(root, every=20):
         # /Volumes/EOS_DIGITAL comes back every week holding a different shoot.
         finished = lambda v, p, i: ((v == "copy" and p in done) or (v == "ingest" and i.split("\t")[0] in done)
                                     or (v == "list" and p in listed))
-        pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
+        pending = [(v, p, i) for v, p, i in want if
+                   (v == 'copy' and p in job_items and job_items[p]['phase'] not in ('done', 'removed'))
+                   or (p not in job_items and not finished(v, p, i))]
         gone = [p for _, p, _ in pending if not os.path.isdir(p)]
         if pending and len(gone) == len(pending):
-            root = os.path.commonpath(gone) if len(gone) > 1 else os.path.dirname(gone[0])
+            missing_root = os.path.commonpath(gone) if len(gone) > 1 else os.path.dirname(gone[0])
             if not blocked:
-                print(f"\n*** STOPPED: cannot see {root}")
+                print(f"\n*** STOPPED: cannot see {missing_root}")
                 print("    Nothing queued can run. Re-mount it in Finder and this carries")
                 print("    on by itself — nothing is lost, and part-copied folders resume.")
                 blocked = True
-            status(phase="blocked", source=root,
-                   note=f"cannot see {root} — waiting for it to come back")
+            status(phase="blocked", source=missing_root,
+                   note=f"cannot see {missing_root} — waiting for it to come back")
+            for _, p, _ in pending:
+                checkpoints().report(job_id, p, "blocked", force=True)
             time.sleep(every); continue
         if blocked:
             print(f"\n{time.strftime('%H:%M:%S')}  source is back — carrying on")
@@ -766,9 +791,15 @@ def watch(root, every=20):
 
         did = False
         for verb, path, into in want:
-            if finished(verb, path, into):            # already finished, ever
+            item = job_items.get(path)
+            if verb == "copy" and not item:
+                continue  # wait for a matching saved selection, never report to a stale job
+            if item and item['phase'] in ('done', 'removed'):
+                continue
+            if finished(verb, path, into) and not (verb == 'copy' and item and item['phase'] != 'done'):
                 continue
             if not os.path.isdir(path):
+                checkpoints().report(job_id, path, "blocked", force=True)
                 print(f"  ! {path} is not mounted — skipping"); continue
             if verb == "ingest" and not visible(path):
                 # The page only offers what this machine reported, so this means
@@ -787,7 +818,8 @@ def watch(root, every=20):
                     print("    archive, then start this again and it carries on.")
                     status(phase="stopped", source=path,
                            note=f"only {free / 1024 ** 3:.0f} GB free — waiting for room")
-                    time.sleep(300)      # check again in five minutes
+                    checkpoints().report(job_id, path, "stopped", force=True)
+                    time.sleep(30)      # check again in five minutes
                     did = True           # do not fall through to the idle sleep
                     break
             did = True
@@ -810,7 +842,10 @@ def watch(root, every=20):
                 run_self("--source", path, "--into", dest, "--apply", *(["--day", day] if day else []))
             else:
                 print(f"\n=== {path} ===")
-                run_self("--source", path, "--root", root, "--apply")
+                result = run_self("--source", path, "--root", root, "--apply", "--job", job_id)
+                if result:
+                    checkpoints().report(job_id, path, "interrupted", force=True)
+                time.sleep(every)  # failed folders retry without flooding activity
             break                                      # one at a time, in order
 
         if not did:
@@ -822,15 +857,17 @@ def run_self(*args):
     """Run one section in its own process, so a failure cannot stop the watch."""
     cmd = [sys.executable, os.path.abspath(__file__), *args, "--url", NAS_URL]
     try:
-        subprocess.run(cmd, check=False)
+        return subprocess.run(cmd, check=False).returncode
     except KeyboardInterrupt:
         raise
     except Exception as e:
         print(f"  that section failed to start: {e}")
+        return 1
 
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--job", default="", help=argparse.SUPPRESS)
     ap.add_argument("--source", help="folder to ingest from (mounted server, or a card)")
     ap.add_argument("--url", help="where Rushes is, e.g. http://192.168.1.20")
     ap.add_argument("--trace", metavar="SOURCE",
@@ -883,6 +920,13 @@ def main():
     # A card goes in whole, so there is nothing to look up in the archive first:
     # a file already at its destination is skipped below, and a card brought in
     # twice under two names is what the duplicate finder is for.
+    cp = checkpoints()
+    if not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT):
+        cp.report(a.job, a.source, "blocked", force=True)
+        return
+    global _HEARTBEAT
+    _HEARTBEAT = lambda: cp.report(a.job, a.source, "checking")
+    cp.report(a.job, a.source, "checking", force=True)
     by_size = {} if a.into else load_manifest(a.refresh_manifest)
     label = os.path.basename(a.into.rstrip("/")) if a.into else ""
     # A folder from a server is copied EXACTLY as it sits there, under a folder
@@ -901,12 +945,12 @@ def main():
     known = {} if a.into else load_origins()
     with open(PLAN, "w") as plan:
         for i, src in enumerate(walk(a.source, everything=True), 1):
-            try: size = os.path.getsize(src)
-            except OSError: continue
+            size = os.path.getsize(src)
             # A card that spans several days goes in as one folder per day:
             # this run takes only its own day's files, layout kept.
             if a.day and shot_day(src) != a.day:
                 continue
+            cp.report(a.job, a.source, "checking")
             match = None
             if not a.into:
                 k = known.get(src)
@@ -945,58 +989,83 @@ def main():
         return
 
     print("\ncopying…")
-    copied = failed = 0
-    landed = []                          # told to search as soon as the copy ends
+    copied = failed = copied_bytes = 0
+    total_bytes = new_bytes + dup_bytes
+    total_files = new + dups
+    last_progress = [0.0]
+    def report(phase="copying", force=False):
+        if not force and time.monotonic() - last_progress[0] < 10: return
+        last_progress[0] = time.monotonic()
+        status(phase=phase, source=a.source, label=label, copied=copied, failed=failed, of=new)
+        cp.report(a.job, a.source, phase, force=force, total_bytes=total_bytes,
+                  total_files=total_files, measured=1, failed=failed,
+                  **cp.counts(a.job, a.source))
+        cp.flush()
+    _HEARTBEAT = report
+    report(force=True)
     o = Origin("card" if a.into else "folder", a.source, src_root, src_name,
                a.into or os.path.join(mirror, os.path.relpath(a.source, src_root)))
-    for line in open(PLAN):
-        f = line.rstrip("\n").split("\t")
-        if f[0] == "skip":               # identical file already in the archive
-            o.add("already", f[2], f[3], f[1], "not copied — this is where it already is")
-    with open(LOG, "w") as log:
-        for line in open(PLAN):
+    with open(LOG, "w") as log, open(PLAN) as plan:
+        for line in plan:
             f = line.rstrip("\n").split("\t")
-            if f[0] != "copy": continue
             size, src, dest = int(f[1]), f[2], f[3]
-            if os.path.exists(dest):
-                log.write(f"EXISTS\t{dest}\n")
-                o.add("copied", src, dest, size, "there from an earlier run"); continue
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
             try:
-                # copy to a temp name, verify the size, then put it in place —
-                # so an interrupted transfer never looks like a finished file
-                tmp = dest + ".part"
-                shutil.copy2(src, tmp)
-                if os.path.getsize(tmp) != size:
-                    os.remove(tmp); raise IOError("size mismatch after copy")
-                os.rename(tmp, dest)
-                log.write(f"{src}\t{dest}\n"); log.flush()
-                copied += 1; landed.append(dest)
-                o.add("copied", src, dest, size)
-            except Exception as e:
-                log.write(f"FAILED\t{src}\t{e}\n"); failed += 1
+                if not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT):
+                    raise OSError("source or archive is disconnected")
+                if f[0] == "skip":
+                    if not os.path.isfile(dest) or os.path.getsize(dest) != size:
+                        raise OSError("previously matched archive file is unavailable")
+                    kind = "already"
+                elif os.path.exists(dest):
+                    # An existing filename alone is never proof of completion.
+                    source_hash = digest(src, full=PARANOID)
+                    if os.path.getsize(dest) != size or source_hash is None or source_hash != digest(dest, full=PARANOID):
+                        raise OSError("destination exists with different content; left untouched")
+                    kind = "already"
+                else:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    tmp = dest + ".part"
+                    with open(src, "rb") as reader, open(tmp, "wb") as writer:
+                        while True:
+                            chunk = reader.read(4 * 1024 * 1024)
+                            if not chunk: break
+                            writer.write(chunk)
+                            report()  # heartbeat even during a single large file
+                    if os.path.getsize(tmp) != size:
+                        raise IOError("size mismatch after copy")
+                    shutil.copystat(src, tmp)
+                    os.rename(tmp, dest)
+                    copied += 1; copied_bytes += size; kind = "copied"
+                    log.write(f"{src}\t{dest}\n"); log.flush()
+                cp.landed(dest, size)
+                cp.complete_file(a.job, a.source, src, size, kind)
+                o.add(kind, src, dest, size)
+                report()
+            except OSError as e:
+                failed += 1
+                log.write(f"FAILED\t{src}\t{e}\n"); log.flush()
                 o.add("failed", src, "", size, str(e))
-            if (copied + failed) % 50 == 0:
-                print(f"  {copied:,} copied, {failed} failed")
-                status(phase="copying", source=a.source, label=label, copied=copied,
-                       failed=failed, of=new, new_bytes=new_bytes)
-    print(f"\ncopied {copied:,}, failed {failed}")
+                report("interrupted", force=True)
+                break  # preserve the checkpoint; retry when the source is available
     o.close()
+    if not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT):
+        failed = max(1, failed)
+    phase = "interrupted" if failed else "done"
+    report(phase, force=True)
+    cp.flush(force=True)
     top = a.into or os.path.join(mirror, os.path.relpath(a.source, src_root))
-    if os.path.isdir(top):
+    if not failed and os.path.isdir(top):
         leave_a_note(top, o, a.source, src_name)
-    print(f"  where every file came from: _rushes/origin/{o.path.name}")
-    if landed:
-        tell_search(landed)
-    print(f"log: {LOG}  (undo with: python ingest.py --undo)")
-    status(phase="done", source=a.source, label=label, copied=copied, failed=failed, of=new)
-    # A card is remembered by where it went; a folder by where it came from.
+    status(phase=phase, source=a.source, label=label, copied=copied, failed=failed, of=new)
     key = a.into.rstrip("/") if a.into else a.source.rstrip("/")
-    history("copied", key, copied, new_bytes, time.time() - t0,
-            f"{failed} failed" if failed else "")
+    # Zero-work retries must not bury useful history with success messages.
+    if copied or failed:
+        history(phase if failed else "copied", key, copied, copied_bytes, time.time() - t0,
+                f"{failed} failed" if failed else "")
     if not failed:
-        with open(DONE, "a") as f:        # so the section list shows it finished
+        with open(DONE, "a") as f:
             f.write(key + "\n")
+    print(f"copied {copied:,}, failed {failed}; search updates retry automatically")
 
 
 
