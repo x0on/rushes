@@ -74,6 +74,16 @@ description quality. What it taught, to build in:
 - **Shot size and people already come back.** Shot size gains *full* (head to
   toe) between wide and medium; people become none / one / a few / a crowd,
   since an exact count from a drone is a guess.
+- **People filters:** count as no people / 1 / 2 / 3+ / large group; age as
+  broad bands (child, teen, adult, senior), which a model estimates reasonably,
+  never finer. Relationships (couples, families) are not guessed.
+- **Faces, after descriptions work:** find faces, group the same face across
+  the archive, and ask once "this person appears in 312 shots — who is it?".
+  Named people (staff, officials, public figures) become searchable; everyone
+  else stays an unnamed group that still answers "other shots of this person".
+  Check the face model's licence and the organisation's policy before building.
+- **Stills use the same pipeline:** a photo is one shot, so descriptions, text,
+  themes and faces work on images too, which is where faces work best.
 
 ## Order
 
