@@ -224,15 +224,16 @@ if (isset($_POST['_newpass'])) {
                   and tags, and everything said, in the language it was said. Kept in <code>_rushes/analysis</code>;
                   nothing in the archive is changed. It starts by itself when a folder's proxies are done.</p></div>
             </div>
-            <p class="note" style="margin:12px 0 8px">Pick a folder and press Prepare. Folders go one after another, in the
+            <p class="note" style="margin:12px 0 8px">Choose a folder, press Plan to see what it would take (nothing changes), then Prepare. Folders go one after another, in the
               order you add them; nothing is ever done twice, so preparing a folder again later only does what is new.</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <input id="prepPath" list="anFolders" placeholder="a folder in the archive, e.g. PARK COLLECTION"
+              <button class="btn quiet" id="prepChoose" type="button">Choose in Finder…</button>
+              <input id="prepPick" type="file" webkitdirectory hidden>
+              <input id="prepPath" placeholder="or type it: a folder in the archive, e.g. PARK COLLECTION"
                      style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
-              <datalist id="anFolders"></datalist>
-              <button class="btn" id="prepGo" type="button">Prepare this folder</button>
-              <button class="btn quiet" data-px="proxy-plan" type="button">Plan (changes nothing)</button>
+              <button class="btn quiet" data-px="proxy-plan" type="button">1 · Plan (changes nothing)</button>
+              <button class="btn" id="prepGo" type="button">2 · Prepare this folder</button>
               <button class="btn quiet" data-px="proxy-stop" type="button">Stop proxies</button>
             </div>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
@@ -394,7 +395,13 @@ async function act(name, btn) {
   }
   if (name === 'cachejunk') { return moveCache(btn); }
   if (name === 'scripts') {
-    if (!confirm('Install the updated scripts? They run with full rights on this machine. The runner installs exactly the files you see listed.')) return;
+    // Asked on the button itself, no pop-up: press again within 5 seconds.
+    if (!btn.dataset.sure) {
+      const was = btn.textContent; btn.dataset.sure = '1'; btn.textContent = 'Sure? ' + was;
+      setTimeout(function () { if (btn.dataset.sure) { delete btn.dataset.sure; btn.textContent = was; } }, 5000);
+      return;
+    }
+    delete btn.dataset.sure;
     btn.disabled = true; btn.textContent = 'Asking…';
     try {
       const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: 'scripts' }) })).json();
@@ -918,10 +925,35 @@ async function loadAnalysis() {
         (m.tags ? '<small>' + esc(m.tags) + '</small>' : '') +
         '<small title="' + esc(m.path) + '">' + esc(m.path.split('/').pop()) + '</small></div></div>';
     }).join('') : '<div class="note">Nothing described yet.</div>';
-    $('anFolders').innerHTML = (a.folders || []).map(function (f) { return '<option value="' + esc(f) + '">'; }).join('');
     drawPrepare(a.table);
   } catch (e) { $('prepTable').textContent = 'Could not read the list: ' + e.message; }
 }
+// Choose in Finder: open the archive share there and pick the folder. The browser
+// hands over the names inside it, never where it is, so Rushes looks those names
+// up in the archive to know which folder it is. Nothing is uploaded.
+$('prepChoose').onclick = function () { $('prepPick').value = ''; $('prepPick').click(); };
+$('prepPick').onchange = async function () {
+  const files = Array.from(this.files || []).filter(function (f) { return !/(^|\/)[._]/.test(f.webkitRelativePath); });
+  const said = $('prepSaid');
+  if (!files.length) { said.textContent = 'That folder has no footage in it that Rushes could see. Pick another.'; return; }
+  const top = files[0].webkitRelativePath.split('/')[0];
+  said.textContent = 'Finding “' + top + '” in the archive…';
+  const q = new URLSearchParams();
+  files.slice(0, 5).forEach(function (f) { q.append('locate[]', f.webkitRelativePath); });
+  try {
+    const r = await (await fetch('analyze.php?' + q)).json();
+    const f = r.folders || [];
+    if (f.length === 1) { $('prepPath').value = f[0]; said.textContent = 'Found it ✓ ' + f[0] + ' — now Plan, then Prepare.'; }
+    else if (f.length > 1) {
+      said.innerHTML = 'There are ' + f.length + ' folders like that in the archive — which one? ' +
+        f.map(function (p) { return '<button class="btn quiet" data-pick="' + esc(p) + '" type="button">' + esc(p) + '</button>'; }).join(' ');
+      said.querySelectorAll('[data-pick]').forEach(function (b) {
+        b.onclick = function () { $('prepPath').value = b.dataset.pick; said.textContent = 'Picked ✓ ' + b.dataset.pick + ' — now Plan, then Prepare.'; };
+      });
+    } else said.textContent = '“' + top + '” is not in the archive (or search has not seen it yet). Pick it from the archive share in Finder.';
+  } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
+};
+
 // Prepare: one confirmation on the button itself, then say what happened.
 let prepArmed = 0;
 $('prepGo').onclick = async function () {
@@ -934,7 +966,7 @@ $('prepGo').onclick = async function () {
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
       : 'Added ✓ ' + path + ' — its proxies start within a minute if nothing else is being made, then it is described.';
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
-  b.disabled = false; b.textContent = 'Prepare this folder'; loadAnalysis();
+  b.disabled = false; b.textContent = '2 · Prepare this folder'; loadAnalysis();
 };
 async function forgetFolder(folder, b) {
   if (!confirm('Take ' + folder + ' off this list? Nothing is deleted: its proxies and descriptions stay.')) return;

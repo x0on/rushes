@@ -297,10 +297,25 @@ if ($transferOpen && !$hvNow['fresh']) {
         'act' => null];
 }
 // Updated scripts wait for a yes: they run with full rights on this machine.
-if ($sw = scripts_waiting())
-    $c[] = ['level' => 'warn', 'title' => count($sw) . ' updated script' . (count($sw) > 1 ? 's are' : ' is') . ' waiting to be installed',
-        'body' => implode(', ', array_column($sw, 'name')) . '. They run with full rights on this machine, so they are only installed when you say so.',
-        'act' => ['scripts', 'Install ' . (count($sw) > 1 ? 'them' : 'it')]];
+// Once you said yes, it says what happens next instead of asking again.
+if ($sw = scripts_waiting()) {
+    $names = implode(', ', array_column($sw, 'name'));
+    $asked = glob("$WEB/queue/*-scripts.job") ?: [];
+    if ($asked) {
+        $c[] = ['level' => 'warn', 'title' => 'Installing ' . $names . ' — you said yes ' . $ago(max(array_map('filemtime', $asked))),
+            'body' => !$runner_ok ? 'But the runner has not checked in' . ($alive ? ' since ' . $ago($alive) : '') . ', so nothing is being installed. Is its cron entry there?'
+                    : ($running ? "The runner is busy with “{$running}” and installs them as soon as that finishes. Nothing to press."
+                                : 'The runner installs them at its next turn, within a minute. Nothing to press.'),
+            'act' => null];
+    } else {
+        // the last time it was asked and said no, and why
+        $tail = @file_get_contents("$WEB/job.log", false, null, max(0, (int)@filesize("$WEB/job.log") - 4000)) ?: '';
+        $why = preg_match_all('/^  refused .*$/m', $tail, $m) ? ' Last try: ' . trim(end($m[0])) . '.' : '';
+        $c[] = ['level' => 'warn', 'title' => count($sw) . ' updated script' . (count($sw) > 1 ? 's are' : ' is') . ' waiting to be installed',
+            'body' => $names . '. They run with full rights on this machine, so they are only installed when you say so.' . $why,
+            'act' => ['scripts', 'Install ' . (count($sw) > 1 ? 'them' : 'it')]];
+    }
+}
 // The QNAP's scratch space (/tmp) is small and shared with the system.
 if (preg_match('/(\d+)%/', (string)@file_get_contents("$WEB/tmp-disk.txt"), $tm) && (int)$tm[1] >= 80)
     $c[] = ['level' => 'warn', 'title' => 'The system scratch space is ' . $tm[1] . '% full',

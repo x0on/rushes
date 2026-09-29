@@ -17,16 +17,26 @@ $Q = web_dir() . '/ingest-queue.tsv';
 $root = rtrim(archive_dir(), '/');
 $helperRoot = rtrim(helper_archive(), '/');
 
-// Folders worth offering: two levels into the archive, the house folders left out.
-function folders(string $root): array {
-    $out = [];
-    foreach (@scandir($root) ?: [] as $a) {
-        if ($a[0] === '.' || $a[0] === '_' || $a[0] === '@' || !is_dir("$root/$a")) continue;
-        $out[] = $a;
-        foreach (@scandir("$root/$a") ?: [] as $b)
-            if ($b[0] !== '.' && $b[0] !== '@' && is_dir("$root/$a/$b")) $out[] = "$a/$b";
+// A folder picked in Finder: a browser only ever tells a page the names inside
+// it ("PARK COLLECTION/2019/a.mov"), never where it is. Those names are enough:
+// the archive file whose path ends in one of them is in that folder.
+//   GET ?locate[]=<folder>/<...>/<file>   up to 5  ->  the archive folders it can be
+if (isset($_GET['locate'])) {
+    require_once __DIR__ . '/schema.php';
+    $find = db()->prepare('SELECT path FROM files WHERE name = ?');
+    $found = [];
+    foreach (array_slice((array)$_GET['locate'], 0, 5) as $rel) {
+        $rel = trim(str_replace('\\', '/', (string)$rel), '/');
+        $top = explode('/', $rel)[0];
+        if (!str_contains($rel, '/') || str_contains($rel, '..')) continue;
+        $find->bindValue(1, basename($rel)); $r = $find->execute();
+        while ($x = $r->fetchArray(SQLITE3_NUM))
+            if (str_ends_with($x[0], "/$rel") && str_starts_with($x[0], "$root/"))
+                $found[substr($x[0], strlen($root) + 1, strlen($top) - strlen($rel)) ?: $top] = 1;
+        $find->reset();
+        if ($found) break;
     }
-    return $out;
+    out(['folders' => array_keys($found)]);
 }
 
 require_once __DIR__ . '/prepare.php';
@@ -70,5 +80,5 @@ $stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
 $latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
     language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
-out(['table' => prepare_table(), 'folders' => folders($root), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
+out(['table' => prepare_table(), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
      'stats' => $stats, 'latest' => $latest, 'helper' => helper_name()]);
