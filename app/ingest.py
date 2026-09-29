@@ -505,6 +505,96 @@ def server_of(root):
     return ""
 
 
+# ── shares that drop: reconnect them without anyone having to ────────────────
+# A network share that drops leaves its folder gone until someone connects it
+# again in Finder. The helper remembers where each share it has seen lives,
+# and asks macOS to connect it again: silently when the password is in the
+# keychain. It tries every 2 minutes, then every 15, and says so each time.
+SHARES = HOME / "shares.json"
+_shares_seen = [0.0]
+
+def remember_shares():
+    if time.time() - _shares_seen[0] < 300:
+        return
+    _shares_seen[0] = time.time()
+    try:
+        known = json.loads(SHARES.read_text())
+    except (OSError, ValueError):
+        known = {}
+    for path in [NAS_MOUNT] + [x.get("path", "") for x in (SETTINGS.get("sources") or [])]:
+        if path and os.path.isdir(path):
+            srv = server_of(path.rstrip("/"))
+            if srv.startswith("//"):
+                known[path.rstrip("/")] = srv
+    try:
+        HOME.mkdir(parents=True, exist_ok=True)
+        SHARES.write_text(json.dumps(known, indent=1))
+    except OSError:
+        pass
+
+
+def share_of(path):
+    """(mount point, //server/share) a missing path belongs to, or (None, None)."""
+    try:
+        known = json.loads(SHARES.read_text())
+    except (OSError, ValueError):
+        return None, None
+    for root, srv in known.items():
+        if path == root or path.startswith(root + os.sep) or root.startswith(path + os.sep):
+            return root, srv
+    return None, None
+
+
+def reconnect(root, srv):
+    """Ask macOS to connect the share again. True when its folder is back."""
+    if sys.platform != "darwin" or not srv:
+        return False
+    try:
+        subprocess.run(["osascript", "-e", f'mount volume "smb:{srv}"'],
+                       capture_output=True, timeout=90)
+    except Exception:
+        pass
+    return os.path.isdir(root)
+
+
+class Dropped:
+    """One share that has gone: when, how many tries, and what to tell the page."""
+    def __init__(self, path):
+        self.path = path
+        self.root, self.srv = share_of(path)
+        self.root = self.root or path
+        self.name = os.path.basename(self.root.rstrip("/")) or self.root
+        self.at = time.time(); self.tries = 0; self.next = 0.0
+
+    def try_again(self):
+        """Ask macOS to connect the share again; True if that brought it back.
+        A share that is there with the folder missing is not a drop: nothing
+        to reconnect, and the watcher simply waits for the folder."""
+        if not self.srv or os.path.isdir(self.root) or time.time() < self.next:
+            return False
+        self.tries += 1
+        print(f"{time.strftime('%H:%M:%S')}  reconnecting {self.name} ({self.srv}), try {self.tries} …")
+        if reconnect(self.root, self.srv):
+            return True
+        self.next = time.time() + (120 if self.tries < 5 else 900)
+        return False
+
+    def note(self):
+        since = time.strftime("%H:%M", time.localtime(self.at))
+        if not self.srv or os.path.isdir(self.root):
+            return f"cannot see {self.path} since {since} — connect it again in Finder"
+        if self.tries >= 5:
+            return (f"{self.name} dropped at {since} and does not reconnect by itself — connect it in Finder "
+                    "(Go → Connect to Server) and tick “Remember this password in my keychain” so it can next time")
+        return f"{self.name} dropped at {since} — reconnecting by itself (try {self.tries})"
+
+    def back(self):
+        mins = max(1, round((time.time() - self.at) / 60))
+        how = "reconnected by itself" if self.tries else "connected again"
+        print(f"\n{time.strftime('%H:%M:%S')}  {self.name} is back — {how} after {mins} min. Carrying on.")
+        history("dropped", self.root, 0, 0, time.time() - self.at, how)
+
+
 class Origin:
     """One run's record: a file in _rushes/origin, one line per file."""
     def __init__(self, kind, source, root, name, into):
@@ -1254,6 +1344,7 @@ def watch(root, every=20):
     while True:
         update_self()                  # between steps only; restarts itself if it did
         learn_where()                  # and follows Rushes to a new address, if it has one
+        remember_shares()              # where each network share lives, to reconnect it if it drops
         checkpoints().flush()          # search updates still waiting, if any
         try:
             with urllib.request.urlopen(QUEUE_URL, timeout=15) as r:
@@ -1341,35 +1432,35 @@ def watch(root, every=20):
             # the source instead of the archive.
             missing = os.path.commonpath(gone) if len(gone) > 1 else os.path.dirname(gone[0])
             if not blocked:
+                blocked = Dropped(missing)
                 print(f"\n*** STOPPED: cannot see {missing}")
-                print("    No copy can run. Re-mount it in Finder and this carries")
-                print("    on by itself — nothing is lost, and part-copied folders resume.")
-                blocked = True
-            status(phase="blocked", source=missing,
-                   note=f"cannot see {missing} — waiting for it to come back")
+                print("    Nothing is lost, and part-copied folders resume."
+                      + (" Reconnecting it by itself …" if blocked.srv else " Connect it again in Finder."))
+            if blocked.try_again():
+                blocked.back(); blocked = False
+                continue
+            status(phase="blocked", source=missing, note=blocked.note())
             for p in gone:
                 checkpoints().report(job_id, p, "blocked", force=True)
             if len(copies) == len(pending):
                 wait(every); continue
         elif blocked:
-            print(f"\n{time.strftime('%H:%M:%S')}  source is back — carrying on")
-            blocked = False
+            blocked.back(); blocked = False
 
         # The archive itself going away — VIDEO unmounted — stops everything,
         # this program's own steps included, since they are read from it.
         # Say so once, keep telling the page, and carry on when it is back.
         if not os.path.isdir(STATUS):
             if not lost:
+                lost = Dropped(NAS_MOUNT)
                 print(f"\n*** STOPPED: cannot see the archive at {NAS_MOUNT}")
-                print("    Re-mount it in Finder (Go → Connect to Server) and this carries")
-                print("    on by itself — nothing is lost, and part-copied folders resume.")
-                lost = True
-            status(phase="blocked", source=NAS_MOUNT,
-                   note=f"cannot see the archive at {NAS_MOUNT} — waiting for it to come back")
-            wait(every); continue
+                print("    Nothing is lost, and part-copied folders resume."
+                      + (" Reconnecting it by itself …" if lost.srv else " Connect it again in Finder."))
+            if not lost.try_again():
+                status(phase="blocked", source=NAS_MOUNT, note=lost.note())
+                wait(every); continue
         if lost:
-            print(f"\n{time.strftime('%H:%M:%S')}  the archive is back — carrying on")
-            lost = False
+            lost.back(); lost = False
 
         # There, but not allowed in: macOS keeps a background program away from
         # network and removable drives until it is given Full Disk Access.

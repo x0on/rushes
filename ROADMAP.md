@@ -39,6 +39,8 @@ with everything the final stage needs inside it.
   Rushes has and follows it to a new one by itself, taking its saved progress along.
 - Tidy-up: moving copied footage onto the organised shelf, recorded and undoable.
 - Skip and "Try again now" during a real failure.
+- Network shares that drop: the helper connects them again by itself (every 2
+  minutes, then every 15), and each drop shows in Activity with how long it lasted.
 - Matching earlier copies to their originals: keeps the originals it has
   listed folder by folder, so a stop part-way costs only the folder it was in;
   the page shows step 1 of 2 and 2 of 2 and how much is left.

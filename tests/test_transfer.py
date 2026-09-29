@@ -246,6 +246,42 @@ class TraceResumeTests(unittest.TestCase):
         self.assertEqual(saved.read_text().count('B.mov'), 1)            # and B's half-list was not kept twice
 
 
+class ReconnectTests(unittest.TestCase):
+    """A share that drops is connected again by the helper, and the drop is recorded."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_a_dropped_share_reconnects_by_itself_and_is_recorded(self):
+        m = self.mod
+        share = self.root / 'Volumes' / 'server'
+        m.SHARES = m.HOME / 'shares.json'
+        m.SHARES.write_text(json.dumps({str(share): '//fileserver/server'}))
+        d = m.Dropped(str(share / 'Departments'))
+        self.assertEqual((d.root, d.srv), (str(share), '//fileserver/server'))
+        calls = []
+        def fake(root, srv):
+            calls.append(srv)
+            if len(calls) == 2: os.makedirs(root)          # the second try works
+            return os.path.isdir(root)
+        with patch.object(m, 'reconnect', side_effect=fake), patch('sys.stdout', new_callable=io.StringIO):
+            self.assertFalse(d.try_again())
+            self.assertIn('reconnecting by itself (try 1)', d.note())
+            self.assertFalse(d.try_again())                  # too soon: waits 2 minutes between tries
+            d.next = 0
+            self.assertTrue(d.try_again())
+            d.back()
+        self.assertEqual(calls, ['//fileserver/server'] * 2)
+        hist = (m.STATUS / 'ingest-history.tsv').read_text()
+        self.assertIn(f'dropped\t{share}\t0\t0', hist)
+        self.assertIn('reconnected by itself', hist)
+
+    def test_a_share_it_never_saw_mounted_asks_for_finder(self):
+        self.mod.SHARES = self.mod.HOME / 'shares.json'
+        d = self.mod.Dropped('/Volumes/unknown')
+        with patch('sys.stdout', new_callable=io.StringIO):
+            self.assertFalse(d.try_again())
+        self.assertIn('connect it again in Finder', d.note())
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

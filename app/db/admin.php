@@ -722,10 +722,12 @@ async function load() {
   // Activity: what happened, as events. Same markup in the pane and in the
   // side column, so the two can never tell different stories.
   const evs = (d.recent || []).map(function (r) {
-    return '<div class="ev"><span class="ico">' + (r.what === 'interrupted' ? 'Ⅱ' : '✓') + '</span><div class="t">' +
+    const drop = r.what === 'dropped';          // a share that went away, and came back
+    return '<div class="ev"><span class="ico">' + (r.what === 'interrupted' ? 'Ⅱ' : drop ? '↯' : '✓') + '</span><div class="t">' +
       esc(r.target) + ' ' + esc(r.what) +
-      '<small>' + r.files.toLocaleString() + ' files · ' + tb(r.bytes) +
-      (r.secs ? ' · ' + Math.round(r.secs / 60) + ' min' : '') + '</small></div>' +
+      '<small>' + (drop ? esc(r.note) + ' after ' + Math.max(1, Math.round(r.secs / 60)) + ' min'
+        : r.files.toLocaleString() + ' files · ' + tb(r.bytes) + (r.secs ? ' · ' + Math.round(r.secs / 60) + ' min' : '')) +
+      '</small></div>' +
       '<span class="when">' + esc(String(r.when).slice(5, 16)) + '</span></div>';
   });
   $('events').innerHTML = evs.length ? evs.join('') : '<div class="empty">Nothing yet.</div>';

@@ -324,7 +324,8 @@ if (is_readable("$WEB/ingest-history.tsv")) {
         // a tidy-up is named for what it did, not for its plan's number
         $tidy = preg_match('/^(un)?tidy /', $f[2]);
         $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
-                 'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted'][$f[1]] ?? 'looked at';
+                 'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted',
+                 'dropped' => 'dropped'][$f[1]] ?? 'looked at';
         $recent[] = ['when' => $f[0], 'what' => $what,
                      'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
                      'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
