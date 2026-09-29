@@ -181,7 +181,8 @@ if (isset($_POST['_newpass'])) {
           <div id="events"></div>
         </div>
         <details style="margin-top:16px">
-          <summary class="note" style="cursor:pointer">Show the raw log</summary>
+          <summary class="note" style="cursor:pointer">Show the raw log — the jobs this machine ran, in the order they ran:
+            newest at the bottom, the last few screens only</summary>
           <pre id="log" class="code block" style="max-height:420px;overflow:auto;
                white-space:pre-wrap;margin-top:10px">&nbsp;</pre>
         </details>
@@ -744,6 +745,8 @@ async function load() {
   const lg = $('log'), stuck = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 30;
   lg.textContent = d.log || 'nothing logged yet';
   if (stuck) lg.scrollTop = lg.scrollHeight;
+  // Opened: start at the newest, which is at the bottom.
+  lg.parentElement.ontoggle = function () { if (this.open) lg.scrollTop = lg.scrollHeight; };
 
   $('queuenote').textContent = (function () {
     const w = secs.filter(function (x) { return x.state === 'queued' || x.state === 'splitting'; }).length;
