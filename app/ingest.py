@@ -630,32 +630,65 @@ def trace(src_root, archive):
     sections = []
     for fn, col, want in (("ingest-history.tsv", 2, "copied"), ("ingest-sections.tsv", 1, "section")):
         fp = STATUS / fn
-        for l in open(fp, errors="replace") if fp.exists() else []:
+        for l in (fp.read_text(errors="replace").splitlines() if fp.exists() else []):
             f = l.rstrip("\n").split("\t")
             kind = f[1] if fn.startswith("ingest-history") else f[0]
             if len(f) > col and kind == want and f[col].startswith(src_root + os.sep):
                 if not any(f[col] == x or f[col].startswith(x + os.sep) for x in sections):
                     sections = [x for x in sections if not x.startswith(f[col] + os.sep)] + [f[col]]
-    print(f"reading {len(sections)} folder(s) copied from {name} …")
-    by_size = defaultdict(list); n = 0
-    for sec in sections:
-        for p in walk(sec, everything=True):
-            try: by_size[os.path.getsize(p)].append(p); n += 1
-            except OSError: pass
-            if n % 2000 == 0: print(f"  {n:,} originals listed")
-            if n % 50 == 0:
-                status(phase="tracing", source=src_root, step="listing", checked=n)
-                trace_paused()
+    # The earlier copies to match: everything in the archive's copied area
+    # EXCEPT the exact-copy folders, which already carry their origin in their
+    # path. Counted first (it is quick), so the page can say how much is left.
+    names = {s.get("label") for s in (SETTINGS.get("sources") or [])} | {name}
+    copies = [p for top in sorted(os.listdir(archive)) if top not in names and not top.startswith(".")
+              for p in walk(os.path.join(archive, top), everything=True)]
+    print(f"{len(copies):,} earlier copies to match")
+
+    # The originals, listed once and kept on this computer folder by folder.
+    # A stop part-way (the source dropped, the Mac slept, Pause) keeps every
+    # folder already read; the next run reads only the rest.
+    HOME.mkdir(parents=True, exist_ok=True)
+    saved = HOME / f"trace-originals-{hashlib.sha256(src_root.encode()).hexdigest()[:12]}.tsv"
+    by_size = defaultdict(list); n = 0; read = set()
+    try:
+        if time.time() - saved.stat().st_mtime > 7 * 86400:
+            saved.unlink()                      # a week old: the source may have changed, read it again
+    except OSError:
+        pass
+    # Only whole folders count: lines after the last "# read" are a folder cut
+    # off part-way, dropped here and read again.
+    lines = saved.read_text(errors="replace").splitlines(keepends=True) if saved.exists() else []
+    lines = lines[:1 + max((i for i, l in enumerate(lines) if l.startswith("# read\t")), default=-1)]
+    saved.write_text("".join(lines))
+    for l in lines:
+        f = l.rstrip("\n").split("\t")
+        if f[0] == "# read" and len(f) > 1:
+            read.add(f[1])
+        elif len(f) == 3 and f[0] == "" and f[2].isdigit():
+            by_size[int(f[2])].append(f[1]); n += 1
+    todo = [x for x in sections if x not in read]
+    print(f"reading {len(todo)} of {len(sections)} folder(s) copied from {name}"
+          + (f" — {len(read)} already read on an earlier run ({n:,} originals)" if read else "") + " …")
+    with open(saved, "a") as keep:
+        for k, sec in enumerate(todo):
+            for p in walk(sec, everything=True):
+                try:
+                    size = os.path.getsize(p)
+                except OSError:
+                    continue
+                by_size[size].append(p); n += 1
+                keep.write(f"\t{p}\t{size}\n")
+                if n % 2000 == 0: print(f"  {n:,} originals listed")
+                if n % 50 == 0:
+                    status(phase="tracing", source=src_root, step="listing", checked=n,
+                           folders=len(sections), folders_read=len(read) + k, copies=len(copies))
+                    trace_paused()
+            keep.write(f"# read\t{sec}\n"); keep.flush()
     print(f"  {n:,} originals listed\n")
 
-    # Everything in the archive's copied area EXCEPT the exact-copy folders,
-    # which already carry their origin in their path.
-    names = {s.get("label") for s in (SETTINGS.get("sources") or [])} | {name}
     o = Origin("traced", src_root, src_root, name, archive)
     t0 = time.time(); i = 0
-    for top in sorted(os.listdir(archive)):
-        if top in names or top.startswith("."): continue
-        for p in walk(os.path.join(archive, top), everything=True):
+    for p in copies:
             i += 1
             try: size = os.path.getsize(p)
             except OSError: continue
@@ -667,7 +700,7 @@ def trace(src_root, archive):
             else:     o.add("untraced", "", p, size, "no identical original found")
             if i % 20 == 0:
                 trace_paused()
-                status(phase="tracing", source=src_root, step="matching", checked=i,
+                status(phase="tracing", source=src_root, step="matching", checked=i, of=len(copies),
                        traced=o.n["traced"], untraced=o.n["untraced"], originals=n)
             if i % 500 == 0:
                 print(f"  {i:,} checked — {o.n['traced']:,} traced, {o.n['untraced']:,} not "

@@ -213,6 +213,39 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(args[args.index('--root')+1], str(self.archive))
 
 
+class TraceResumeTests(unittest.TestCase):
+    """Matching earlier copies keeps the originals it has listed, folder by folder."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+    def test_a_stop_part_way_reads_only_the_folders_not_yet_read(self):
+        m = self.mod
+        src = self.root / 'server'
+        for name in ('A', 'B'):
+            (src / name).mkdir(parents=True)
+            (src / name / f'{name}.mov').write_bytes(name.encode() * 50)
+        (self.archive / '2020').mkdir()
+        (self.archive / '2020' / 'old.mov').write_bytes(b'A' * 50)          # an earlier copy of A.mov
+        m.SETTINGS = {'archive': {'local': str(self.archive)}, 'sources': [{'label': 'server', 'path': str(src)}]}
+        m.STATUS.mkdir(parents=True, exist_ok=True)
+        (m.STATUS / 'ingest-sections.tsv').write_text(f"section\t{src}/A\t1\t50\nsection\t{src}/B\t1\t50\n")
+        walked = []
+        real = m.walk
+        def spy(path, everything=False):
+            walked.append(os.path.basename(path)); return real(path, everything)
+        with patch.object(m, 'walk', spy), patch('sys.stdout', new_callable=io.StringIO):
+            m.trace(str(src), str(self.archive))
+        self.assertEqual(sorted(w for w in walked if w in 'AB'), ['A', 'B'])
+        rec = next(m.ORIGIN.glob('* traced.tsv')).read_text()
+        self.assertIn(f'traced\t{src}/A/A.mov', rec)
+        # B was cut off part-way: its "# read" line never made it
+        saved = next(m.HOME.glob('trace-originals-*.tsv'))
+        saved.write_text(saved.read_text().replace(f'# read\t{src}/B\n', ''))
+        walked.clear()
+        with patch.object(m, 'walk', spy), patch('sys.stdout', new_callable=io.StringIO):
+            m.trace(str(src), str(self.archive))
+        self.assertEqual([w for w in walked if w in 'AB'], ['B'])        # A is not read again
+        self.assertEqual(saved.read_text().count('B.mov'), 1)            # and B's half-list was not kept twice
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

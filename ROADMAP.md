@@ -39,8 +39,9 @@ with everything the final stage needs inside it.
   Rushes has and follows it to a new one by itself, taking its saved progress along.
 - Tidy-up: moving copied footage onto the organised shelf, recorded and undoable.
 - Skip and "Try again now" during a real failure.
-- Matching earlier copies to their originals: correct, but starts over after a
-  disconnect instead of picking up where it stopped.
+- Matching earlier copies to their originals: keeps the originals it has
+  listed folder by folder, so a stop part-way costs only the folder it was in;
+  the page shows step 1 of 2 and 2 of 2 and how much is left.
 - Transfer history: patched to show copied and already-present for older
   folders; not yet one consistent history.
 
@@ -63,6 +64,3 @@ with everything the final stage needs inside it.
 3. **Package A · Mac, then B · Server, then C · Windows**, once proxies and the
    vision model work, so ffmpeg and the model runtime go into each package once.
 
-## Next small things
-
-- **Matching that resumes** instead of starting over after a disconnect.

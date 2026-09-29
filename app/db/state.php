@@ -379,6 +379,9 @@ echo json_encode([
         'already' => (int)($mac['already'] ?? 0), 'step' => $mac['step'] ?? '',
         'traced' => (int)($mac['traced'] ?? 0), 'untraced' => (int)($mac['untraced'] ?? 0),
         'originals' => (int)($mac['originals'] ?? 0), 'secs' => $mac_at ? $now - $mac_at : null,
+        // matching earlier copies: how many folders of originals, and copies to check
+        'folders' => (int)($mac['folders'] ?? 0), 'folders_read' => (int)($mac['folders_read'] ?? 0),
+        'copies' => (int)($mac['copies'] ?? 0),
     ] : null,
     'helper'   => (function () use ($ago, $WEB) {
         $hv = helper_volumes(); $ctl = helper_control();

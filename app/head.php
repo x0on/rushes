@@ -112,11 +112,21 @@ window.helperNow = function (c) {
   if (c.phase === 'looking') return {busy: true, title: 'Checking what ' + name + ' still needs',
       short: 'checking ' + name + ' · ' + num(c.checked) + ' files',
       facts: [[num(c.checked), 'files checked'], [num(c.new) + ' · ' + size(c.bytes), 'to copy'], [num(c.already), 'already here']]};
-  if (c.phase === 'tracing') return {busy: true, title: 'Matching earlier copies to their originals on ' + name,
-      short: 'matching earlier copies · ' + num(c.checked),
-      facts: c.step === 'matching'
-        ? [[num(c.checked), 'copies checked'], [num(c.traced), 'traced'], [num(c.untraced), 'no original found'], [num(c.originals), 'originals listed']]
-        : [[num(c.checked), 'originals listed so far'], ['reading only', 'nothing moves']]};
+  // Two steps, and the page says which one and how much of it is left.
+  if (c.phase === 'tracing' && c.step === 'matching') return {busy: true,
+      title: 'Matching earlier copies to their originals on ' + name + ' · step 2 of 2: checking the copies',
+      pct: c.of ? Math.min(100, Math.floor(c.checked / c.of * 100)) : null,
+      short: 'matching · step 2 of 2 · ' + num(c.checked) + (c.of ? ' of ' + num(c.of) : ''),
+      facts: [[num(c.checked) + (c.of ? ' / ' + num(c.of) : ''), 'earlier copies checked'], [num(c.traced), 'traced to an original'],
+              [num(c.untraced), 'no original found'], [num(c.originals), 'originals listed']]};
+  if (c.phase === 'tracing') return {busy: true,
+      title: 'Matching earlier copies to their originals on ' + name + ' · step 1 of 2: listing the originals',
+      pct: c.folders ? Math.floor(c.folders_read / c.folders * 100) : null,
+      short: 'matching · step 1 of 2 · ' + num(c.checked),
+      facts: [[num(c.checked), 'originals listed so far']]
+        .concat(c.folders ? [[c.folders_read + ' of ' + c.folders, 'folders read — kept if it stops']] : [])
+        .concat(c.copies ? [[num(c.copies), 'earlier copies to check next']] : [])
+        .concat([['reading only', 'nothing moves']])};
   if (c.phase === 'tidying') {
     var p2 = c.of ? Math.floor(c.copied / c.of * 100) : 0;
     return {busy: true, pct: p2, title: 'Tidying up', short: 'tidying up · ' + p2 + '%',
