@@ -81,6 +81,7 @@ if [ -d "$DROP" ]; then
         esac
         case "$rel" in
             *.php|*.html|*.js|*.css|*.json|db/*.php) ;;
+            favicon.ico|apple-touch-icon.png) ;;     # the tab icon Safari asks the web root for
             *) log "  refused $rel (not a page)"; rm -f "$f"; continue ;;
         esac
         mkdir -p "/share/Web/$(dirname "$rel")"
