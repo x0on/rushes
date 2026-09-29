@@ -151,6 +151,19 @@ def shots_of(path, duration):
     return [(s.get_seconds(), e.get_seconds()) for s, e in found]
 
 
+def sample_times(a, b):
+    """Where in a shot to look. Never its first frames: the camera is still
+    settling — moving, out of focus, exposure hunting — and a recording's very
+    start is the worst of all. Skip the first second of a shot (the first two of
+    the file) and its last half second; look at 35% and 70% of what is left.
+    A shot too short for that gets one look, in its middle."""
+    lo = a + (2.0 if a < 0.01 else 1.0)
+    hi = b - 0.5
+    if hi - lo < 0.5:
+        return [(a + b) / 2]
+    return [lo + (hi - lo) * 0.35, lo + (hi - lo) * 0.7]
+
+
 def frame(path, t, out, width=768):
     subprocess.run([tool("ffmpeg"), "-nostdin", "-loglevel", "error", "-ss", f"{t:.3f}", "-i", str(path),
                     "-frames:v", "1", "-vf", f"scale={width}:-2", "-q:v", "4", "-y", str(out)], check=False)
@@ -313,7 +326,6 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             for i, (a, b) in enumerate(cuts):
-                span = max(b - a, 0.1)
                 frames = []
                 if ext in IMAGE:
                     f = td / "f0.jpg"
@@ -321,7 +333,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                                     "-vf", "scale=768:-2", "-y", str(f)], check=False)
                     frames = [str(f)] if f.exists() else []
                 else:
-                    for k, at in enumerate((a + span * 0.35, a + span * 0.7)):
+                    for k, at in enumerate(sample_times(a, b)):
                         if frame(src, at, td / f"f{k}.jpg"):
                             frames.append(str(td / f"f{k}.jpg"))
                 if not frames:
@@ -453,6 +465,9 @@ def selftest():
         (Path(td) / "_rushes").mkdir(); (Path(td) / "_rushes" / "c.mov").write_bytes(b"z")
         assert [x.name for x in media_under(td)] == ["a.mov", "b.mov"]
     assert prompt_id(th) == prompt_id(list(th)) and prompt_id(th) != prompt_id(th[:3])
+    assert all(t >= 2.0 for t in sample_times(0.0, 10.0))          # never the start of a recording
+    assert all(t >= 21.0 for t in sample_times(20.0, 30.0))        # never the first second of a shot
+    assert sample_times(5.0, 6.0) == [5.5]                         # a short shot: its middle
     with tempfile.TemporaryDirectory() as td:
         arch, prox = Path(td) / "VIDEO", Path(td) / "VIDEO" / "PROXIES"
         (arch / "PARKS").mkdir(parents=True); (prox / "PARKS").mkdir(parents=True)

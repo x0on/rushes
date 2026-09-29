@@ -93,6 +93,10 @@ description quality. What it taught, to build in:
 - **Time of day from two places:** the camera's own clock (in the file) says
   morning, afternoon or evening; the model says what the light looks like
   (sunrise or sunset light, daylight, dusk, night).
+- **Never the first frames.** A camera is still settling when it starts
+  (moving, out of focus, exposure hunting). Frames are taken after the first
+  second of a shot (two at the start of a recording) and before its last half
+  second; a very short shot gets one look in its middle.
 - **Stills use the same pipeline:** a photo is one shot, so descriptions, text,
   themes and faces work on images too, which is where faces work best.
 
