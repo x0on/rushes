@@ -834,6 +834,26 @@ def _mark_done(key):
         f.write(key + "\n")
 
 
+def move_proxy(old, new, o):
+    """A proxy follows its original. Proxies mirror the archive's paths under
+    PROXIES, so when a file moves, its proxy moves to the matching place — and
+    search, describing and Premiere keep finding it. Never over another file."""
+    root = NAS_MOUNT.rstrip("/")
+    if not (old.startswith(root + os.sep) and new.startswith(root + os.sep)):
+        return
+    pr = os.path.join(root, "PROXIES")
+    a = os.path.splitext(os.path.join(pr, old[len(root) + 1:]))[0] + ".mp4"
+    b = os.path.splitext(os.path.join(pr, new[len(root) + 1:]))[0] + ".mp4"
+    if not os.path.isfile(a) or os.path.lexists(b):
+        return
+    try:
+        os.makedirs(os.path.dirname(b), exist_ok=True)
+        os.rename(a, b)
+        o.add("proxy moved", a, b, os.path.getsize(b), "follows its original")
+    except OSError as e:
+        o.add("proxy not moved", a, b, 0, str(e))
+
+
 def clear_out(paths, stop, o, examples=None):
     """Remove the folders a tidy-up emptied, deepest first — never `stop` or
     anything above it. A folder's note goes with its files; Finder's
@@ -947,6 +967,7 @@ def tidy(plan_id):
                 os.makedirs(os.path.dirname(new), exist_ok=True)
                 os.rename(old, new)
                 o.add("moved", old, new, size, src)
+                move_proxy(old, new, o)
                 moved.append((old, new)); mb += size
                 d = os.path.dirname(old)
                 while d.startswith(area) and d not in examples:
@@ -996,6 +1017,7 @@ def untidy(name):
                 os.makedirs(os.path.dirname(old), exist_ok=True)
                 os.rename(new, old)
                 o.add("moved", new, old, size, "undo"); back.append((new, old)); mb += size
+                move_proxy(new, old, o)
             except OSError as e:
                 o.add("failed", new, old, size, str(e))
     # Empty folders the tidy-up made on the shelf go; the department folders stay.
@@ -1379,7 +1401,8 @@ def watch(root, every=20):
             if len(f) >= 2 and f[0] in ("copy", "list") and f[1].startswith("/"):
                 want.append((f[0], f[1], ""))
             elif len(f) >= 2 and f[0] == "analyze" and f[1].startswith("/"):
-                want.append(("analyze", f[1], ""))
+                # the third field is when it was asked for: asking again (new footage) runs again
+                want.append(("analyze", f[1], f[2] if len(f) > 2 and f[2].isdigit() else ""))
             elif len(f) >= 2 and f[0] in ("tidy", "untidy") and f[1]:
                 want.append((f[0], f[1], ""))
             elif len(f) >= 3 and f[0] == "ingest" and f[1] and f[2]:
@@ -1430,7 +1453,8 @@ def watch(root, every=20):
         # one the transfer does not know is finished when this computer did it.
         item_done = lambda p: job_items[p]["phase"] in ("done", "removed")
         finished = lambda v, p, i: ((v == "copy" and (item_done(p) if p in job_items else p in done)) or (v == "ingest" and i.split("\t")[0] in done)
-                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy", "analyze") and f"{v} {p}" in done))
+                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy") and f"{v} {p}" in done)
+                                    or (v == "analyze" and f"analyze {p}{' ' + i if i else ''}" in done))
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
         # A tidy-up works inside the archive, so a source going away does not stop it.
         copies = [p for v, p, _ in pending if v not in ("tidy", "untidy")]
@@ -1519,8 +1543,8 @@ def watch(root, every=20):
                     continue                          # not there right now: the next thing goes first
                 did = True
                 print(f"\n=== describing {path} (vision model and speech) ===")
-                if describe_folder(path) == 0:
-                    _mark_done(f"analyze {path}")
+                if describe_folder(path, into) == 0:
+                    _mark_done(f"analyze {path}{' ' + into if into else ''}")
                 time.sleep(5)
                 break
             if verb == "copy" and path in c.get("skip", []):
@@ -1603,7 +1627,7 @@ def analysis_tools():
     return (py if os.path.exists(py) else ""), model, a.get("whisper", "mlx-community/whisper-large-v3-turbo")
 
 
-def describe_folder(path):
+def describe_folder(path, asked=""):
     py, model, whisper = analysis_tools()
     name = os.path.basename(path.rstrip("/")) or path
     if not py:
@@ -1643,7 +1667,8 @@ def describe_folder(path):
         print(f"*** {stopped} — the files already described are kept")
         return 1
     history("analysed", path, done.get("done", 0) + done.get("already", 0), 0, secs,
-            f"{done.get('failed', 0)} could not be described" if done.get("failed") else "")
+            "; ".join(x for x in (f"asked={asked}" if asked else "",
+                                  f"{done.get('failed', 0)} could not be described" if done.get("failed") else "") if x))
     return 0 if rc == 0 and done else 1
 
 

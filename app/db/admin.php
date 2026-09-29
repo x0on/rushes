@@ -78,6 +78,15 @@ if (isset($_POST['_newpass'])) {
   .mo .ons span { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
   .mo .ons span.txt { background: var(--warn-bg); border-color: var(--warn) }
   .mo small { display: block; margin-top: 6px; color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .steps2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px }
+  .steps2 > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg) }
+  .steps2 p { margin: 6px 0 0; font-size: 13px; line-height: 1.5 }
+  table.prep { width: 100%; border-collapse: collapse; font-size: 13px }
+  table.prep th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
+                  font-weight: 650; padding: 6px 8px; border-bottom: 1px solid var(--line) }
+  table.prep td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+  table.prep .ok { color: var(--ok) } table.prep .busy { color: var(--accent-text); font-weight: 600 }
+  table.prep .bad { color: var(--warn) } table.prep .dim { color: var(--faint) }
   .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
@@ -200,61 +209,46 @@ if (isset($_POST['_newpass'])) {
 
       <!-- ══ jobs and tools ══ -->
       <section id="pane-describe" hidden>
-        <!-- Proxies: made on the archive machine itself, in the background. -->
+        <!-- One job per folder, two steps in a fixed order, on two machines. -->
         <div class="panel" style="margin-top:8px">
-          <header><b>Proxies</b></header>
+          <header><b>Prepare folders</b> <span class="note">· so their footage plays in search and can be found by what is in it</span></header>
           <div style="padding:14px">
-            <p style="margin:0 0 10px">A proxy is a small, light copy of a video (1080p, H.264) that plays in any browser
-              and reads much faster than the camera original. Search plays them, describing reads them, and
-              editors can cut with them in Premiere. They live in their own folder, <code>PROXIES</code>, with the
-              same paths as the originals, so nothing mixes with the footage, and they can always be made again.
-              Made on this machine, at low priority; a file that arrived in the last two hours is left for the
-              next run, so nothing still being copied is touched.</p>
-            <p class="note" style="margin:0 0 8px">One folder at a time, in the order you choose: pick a folder
-              (or leave it empty for the whole archive), press Plan to see what it would do, then Make proxies.</p>
-            <input id="pxPath" list="anFolders" placeholder="a folder in the archive, e.g. PARK COLLECTION — or empty for everything"
-                   style="width:100%;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
-                          border-radius:var(--radius-sm);background:var(--bg);color:var(--fg);margin-bottom:10px">
-            <div id="pxState" class="note"></div>
-            <div class="btns" style="margin-top:10px">
-              <button class="btn quiet" data-px="proxy-plan">Plan (changes nothing)</button>
-              <button class="btn" data-px="proxy-build">Make proxies</button>
-              <button class="btn quiet" data-px="proxy-stop">Stop</button>
+            <div class="steps2">
+              <div><b>1 · Proxies</b> <span class="note">on the archive machine</span>
+                <p>A small, light copy of each video (1080p, H.264) that plays in any browser and reads much faster
+                  than the camera original. Kept in their own folder, <code>PROXIES</code>, with the same paths as the
+                  originals, so nothing mixes with the footage. Made at low priority; a file that arrived in the last
+                  two hours waits for a later run, so nothing still being copied is touched.</p></div>
+              <div><b>2 · Descriptions</b> <span class="note">on the helper</span>
+                <p>Every shot, read from its proxy: a sentence, the text on screen, shot size, people, light, themes
+                  and tags, and everything said, in the language it was said. Kept in <code>_rushes/analysis</code>;
+                  nothing in the archive is changed. It starts by itself when a folder's proxies are done.</p></div>
             </div>
+            <p class="note" style="margin:12px 0 8px">Pick a folder and press Prepare. Folders go one after another, in the
+              order you add them; nothing is ever done twice, so preparing a folder again later only does what is new.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <input id="prepPath" list="anFolders" placeholder="a folder in the archive, e.g. PARK COLLECTION"
+                     style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
+                            border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
+              <datalist id="anFolders"></datalist>
+              <button class="btn" id="prepGo" type="button">Prepare this folder</button>
+              <button class="btn quiet" data-px="proxy-plan" type="button">Plan (changes nothing)</button>
+              <button class="btn quiet" data-px="proxy-stop" type="button">Stop proxies</button>
+            </div>
+            <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
+            <div id="pxState" class="note" style="margin-top:6px"></div>
+            <div id="prepTable" style="margin-top:12px"></div>
           </div>
         </div>
 
         <!-- What the helper can describe with, and how far the archive has got. -->
-        <div class="panel" style="margin-top:8px">
-          <header><b>Describing footage</b></header>
+        <div class="panel" style="margin-top:14px">
+          <header><b>Describing</b></header>
           <div style="padding:14px">
-            <p style="margin:0 0 10px">The helper looks at every shot and writes down what it shows (a sentence, the
-              text on screen, shot size, people, light, themes and tags) and everything that is said, in the
-              language it was said. That is what lets search find a moment by what is <i>in</i> it, not only by
-              its file name. Nothing is moved or changed: the descriptions are kept beside the archive, in
-              <code>_rushes/analysis</code>.</p>
             <div id="anTools" class="note"></div>
             <div class="tiles" id="anTiles" style="margin-top:12px"></div>
           </div>
         </div>
-        <div class="panel" style="margin-top:14px">
-          <header><b>Describe a folder</b></header>
-          <div style="padding:14px">
-            <p class="note" style="margin:0 0 10px">Each shot gets a sentence, the text on screen, shot size, people,
-              themes and tags; everything said is written down, in the language it was said. One file at a time,
-              after any copies; a file already described is skipped. About 6 seconds per shot.</p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <input id="anPath" list="anFolders" placeholder="a folder in the archive, e.g. PARK COLLECTION"
-                     style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
-                            border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
-              <datalist id="anFolders"></datalist>
-              <button class="btn" id="anGo" type="button">Describe it</button>
-            </div>
-            <p class="note" id="anSaid" style="margin:10px 0 0"></p>
-            <div id="anList" class="note" style="margin-top:10px"></div>
-          </div>
-        </div>
-
 
         <div class="panel" style="margin-top:14px">
           <header><b>Latest described</b> <span class="note">· to check the quality, shot by shot</span></header>
@@ -882,7 +876,7 @@ function drawProxies(p) {
 // Proxy buttons: the same runner jobs, for the folder typed above (or all of it).
 document.querySelectorAll('[data-px]').forEach(function (b) {
   b.onclick = async function () {
-    const what = b.dataset.px, folder = $('pxPath').value.trim().replace(/\/+$/, '');
+    const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '');
     const where = folder ? ' — only ' + folder : ' — the whole archive';
     if (!confirm(ASK[what] + (what === 'proxy-stop' ? '' : where))) return;
     const was = b.textContent; b.disabled = true; b.textContent = 'Asking…';
@@ -925,26 +919,56 @@ async function loadAnalysis() {
         '<small title="' + esc(m.path) + '">' + esc(m.path.split('/').pop()) + '</small></div></div>';
     }).join('') : '<div class="note">Nothing described yet.</div>';
     $('anFolders').innerHTML = (a.folders || []).map(function (f) { return '<option value="' + esc(f) + '">'; }).join('');
-    $('anList').innerHTML =
-      (a.waiting.length ? '<div><b>Waiting</b> · ' + a.waiting.map(esc).join(' · ') + '</div>' : '') +
-      (a.done.length ? '<div style="margin-top:4px"><b>Described</b> · ' + a.done.map(function (d) {
-        return esc(d.path) + ' (' + d.files + ' files' + (d.note ? ', ' + esc(d.note) : '') + ')'; }).join(' · ') + '</div>' : '') +
-      '<div style="margin-top:4px">' + (a.described || 0).toLocaleString() + ' files described in the archive so far.</div>';
-  } catch (e) { $('anList').textContent = 'Could not read what is waiting: ' + e.message; }
+    drawPrepare(a.table);
+  } catch (e) { $('prepTable').textContent = 'Could not read the list: ' + e.message; }
 }
-$('anGo').onclick = async function () {
-  const path = $('anPath').value.trim(), b = this;
-  if (!path) { $('anSaid').textContent = 'Type or pick a folder first.'; return; }
-  if (Date.now() > anArmed) { anArmed = Date.now() + 5000; b.textContent = 'Sure? Describe ' + path.split('/').pop(); return; }
-  anArmed = 0; b.disabled = true; b.textContent = 'Asking…';
+// Prepare: one confirmation on the button itself, then say what happened.
+let prepArmed = 0;
+$('prepGo').onclick = async function () {
+  const path = $('prepPath').value.trim().replace(/\/+$/, ''), b = this;
+  if (!path) { $('prepSaid').textContent = 'Type or pick a folder first.'; return; }
+  if (Date.now() > prepArmed) { prepArmed = Date.now() + 5000; b.textContent = 'Sure? Prepare ' + path.split('/').pop(); return; }
+  prepArmed = 0; b.disabled = true; b.textContent = 'Asking…';
   try {
-    const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ path: path }) })).json();
-    $('anSaid').textContent = r.error ? 'Did not happen: ' + r.error
-      : 'Queued ✓ ' + r.queued + ' — the helper describes it after anything already waiting. The live box shows it.';
-  } catch (e) { $('anSaid').textContent = 'Could not reach the archive: ' + e.message; }
-  b.disabled = false; b.textContent = 'Describe it'; loadAnalysis();
+    const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'prepare', path: path }) })).json();
+    $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
+      : 'Added ✓ ' + path + ' — its proxies start within a minute if nothing else is being made, then it is described.';
+  } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
+  b.disabled = false; b.textContent = 'Prepare this folder'; loadAnalysis();
 };
-loadAnalysis(); setInterval(loadAnalysis, 30000);
+async function forgetFolder(folder, b) {
+  if (!confirm('Take ' + folder + ' off this list? Nothing is deleted: its proxies and descriptions stay.')) return;
+  b.disabled = true;
+  try { await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'forget', path: folder }) }); } catch (e) {}
+  loadAnalysis();
+}
+function drawPrepare(rows) {
+  const n = function (x) { return (+x || 0).toLocaleString(); };
+  if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is being prepared yet.</div>'; return; }
+  const px = function (p) {
+    return p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>'
+      : p.step === 'done' ? '<span class="ok">✓ ' + n(p.ok) + ' made</span>' + (+p.failed ? ' · <span class="bad">' + n(p.failed) + ' failed</span>' : '') +
+                            (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
+      : p.step === 'again' ? 'making the ones that were still arriving'
+      : p.step === 'stopped' ? '<span class="bad">stopped</span> · ' + n(p.ok) + ' made · press Prepare to carry on'
+      : p.step === 'no-ffmpeg' ? '<span class="bad">this machine cannot make video yet (no ffmpeg)</span>'
+      : '<span class="dim">waiting its turn</span>';
+  };
+  const ds = function (d) {
+    return d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>'
+      : d.step === 'done' ? '<span class="ok">✓ ' + n(d.files) + ' files</span>' + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
+      : d.step === 'queued' ? 'queued on the helper, after any copies'
+      : d.step === 'next' ? 'starting'
+      : '<span class="dim">waiting for proxies</span>';
+  };
+  $('prepTable').innerHTML = '<table class="prep"><tr><th>Folder</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
+    rows.map(function (r) {
+      return '<tr><td><b>' + esc(r.folder) + '</b></td><td>' + px(r.proxies) + '</td><td>' + ds(r.describe) + '</td>' +
+        '<td style="text-align:right"><button class="btn quiet" data-forget="' + esc(r.folder) + '" style="padding:3px 9px;font-size:12px">Take off the list</button></td></tr>';
+    }).join('') + '</table>';
+  $('prepTable').querySelectorAll('[data-forget]').forEach(function (b) { b.onclick = function () { forgetFolder(b.dataset.forget, b); }; });
+}
+loadAnalysis(); setInterval(loadAnalysis, 10000);
 
 show((location.hash || '#overview').slice(1));
 load(); setInterval(load, 4000);

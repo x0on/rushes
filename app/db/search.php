@@ -21,6 +21,7 @@ register_shutdown_function(function () {
 });
 
 require __DIR__ . '/schema.php';
+db_init();   // new tables (the media ledger) exist before the first search
 
 $q      = trim($_GET['q'] ?? '');
 $kind   = $_GET['kind'] ?? '';
@@ -57,8 +58,9 @@ if ($where === []) {
 }
 
 // the rows
-$st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept
-                    FROM files$sql ORDER BY path LIMIT ? OFFSET ?");
+$st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept,
+                           width, height, fps, codec, duration, proxy_at
+                    FROM files LEFT JOIN media ON media.file_id = files.id$sql ORDER BY path LIMIT ? OFFSET ?");
 $bind($st, $args);
 $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
 $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);

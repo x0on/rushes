@@ -25,7 +25,10 @@ foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
     $f = explode("\t", rtrim($l, "\n"));
     if (count($f) >= 3 && in_array($f[1], ['copied', 'refused'], true)) $landed[$f[2]] = true;
     if (count($f) >= 3 && in_array($f[1], ['tidied', 'untidied', 'refused'], true)) $landed[preg_replace('/ /', "\t", $f[2], 1)] = true;
-    if (count($f) >= 3 && $f[1] === 'analysed') $landed["analyze\t" . $f[2]] = true;
+    if (count($f) >= 3 && $f[1] === 'analysed') {
+        $landed["analyze\t" . $f[2]] = true;
+        if (preg_match('/asked=(\d+)/', $f[6] ?? '', $m)) $landed["analyze\t{$f[2]}\t{$m[1]}"] = true;
+    }
 }
 // A tidy-up (Structure → Tidy-up) is its own door, db/tidy.php. Kept here
 // untouched, and dropped once the helper has done it.

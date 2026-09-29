@@ -31,6 +31,8 @@ MODE=${1:-plan}
 ONLY=${PROXY_ONLY:-}     # one folder of the archive (e.g. "PARK COLLECTION"), or empty for all of it
 ONLY=${ONLY%/}
 STATE=${STATE:-/share/Web/proxy-status.txt}
+RUNS=${RUNS:-/share/Web/proxy-folders.tsv}   # one line per finished or stopped run, per folder: what Rushes reads to know a folder is ready
+MADE=${MADE:-/share/Web/proxy-made.tsv}      # never emptied: every proxy made, with what the original is (Rushes keeps it in its media ledger)
 RECENT=${RECENT:-7200}   # seconds: a file written this recently may still be arriving; left for the next run
 
 # What the page shows: one small file, rewritten whole, so it is never half-read.
@@ -138,6 +140,7 @@ NICE=""; command -v nice >/dev/null 2>&1 && NICE="nice -n 15"
 # Stop (from Manage) ends the proxy being made and leaves no half file.
 trap '[ -n "$ff" ] && kill "$ff" 2>/dev/null; [ -n "$tmp" ] && rm -f "$tmp";
       state "state${TAB}stopped" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later";
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$ONLY" stopped "$ok" "$failed" "$later" "$total" "$(date +%s)" >> "$RUNS";
       echo "stopped from Manage after $ok proxies"; exit 1' TERM INT
 
 while IFS="$TAB" read -r src out; do
@@ -159,6 +162,10 @@ while IFS="$TAB" read -r src out; do
     if wait "$ff"; then
         mv -f "$tmp" "$out"
         printf '%s\t%s\n' "$src" "$out" >> "$LOG"
+        # What the original is (4K or HD, frame rate, codec, length), read once
+        # here, where the file is: the proxy is always 1080p, the original is not.
+        probe=$($FFMPEG -hide_banner -nostdin -i "$src" 2>&1 | grep -E 'Duration:|Video:' | head -2 | tr '\t\n' '  ')
+        printf '%s\t%s\t%s\n' "$src" "$(date +%s)" "$probe" >> "$MADE"
         ok=$((ok + 1))
     else
         rm -f "$tmp"
@@ -172,6 +179,7 @@ done < "$PLAN"
 
 ff=""; tmp=""
 state "state${TAB}done" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ONLY" done "$ok" "$failed" "$later" "$total" "$(date +%s)" >> "$RUNS"
 echo "built $ok proxies, $failed failed, $later left for the next run (still arriving)"
 [ "$failed" -gt 0 ] && echo "errors in $LOG.err"
 echo "proxies: $PROXY_ROOT"

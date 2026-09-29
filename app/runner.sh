@@ -54,6 +54,20 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
     fi
 fi
 
+# Folders being prepared (Manage → Describe): Rushes writes the next folder that
+# needs proxies into proxy-next.txt; start it here when nothing is being made.
+# Rushes only decides; this is the only place a build is started from.
+NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
+if [ -n "$NEXT" ]; then
+    pid=$(cat /share/Web/proxy.pid 2>/dev/null)
+    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+        rm -f /share/Web/proxy-next.txt
+        PROXY_ONLY="$NEXT" nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
+        echo $! > /share/Web/proxy.pid
+        echo "$(date '+%Y-%m-%d %H:%M:%S')  making proxies for $NEXT" >> "$LOG"
+    fi
+fi
+
 # The Mac writes ingest progress onto the VIDEO share (the only place both
 # machines can reach). Mirror it into the web folder so the page can read it
 # without the Mac needing any extra mount or service.

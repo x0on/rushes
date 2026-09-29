@@ -89,4 +89,18 @@ check($m['count'] === 1 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['wh
 check(analysis_search('parque bienvenidos')['rows'][0]['kind'] === 'speech', 'spoken words find the moment they were said');
 check(analysis_search('parks recreation')['count'] === 1 && analysis_search('nothing here')['count'] === 0, 'themes are searchable; nothing invented');
 check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
+require_once "$root/app/db/prepare.php";
+file_put_contents("$root/archive/b4k.mov", 'four'); landed("$root/archive/b4k.mov", 4);
+file_put_contents("$root/app/proxy-made.tsv",
+    "$root/archive/b4k.mov\t1700000000\t  Duration: 00:02:05.50, start: 0.000000, bitrate: 400000 kb/s     Stream #0:0: Video: h264 (High), yuv420p(tv), 3840x2160 [SAR 1:1 DAR 16:9], 100000 kb/s, 29.97 fps, 29.97 tbr \n" .
+    "$root/archive/b4k.mov\t17000");                                   // a line still being written
+check(media_import()['added'] === 1, 'proxies made are read into the media ledger');
+$ledger = fn() => db()->querySingle("SELECT width||'x'||height||' '||fps||' '||codec||' '||duration FROM files JOIN media ON file_id=id WHERE name='b4k.mov'");
+check($ledger() === '3840x2160 29.97 h264 125.5', 'the ledger knows the original is 4K, whatever size its proxy is');
+check(media_import()['added'] === 0, 'a half-written line is left for next time, nothing read twice');
+mkdir("$root/archive/shelf"); rename("$root/archive/b4k.mov", "$root/archive/shelf/b4k.mov");
+$_POST = ['moves' => "$root/archive/b4k.mov\t$root/archive/shelf/b4k.mov"];
+ob_start(); include "$root/app/db/moved.php"; ob_end_clean();
+check(db()->querySingle("SELECT path FROM files WHERE name='b4k.mov'") === "$root/archive/shelf/b4k.mov" && $ledger() === '3840x2160 29.97 h264 125.5',
+      'after a tidy-up moves the original, the ledger still follows it');
 echo "Server tests complete. Fixture: $root\n";

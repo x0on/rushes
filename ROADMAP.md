@@ -51,11 +51,20 @@ with everything the final stage needs inside it.
   the page shows step 1 of 2 and 2 of 2 and how much is left.
 - Transfer history: patched to show copied and already-present for older
   folders; not yet one consistent history.
+- Preparing a folder (Manage → Describe): its proxies are made on the archive
+  machine first (1080p, in `PROXIES` with the same paths, never on a folder
+  still arriving), then the helper describes it from those proxies. One step
+  after the other, by itself, never twice.
+- The media ledger, in the database: for every original, what it is (4K or
+  HD, frame rate, codec, length, read when its proxy is made) and when its
+  proxy was made. It belongs to the file's row, so it follows the file when a
+  tidy-up moves it; the tidy-up moves the proxy along too, and descriptions are
+  named by content, so nothing comes unlinked. Search shows 4K / HD on each file.
 
 ### Not built yet
 
 - Premiere relinking after tidy-up.
-- Proxies (the plan can be run from Jobs and tools; building them is next).
+- Playing proxies in search, jumping to a described moment.
 - Faces.
 - The analysis tools in the installer (today they are the pilot's, on the Mac).
 - Rushes Helper for Windows.

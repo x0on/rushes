@@ -312,6 +312,25 @@ class DescribeTests(unittest.TestCase):
         self.assertIn('not installed', seen[-1]['note'])
 
 
+class ProxyFollowsTests(unittest.TestCase):
+    """A tidy-up moves each original's proxy with it, so the two stay linked."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_proxy_moves_with_its_original_and_never_over_another(self):
+        m = self.mod
+        a, b = self.archive / 'ARCHIVE' / 'x' / 'clip.MXF', self.archive / 'Parks' / '2024' / 'clip.MXF'
+        pa = self.archive / 'PROXIES' / 'ARCHIVE' / 'x' / 'clip.mp4'
+        pb = self.archive / 'PROXIES' / 'Parks' / '2024' / 'clip.mp4'
+        pa.parent.mkdir(parents=True); pa.write_text('proxy')
+        seen = []
+        o = type('O', (), {'add': lambda self, *r: seen.append(r)})()
+        m.move_proxy(str(a), str(b), o)
+        self.assertTrue(pb.is_file()); self.assertFalse(pa.exists())
+        self.assertEqual(seen[0][0], 'proxy moved')
+        pa.write_text('another'); m.move_proxy(str(a), str(b), o)       # something already there: left alone
+        self.assertEqual(pb.read_text(), 'proxy'); self.assertEqual(pa.read_text(), 'another')
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

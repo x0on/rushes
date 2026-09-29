@@ -107,6 +107,16 @@ function db_init(): void {
     )");
     $db->exec('CREATE INDEX IF NOT EXISTS i_shots_file ON shots (file_id)');
 
+    // ── the media ledger: what each original is, and what has been made from it ──
+    // Keyed by the file's row, which keeps its id when a tidy-up moves the file
+    // (moved.php), so this follows the file wherever it goes. The proxy itself
+    // mirrors the original's path under PROXIES and is moved with it.
+    $db->exec("CREATE TABLE IF NOT EXISTS media (
+        file_id  INTEGER PRIMARY KEY,
+        width    INTEGER, height INTEGER, fps REAL, codec TEXT, duration REAL,
+        proxy_at INTEGER                -- when its 1080p proxy was made
+    )");
+
     $db->exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)");
 
     // ── pulls: clips gathered for a job ───────────────────────────────────

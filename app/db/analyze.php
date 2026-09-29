@@ -29,24 +29,31 @@ function folders(string $root): array {
     return $out;
 }
 
+require_once __DIR__ . '/prepare.php';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
     $rel = trim(str_replace('\\', '/', (string)($_POST['path'] ?? '')), '/');
-    if ($rel === '' || str_contains($rel, '..') || str_contains($rel, "\t") || str_contains($rel, "\n"))
-        bail(400, 'Pick a folder inside the archive.');
-    if (!file_exists("$root/$rel")) bail(400, "There is no “{$rel}” in the archive.");
-    if ($helperRoot === '') bail(400, 'Setup does not know where the helper finds the archive yet (04 · Helper).');
-    $line = "analyze\t$helperRoot/$rel";
-    $lines = array_values(array_filter(array_map('rtrim', @file($Q) ?: []), fn($l) => $l !== '' && $l !== $line));
-    $lines[] = $line;                                   // after everything already waiting
-    if (@file_put_contents("$Q.new", implode("\n", $lines) . "\n") === false || !@rename("$Q.new", $Q))
-        bail(500, 'Could not write the queue — is the web folder writable?');
-    out(['queued' => $rel]);
+    // Prepare: proxies first, then descriptions; the order is kept by prepare_advance.
+    if (($_POST['action'] ?? '') === 'prepare' || ($_POST['action'] ?? '') === 'forget') {
+        if ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[A-Za-z0-9 _./&(),+-]+$#', $rel))
+            bail(400, 'Pick a folder inside the archive (letters, numbers, spaces and . _ - & ( ) , + only).');
+        $list = prepare_list();
+        if ($_POST['action'] === 'forget') { unset($list[$rel]); }
+        else {
+            if (!is_dir("$root/$rel")) bail(400, "There is no folder “{$rel}” in the archive.");
+            unset($list[$rel]); $list[$rel] = time();      // asked again: to the end, and runs again
+        }
+        if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?');
+        prepare_advance();
+        out(['ok' => $_POST['action'], 'folder' => $rel]);
+    }
+    bail(400, 'unknown action');
 }
 
 $waiting = []; $done = [];
 foreach (@file($Q) ?: [] as $l)
-    if (preg_match('/^analyze\t(.+)$/', rtrim($l), $m)) $waiting[] = ltrim(substr($m[1], strlen($helperRoot)), '/');
+    if (preg_match('/^analyze\t([^\t]+)/', rtrim($l), $m)) $waiting[] = ltrim(substr($m[1], strlen($helperRoot)), '/');
 foreach (array_reverse(@file(web_dir() . '/ingest-history.tsv') ?: []) as $l) {
     $f = explode("\t", rtrim($l, "\n"));
     if (($f[1] ?? '') === 'analysed' && count($done) < 20)
@@ -63,5 +70,5 @@ $stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
 $latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
     language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
-out(['folders' => folders($root), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
+out(['table' => prepare_table(), 'folders' => folders($root), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
      'stats' => $stats, 'latest' => $latest, 'helper' => helper_name()]);

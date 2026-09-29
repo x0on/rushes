@@ -310,7 +310,8 @@ function draw() {
         '<span class="thumb k-' + esc(k) + '">' + (ICON[k] || ICON.file || '') + '</span>' +
         '<span class="nm">' + esc(r.name) +
         (moved ? ' <span class="pill">moved aside</span>' : '') +
-        '<small>' + esc((r.ext || '').toUpperCase()) + (r.ext ? ' · ' : '') + esc(k) + '</small></span>' +
+        '<small>' + esc((r.ext || '').toUpperCase()) + (r.ext ? ' · ' : '') + esc(k) +
+        (res(r) ? ' · <b class="res">' + res(r) + '</b>' : '') + '</small></span>' +
         addBtn(r.path) +
         '<span class="sz">' + tb(r.bytes) + '</span></div>';
     });
@@ -338,6 +339,17 @@ function draw() {
 // actually want to do with it. Revealing only works when the browser is on a
 // machine that has the archive mounted, so copying the path comes first because
 // it always works.
+// What the original is, however small its proxy: 4K, HD, 720p or SD.
+function res(r) {
+  if (!r.width) return '';
+  const w = Math.max(r.width, r.height), h = Math.min(r.width, r.height);
+  return w >= 3800 || h >= 2100 ? '4K' : w >= 2500 || h >= 1400 ? '2.7K' : h >= 1060 ? 'HD' : h >= 700 ? '720p' : 'SD';
+}
+function clock(s) {
+  s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+}
+
 function inspect(r) {
   if (!r) return;
   const mine = store('archiveBase');
@@ -351,6 +363,11 @@ function inspect(r) {
       '<div class="k">Kind</div><div class="v">' + esc(r.kind || 'file') +
         (r.ext ? ' · ' + esc(r.ext.toUpperCase()) : '') + '</div>' +
       '<div class="k">Size</div><div class="v">' + tb(r.bytes) + '</div>' +
+      (r.width ? '<div class="k">Original</div><div class="v">' + res(r) + ' · ' + r.width + ' × ' + r.height +
+        (r.fps ? ' · ' + (+r.fps).toFixed(2).replace(/\.?0+$/, '') + ' fps' : '') +
+        (r.codec ? ' · ' + esc(r.codec.toUpperCase()) : '') +
+        (r.duration ? ' · ' + clock(r.duration) : '') + '</div>' : '') +
+      (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its 1080p proxy (downloads and pulls use the original)</div>' : '') +
       (r.event ? '<div class="k">Shoot</div><div class="v">' + esc(r.event) + '</div>' : '') +
       (r.year  ? '<div class="k">Year</div><div class="v">' + esc(r.year) + '</div>' : '') +
       '<div class="k">Where it lives</div><div class="v">' + esc(short(r.path)) + '</div>' +
