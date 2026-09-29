@@ -90,6 +90,17 @@ description quality. What it taught, to build in:
 - **Stills use the same pipeline:** a photo is one shot, so descriptions, text,
   themes and faces work on images too, which is where faces work best.
 
+### Speech: Whisper
+
+Not piloted yet. Every file with speech gets a timecoded transcript, in the
+language that was spoken (Spanish and English alike; the model detects which),
+kept verbatim like on-screen text: evidence, not description. It is how names,
+streets and topics become searchable, since nobody says "medium shot of a man"
+out loud. Voice detection runs first so music-only and silent files are skipped.
+Same rules as the vision model: part of the installer, a setting not code
+(default: Whisper large-v3-turbo, through MLX on a Mac, faster-whisper on NVIDIA),
+and each transcript records which model made it.
+
 ### Models are swappable, not built in
 
 - **Version 1:** which model to use is a setting, never code. What the model is
