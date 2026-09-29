@@ -91,6 +91,9 @@ if (isset($_POST['_newpass'])) {
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
   @media (max-width: 900px)  { .with-side { grid-template-columns: 1fr } }
+  .spin { display:inline-block; width:10px; height:10px; border:2px solid var(--line); border-top-color:var(--accent);
+          border-radius:50%; animation:spin .9s linear infinite; vertical-align:-1px }
+  @keyframes spin { to { transform: rotate(360deg) } }
 </style>
 
 <div class="app" style="grid-template-rows:1fr">
@@ -862,12 +865,26 @@ function drawProxies(p) {
   const el = $('pxState');
   if (!p) { el.textContent = 'Not planned yet. Press Plan to see how many videos need one.'; return; }
   const n = function (x) { return (+x || 0).toLocaleString(); };
-  el.innerHTML = p.state === 'no-ffmpeg'
+  const size = function (gb) { gb = +gb || 0; return gb >= 1000 ? (gb / 1024).toFixed(1) + ' TB' : gb + ' GB'; };
+  const when = p.ago == null ? '' : ' <span class="note">(' + (p.ago < 90 ? 'just now' : Math.round(p.ago / 60) + ' min ago') + ')</span>';
+  // Asked, not started: the runner looks at its list once a minute.
+  if (p.asked) {
+    el.innerHTML = '<span class="spin"></span> <b>' + (p.asked.what === 'proxy-plan' ? 'Plan' : 'Make proxies') + '</b>' +
+      (p.asked.only ? ' for ' + esc(p.asked.only) : ' for the whole archive') + ' · asked ' + p.asked.ago + ' s ago; the archive machine starts it at its next turn (within a minute).';
+    return;
+  }
+  el.innerHTML = p.state === 'planning'
+      ? '<span class="spin"></span> <b>Planning' + (p.only ? ' ' + esc(p.only) : ' the whole archive') + '</b> · ' + esc(p.step || '') +
+        (p.videos ? ' · ' + n(p.seen) + ' of ' + n(p.videos) + ' videos' : '')
+    : p.state === 'no-folder'
+      ? '<span class="warnline" style="display:block">The archive machine found no folder “' + esc(p.only) + '”.</span>'
+    : p.state === 'no-ffmpeg'
       ? '<span class="warnline" style="display:block">This machine has no ffmpeg, the tool that makes video, so it cannot make proxies yet.</span>'
     : p.state === 'planned'
       ? (p.only ? '<b>' + esc(p.only) + '</b>: ' : 'Whole archive: ') +
-        n(p.have) + ' videos already have a proxy · <b>' + n(p.missing) + ' to make</b>, about ' + p.source_tb + ' TB to read · ' +
-        (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software: slow, the hardware encoder was not found')
+        '<b>' + n(p.videos) + ' videos</b> · ' + n(p.have) + ' already have a proxy · <b>' + n(p.missing) + ' to make</b>' +
+        (+p.missing ? ', about ' + size(p.source_gb) + ' to read' : '') + ' · ' +
+        (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software: slow, the hardware encoder was not found') + when
     : p.state === 'building' && p.running
       ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed · ' +
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
@@ -884,13 +901,19 @@ function drawProxies(p) {
 document.querySelectorAll('[data-px]').forEach(function (b) {
   b.onclick = async function () {
     const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '');
-    const where = folder ? ' — only ' + folder : ' — the whole archive';
-    if (!confirm(ASK[what] + (what === 'proxy-stop' ? '' : where))) return;
-    const was = b.textContent; b.disabled = true; b.textContent = 'Asking…';
+    if (what === 'proxy-plan' && !folder) { $('prepSaid').textContent = 'Choose a folder first — Plan looks at one folder.'; return; }
+    if (what === 'proxy-stop' && !b.dataset.sure) {
+      const w = b.textContent; b.dataset.sure = '1'; b.textContent = 'Sure? Stop';
+      setTimeout(function () { if (b.dataset.sure) { delete b.dataset.sure; b.textContent = w; } }, 5000);
+      return;
+    }
+    delete b.dataset.sure;
+    const was = what === 'proxy-stop' ? 'Stop proxies' : b.textContent; b.disabled = true; b.textContent = 'Asking…';
     try {
       const j = await (await fetch('../run.php', { method: 'POST',
         body: new URLSearchParams({ action: what, query: folder }) })).json();
-      b.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓ within a minute';
+      b.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓';
+      if (!j.error) $('pxState').innerHTML = '<span class="spin"></span> Asked — the archive machine starts it within a minute.';
     } catch (e) { b.textContent = 'Could not reach the archive'; }
     setTimeout(function () { b.textContent = was; b.disabled = false; load(); }, 3000);
   };

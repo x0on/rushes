@@ -409,6 +409,12 @@ echo json_encode([
     'proxies'  => (function () use ($WEB) {
         $p = [];
         foreach (@file("$WEB/proxy-status.txt") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $p[$f[0]] = $f[1] ?? ''; }
+        // asked from Manage, waiting for the runner's next turn (within a minute)
+        foreach (glob("$WEB/queue/*.job") ?: [] as $j)
+            if (preg_match('/^ACTION=(proxy-plan|proxy-build)$/m', (string)@file_get_contents($j), $m)) {
+                preg_match('/^QUERY=(.*)$/m', (string)@file_get_contents($j), $q);
+                $p['asked'] = ['what' => $m[1], 'only' => $q[1] ?? '', 'ago' => time() - filemtime($j)];
+            }
         if (!$p) return null;
         $pid = (int)@file_get_contents("$WEB/proxy.pid");
         $p['running'] = $pid > 0 && @file_exists("/proc/$pid");

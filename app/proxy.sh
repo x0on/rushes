@@ -76,11 +76,22 @@ else
 fi
 
 # ---------- what is missing ----------
-[ -f "$INDEX" ] || { echo "no index at $INDEX"; exit 1; }
+# One folder: read the folder itself, so footage that landed since the last
+# full scan counts too. The whole archive: the index of the last scan.
+state "state${TAB}planning" "only${TAB}$ONLY" "step${TAB}listing the videos in the folder"
+if [ -n "$ONLY" ]; then
+    [ -d "$SHARE/$ONLY" ] || { state "state${TAB}no-folder" "only${TAB}$ONLY"; echo "no folder $SHARE/$ONLY"; exit 1; }
+    list() { find "$SHARE/$ONLY" -type f 2>/dev/null; }
+else
+    [ -f "$INDEX" ] || { echo "no index at $INDEX"; exit 1; }
+    list() { cat "$INDEX"; }
+fi
 
-awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" -v only="$ONLY" '
+list | awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" -v only="$ONLY" '
 {
     rel = $0
+    # the index and find both give full paths: make them relative to the share
+    if (index(rel, share "/") == 1) rel = substr(rel, length(share) + 2)
     if (only != "" && index(rel, only "/") != 1) next
     if (rel ~ /^(PROXIES|_duplicates)\//) next
     if (rel ~ /(^|\/)@Recycle\//) next
@@ -93,8 +104,11 @@ awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" -v only="$ONLY" '
 
 # only the ones that do not exist yet — this is what makes it resumable
 : > "$PLAN"
-missing=0; have=0
+missing=0; have=0; seen=0; videos=$(wc -l < "$PLAN.all")
 while IFS="$TAB" read -r src out; do
+    seen=$((seen + 1))
+    [ $((seen % 200)) -eq 0 ] && state "state${TAB}planning" "only${TAB}$ONLY" "step${TAB}checking which already have a proxy" \
+        "seen${TAB}$seen" "videos${TAB}$videos"
     if [ -f "$out" ]; then
         have=$((have + 1))
     else
@@ -108,9 +122,10 @@ echo "encoder: $([ "$HW" = 1 ] && echo 'hardware (QuickSync)' || echo 'software 
 echo "proxies already built: $have"
 echo "proxies to build:      $missing"
 
+sizes() { head -2000 "$PLAN" | while IFS="$TAB" read -r src out; do stat -c %s "$src" 2>/dev/null; done; }
 if [ "$missing" -gt 0 ]; then
     # source bytes of what is missing, to estimate both time and space
-    awk -F"$TAB" '{print $1}' "$PLAN" | head -2000 | xargs -r -d '\n' stat -c %s 2>/dev/null |
+    sizes |
     awk -v n="$missing" '{ s += $1; c++ } END {
         if (c > 0) {
             avg = s / c
@@ -121,10 +136,10 @@ if [ "$missing" -gt 0 ]; then
 fi
 
 if [ "$MODE" != "--build" ]; then
-    src_tb=$(awk -F"$TAB" '{print $1}' "$PLAN" | head -2000 | xargs -r -d '\n' stat -c %s 2>/dev/null |
-             awk -v n="$missing" '{ s += $1; c++ } END { if (c) printf "%.1f", s / c * n / 1099511627776; else print 0 }')
-    state "state${TAB}planned" "only${TAB}$ONLY" "have${TAB}$have" "missing${TAB}$missing" "source_tb${TAB}$src_tb" \
-          "hw${TAB}$HW" "height${TAB}$HEIGHT"
+    src_tb=$(sizes |
+             awk -v n="$missing" '{ s += $1; c++ } END { if (c) printf "%.0f", s / c * n / 1073741824; else print 0 }')
+    state "state${TAB}planned" "only${TAB}$ONLY" "have${TAB}$have" "missing${TAB}$missing" "source_gb${TAB}$src_tb" \
+          "hw${TAB}$HW" "height${TAB}$HEIGHT" "videos${TAB}$videos"
     echo
     echo "nothing encoded. re-run with --build."
     exit 0
