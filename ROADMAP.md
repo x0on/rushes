@@ -81,7 +81,13 @@ description quality. What it taught, to build in:
   the archive, and ask once "this person appears in 312 shots — who is it?".
   Named people (staff, officials, public figures) become searchable; everyone
   else stays an unnamed group that still answers "other shots of this person".
-  Check the face model's licence and the organisation's policy before building.
+  Only the people an organisation chooses are named. The face model must be free for any use:
+  dlib's face recognition model (public domain) or OpenCV's YuNet detector with
+  SFace (MIT / Apache-2.0), not InsightFace, whose trained models are for
+  non-commercial research only.
+- **Time of day from two places:** the camera's own clock (in the file) says
+  morning, afternoon or evening; the model says what the light looks like
+  (sunrise or sunset light, daylight, dusk, night).
 - **Stills use the same pipeline:** a photo is one shot, so descriptions, text,
   themes and faces work on images too, which is where faces work best.
 
