@@ -384,13 +384,15 @@ echo json_encode([
         'folders' => (int)($mac['folders'] ?? 0), 'folders_read' => (int)($mac['folders_read'] ?? 0),
         'copies' => (int)($mac['copies'] ?? 0),
     ] : null,
-    'helper'   => (function () use ($ago, $WEB) {
+    'helper'   => (function () use ($ago, $WEB, $mac, $mac_stale) {
         $hv = helper_volumes(); $ctl = helper_control();
         return [
             'mode'    => helper_mode(),
             'label'   => helper_name(),
             'command' => helper_command(),
-            'seen'    => $hv['at'], 'seen_ago' => $ago($hv['at']), 'fresh' => $hv['fresh'],
+            // Alive if it reported its drives lately OR its live status is fresh:
+            // a slow network share can hold up the drive report for a while.
+            'seen'    => $hv['at'], 'seen_ago' => $ago($hv['at']), 'fresh' => $hv['fresh'] || ($mac && !$mac_stale),
             'how'     => $hv['how'], 'ver' => $hv['ver'],
             // the version on the archive; a helper with another one updates itself
             'current' => substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),

@@ -261,7 +261,7 @@ const tb  = function (b) {
 };
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
-let pane = 'overview', latestTransfer = null;
+let pane = 'overview', latestTransfer = null, quiet = 0;
 
 // ── moving between sections ────────────────────────────────────────────────
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
@@ -753,7 +753,8 @@ async function load() {
   const h = d.helper || {};
   // Only when something is wrong: the helper runs by itself now, so a start
   // command here was a leftover. If it has gone quiet, say so and where to fix it.
-  $('watchhint').innerHTML = h.label && !h.fresh
+  quiet = h.label && !h.fresh ? quiet + 1 : 0;        // twice in a row: never a blip while loading
+  $('watchhint').innerHTML = quiet >= 2
     ? '<div class="warnline">The helper on <b>' + esc(h.label) + '</b> is not running, so nothing copies. ' +
       '<a href="/setup.php">Setup → 04 Helper</a> shows how to install or start it.</div>'
     : '';
