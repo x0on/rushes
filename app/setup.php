@@ -229,8 +229,48 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <?php endif; ?>
           </select></label>
 
+        <?php $aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
+              $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST); ?>
         <label class="f"><span>Address people open Rushes at</span>
-          <input type="text" name="a_url" value="<?= $e($s['archive']['url'] ?? '') ?>"></label>
+          <input type="text" name="a_url" id="aUrl" value="<?= $e($aUrl ?: $here) ?>"></label>
+        <?php if ($aUrl === '' && $here !== ''): ?>
+          <div class="seen">Filled in from the address you opened this page at — press <b>Save settings</b> to keep it.</div>
+        <?php endif; ?>
+        <?php if (filter_var(trim($aHost, '[]'), FILTER_VALIDATE_IP)): ?>
+          <!-- A number can change under everyone's feet; a name usually does not. -->
+          <div class="seen bad" id="addrWarn">This address is a number, and numbers can change.
+            <?= str_starts_with($aHost, '169.254.')
+              ? 'One that starts with 169.254 is one a machine gives itself when nothing on the network hands out addresses — it can come back different after a restart.'
+              : 'Unless it is fixed on the router or on this machine, the network can hand out a different one.' ?>
+            Rushes Helper follows a change by itself, but people's bookmarks do not.
+            <?php if ($byName !== ''): ?>
+              <span id="nameTry" data-name="<?= $e($byName) ?>">Checking whether this machine opens by its name, <b><?= $e($byName) ?></b> …</span>
+            <?php else: ?>
+              To stop it changing, give this machine a fixed address in its network settings.
+            <?php endif; ?>
+          </div>
+          <script>
+            (function () {
+              const el = document.getElementById('nameTry'); if (!el) return;
+              const name = el.dataset.name, ctl = new AbortController();
+              setTimeout(function () { ctl.abort(); }, 4000);
+              fetch(name + '/db/helper.php?hash', { mode: 'no-cors', cache: 'no-store', signal: ctl.signal })
+                .then(function () {
+                  el.innerHTML = '✓ Its name works from this computer: <b></b>. A name keeps working when the number changes. ' +
+                    '<button type="button" class="ghost">Use the name</button>';
+                  el.querySelector('b').textContent = name;
+                  el.querySelector('button').onclick = function () {
+                    document.getElementById('aUrl').value = name;
+                    this.outerHTML = '<b>Filled in ✓ — press Save settings to keep it.</b>';
+                  };
+                })
+                .catch(function () {
+                  el.textContent = 'Its name (' + name + ') does not open from this computer, so the number stays. ' +
+                    'To stop it changing, give this machine a fixed address in its network settings.';
+                });
+            })();
+          </script>
+        <?php endif; ?>
       </div>
 
       <!-- ══ 03 sources ══ -->

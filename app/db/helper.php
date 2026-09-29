@@ -5,6 +5,7 @@
 //   GET  ?hash                                  what the current files are (for updates)
 //   GET  ?app                                   Rushes Helper for Mac, as a zip (from _rushes)
 //   GET  ?install / ?remove                     a Mac, from Terminal: fetch the app and open it, or take it off
+//   GET  ?where                                 the addresses Rushes can be reached at (helpers follow a change)
 //   GET  ?control                               pause, "try again now", folders to skip
 //   GET  ?builtin                               "yes" when this machine should run it (for runner.sh)
 //   POST action=pause|resume|nudge|skip [path]  the buttons in Manage (signed in)
@@ -38,6 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['hash']))    out(helper_hashes());
     if (isset($_GET['control'])) out(helper_control());
     if (isset($_GET['builtin'])) out(helper_mode() === 'built_in' ? 'yes' : 'no', 'text/plain');
+    // Where helpers should find Rushes: the address in Setup, and this machine's
+    // name, which keeps working when its number changes.
+    if (isset($_GET['where'])) out(['url' => rtrim((string)(settings()['archive']['url'] ?? ''), '/'), 'name' => name_url()]);
     if (isset($_GET['app'])) {
         // Built by mac/build.py and put next to the helper on the archive.
         $z = archive_dir() . '/_rushes/Rushes Helper.zip';

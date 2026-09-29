@@ -33,6 +33,10 @@ with everything the final stage needs inside it.
 
 ### Built, not yet proven on real data
 
+- The Rushes address for any installation: Setup fills it in from the address
+  the page was opened at, warns when it is a number that can change and offers
+  the machine's name when that works, and Rushes Helper learns every address
+  Rushes has and follows it to a new one by itself, taking its saved progress along.
 - Tidy-up: moving copied footage onto the organised shelf, recorded and undoable.
 - Skip and "Try again now" during a real failure.
 - Matching earlier copies to their originals: correct, but starts over after a
@@ -62,9 +66,4 @@ with everything the final stage needs inside it.
 
 ## Next small things
 
-- **The Rushes address, for any installation.** Setup fills it in from the
-  address the browser used when it is empty; warns when the address is one that
-  can change (a self-assigned 169.254 address, or one handed out automatically)
-  and offers the machine's name instead; and Rushes Helper learns both the
-  number and the name, so it can follow a change by itself.
 - **Matching that resumes** instead of starting over after a disconnect.

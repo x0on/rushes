@@ -41,6 +41,22 @@ LOG       = HOME / "ingest-copied.tsv"
 def _arg(name):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv[:-1] else None
 NAS_URL   = (_arg("--url") or os.environ.get("NAS_URL") or "http://localhost").rstrip("/")
+ARG_URL   = NAS_URL          # what it was started with; NAS_URL can move on from it
+
+# Where Rushes was last found. The background service's start command is
+# written once, but Rushes' address can change (a new number after a restart,
+# or a name chosen in Setup); the watcher follows it, and remembers here.
+# Only for the address it was started with: set up again for another Rushes,
+# and this is ignored.
+WHERE = HOME / "where.json"
+def _where():
+    try:
+        w = json.loads(WHERE.read_text())
+        return w if w.get("from") == ARG_URL else {"from": ARG_URL}
+    except (OSError, ValueError):
+        return {"from": ARG_URL}
+if "--watch" in sys.argv and _where().get("current"):
+    NAS_URL = _where()["current"]
 
 # ── one source of truth ─────────────────────────────────────────────────────
 # settings.json and rules.json live beside the web root on the archive. Both
@@ -1018,6 +1034,74 @@ def wait(seconds):
             return
 
 
+def answers(url):
+    """Is Rushes at this address? (Not just anything that answers.)"""
+    try:
+        with urllib.request.urlopen(url + "/db/helper.php?hash", timeout=6) as r:
+            return b"ingest.py" in r.read()
+    except Exception:
+        return False
+
+
+def _save_where(w):
+    try:
+        HOME.mkdir(parents=True, exist_ok=True)
+        WHERE.with_suffix(".new").write_text(json.dumps(w, indent=1))
+        os.replace(WHERE.with_suffix(".new"), WHERE)
+    except OSError:
+        pass
+
+
+_learned = [0.0]
+
+def learn_where():
+    """Every few minutes, ask Rushes every address it can be reached at, and
+    keep them. When Setup names a new address and it answers from here, move."""
+    if time.time() - _learned[0] < 300:
+        return
+    _learned[0] = time.time()
+    try:
+        with urllib.request.urlopen(NAS_URL + "/db/helper.php?where", timeout=6) as r:
+            got = json.loads(r.read().decode("utf-8", "replace")) or {}
+    except Exception:
+        return
+    w = _where()
+    known = [got.get("url"), got.get("name"), NAS_URL, ARG_URL] + w.get("known", [])
+    w["known"] = list(dict.fromkeys(u.rstrip("/") for u in known if u))[:6]
+    _save_where(w)
+    want = (got.get("url") or "").rstrip("/")
+    if want and want != NAS_URL and answers(want):
+        move_to(want, "Setup in Rushes has a new address for it")
+
+
+def rushes_elsewhere():
+    """The first other address Rushes answers at, or None."""
+    for u in [ARG_URL] + _where().get("known", []):
+        if u and u != NAS_URL and answers(u):
+            return u
+    return None
+
+
+def move_to(url, why):
+    """Carry on at a new address: this computer's saved progress moves with
+    it, and the helper restarts itself in place pointing there."""
+    for sfx in ("", "-wal", "-shm"):
+        old = HOME / f"transfer-{hashlib.sha256(NAS_URL.encode()).hexdigest()[:16]}.sqlite{sfx}"
+        new = HOME / f"transfer-{hashlib.sha256(url.encode()).hexdigest()[:16]}.sqlite{sfx}"
+        if old.exists() and not new.exists():
+            os.replace(old, new)
+    w = _where(); w["current"] = url
+    w["known"] = list(dict.fromkeys([url] + w.get("known", [])))[:6]
+    _save_where(w)
+    app = Path.home() / "Library" / "Application Support" / "Rushes" / "url"
+    if app.exists():                      # what Rushes Helper's window shows
+        try: app.write_text(url + "\n")
+        except OSError: pass
+    print(f"\n{time.strftime('%H:%M:%S')}  Rushes is now at {url} — {why}. Restarting with the new address …")
+    sys.stdout.flush()
+    os.execv(sys.executable, [sys.executable, "-u"] + sys.argv)
+
+
 _LOCK = None
 try:
     with open(os.path.abspath(__file__), "rb") as _me:
@@ -1133,12 +1217,15 @@ def watch(root, every=20):
     denied = False         # said macOS would not let it in; once
     lost = False           # said the archive was gone; do not say it again
     jobless = False        # said the saved transfer could not be read; once
+    unreached = 0          # tries in a row Rushes did not answer
     while True:
         update_self()                  # between steps only; restarts itself if it did
+        learn_where()                  # and follows Rushes to a new address, if it has one
         checkpoints().flush()          # search updates still waiting, if any
         try:
             with urllib.request.urlopen(QUEUE_URL, timeout=15) as r:
                 body = r.read().decode("utf-8", "replace")
+            unreached = 0
         except urllib.error.HTTPError as e:
             # 404 means the file is not there, which is what an empty queue
             # looks like before anything has ever been ticked. Not an error.
@@ -1148,6 +1235,11 @@ def watch(root, every=20):
             body = ""
         except Exception as e:
             print(f"  cannot reach the NAS ({e}) — trying again in {every}s")
+            unreached += 1
+            if unreached >= 3:         # a minute or so: not a blip. Is it somewhere else now?
+                u = rushes_elsewhere()
+                if u:
+                    move_to(u, f"it stopped answering at {NAS_URL}")
             wait(every); continue
 
         want = []
@@ -1411,6 +1503,9 @@ def main():
     if a.selftest: return selftest()
     if a.watch:
         if not SETTINGS:
+            u = rushes_elsewhere()
+            if u:
+                move_to(u, f"it does not answer at {NAS_URL}")
             sys.exit(f"Cannot reach Rushes at {NAS_URL}.\n"
                      "Copy the start command from Setup in Rushes — it has the right --url.")
         only_one()

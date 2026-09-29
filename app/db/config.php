@@ -313,6 +313,23 @@ function helper_command(): string {
 
 // A command on one line, with a Copy button beside it. Never wrapped: a
 // command broken across two lines is how a stray space gets pasted into it.
+// This machine by name (http://nas.local), which keeps working on a local
+// network when its number changes. Empty when the machine has no usable name.
+function name_url(): string {
+    $h = strtolower(explode('.', (string)gethostname())[0]);
+    if (!preg_match('/^[a-z0-9-]+$/', $h) || $h === 'localhost') return '';
+    $https = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    $port = (int)($_SERVER['SERVER_PORT'] ?? 80);
+    return ($https ? 'https' : 'http') . "://$h.local" . (in_array($port, [80, 443, 0], true) ? '' : ":$port");
+}
+
+// The address this page was opened at: a good first guess for Setup.
+function here_url(): string {
+    $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+    if (!preg_match('/^[A-Za-z0-9.:\[\]-]+$/', $host)) return '';
+    return ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . "://$host";
+}
+
 function cmd_block(string $cmd): string {
     $e = htmlspecialchars($cmd);
     return '<div class="cmd"><code>' . $e . '</code>'

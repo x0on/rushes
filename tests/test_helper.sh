@@ -25,6 +25,7 @@ check 'call GET "{\"app\":\"\"}" | grep -q "not on the archive yet"' 'no app on 
 printf 'PK-fake' > "$ROOT/archive/_rushes/Rushes Helper.zip"
 check 'call GET "{\"app\":\"\"}" | grep -q "PK-fake"' 'the app is served from the archive'
 check 'call GET "{\"remove\":\"\"}" | grep -q "launchctl bootout"' 'remove script takes it off again'
+check 'call GET "{\"where\":\"\"}" | grep -q "\"url\":\"http://nas.test\""' 'helpers can ask where Rushes is'
 want=$(sha256sum "$ROOT/archive/_rushes/ingest.py" | cut -d" " -f1)
 check 'call GET "{\"hash\":\"\"}" | grep -q "$want"' 'the helper can compare itself with the archive copy'
 check 'call POST "{}" "{\"action\":\"pause\"}" | grep -q "sign in"' 'buttons need the admin password or a session'

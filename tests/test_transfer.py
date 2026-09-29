@@ -213,6 +213,60 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(args[args.index('--root')+1], str(self.archive))
 
 
+class AddressTests(unittest.TestCase):
+    """The helper follows Rushes to a new address, and its saved progress goes with it."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        spec = importlib.util.spec_from_file_location('rushes_ingest_where', APP / 'ingest.py')
+        self.m = importlib.util.module_from_spec(spec)
+        with patch('urllib.request.urlopen', side_effect=OSError('offline')): spec.loader.exec_module(self.m)
+        m = self.m
+        m.HOME = Path(self.tmp.name); m.WHERE = m.HOME / 'where.json'
+        m.NAS_URL = m.ARG_URL = 'http://169.254.1.1'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def key(self, url):
+        import hashlib
+        return self.m.HOME / f"transfer-{hashlib.sha256(url.encode()).hexdigest()[:16]}.sqlite"
+
+    def test_stopped_answering_moves_to_the_name_and_keeps_progress(self):
+        m = self.m
+        m._save_where({'from': m.ARG_URL, 'known': ['http://169.254.1.1', 'http://nas.local']})
+        self.key('http://169.254.1.1').write_text('progress')
+        with patch.object(m, 'answers', side_effect=lambda u: u == 'http://nas.local'):
+            self.assertEqual(m.rushes_elsewhere(), 'http://nas.local')
+        class Restarted(Exception): pass
+        with patch('os.execv', side_effect=Restarted), patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(Restarted):
+                m.move_to('http://nas.local', 'test')
+        self.assertEqual(self.key('http://nas.local').read_text(), 'progress')
+        self.assertEqual(m._where()['current'], 'http://nas.local')
+
+    def test_memory_of_another_rushes_is_ignored(self):
+        m = self.m
+        m.WHERE.write_text(json.dumps({'from': 'http://other', 'current': 'http://elsewhere'}))
+        self.assertNotIn('current', m._where())
+
+    def test_a_new_address_in_setup_is_followed_only_if_it_answers(self):
+        m = self.m
+        class R(io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+        where = lambda *a, **k: R(json.dumps({'url': 'http://nas.local', 'name': 'http://nas.local'}).encode())
+        with patch('urllib.request.urlopen', side_effect=where), patch.object(m, 'answers', return_value=False), \
+             patch.object(m, 'move_to') as moved:
+            m.learn_where()
+        moved.assert_not_called()
+        self.assertIn('http://nas.local', m._where()['known'])
+        m._learned[0] = 0
+        with patch('urllib.request.urlopen', side_effect=where), patch.object(m, 'answers', return_value=True), \
+             patch.object(m, 'move_to') as moved:
+            m.learn_where()
+        moved.assert_called_once()
+
+
 class RunnerTests(unittest.TestCase):
     def test_idle_runner_requests_search_reconciliation_without_browser(self):
         import subprocess
