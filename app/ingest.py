@@ -526,6 +526,9 @@ def remember_shares():
             srv = server_of(path.rstrip("/"))
             if srv.startswith("//"):
                 known[path.rstrip("/")] = srv
+                known.pop("not a network share: " + path.rstrip("/"), None)
+            else:                   # said, so it is clear why this one cannot be reconnected
+                known["not a network share: " + path.rstrip("/")] = srv or "not in the list of mounted drives"
     try:
         HOME.mkdir(parents=True, exist_ok=True)
         SHARES.write_text(json.dumps(known, indent=1))
@@ -540,6 +543,8 @@ def share_of(path):
     except (OSError, ValueError):
         return None, None
     for root, srv in known.items():
+        if not srv.startswith("//"):
+            continue
         if path == root or path.startswith(root + os.sep) or root.startswith(path + os.sep):
             return root, srv
     return None, None
