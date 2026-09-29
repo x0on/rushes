@@ -92,7 +92,7 @@ description quality. What it taught, to build in:
 
 ### Speech: Whisper
 
-Not piloted yet. Every file with speech gets a timecoded transcript, in the
+No pilot needed: it goes straight into the analysis build. Every file with speech gets a timecoded transcript, in the
 language that was spoken (Spanish and English alike; the model detects which),
 kept verbatim like on-screen text: evidence, not description. It is how names,
 streets and topics become searchable, since nobody says "medium shot of a man"
