@@ -10,13 +10,14 @@
 require_once __DIR__ . '/db/config.php';
 $NAV = $NAV ?? '';
 ?>
-<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/tokens.css?v=<?= @filemtime(__DIR__ . '/tokens.css') ?>">
 <style>
   .tab-i { display: inline-flex; align-items: center; gap: 7px }
   .tab-i svg { width: 15px; height: 15px; flex: none }
   .topbar .pulse { padding-right: 14px; border-right: 1px solid var(--line-soft) }
 </style>
-<link rel="icon" type="image/svg+xml" href="<?= favicon_href() ?>">
+<link rel="icon" type="image/png" sizes="64x64" href="<?= favicon_href() ?>">
+<link rel="apple-touch-icon" href="<?= home_icon_href() ?>">
 <script>
   // Theme before first paint, so a dark page never flashes white on the way in.
   try { var t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; }
@@ -67,23 +68,55 @@ $NAV = $NAV ?? '';
       .then(function (r) { return r.json(); })
       .then(function (s) {
         if (s.error) { $('hDot').className = 'dot off'; $('hWhat').textContent = 'needs setting up'; return; }
-        // A copy on the helper counts as running. Saying "idle" while a
-        // transfer is moving is the one lie this indicator must never tell.
-        var c = s.copy, copying = c && (c.phase === 'copying' || c.phase === 'tidying') && !c.stale;
-        var busy = !!s.running || copying;
-        $('hDot').className = 'dot' + (busy ? ' busy' : (s.runner && s.runner.ok ? '' : ' off'));
-        $('hWhat').textContent = s.running
-          ? (s.progress ? s.running + ' · ' + s.progress.pct + '%' : s.running)
-          : copying
-          ? (c.phase === 'tidying' ? 'tidying up' : 'copying ' + (c.source || '').split('/').pop())
-            + ' · ' + (c.of ? Math.round(c.copied / c.of * 100) : 0) + '%'
-          : (c && c.phase === 'copying' && c.stale) ? 'a copy stopped'
+        // What the helper is doing counts as running. Saying "nothing running"
+        // while a transfer is moving is the one lie this must never tell.
+        var h = helperNow(s.copy), c = s.copy;
+        var busy = !!s.running || (h && h.busy);
+        $('hDot').className = 'dot' + (h && h.bad ? ' off' : busy ? ' busy' : (s.runner && s.runner.ok ? '' : ' off'));
+        $('hWhat').textContent = h ? h.short
+          : s.running ? (s.progress ? s.running + ' · ' + s.progress.pct + '%' : s.running)
+          : (c && c.stale && /copying|looking|tracing|tidying/.test(c.phase)) ? 'the helper went quiet'
           : (s.runner && s.runner.ok ? 'nothing running' : 'not picking up jobs');
+        $('hPulse').title = h ? h.title + (h.facts ? ' — ' + h.facts.map(function (f) { return f[0] + ' ' + f[1]; }).join(', ') : '') : 'what is moving right now';
       })
       .catch(function () { $('hDot').className = 'dot off'; $('hWhat').textContent = 'no answer'; });
   }
-  paint(); setInterval(paint, 10000);
+  paint(); setInterval(paint, 5000);
 })();
+
+// What the helper is doing, in words and numbers, from state.php's "copy".
+// One place, so the top bar and Overview never disagree. null = nothing live.
+window.helperNow = function (c) {
+  if (!c || c.stale || !c.phase) return null;
+  var num  = function (n) { return (n || 0).toLocaleString(); };
+  var size = function (b) { b = b || 0; return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB'; };
+  var speed = function (r) { return r >= 1e9 ? (r / 1e9).toFixed(1) + ' GB/s' : Math.round(r / 1e6) + ' MB/s'; };
+  var left = function (t) { return t >= 5400 ? Math.round(t / 3600) + ' h' : t >= 90 ? Math.round(t / 60) + ' min' : 'under 1 min'; };
+  var name = c.label || (c.source || '').split('/').pop();
+  if (c.phase === 'copying') {
+    var pct = c.bytes ? Math.min(100, Math.floor(c.done_bytes / c.bytes * 100)) : (c.of ? Math.floor(c.copied / c.of * 100) : 0);
+    return {busy: true, pct: pct, file: c.file, title: 'Copying ' + name,
+      short: 'copying ' + name + ' · ' + pct + '%' + (c.rate ? ' · ' + speed(c.rate) : ''),
+      facts: [[num(c.copied) + ' / ' + num(c.of), 'files'], [size(c.done_bytes) + ' / ' + size(c.bytes), 'copied'],
+              [c.rate ? speed(c.rate) : '—', 'speed'], [c.eta != null && c.rate ? left(c.eta) : '—', 'left']]};
+  }
+  if (c.phase === 'looking') return {busy: true, title: 'Checking what ' + name + ' still needs',
+      short: 'checking ' + name + ' · ' + num(c.checked) + ' files',
+      facts: [[num(c.checked), 'files checked'], [num(c.new) + ' · ' + size(c.bytes), 'to copy'], [num(c.already), 'already here']]};
+  if (c.phase === 'tracing') return {busy: true, title: 'Matching earlier copies to their originals on ' + name,
+      short: 'matching earlier copies · ' + num(c.checked),
+      facts: c.step === 'matching'
+        ? [[num(c.checked), 'copies checked'], [num(c.traced), 'traced'], [num(c.untraced), 'no original found'], [num(c.originals), 'originals listed']]
+        : [[num(c.checked), 'originals listed so far'], ['reading only', 'nothing moves']]};
+  if (c.phase === 'tidying') {
+    var p2 = c.of ? Math.floor(c.copied / c.of * 100) : 0;
+    return {busy: true, pct: p2, title: 'Tidying up', short: 'tidying up · ' + p2 + '%',
+      facts: [[num(c.copied) + ' / ' + num(c.of), 'files moved']]};
+  }
+  if (c.phase === 'blocked') return {bad: true, short: 'copying stopped · source gone', title: c.note || 'The helper cannot see the source'};
+  if (c.phase === 'stopped') return {bad: true, short: 'copying paused · archive nearly full', title: c.note || ''};
+  return null;
+};
 
 // Copy anything, from any page. Every copy says it happened — or says what to
 // do instead, when the browser would not let it.

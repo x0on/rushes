@@ -101,20 +101,51 @@ def history(kind, source, files, byts, secs, note=""):
         pass
 
 
+_last_push = [0.0, ""]
+
+def _push(text):
+    try:
+        body = urllib.parse.urlencode({"status": text}).encode()
+        urllib.request.urlopen(NAS_URL + "/db/status.php", data=body, timeout=5).read()
+    except Exception:
+        pass        # the file on the share still gets there, within a minute
+
+
 def status(**kw):
+    # The same moment as a plain count of seconds ('ts'). The archive may be set
+    # to another time zone than this computer — a QNAP often ships on Taipei
+    # time — and read "15:08" as twelve hours ago. A count cannot be misread.
+    text = (f"at\t{time.strftime('%Y-%m-%d %H:%M:%S')}\nts\t{int(time.time())}\n"
+            + "".join(f"{k}\t{v}\n" for k, v in kw.items()))
     try:
         STATUS.mkdir(parents=True, exist_ok=True)
         with open(STATUS / "ingest-status.tsv", "w") as f:
-            f.write(f"at\t{time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            # The same moment as a plain count of seconds. The archive may be set
-            # to another time zone than this computer — a QNAP often ships on
-            # Taipei time — and read "15:08" as twelve hours ago. A count cannot
-            # be misread.
-            f.write(f"ts\t{int(time.time())}\n")
-            for k, v in kw.items():
-                f.write(f"{k}\t{v}\n")
+            f.write(text)
     except OSError:
         pass        # the share may be unmounted; never let reporting stop a copy
+    # And straight to Rushes, so the pages show it live instead of when the
+    # archive next copies the file over. A change of phase is sent at once;
+    # progress at most every two seconds, without ever holding the copy up.
+    phase = str(kw.get("phase", ""))
+    if phase != _last_push[1]:
+        _last_push[:] = [time.time(), phase]; _push(text)
+    elif time.time() - _last_push[0] >= 2:
+        _last_push[0] = time.time()
+        threading.Thread(target=_push, args=(text,), daemon=True).start()
+
+
+class Speed:
+    """Bytes per second over the last half minute: steady enough to read,
+    quick enough to show a slow file or a busy network."""
+    def __init__(self):
+        self.marks = [(time.time(), 0)]
+    def add(self, done):
+        now = time.time()
+        self.marks.append((now, done))
+        self.marks = [m for m in self.marks if now - m[0] <= 30] or self.marks[-1:]
+    def rate(self):
+        (t0, b0), (t1, b1) = self.marks[0], self.marks[-1]
+        return int((b1 - b0) / (t1 - t0)) if t1 - t0 >= 1 else 0
 MEDIA = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d",
          ".wav", ".aif", ".aiff", ".jpg", ".jpeg", ".png", ".tif", ".tiff",
          ".psd", ".ai", ".prproj", ".aep"}
@@ -503,10 +534,17 @@ def needs_trace(src_root, archive):
     names = {s.get("label") for s in (SETTINGS.get("sources") or [])}
     if not [t for t in tops if t not in names]:
         return False
+    # Only a trace that got to the end counts. One stopped part-way (Ctrl-C,
+    # a sleeping Mac) left files unmatched, and those would be copied again.
     for f in ORIGIN.glob("*.tsv") if ORIGIN.exists() else []:
-        head = open(f, errors="replace").read(2000)
-        if "# kind\ttraced" in head and f"# source root\t{src_root}\n" in head:
-            return False
+        with open(f, "rb") as fh:
+            head = fh.read(2000).decode("utf-8", "replace")
+            if ("# kind\ttraced" not in head or f"# source root\t{src_root}\n" not in head
+                    or f"# into\t{archive}\n" not in head):
+                continue
+            fh.seek(max(0, os.path.getsize(f) - 200))
+            if b"\n# finished\t" in fh.read():
+                return False
     return True
 
 
@@ -538,6 +576,7 @@ def trace(src_root, archive):
             try: by_size[os.path.getsize(p)].append(p); n += 1
             except OSError: pass
             if n % 2000 == 0: print(f"  {n:,} originals listed")
+            if n % 50 == 0: status(phase="tracing", source=src_root, step="listing", checked=n)
     print(f"  {n:,} originals listed\n")
 
     # Everything in the archive's copied area EXCEPT the exact-copy folders,
@@ -557,9 +596,13 @@ def trace(src_root, archive):
                     match = c; break
             if match: o.add("traced", match, p, size, "copied before the record existed; matched by content")
             else:     o.add("untraced", "", p, size, "no identical original found")
+            if i % 20 == 0:
+                status(phase="tracing", source=src_root, step="matching", checked=i,
+                       traced=o.n["traced"], untraced=o.n["untraced"], originals=n)
             if i % 500 == 0:
                 print(f"  {i:,} checked — {o.n['traced']:,} traced, {o.n['untraced']:,} not "
                       f"({time.time() - t0:.0f}s)")
+    o.f.write(f"# finished\t{time.strftime('%Y-%m-%d %H:%M')}\n")
     o.close(); save_cache()
     tn, un = o.n['traced'], o.n['untraced']
     print(f"\n{tn:,} file{'' if tn == 1 else 's'} traced to {'its' if tn == 1 else 'their'} original, "
@@ -675,7 +718,7 @@ def tidy(plan_id):
             maps.append((f[1].rstrip("/\\"), to))
     maps.sort(key=lambda m: -len(m[0]))          # the most specific line wins
 
-    done = {l.strip() for l in open(DONE) if l.strip()} if DONE.exists() else set()
+    done = {l.rstrip("\n") for l in open(DONE) if l.strip()} if DONE.exists() else set()
     busy = [f[1].rstrip("/\\") for f in (l.split("\t") for l in queue.splitlines())
             if len(f) >= 2 and f[0] == "copy" and f[1] not in done]
     inside = lambda p, d: p == d or p.startswith(d + os.sep)
@@ -837,7 +880,7 @@ def sections(roots, fresh=False):
     """
     done = set()
     if DONE.exists():
-        done = {l.strip() for l in open(DONE) if l.strip()}
+        done = {l.rstrip("\n") for l in open(DONE) if l.strip()}
 
     STATUS.mkdir(parents=True, exist_ok=True)
     listing = STATUS / "ingest-sections.tsv"
@@ -906,6 +949,19 @@ FLOOR = (int(os.environ["FLOOR_GB"]) * 1024 ** 3 if os.environ.get("FLOOR_GB")
 
 
 def free_bytes(path=NAS_MOUNT):
+    """Free space on the archive, as the archive itself counts it. Over SMB a
+    Mac misreads a volume this big — the block counts wrap, 'used' comes back
+    negative and 15 TB free reads as 3 TB — so an external helper asks Rushes,
+    which reads df on its own disk every minute. The share's own figure is
+    only the fallback."""
+    if not BUILT_IN:
+        try:
+            with urllib.request.urlopen(NAS_URL + "/db/state.php", timeout=15) as r:
+                free = int(json.loads(r.read().decode("utf-8", "replace"))["disk"]["free"])
+            if free > 0:
+                return free
+        except Exception:
+            pass
     try:
         st = os.statvfs(path)
         return st.f_bavail * st.f_frsize
@@ -919,6 +975,16 @@ def watch(root, every=20):
     last = None
     blocked = False        # said the source was gone; do not say it again
     threading.Thread(target=report_forever, daemon=True).start()
+    # A copy that runs overnight must not stop because the Mac dozed off: the
+    # network drops with it, and the archive and the source both unmount.
+    # caffeinate keeps it awake exactly as long as this window runs.
+    if sys.platform == "darwin":
+        try:
+            subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+            print("Keeping this Mac awake while the helper runs (the screen can still sleep).\n")
+        except OSError:
+            pass
+    lost = False           # said the archive was gone; do not say it again
     while True:
         try:
             with urllib.request.urlopen(QUEUE_URL, timeout=15) as r:
@@ -954,12 +1020,12 @@ def watch(root, every=20):
 
         done = set()
         if DONE.exists():
-            done = {l.strip() for l in open(DONE) if l.strip()}
+            done = {l.rstrip("\n") for l in open(DONE) if l.strip()}
         # A split is asked for once. Without this it would be re-run every pass,
         # for ever, and nothing queued behind it would ever get copied.
         listed = set()
         if LISTED.exists():
-            listed = {l.strip() for l in open(LISTED) if l.strip()}
+            listed = {l.rstrip("\n") for l in open(LISTED) if l.strip()}
 
         # If EVERY queued folder has vanished, the source is gone — the drive
         # unmounted, the server rebooted, the network dropped. That is not a
@@ -975,19 +1041,38 @@ def watch(root, every=20):
         copies = [p for v, p, _ in pending if v not in ("tidy", "untidy")]
         gone = [p for p in copies if not os.path.isdir(p)]
         if copies and len(gone) == len(copies):
-            root = os.path.commonpath(gone) if len(gone) > 1 else os.path.dirname(gone[0])
+            # Its own name: this used to reuse `root`, which is the ARCHIVE — so
+            # once a source had gone missing, every copy after it was aimed at
+            # the source instead of the archive.
+            missing = os.path.commonpath(gone) if len(gone) > 1 else os.path.dirname(gone[0])
             if not blocked:
-                print(f"\n*** STOPPED: cannot see {root}")
+                print(f"\n*** STOPPED: cannot see {missing}")
                 print("    No copy can run. Re-mount it in Finder and this carries")
                 print("    on by itself — nothing is lost, and part-copied folders resume.")
                 blocked = True
-            status(phase="blocked", source=root,
-                   note=f"cannot see {root} — waiting for it to come back")
+            status(phase="blocked", source=missing,
+                   note=f"cannot see {missing} — waiting for it to come back")
             if len(copies) == len(pending):
                 time.sleep(every); continue
         elif blocked:
             print(f"\n{time.strftime('%H:%M:%S')}  source is back — carrying on")
             blocked = False
+
+        # The archive itself going away — VIDEO unmounted — stops everything,
+        # this program's own steps included, since they are read from it.
+        # Say so once, keep telling the page, and carry on when it is back.
+        if not os.path.isdir(STATUS):
+            if not lost:
+                print(f"\n*** STOPPED: cannot see the archive at {NAS_MOUNT}")
+                print("    Re-mount it in Finder (Go → Connect to Server) and this carries")
+                print("    on by itself — nothing is lost, and part-copied folders resume.")
+                lost = True
+            status(phase="blocked", source=NAS_MOUNT,
+                   note=f"cannot see the archive at {NAS_MOUNT} — waiting for it to come back")
+            time.sleep(every); continue
+        if lost:
+            print(f"\n{time.strftime('%H:%M:%S')}  the archive is back — carrying on")
+            lost = False
 
         did = False
         for verb, path, into in want:
@@ -1057,12 +1142,18 @@ def watch(root, every=20):
 def run_self(*args):
     """Run one section in its own process, so a failure cannot stop the watch."""
     cmd = [sys.executable, os.path.abspath(__file__), *args, "--url", NAS_URL]
+    t0 = time.time()
     try:
-        subprocess.run(cmd, check=False)
+        rc = subprocess.run(cmd, check=False).returncode
     except KeyboardInterrupt:
         raise
     except Exception as e:
-        print(f"  that section failed to start: {e}")
+        print(f"  that section failed to start: {e}"); rc = -1
+    # A step that fails the moment it starts would otherwise be retried at
+    # once, for ever, as fast as the machine can go. Wait before the next try.
+    if rc not in (0, 130) and time.time() - t0 < 10:
+        print("  that step stopped straight away — trying again in a minute")
+        time.sleep(60)
 
 
 def main():
@@ -1109,6 +1200,14 @@ def main():
     if (a.sections or a.source or a.trace or a.tidy or a.untidy) and not SETTINGS:
         sys.exit(f"Cannot reach Rushes at {NAS_URL} — nothing copied.\n"
                  "Stop the helper (Ctrl-C) and start it again with the command from Setup.")
+    # The one boundary every copy must respect: it lands inside the archive.
+    # Whatever went wrong upstream, a copy aimed anywhere else stops here.
+    inside = lambda p: os.path.abspath(p) == os.path.abspath(NAS_MOUNT) or \
+        os.path.abspath(p).startswith(os.path.abspath(NAS_MOUNT) + os.sep)
+    for where in ([a.into] if a.into else [a.root] if (a.source or a.trace) else []):
+        if not inside(where):
+            print(f"Refused: {where} is not inside the archive ({NAS_MOUNT}). Nothing copied.")
+            sys.exit(1)
     if a.trace:
         HOME.mkdir(exist_ok=True); load_cache()
         return trace(a.trace, a.root)
@@ -1141,8 +1240,10 @@ def main():
     new = dups = 0; new_bytes = dup_bytes = 0
     t0 = time.time()
     known = {} if a.into else load_origins()
+    walked = 0
     with open(PLAN, "w") as plan:
         for i, src in enumerate(walk(a.source, everything=True), 1):
+            walked = i
             try: size = os.path.getsize(src)
             except OSError: continue
             # A card that spans several days goes in as one folder per day:
@@ -1167,9 +1268,26 @@ def main():
             if i % 500 == 0:
                 print(f"  {i:,} checked — {new:,} new, {dups:,} already here "
                       f"({time.time() - t0:.0f}s)")
-                status(phase="looking", source=a.source, checked=i, new=new,
+            if i % 50 == 0:              # status() itself keeps this to one every 2 s
+                status(phase="looking", source=a.source, label=label, checked=i, new=new,
                        already=dups, new_bytes=new_bytes)
     save_cache()
+
+    # A folder that had files when it was listed, and now shows none, is a
+    # share that came back wrong (half-mounted, or renamed by the Mac) — not
+    # an empty folder. Marking it done would skip it for ever.
+    if not a.into and walked == 0:
+        had = 0
+        for l in open(STATUS / "ingest-sections.tsv", errors="replace") if (STATUS / "ingest-sections.tsv").exists() else []:
+            f = l.rstrip("\n").split("\t")
+            if len(f) > 2 and f[0] == "section" and f[1] == a.source.rstrip("/") and f[2].isdigit():
+                had = int(f[2])
+        if had:
+            print(f"\n*** {a.source} shows no files, but it had {had:,} when it was listed.")
+            print("    Not marking it done. Check the share is connected properly (eject and")
+            print("    connect it again in Finder); this folder is tried again after that.")
+            status(phase="blocked", source=a.source, note=f"{os.path.basename(a.source.rstrip('/'))} shows no files — check the share")
+            sys.exit(1)
 
     gb = lambda b: f"{b / 1099511627776:.2f} TB" if b > 1e12 else f"{b / 1073741824:.0f} GB"
     print(f"\n{new:,} files to copy ({gb(new_bytes)})")
@@ -1195,6 +1313,13 @@ def main():
         f = line.rstrip("\n").split("\t")
         if f[0] == "skip":               # identical file already in the archive
             o.add("already", f[2], f[3], f[1], "not copied — this is where it already is")
+    done_b, speed, shown = 0, Speed(), [0.0]
+    def progress(name, force=False):
+        if not force and time.time() - shown[0] < 2: return
+        shown[0] = time.time(); speed.add(done_b); r = speed.rate()
+        status(phase="copying", source=a.source, label=label, copied=copied, failed=failed,
+               of=new, new_bytes=new_bytes, done_bytes=done_b, rate=r,
+               eta=int((new_bytes - done_b) / r) if r else "", file=name)
     with open(LOG, "w") as log:
         for line in open(PLAN):
             f = line.rstrip("\n").split("\t")
@@ -1202,13 +1327,22 @@ def main():
             size, src, dest = int(f[1]), f[2], f[3]
             if os.path.exists(dest):
                 log.write(f"EXISTS\t{dest}\n")
-                o.add("copied", src, dest, size, "there from an earlier run"); continue
+                o.add("copied", src, dest, size, "there from an earlier run")
+                done_b += size; continue
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             try:
                 # copy to a temp name, verify the size, then put it in place —
                 # so an interrupted transfer never looks like a finished file
                 tmp = dest + ".part"
-                shutil.copy2(src, tmp)
+                name = os.path.basename(src)
+                progress(name, force=True)
+                with open(src, "rb") as fi, open(tmp, "wb") as fo:
+                    while True:
+                        buf = fi.read(8 << 20)
+                        if not buf: break
+                        fo.write(buf); done_b += len(buf)
+                        progress(name)
+                shutil.copystat(src, tmp)
                 if os.path.getsize(tmp) != size:
                     os.remove(tmp); raise IOError("size mismatch after copy")
                 os.rename(tmp, dest)
@@ -1219,9 +1353,9 @@ def main():
                 log.write(f"FAILED\t{src}\t{e}\n"); failed += 1
                 o.add("failed", src, "", size, str(e))
             if (copied + failed) % 50 == 0:
-                print(f"  {copied:,} copied, {failed} failed")
-                status(phase="copying", source=a.source, label=label, copied=copied,
-                       failed=failed, of=new, new_bytes=new_bytes)
+                r = speed.rate()
+                print(f"  {copied:,} copied, {failed} failed"
+                      + (f" — {r / 1e6:.0f} MB/s" if r else ""))
     print(f"\ncopied {copied:,}, failed {failed}")
     o.close()
     top = a.into or os.path.join(mirror, os.path.relpath(a.source, src_root))

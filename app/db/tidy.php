@@ -140,6 +140,7 @@ function runs(): array {
             if (($p[4] ?? '') === "the folder's note\n") continue;      // a note is not footage
             if (isset($n[$p[0]])) { $n[$p[0]]++; if ($p[0] === 'moved') $b += (int)($p[3] ?? 0); }
         }
+        if (!$n['moved'] && !$n['skipped'] && !$n['failed']) continue;    // found nothing to move: not worth a line
         $name = basename($f);
         $out[] = ['record' => $name, 'when' => filemtime($f), 'ago' => ago_words(filemtime($f)),
                   'moved' => $n['moved'], 'left' => $n['skipped'] + $n['failed'], 'bytes' => $b,
