@@ -278,8 +278,8 @@ def transcribe(path, model):
 
 
 # ── one file ────────────────────────────────────────────────────────────────
-def analyse(path, store, vision, whisper_model, themes, force, n, of):
-    fp = fingerprint(path)
+def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None):
+    fp = fingerprint(path)                  # always the original: that is what search finds
     out = store / fp[:2] / f"{fp}.json"
     pid = prompt_id(themes)
     if out.exists() and not force:
@@ -295,18 +295,21 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of):
             pass
     ext = path.suffix.lower()
     t0 = time.time()
-    duration, has_audio, has_video, clock = (0.0, False, True, "") if ext in IMAGE else probe(path)
+    src = proxy or path                     # the pictures and sound are read from the proxy when there is one
+    duration, has_audio, has_video, clock = (0.0, False, True, "") if ext in IMAGE else probe(src)
+    if proxy:                               # the camera clock is in the original
+        clock = probe(path)[3] or clock
     thumbs = store / fp[:2] / fp
     thumbs.mkdir(parents=True, exist_ok=True)
     rec = {"version": VERSION, "fingerprint": fp, "file": str(path), "seen_at": [str(path)],
            "kind": "image" if ext in IMAGE else "audio" if ext in AUDIO else "video",
            "duration": round(duration, 2), "camera_clock": clock, "part_of_day": part_of_day(clock),
            "model": vision.name, "prompt": pid, "whisper": "", "analysed": "",
-           "shots": [], "speech": None, "failed_shots": 0}
+           "shots": [], "speech": None, "failed_shots": 0, "read_from": "proxy" if proxy else "original"}
     print(f"[{n}/{of}] {path.name}", flush=True)
 
     if ext in IMAGE or (ext not in AUDIO and has_video):
-        cuts = [(0.0, 0.0)] if ext in IMAGE else shots_of(path, duration)
+        cuts = [(0.0, 0.0)] if ext in IMAGE else shots_of(src, duration)
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             for i, (a, b) in enumerate(cuts):
@@ -319,7 +322,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of):
                     frames = [str(f)] if f.exists() else []
                 else:
                     for k, at in enumerate((a + span * 0.35, a + span * 0.7)):
-                        if frame(path, at, td / f"f{k}.jpg"):
+                        if frame(src, at, td / f"f{k}.jpg"):
                             frames.append(str(td / f"f{k}.jpg"))
                 if not frames:
                     continue
@@ -339,7 +342,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of):
     if whisper_model and (ext in AUDIO or has_audio):
         say(file=path.name, n=n, of=of, step="speech")
         try:
-            rec["speech"] = transcribe(path, whisper_model)
+            rec["speech"] = transcribe(src, whisper_model)
             rec["whisper"] = whisper_model
         except Exception as e:
             print(f"    could not transcribe ({e})")
@@ -353,6 +356,19 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of):
           + (f", {len(rec['speech']['segments'])} lines of speech ({rec['speech']['language']})" if rec["speech"] else "")
           + (f", {rec['failed_shots']} could not be read" if rec["failed_shots"] else ""), flush=True)
     return "done"
+
+
+def proxy_of(path, archive, proxies):
+    """The proxy made for an original, if there is one: same path under the
+    proxies folder, as .mp4. Reading it is several times faster than reading
+    4K MXF over the network, and describes the same pictures and sound."""
+    if not archive or not proxies:
+        return None
+    p, a = str(path), str(archive).rstrip("/")
+    if not p.startswith(a + "/"):
+        return None
+    cand = Path(proxies) / Path(p[len(a) + 1:]).with_suffix(".mp4")
+    return cand if cand.exists() and cand.stat().st_size > 0 else None
 
 
 def media_under(target):
@@ -385,6 +401,8 @@ def main():
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--whisper", default=DEFAULT_WHISPER, help="'' to skip speech")
     ap.add_argument("--force", action="store_true", help="describe again even if already done")
+    ap.add_argument("--archive", default="", help="the archive root, to find each file's proxy")
+    ap.add_argument("--proxies", default="", help="where the proxies are (same paths, as .mp4)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -402,7 +420,8 @@ def main():
     counts = {"done": 0, "already": 0, "failed": 0}
     for n, f in enumerate(files, 1):
         try:
-            counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files))] += 1
+            counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
+                           proxy_of(f, a.archive, a.proxies))] += 1
         except Exception as e:                       # one bad file never stops the folder
             counts["failed"] += 1
             print(f"    could not describe {f.name}: {e}", flush=True)
@@ -434,6 +453,12 @@ def selftest():
         (Path(td) / "_rushes").mkdir(); (Path(td) / "_rushes" / "c.mov").write_bytes(b"z")
         assert [x.name for x in media_under(td)] == ["a.mov", "b.mov"]
     assert prompt_id(th) == prompt_id(list(th)) and prompt_id(th) != prompt_id(th[:3])
+    with tempfile.TemporaryDirectory() as td:
+        arch, prox = Path(td) / "VIDEO", Path(td) / "VIDEO" / "PROXIES"
+        (arch / "PARKS").mkdir(parents=True); (prox / "PARKS").mkdir(parents=True)
+        (arch / "PARKS" / "A001.MXF").write_bytes(b"o"); (prox / "PARKS" / "A001.mp4").write_bytes(b"p")
+        assert proxy_of(arch / "PARKS" / "A001.MXF", arch, prox) == prox / "PARKS" / "A001.mp4"
+        assert proxy_of(arch / "PARKS" / "B.MXF", arch, prox) is None
     print("analyze: all checks pass")
     return 0
 

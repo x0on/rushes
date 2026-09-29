@@ -1606,7 +1606,8 @@ def describe_folder(path):
         return 2
     cmd = [py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), path,
            "--store", os.path.join(NAS_MOUNT, "_rushes", "analysis"), "--url", NAS_URL,
-           "--model", model, "--whisper", whisper]
+           "--model", model, "--whisper", whisper,
+           "--archive", NAS_MOUNT, "--proxies", os.path.join(NAS_MOUNT, "PROXIES")]
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i"] + cmd
     status(phase="analysing", source=path, label=name, step="loading the model")

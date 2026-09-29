@@ -90,7 +90,7 @@ $opts = function (string $cur) use ($folders, $e) {
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Structure &middot; <?= $e(settings()['name'] ?? 'Rushes') ?></title>
+<title>Reorganize &middot; <?= $e(settings()['name'] ?? 'Rushes') ?></title>
 <?php require __DIR__ . '/head.php'; ?>
 <style>
   .form { max-width: 820px }
@@ -138,6 +138,10 @@ $opts = function (string $cur) use ($folders, $e) {
          border-top: 1px solid var(--line-soft); font-size: 13px }
   .run small { display: block; color: var(--faint); font-size: 11.5px; font-family: var(--mono) }
   @media (max-width: 640px) { .tg { grid-template-columns: 1fr } .dep-h.tg { display: none } }
+  .intro .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 12px }
+  .intro .parts > div { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--bg) }
+  .intro .parts p { margin: 6px 0 0 }
+  h3.part { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px }
 </style>
 
 <div class="app">
@@ -146,8 +150,33 @@ $opts = function (string $cur) use ($folders, $e) {
 
   <main class="work">
   <div class="pad form">
-    <div class="head"><h1>Structure</h1>
-      <span class="sub">How the archive is organised.</span></div>
+    <div class="head"><h1>Reorganize</h1>
+      <span class="sub">How the archive should be organised, and moving what is already here into it.</span></div>
+
+    <!-- What this page is, for someone who did not build it. -->
+    <div class="grp intro">
+      <h2>What this is</h2>
+      <p>An archive that grew over years has every shoot organised a different way: by date in one
+         place, by whoever filed it in another, the same event in three folders. This page gives it
+         <b>one shape</b>: a shelf per <?= $e($one) ?>, and inside it every shoot filed by year and date.
+         It works in two parts, and nothing moves until you say so.</p>
+      <div class="parts">
+        <div><b>Part 1 · The plan</b> <span class="note">(00 to 03)</span>
+          <p>Say what your top folders are, which folder on the shelf each <?= $e($one) ?> uses, and how a
+             shoot's folder is named. Saving the plan moves nothing. From then on, <b>Ingest</b> files every
+             new card straight into it, so new footage is never out of place.</p></div>
+        <div><b>Part 2 · Moving what is already here</b> <span class="note">(04 · Tidy-up)</span>
+          <p>Footage copied in from another server arrives as an exact copy of that server, in ARCHIVE.
+             Tidy-up proposes where each of its folders belongs on the shelf. You check it, approve it,
+             and the helper moves it: every move recorded, so it can be put back and Premiere projects
+             can be relinked.</p></div>
+      </div>
+      <p class="note" style="margin:10px 0 0"><b>Why bother:</b> every shoot in one predictable place;
+         searching or filtering by <?= $e($one) ?> works; the same footage stops landing in three
+         folders; and anyone can find last year's event without knowing who filed it.</p>
+    </div>
+
+    <h3 class="part">Part 1 · The plan</h3>
 
     <!-- ══ 00 what they are, and who adds them ══ -->
     <form class="grp" method="post">
@@ -239,8 +268,8 @@ $opts = function (string $cur) use ($folders, $e) {
     <div class="grp">
       <h2><span>02 /</span> Folders not in the plan</h2>
       <?php if ($loose): ?>
-        <p>These stay exactly where they are and stay searchable. Ingest never offers them.
-           The tidy-up is where each one gets a home.</p>
+        <p>Folders already on the shelf that no <?= $e($one) ?> in the plan uses. They stay exactly where
+           they are and stay searchable; Ingest never offers them. Tidy-up (part 2) is where each one gets a home.</p>
         <div class="loose"><?php foreach ($loose as $f): ?><span><?= $e($f) ?></span><?php endforeach; ?></div>
       <?php else: ?>
         <p style="margin:0">None &mdash; every folder on the shelf belongs to a <?= $e($one) ?>.</p>
@@ -257,6 +286,7 @@ $opts = function (string $cur) use ($folders, $e) {
     </div>
 
     <!-- ══ the tidy-up ══ -->
+    <h3 class="part">Part 2 · Moving what is already here</h3>
     <div class="grp" id="tidy">
       <h2><span>04 /</span> Tidy-up</h2>
       <p>Moves what the copies brought into ARCHIVE onto the shelf. Where each file goes is read

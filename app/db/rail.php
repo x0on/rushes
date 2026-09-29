@@ -18,7 +18,7 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
     <?= $railItem('transfers',  'Transfers',  'transfers', '/db/admin.php#transfers',  true, ' <span class="count" id="nTransfers"></span>') ?>
     <?= $railItem('duplicates', 'Duplicates', 'library',   '/db/admin.php#duplicates', true) ?>
     <?= $railItem('cache',      'Cache',      'cache',     '/db/admin.php#cache',      true, ' <span class="count" id="nCache"></span>') ?>
-    <?= $railItem('structure',  'Structure',  'projects',  '/structure.php',           false) ?>
+    <?= $railItem('structure',  'Reorganize',  'projects',  '/structure.php',           false) ?>
 
     <h2>System</h2>
     <?= $railItem('activity',   'Activity',       'activity', '/db/admin.php#activity', true) ?>

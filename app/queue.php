@@ -59,7 +59,7 @@ if (isset($_POST['ingest_src'])) {
         // Adding to the plan from Ingest is allowed only where Structure says so,
         // and under the same no-catch-all rule. It becomes a real entry,
         // visible in Structure, with its own folder.
-        if (!shelf_open()) bail(403, 'New ' . strtolower(shelf_word(true)) . ' are added in Structure, by the admin.');
+        if (!shelf_open()) bail(403, 'New ' . strtolower(shelf_word(true)) . ' are added in Reorganize, by the admin.');
         $names = array_column(departments(), 'name');
         if ($why = shelf_name_problem($new, $names)) bail(400, $why);
         $s = settings();
