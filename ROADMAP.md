@@ -79,9 +79,8 @@ description quality. What it taught, to build in:
   never finer. Relationships (couples, families) are not guessed.
 - **Faces, after descriptions work:** find faces, group the same face across
   the archive, and ask once "this person appears in 312 shots — who is it?".
-  Named people (staff, officials, public figures) become searchable; everyone
-  else stays an unnamed group that still answers "other shots of this person".
-  Only the people an organisation chooses are named. The face model must be free for any use:
+  Only the people an organisation chooses are named, and become searchable by name; everyone
+  else stays an unnamed group that still answers "other shots of this person". The face model must be free for any use:
   dlib's face recognition model (public domain) or OpenCV's YuNet detector with
   SFace (MIT / Apache-2.0), not InsightFace, whose trained models are for
   non-commercial research only.
@@ -98,8 +97,9 @@ description quality. What it taught, to build in:
   model that answers in those fields fits. Every result records which model and
   which prompt made it, so an archive can hold results from two models and a
   re-run replaces only what is asked. The installer checks the machine and
-  offers the few models that suit it, with size and speed, one marked as the
-  default.
+  offers the few models that suit it, with size and speed. The default is
+  Qwen3-VL 8B at 4-bit: the pilot showed it is good enough, and swapping is
+  there for the future, not because it needs replacing.
 - **Version 2:** try another model on a sample (say 20 shots) and see its
   answers beside the current ones before switching; add any compatible model by
   name; re-describe the archive, or only new footage, with the new one.
