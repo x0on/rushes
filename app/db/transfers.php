@@ -70,7 +70,7 @@ function transfer_summary(?array $j): ?array {
     $phase = $current['phase'] ?? 'done';
     if ($current && $current['updated'] && time() - $current['updated'] > 90) $phase = 'interrupted';
     $total = $sum('total_bytes'); $accounted = min($total, $sum('done_bytes'));
-    return ['id' => $j['id'], 'phase' => $phase, 'updated' => $last,
+    return ['id' => $j['id'], 'phase' => $phase, 'reported' => $current['phase'] ?? 'done', 'updated' => $last,
         'source' => $current['source'] ?? '', 'folders' => count($items), 'folders_done' => $done,
         'total_bytes' => $total, 'done_bytes' => $accounted,
         'copied_bytes' => $sum('copied_bytes'), 'already_bytes' => $sum('already_bytes'),

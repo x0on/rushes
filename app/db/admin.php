@@ -62,6 +62,12 @@ if (isset($_POST['_newpass'])) {
   .hctl .dot.ok { background: var(--ok) } .hctl .dot.off { background: var(--bad) }
   .hctl .btn { padding: 6px 12px; font-size: 12.5px }
   .hctl .note { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--muted) }
+  .transfer-summary .now { border: 0; padding: 0; margin: 16px 0 10px; background: none }
+  .transfer-summary .hctl { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none;
+                            margin: 16px 0 0; padding: 14px 0 0 }
+  .hctl .alarm { flex-basis: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px;
+                 border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 8px; color: var(--fg) }
+  .hctl .alarm p { margin: 0; flex: 1; min-width: 240px; line-height: 1.5 }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
   @media (max-width: 900px)  { .with-side { grid-template-columns: 1fr } }
@@ -395,16 +401,30 @@ function oops(msg) {
 }
 
 // ── the transfer ───────────────────────────────────────────────────────────
-function drawTransfer(j, copy) {
+// One box for the transfer: where it stands, what the helper is doing for it
+// this second, and the helper's own row. The live box on top is only for work
+// that is not part of the transfer — a card at Ingest, a tidy-up.
+
+// The live status, when it is work on this transfer's folders; otherwise null.
+function liveFor(j, c) {
+  if (!j || j.phase === 'done' || !c || !j.source || !c.source) return null;
+  if (!['copying', 'looking', 'tracing'].includes(c.phase)) return null;
+  const h = helperNow(c), a = j.source, b = c.source;
+  return h && h.busy && (a === b || a.startsWith(b + '/') || b.startsWith(a + '/')) ? h : null;
+}
+function clock(t) { return t ? new Date(t*1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : ''; }
+
+function drawTransfer(j, c) {
   latestTransfer = j;
-  const el = $('transferSummary');
+  const el = $('transferSummary'), hc = $('hctl');
   el.hidden = !j || !['overview', 'transfers'].includes(pane);
-  if (!j) return;
+  if (!j) { el.before(hc); return; }                 // no transfer: the helper row stands on its own
   const labels = {queued:'Waiting for the helper', checking:'Checking selected files', copying:'Transferring',
     done:'Transfer complete', interrupted:'Transfer interrupted', blocked:'Waiting for the source drive', stopped:'Waiting for space',
     paused:'Transfer paused'};
   const pct = j.pct === null ? 'Preparing…' : j.pct + '%';
-  const detail = j.phase === 'paused'
+  let title = labels[j.phase] || 'Transfer';
+  let say = j.phase === 'paused'
     ? 'Paused from Manage. Press Resume below and it carries on from where it stopped.'
     : j.phase === 'interrupted'
     ? 'Progress is saved. Check that the source and archive are connected and the helper is running. It will retry automatically.'
@@ -413,14 +433,18 @@ function drawTransfer(j, copy) {
     : j.phase === 'queued' ? 'Your selection is saved. Start the helper to begin or continue.'
     : j.phase === 'done' ? 'All selected files are accounted for. Any pending search updates will catch up automatically.'
     : 'New files become searchable as the transfer progresses.';
-  // The last report can be older than what the helper is doing now: it said
-  // "interrupted" at 1:38, then came back and is busy on the next step. The
-  // live status wins, and the stop is told as history, with its time.
-  const live = helperNow(copy), back = live && live.busy && ['interrupted', 'queued', 'blocked', 'stopped', 'paused'].includes(j.phase);
-  const when = j.updated ? new Date(j.updated*1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : '';
-  const title = back ? 'Transfer running again' : (labels[j.phase] || 'Transfer');
-  const say = back ? 'It stopped' + (when ? ' at ' + when : '') + ' and is back at it — right now: ' +
-      live.title.charAt(0).toLowerCase() + live.title.slice(1) + '.' + (pane === 'overview' ? ' The live box above has the numbers.' : '') : detail;
+  // The last report can be older than what the helper is doing now. The live
+  // status wins; a real stop before it is told as history, with its time.
+  const live = liveFor(j, c);
+  if (live) {
+    title = c.phase === 'tracing' ? 'Transfer getting ready' : c.phase === 'looking' ? 'Transfer checking a folder' : 'Transferring';
+    say = c.phase === 'tracing'
+      ? 'Before copying the rest, the helper matches footage copied earlier to its originals, so nothing is copied twice. ' +
+        'It only reads. Copying carries on by itself when it is done.'
+      : 'New files become searchable as the transfer progresses.';
+    if (j.reported === 'interrupted' && j.updated) say = 'It stopped at ' + clock(j.updated) + ' and is back at it. ' + say;
+  }
+  hc.remove();                                        // kept across the redraw, put back at the bottom
   el.innerHTML = '<div class="job-top"><div><h2>' + esc(title) + '</h2>' +
     '<p class="note">Selected transfer · ' + j.folders + ' folders</p></div>' +
     '<strong class="job-percent">' + pct + (j.pct === null ? '' : ' <small>complete</small>') + '</strong></div>' +
@@ -430,8 +454,10 @@ function drawTransfer(j, copy) {
     '<p class="note">' + tb(j.copied_bytes) + ' copied · ' + tb(j.already_bytes) + ' already present · ' +
     j.folders_done + ' of ' + j.folders + ' folders finished</p>' +
     (j.source ? '<p class="note">Current folder: ' + esc(j.source.split('/').pop()) + '</p>' : '') +
+    (live ? '<div class="now">' + nowHTML(live, c) + '</div>' : '') +
     '<p>' + esc(say) + '</p>' +
-    (j.updated && !back ? '<p class="note">Last report: ' + esc(new Date(j.updated*1000).toLocaleString()) + '</p>' : '');
+    (j.updated && !live ? '<p class="note">Last report: ' + esc(new Date(j.updated*1000).toLocaleString()) + '</p>' : '');
+  el.appendChild(hc);
 }
 
 function drawMove(d) {
@@ -576,17 +602,20 @@ function drawTiles(d) {
 }
 
 // ── live: what the helper is doing, with its numbers ─────────────────────────
-function drawNow(d) {
-  const h = (pane === 'overview') ? helperNow(d.copy) : null;
-  $('now').hidden = !h || h.bad;
-  if (!h || h.bad) return;
-  const secs = d.copy.secs == null ? '' : d.copy.secs < 10 ? 'live' : 'updated ' + d.copy.secs + ' s ago';
-  $('now').innerHTML =
-    '<div class="now-h"><span class="dot busy"></span><b>' + esc(h.title) + '</b><span>' + esc(secs) + '</span></div>' +
+function nowHTML(h, c) {
+  const secs = c.secs == null ? '' : c.secs < 10 ? 'live' : 'updated ' + c.secs + ' s ago';
+  return '<div class="now-h"><span class="dot busy"></span><b>' + esc(h.title) + '</b><span>' + esc(secs) + '</span></div>' +
     (h.pct != null ? '<div class="bar"><i style="width:' + h.pct + '%"></i><em>' + h.pct + '%</em></div>' : '') +
     '<div class="facts">' + (h.facts || []).map(function (f) {
       return '<div><b>' + esc(f[0]) + '</b><span>' + esc(f[1]) + '</span></div>'; }).join('') + '</div>' +
     (h.file ? '<div class="file">now: ' + esc(h.file) + '</div>' : '');
+}
+function drawNow(d) {
+  // Work on the transfer is shown inside the transfer box instead.
+  const h = pane === 'overview' && !liveFor(d.transfer, d.copy) ? helperNow(d.copy) : null;
+  $('now').hidden = !h || h.bad;
+  if (!h || h.bad) return;
+  $('now').innerHTML = nowHTML(h, d.copy);
 }
 
 // ── the helper and its buttons ─────────────────────────────────────────────
@@ -601,10 +630,13 @@ function drawHelper(d) {
   const seen = h.seen ? (h.fresh ? 'seen ' + h.seen_ago : 'not heard from since ' + h.seen_ago) : 'not started yet';
   const updating = h.fresh && h.ver && h.current && h.ver !== h.current ? ' · updating itself to the new version' : '';
   const cur = d.transfer && d.transfer.phase !== 'done' ? d.transfer.source : '';
+  // Something is wrong only when a folder stopped and the helper has not been
+  // back on it for three minutes (a retry is normally seconds away).
+  const stuck = cur && h.fresh && !h.paused && d.transfer.phase === 'interrupted' && !liveFor(d.transfer, d.copy)
+    && Date.now() / 1000 - d.transfer.updated > 180;
   const btns = [];
   if (h.fresh) btns.push(h.paused ? ['resume', 'Resume'] : ['pause', 'Pause']);
   btns.push(['nudge', 'Try again now']);
-  if (cur && h.fresh) btns.push(['skip', 'Skip ' + cur.split('/').pop()]);
   const now = Date.now();
   el.innerHTML = '<span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span>' +
     '<span class="t"><b>Helper on ' + esc(h.label) + '</b> · ' + esc([how, seen].filter(Boolean).join(' · ')) +
@@ -612,6 +644,11 @@ function drawHelper(d) {
     btns.map(function (b) {
       const sure = armed.what === b[0] && now < armed.until;
       return '<button class="btn quiet" data-h="' + b[0] + '">' + esc(sure ? 'Sure? ' + b[1] : b[1]) + '</button>'; }).join('') +
+    (stuck ? '<div class="alarm"><p><b>' + esc(cur.split('/').pop()) + ' stopped at ' + esc(clock(d.transfer.updated)) +
+      ' and has not started again.</b> The helper keeps retrying by itself. If it keeps stopping — a file it cannot read, ' +
+      'a source that drops — skip this folder for now: nothing already copied is lost, and ticking it again in Transfers brings it back.</p>' +
+      (function () { const sure = armed.what === 'skip' && now < armed.until, n = 'Skip ' + cur.split('/').pop();
+        return '<button class="btn quiet" data-h="skip">' + esc(sure ? 'Sure? ' + n : n) + '</button>'; })() + '</div>' : '') +
     (now < said.until ? '<p class="note">' + esc(said.text) + '</p>' : '') +
     (!h.fresh && h.how !== 'service' && h.mode === 'external'
       ? '<p class="note">Start it from Setup → 04 Helper, or install it there once so it starts by itself.</p>' : '');
