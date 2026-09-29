@@ -16,8 +16,9 @@ $NAV = $NAV ?? '';
   .tab-i svg { width: 15px; height: 15px; flex: none }
   .topbar .pulse { padding-right: 14px; border-right: 1px solid var(--line-soft) }
 </style>
-<link rel="icon" type="image/png" sizes="64x64" href="<?= favicon_href() ?>">
-<link rel="apple-touch-icon" href="<?= home_icon_href() ?>">
+<?php $iv = substr(md5(favicon_href()), 0, 8); ?>
+<link rel="icon" type="image/png" sizes="64x64" href="/icon.php?v=<?= $iv ?>">
+<link rel="apple-touch-icon" href="/icon.php?s=180&amp;v=<?= $iv ?>">
 <script>
   // Theme before first paint, so a dark page never flashes white on the way in.
   try { var t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; }
