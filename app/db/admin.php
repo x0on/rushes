@@ -850,7 +850,8 @@ async function load() {
   drawMove(d);
 
   $('tools').innerHTML = [['manifest', 'Rebuild the file list'], ['import', 'Rebuild search'],
-    ['verify', 'Check the holding folder'], ['df', 'Measure free space'], ['proxy-plan', 'Plan proxies (changes nothing)']]
+    ['verify', 'Check the holding folder'], ['df', 'Measure free space'], ['proxy-plan', 'Plan proxies (changes nothing)'],
+    ['gpu-test', 'Test the video chip (changes nothing, about a minute)']]
     .map(function (a) { return '<button class="btn quiet" data-t="' + a[0] + '">' + a[1] + '</button>'; })
     .join('');
   $('tools').querySelectorAll('[data-t]').forEach(function (b) {

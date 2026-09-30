@@ -295,6 +295,44 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
         df)
             df -h /share/VIDEO >> "$LOG" 2>&1
             ;;
+        gpu-test)
+            # Can this machine make video on its video chip? Changes nothing: it
+            # makes a 20-second test picture and keeps none of it. It tries the
+            # NAS's own ffmpeg, then a complete one in a container
+            # (linuxserver/ffmpeg) with each of Intel's two drivers — i965 for
+            # chips from before 2015, iHD for newer — and software for comparison.
+            # The result also goes to the VIDEO share, where the helper side can read it.
+            out=/share/Web/gpu-test.txt
+            SRC="-f lavfi -i testsrc2=size=1920x1080:rate=30:duration=20"
+            enc() {
+                lab=$1; shift; t0=$(date +%s)
+                if msg=$("$@" 2>&1); then echo "  $lab: WORKS — 20 s of 1080p made in $(( $(date +%s) - t0 )) s"
+                else echo "  $lab: does not work — $(printf '%s' "$msg" | tail -2 | tr '\n' ' ' | cut -c1-240)"; fi
+            }
+            {
+                echo "Video chip test · $(date '+%Y-%m-%d %H:%M')"
+                echo "processor:$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
+                if [ -e /dev/dri/renderD128 ]; then echo "video chip device: $(ls /dev/dri | tr '\n' ' ')"
+                else echo "video chip device: none — the system offers no video chip to programs"; fi
+                echo "The NAS's own ffmpeg:"
+                for c in /usr/local/medialibrary/bin/ffmpeg /usr/local/bin/ffmpeg /opt/bin/ffmpeg /mnt/ext/opt/medialibrary/bin/ffmpeg; do
+                    [ -x "$c" ] || continue
+                    if "$c" -hide_banner -encoders 2>/dev/null | grep -q h264_vaapi; then echo "  $c: has hardware encoding"
+                    else echo "  $c: built without hardware encoding"; fi
+                done
+                echo "A complete ffmpeg in a container (linuxserver/ffmpeg):"
+                docker pull -q linuxserver/ffmpeg >/dev/null 2>&1 || echo "  could not download it (is the NAS online? is Container Station running?)"
+                for drv in i965 iHD; do
+                    enc "video chip, driver $drv" docker run --rm --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=$drv \
+                        linuxserver/ffmpeg -hide_banner -loglevel error -vaapi_device /dev/dri/renderD128 $SRC \
+                        -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 2M -f null -
+                done
+                enc "software (libx264), for comparison" docker run --rm linuxserver/ffmpeg -hide_banner -loglevel error \
+                    $SRC -c:v libx264 -preset veryfast -crf 23 -f null -
+            } > "$out" 2>&1
+            cp "$out" /share/VIDEO/_rushes/gpu-test.txt 2>/dev/null
+            cat "$out" >> "$LOG"
+            ;;
         proxy-plan)
             PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh >> "$LOG" 2>&1
             ;;
