@@ -251,6 +251,18 @@ if (isset($_POST['_newpass'])) {
           <header><b>Proxy settings</b> <span class="note">· how proxies are made, tried on this machine's video chip first</span></header>
           <div style="padding:14px">
             <p id="ptNow" style="margin:0 0 8px"></p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
+              <select id="ptSet" style="padding:7px 10px;font:13.5px var(--font);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
+                <option value="720 2">720p · 2 Mbit/s — lightest, about 15 MB a minute</option>
+                <option value="720 3">720p · 3 Mbit/s — about 23 MB a minute</option>
+                <option value="720 4">720p · 4 Mbit/s — about 30 MB a minute (the default)</option>
+                <option value="720 6">720p · 6 Mbit/s — about 45 MB a minute</option>
+                <option value="1080 4">1080p · 4 Mbit/s — about 30 MB a minute</option>
+                <option value="1080 6">1080p · 6 Mbit/s — sharpest, about 45 MB a minute</option>
+              </select>
+              <button class="btn quiet" id="ptSave" type="button">Use this setting</button>
+              <span class="note">or test them on one of your clips first, below, and choose by eye</span>
+            </div>
             <p class="note" style="margin:0 0 10px">Pick one clip from the archive in Finder. Twenty seconds of it are made at several sizes and
               bitrates on the video chip, and a still from each appears below beside one from the original, at the same moment. Choose the
               one you like: proxies made from then on use it (the ones already made stay as they are). Nothing is uploaded — Safari's button
@@ -920,6 +932,7 @@ function drawProxyTest(d) {
   const ps = d.proxy_setting || [720, 4], pt = d.proxy_test;
   const running = d.running === 'proxy-test', asked = (d.queued || []).includes('proxy-test');
   $('ptNow').innerHTML = 'In use: <b>' + ps[0] + 'p at ' + ps[1] + ' Mbit/s</b>';
+  if (document.activeElement !== $('ptSet')) $('ptSet').value = ps[0] + ' ' + ps[1];   // not while you are choosing
   $('ptGo').disabled = running || asked;
   $('ptGo').textContent = running ? 'Testing…' : asked ? 'Asked…' : 'Test proxy settings…';
   if (!pt && !running && !asked) { $('pxTest').innerHTML = ''; return; }
@@ -949,17 +962,20 @@ function drawProxyTest(d) {
     (pt ? '<details style="margin-top:8px"><summary class="note">What the archive machine said</summary><pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' +
       esc(pt.text) + '</pre></details>' : '') + '</div>';
   $('pxTest').querySelectorAll('[data-use]').forEach(function (b) {
-    b.onclick = async function () {
-      const v = b.dataset.use.split(' '); b.disabled = true; b.textContent = 'Saving…';
-      try {
-        const j = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'proxy-setting', height: v[0], mbits: v[1] }) })).json();
-        $('ptSaid').textContent = j.error ? 'Did not happen: ' + j.error
-          : 'Saved ✓ Proxies made from now on are ' + v[0] + 'p at ' + v[1] + ' Mbit/s. The ones already made stay as they are.';
-      } catch (e) { $('ptSaid').textContent = 'Could not reach the archive: ' + e.message; }
-      load();
-    };
+    b.onclick = function () { b.disabled = true; b.textContent = 'Saving…'; useSetting(b.dataset.use); };
   });
 }
+async function useSetting(v) {
+  v = v.split(' ');
+  try {
+    const j = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'proxy-setting', height: v[0], mbits: v[1] }) })).json();
+    $('ptSaid').textContent = j.error ? 'Did not happen: ' + j.error
+      : 'Saved ✓ Proxies made from now on are ' + v[0] + 'p at ' + v[1] + ' Mbit/s. The ones already made stay as they are.';
+  } catch (e) { $('ptSaid').textContent = 'Could not reach the archive: ' + e.message; }
+  load();
+}
+$('ptSave').onclick = function () { this.disabled = true; this.textContent = 'Saving…'; const b = this;
+  useSetting($('ptSet').value).then(function () { b.disabled = false; b.textContent = 'Use this setting'; }); };
 $('ptGo').onclick = function () { $('ptPick').value = ''; $('ptPick').click(); };
 $('ptPick').onchange = async function () {
   const f = (this.files || [])[0], said = $('ptSaid');
