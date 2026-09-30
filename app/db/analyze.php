@@ -65,8 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // The proxy setting chosen after "Test proxy settings": proxy.sh reads it
     // for every proxy made from now on. Existing proxies stay as they are.
     if (($_POST['action'] ?? '') === 'proxy-setting') {
-        $h = (int)($_POST['height'] ?? 0); $b = (int)($_POST['mbits'] ?? 0);
-        if (!in_array($h, [720, 1080], true) || !in_array($b, [2, 3, 4, 6], true)) bail(400, 'not one of the tested settings');
+        $h = (int)($_POST['height'] ?? 0); $b = (string)($_POST['mbits'] ?? '');     // 4 or 6 Mbit/s on the chip, or sw: software
+        if (!in_array($h, [720, 1080], true) || !in_array($b, ['4', '6', 'sw'], true)) bail(400, 'not one of the settings offered');
         if (file_put_contents(web_dir() . '/proxy-setting.txt', "$h $b\n") === false) bail(500, 'could not save it');
         out(['ok' => 'proxy-setting', 'height' => $h, 'mbits' => $b]);
     }

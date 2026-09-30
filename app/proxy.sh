@@ -30,10 +30,15 @@ PROXY_ROOT=${PROXY_ROOT:-$SHARE/PROXIES}
 INDEX=${INDEX:-/share/Web/index.txt}
 PLAN=${PLAN:-/share/Web/proxy-plan.tsv}
 LOG=${LOG:-/share/Web/proxy-built.tsv}
-# The setting chosen in Manage → Describe after "Test proxy settings" (height,
-# Mbit/s), when one was chosen; otherwise 720p at 4.
+# The setting chosen in Manage → Describe → Proxy settings: height, and Mbit/s
+# on the video chip or "sw" for software (x264: often a better picture than an
+# older chip, at the cost of the processor). Otherwise 720p at 4 on the chip.
+SOFTWARE=0
 if [ -z "${HEIGHT:-}" ] && read -r ph pb < /share/Web/proxy-setting.txt 2>/dev/null; then
-    case "$ph:$pb" in 720:[2346]|1080:[2346]) HEIGHT=$ph; BITRATE=${pb}M; MAXRATE=$(( pb * 3 / 2 ))M ;; esac
+    case "$ph:$pb" in
+        720:[46]|1080:[46]) HEIGHT=$ph; BITRATE=${pb}M; MAXRATE=$(( pb * 3 / 2 ))M ;;
+        720:sw|1080:sw)     HEIGHT=$ph; SOFTWARE=1 ;;
+    esac
 fi
 HEIGHT=${HEIGHT:-720}
 BITRATE=${BITRATE:-4M}
@@ -143,6 +148,10 @@ kind_of() {
 
 encode() {
     kind=$(kind_of "$1")
+    if [ "$SOFTWARE" = 1 ]; then          # chosen in Proxy settings: straight to software
+        how="software"
+        run_ff -i "$1" -vf "scale=-2:$HEIGHT" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"; return
+    fi
     if [ "$HW" = 1 ] && ! { [ -n "$kind" ] && grep -qxF "$kind" "$CANNOT" 2>/dev/null; }; then
         how="video chip"
         run_ff -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -i "$1" \

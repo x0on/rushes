@@ -253,12 +253,16 @@ if (isset($_POST['_newpass'])) {
             <p id="ptNow" style="margin:0 0 8px"></p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
               <select id="ptSet" style="padding:7px 10px;font:13.5px var(--font);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
-                <option value="720 2">720p · 2 Mbit/s — lightest, about 15 MB a minute</option>
-                <option value="720 3">720p · 3 Mbit/s — about 23 MB a minute</option>
-                <option value="720 4">720p · 4 Mbit/s — about 30 MB a minute (the default)</option>
-                <option value="720 6">720p · 6 Mbit/s — about 45 MB a minute</option>
-                <option value="1080 4">1080p · 4 Mbit/s — about 30 MB a minute</option>
-                <option value="1080 6">1080p · 6 Mbit/s — sharpest, about 45 MB a minute</option>
+                <optgroup label="On the video chip — fast, the processor stays free">
+                  <option value="720 4">720p · 4 Mbit/s — about 30 MB a minute (the default)</option>
+                  <option value="720 6">720p · 6 Mbit/s — about 45 MB a minute</option>
+                  <option value="1080 4">1080p · 4 Mbit/s — about 30 MB a minute</option>
+                  <option value="1080 6">1080p · 6 Mbit/s — about 45 MB a minute</option>
+                </optgroup>
+                <optgroup label="In software — often a better picture than an older chip; slower, uses the processor">
+                  <option value="720 sw">720p · software — about 25 MB a minute (varies with the shot)</option>
+                  <option value="1080 sw">1080p · software — about 50 MB a minute (varies with the shot)</option>
+                </optgroup>
               </select>
               <button class="btn quiet" id="ptSave" type="button">Use this setting</button>
               <span class="note">or test them on one of your clips first, below, and choose by eye</span>
@@ -932,21 +936,20 @@ let ptOpen = false, ptLast = '';        // the log stays as you left it; nothing
 function drawProxyTest(d) {
   const ps = d.proxy_setting || [720, 4], pt = d.proxy_test;
   const running = d.running === 'proxy-test', asked = (d.queued || []).includes('proxy-test');
-  $('ptNow').innerHTML = 'In use: <b>' + ps[0] + 'p at ' + ps[1] + ' Mbit/s</b>';
+  $('ptNow').innerHTML = 'In use: <b>' + ps[0] + 'p ' + (ps[1] === 'sw' ? 'in software' : 'at ' + ps[1] + ' Mbit/s on the video chip') + '</b>';
   if (document.activeElement !== $('ptSet')) $('ptSet').value = ps[0] + ' ' + ps[1];   // not while you are choosing
   $('ptGo').disabled = running || asked;
   $('ptGo').textContent = running ? 'Testing…' : asked ? 'Asked…' : 'Test proxy settings…';
   if (!pt && !running && !asked) { $('pxTest').innerHTML = ''; return; }
   const mb = {};                               // "720p at 4Mbit/s: 30 MB a minute" -> {"720-4M": 30}
   ((pt && pt.text) || '').replace(/(\d+)p at (\d+)Mbit\/s: (\d+) MB a minute/g, function (_, h, b, m) { mb[h + '-' + b + 'M'] = m; });
-  const soft = ((pt && pt.text) || '').match(/in software, for comparison: (\d+) MB a minute/);
-  const order = ['original', '720-2M', '720-3M', '720-4M', '720-6M', '1080-4M', '1080-6M', 'software'];
+  ((pt && pt.text) || '').replace(/(\d+)p in software: (\d+) MB a minute/g, function (_, h, m) { mb[h + '-sw'] = m; });
+  const order = ['original', '720-4M', '720-6M', '1080-4M', '1080-6M', '720-sw', '1080-sw'];
   const have = (pt && pt.stills) || [];
   const tiles = order.filter(function (k) { return have.includes(k + '.jpg'); }).map(function (k) {
-    const m = /^(\d+)-(\d)M$/.exec(k), inUse = m && +m[1] === ps[0] && +m[2] === ps[1];
-    const label = k === 'original' ? 'The original' : k === 'software' ? '720p in software <span class="note">(for comparison)</span>'
-      : m[1] + 'p · ' + m[2] + ' Mbit/s';
-    const size = k === 'original' ? 'the camera file' : k === 'software' ? (soft ? soft[1] + ' MB a minute' : '') : (mb[k] ? mb[k] + ' MB a minute' : '');
+    const m = /^(\d+)-(\d)M$/.exec(k) || /^(\d+)-(sw)$/.exec(k), inUse = m && +m[1] === ps[0] && m[2] === String(ps[1]);
+    const label = k === 'original' ? 'The original' : m[2] === 'sw' ? m[1] + 'p · software' : m[1] + 'p · ' + m[2] + ' Mbit/s <span class="note">· chip</span>';
+    const size = k === 'original' ? 'the camera file' : mb[k] ? mb[k] + ' MB a minute' : '';
     return '<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden' + (inUse ? ';outline:2px solid var(--accent)' : '') + '">' +
       '<a href="../proxy-test/' + k + '.jpg?t=' + pt.at + '" target="_blank" title="Open it full size">' +
       '<img src="../proxy-test/' + k + '.jpg?t=' + pt.at + '" style="display:block;width:100%;aspect-ratio:16/9;object-fit:cover" alt=""></a>' +

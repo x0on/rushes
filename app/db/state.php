@@ -389,7 +389,7 @@ echo json_encode([
     'proxy_test' => is_readable("$WEB/proxy-test.txt") ? ['text' => (string)file_get_contents("$WEB/proxy-test.txt"), 'at' => filemtime("$WEB/proxy-test.txt"),
                      'stills' => array_map('basename', glob("$WEB/proxy-test/*.jpg") ?: [])] : null,
     // the proxy setting in use: height and Mbit/s (chosen after the test; 720p at 4 until then)
-    'proxy_setting' => preg_match('/^(720|1080) ([2346])$/', trim((string)@file_get_contents("$WEB/proxy-setting.txt")), $ps) ? [(int)$ps[1], (int)$ps[2]] : [720, 4],
+    'proxy_setting' => preg_match('/^(720|1080) (4|6|sw)$/', trim((string)@file_get_contents("$WEB/proxy-setting.txt")), $ps) ? [(int)$ps[1], $ps[2]] : [720, '4'],
     'gpu_test' => is_readable("$WEB/gpu-test.txt") ? ['text' => (string)file_get_contents("$WEB/gpu-test.txt"), 'at' => filemtime("$WEB/gpu-test.txt")] : null,
     'conditions' => $c,
     'copies'   => $copies,

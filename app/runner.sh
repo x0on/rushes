@@ -420,7 +420,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                     echo "20 seconds from ${at}s, each setting made on the video chip (the way proxies are made):"
                     $D -loglevel error -ss $(( at + 10 )) -i "$clip" -frames:v 1 -q:v 2 "$T/$name - 0 original - still.jpg" 2>/dev/null
                     cp "$T/$name - 0 original - still.jpg" "$W/original.jpg" 2>/dev/null
-                    for s in "720 2M" "720 3M" "720 4M" "720 6M" "1080 4M" "1080 6M"; do
+                    for s in "720 4M" "720 6M" "1080 4M" "1080 6M"; do   # below 4 Mbit/s is too rough to offer
                         set -- $s; h=$1; b=$2; m=$(( ${b%M} * 3 / 2 ))M; o="$T/$name - ${h}p ${b}.mp4"; t0=$(date +%s)
                         if $D -loglevel error -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -ss $at -t 20 -i "$clip" \
                                -vf "scale_vaapi=w=-2:h=$h" -c:v h264_vaapi -b:v $b -maxrate $m -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null \
@@ -431,12 +431,16 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                             echo "  ${h}p at ${b}bit/s: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
                         else rm -f "$o"; echo "  ${h}p at ${b}bit/s: the chip could not make it"; fi
                     done
-                    o="$T/$name - 720p software crf23.mp4"; t0=$(date +%s)
-                    if $D -loglevel error -ss $at -t 20 -i "$clip" -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null; then
-                        $D -loglevel error -ss 10 -i "$o" -frames:v 1 -q:v 2 "$T/$name - 720p software crf23 - still.jpg" 2>/dev/null
-                        cp "$T/$name - 720p software crf23 - still.jpg" "$W/software.jpg" 2>/dev/null
-                        echo "  720p in software, for comparison: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
-                    fi
+                    # In software (x264): an older chip's picture is often beaten by it,
+                    # at the cost of the processor; a newer chip may not be.
+                    for h in 720 1080; do
+                        o="$T/$name - ${h}p software.mp4"; t0=$(date +%s)
+                        if $D -loglevel error -ss $at -t 20 -i "$clip" -vf scale=-2:$h -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null; then
+                            $D -loglevel error -ss 10 -i "$o" -frames:v 1 -q:v 2 "$T/$name - ${h}p software - still.jpg" 2>/dev/null
+                            cp "$T/$name - ${h}p software - still.jpg" "$W/$h-sw.jpg" 2>/dev/null
+                            echo "  ${h}p in software: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
+                        fi
+                    done
                     chown -R "$(stat -c %u:%g /share/VIDEO)" "$T" 2>/dev/null
                     echo "Look at them in _rushes/proxy-test on VIDEO: each clip, and a still from each at the same moment."
                     [ -f /share/Web/proxy.pid ] && echo "(Proxies were being made meanwhile, so the times are slower than on a quiet chip.)"
