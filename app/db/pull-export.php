@@ -12,6 +12,12 @@
 //
 // ponytail: the Premiere file is a bin of clips, not a timeline. A timeline
 // needs each clip's length and frame rate, which come with previews.
+//
+// What describing found goes with each clip: a marker at every shot (what it
+// shows, and any text on screen) and at every line spoken, and the first shot's
+// description in the clip's Description. That is how descriptions reach
+// Premiere for every kind of file — MP4 and MOV ignore sidecar .xmp files — and
+// nothing is written beside the footage.
 require_once __DIR__ . '/schema.php';
 db_init();
 $db = db();
@@ -95,10 +101,37 @@ header('Content-Type: application/xml; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $file . '.xml"');
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE xmeml>\n<xmeml version=\"4\">\n";
 echo "  <bin>\n    <name>" . $x($p['name']) . "</name>\n    <children>\n";
+require_once __DIR__ . '/analysis.php'; analysis_init();
+$ledger = $db->prepare('SELECT m.fps, m.duration FROM media m JOIN files f ON f.id = m.file_id WHERE f.path = ?');
+// ponytail: by the path the description was made at; after a tidy-up a clip keeps
+// its file but its markers wait for describing to see it at its new place
+$said = $db->prepare("SELECT kind, start_s, what, on_screen, themes FROM moments WHERE path = ? AND kind IN ('shot', 'speech') ORDER BY start_s");
 foreach ($items as $i => $it) {
     $n = $i + 1;
+    $ledger->bindValue(1, $root . $it['rel']); $m = $ledger->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $ledger->reset();
+    $said->bindValue(1, $root . $it['rel']); $r = $said->execute(); $mo = [];
+    while ($row = $r->fetchArray(SQLITE3_ASSOC)) $mo[] = $row;
+    $said->reset();
+    $fps = (float)($m['fps'] ?? 0); $tb = (int)round($fps); $ntsc = $fps && abs($fps - $tb) > 0.01 ? 'TRUE' : 'FALSE';
+    $rate = $tb ? "<rate><timebase>$tb</timebase><ntsc>$ntsc</ntsc></rate>" : '';
+    $dur = $tb && !empty($m['duration']) ? '<duration>' . (int)round($m['duration'] * $fps) . '</duration>' : '';
     echo "      <clip id=\"clip-$n\">\n        <name>" . $x($it['name']) . "</name>\n";
+    if ($rate) echo "        $dur$rate\n";
     echo "        <file id=\"file-$n\">\n          <name>" . $x($it['name']) . "</name>\n";
-    echo "          <pathurl>" . $x($url($it['rel'])) . "</pathurl>\n        </file>\n      </clip>\n";
+    echo "          <pathurl>" . $x($url($it['rel'])) . "</pathurl>\n";
+    if ($rate) echo "          $rate$dur\n";
+    echo "        </file>\n";
+    $shots = array_values(array_filter($mo, fn($r) => $r['kind'] === 'shot'));
+    if ($shots) {
+        $themes = implode(', ', array_unique(array_filter(array_map('trim', explode(' · ', implode(' · ', array_column($shots, 'themes')))))));
+        echo "        <logginginfo><description>" . $x($shots[0]['what']) . "</description><lognote>" . $x($themes) . "</lognote></logginginfo>\n";
+    }
+    if ($tb) foreach ($mo as $r) {         // a marker needs the clip's frame rate: only for clips whose proxy was made
+        $name = $r['kind'] === 'speech' ? '“' . $r['what'] . '”' : $r['what'];
+        $note = $r['kind'] === 'speech' ? 'Said' : ($r['what'] . ($r['on_screen'] ? "\nOn screen: " . $r['on_screen'] : ''));
+        echo "        <marker><name>" . $x(mb_strimwidth($name, 0, 80, '…')) . "</name><comment>" . $x($note) . "</comment>"
+           . "<in>" . (int)round($r['start_s'] * $fps) . "</in><out>-1</out></marker>\n";
+    }
+    echo "      </clip>\n";
 }
 echo "    </children>\n  </bin>\n</xmeml>\n";

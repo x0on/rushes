@@ -154,4 +154,19 @@ file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\
 $f = proxy_failures('PARKS');
 check(count($f) === 1 && $f[0]['file'] === 'day1/b.mxf' && $f[0]['why'] === 'moov atom not found',
       "a folder's failures say which file and why, and leave out ones made since and other folders");
+// A pull for Premiere carries what describing found: a marker per shot and line spoken, at the right frame.
+require_once "$root/app/db/analysis.php"; analysis_init();
+db()->exec("INSERT INTO pulls (slug, name, created) VALUES ('p1', 'Kite day', 0)");
+db()->exec("INSERT INTO pull_items (pull_id, rel, name, bytes, pos, added) VALUES (1, 'shelf/b4k.mov', 'b4k.mov', 3, 1, 0)");
+db()->exec("INSERT INTO moments (fp, path, kind, shot, start_s, end_s, what, on_screen, themes) VALUES
+    ('f', '$root/archive/shelf/b4k.mov', 'shot', 0, 2.0, 5.0, 'Children fly kites & laugh', 'KITE FEST 2024', 'Events · Parks & Recreation'),
+    ('f', '$root/archive/shelf/b4k.mov', 'speech', null, 10.0, 12.0, 'Welcome everyone', '', '')");
+$_GET = ['p' => 'p1', 'fmt' => 'premiere', 'base' => '/Volumes/VIDEO'];
+ob_start(); include "$root/app/db/pull-export.php"; $xml = ob_get_clean();
+$doc = simplexml_load_string(preg_replace('/<!DOCTYPE[^>]*>/', '', $xml));
+$mk = $doc ? $doc->xpath('//clip/marker') : [];
+check($doc && count($mk) === 2 && (string)$mk[0]->in === '60' && (string)$mk[1]->in === '300'
+      && str_contains((string)$mk[0]->comment, 'On screen: KITE FEST 2024') && (string)$doc->xpath('//clip/rate/timebase')[0] === '30'
+      && (string)$doc->xpath('//clip/logginginfo/description')[0] === 'Children fly kites & laugh',
+      'a pull for Premiere carries a marker at each shot and line spoken, at its frame, and the description');
 echo "Server tests complete. Fixture: $root\n";

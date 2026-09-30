@@ -162,8 +162,12 @@ licenses stay theirs; CREDITS.md says what came from where):
    proxy is made; search finds "FX6" or "A001", and a file shows when it was
    recorded and the part of the day. ExifTool only if maker notes or Sony's XML
    sidecars turn out to be needed.
-6. **XMP sidecars** — descriptions and keywords in Adobe's format beside the
-   footage, so Premiere and Bridge show them too.
+6. **XMP sidecars** — done another way. Premiere ignores a sidecar .xmp for MP4
+   and MOV (they hold XMP inside, and Rushes never changes an original), so a
+   pull's Premiere file carries the descriptions instead: a marker at every
+   described shot (what it shows, text on screen) and every line spoken, at its
+   frame, and the first shot's description in the clip's Description. Nothing is
+   written beside the footage. To confirm in Premiere on the first real pull.
 7. **OpenTimelineIO** (Apache-2.0) — Premiere relinking is done, without it: OTIO
    cannot read a Premiere project, but a project is gzipped XML, so Reorganize →
    05 opens it in the browser, sends only its file paths, and saves a copy pointed
