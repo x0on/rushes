@@ -106,11 +106,19 @@ with open(os.path.join(C, "Info.plist"), "wb") as f:
         "NSHumanReadableCopyright": "Rushes Media Management Software · by Alejandro Renteria · open source, github.com/x0on/rushes",
     }, f)
 
-# ── sign (ad hoc: no Apple account) and pack ────────────────────────────────
-run(RC, "sign", APP)
+# ── sign and pack ───────────────────────────────────────────────────────────
+# With the author's certificate (RUSHES_SIGN_KEY / RUSHES_SIGN_CERT, kept
+# privately, never in this repo) the app says who made it, and every build
+# carries the same identity, so macOS keeps the permissions granted to the last
+# one. Without them: ad hoc, which is nobody, and a new identity every build.
+KEY, CERT = os.environ.get("RUSHES_SIGN_KEY"), os.environ.get("RUSHES_SIGN_CERT")
+run(RC, "sign", *(["--pem-file", KEY, "--pem-file", CERT] if KEY and CERT else []), APP)
 info = subprocess.run([RC, "print-signature-info", os.path.join(C, "MacOS", "Rushes Helper")], capture_output=True, text=True).stdout
 # both chips signed as org.rushes.helper, each sealing the Info.plist and the resources
 assert info.count("identifier: org.rushes.helper") == 2 and info.count("Resources (3)") == 2, info[:2000]
+if KEY and CERT:
+    assert "Alejandro Renteria" in info, "signed, but not with the author's certificate"
+print("signed by:", "the author's certificate" if KEY and CERT else "nobody (ad hoc)")
 z = os.path.join(OUT, "Rushes Helper.zip")
 run("zip", "-qry", z, "Rushes Helper.app", cwd=OUT)
 print(f"\n{z}: {os.path.getsize(z) / 1e6:.1f} MB")

@@ -5,3 +5,6 @@ app/db/*.sqlite
 app/db/*.db
 __pycache__/
 *.bak
+# signing keys never belong in the repo
+*.pem
+*.p12
