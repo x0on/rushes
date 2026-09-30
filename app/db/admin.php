@@ -248,7 +248,7 @@ if (isset($_POST['_newpass'])) {
 
         <!-- How proxies are made: tested on this machine's own video chip, chosen here. -->
         <div class="panel" style="margin-top:14px">
-          <header><b>Proxy settings</b> <span class="note">· how proxies are made, tried on this machine's video chip first</span></header>
+          <header><b>Proxy settings</b> <span class="note">· how proxies are made on the archive machine: on its video chip or in software</span></header>
           <div style="padding:14px">
             <p id="ptNow" style="margin:0 0 8px"></p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
