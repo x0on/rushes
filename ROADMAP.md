@@ -143,8 +143,10 @@ and each transcript records which model made it.
 What long-running open-source tools already solved, taken as ideas (their
 licenses stay theirs; CREDITS.md says what came from where):
 
-1. **Jellyfin** — older Intel video chips (like the archive's i7-4790S) need the
-   i965 driver; their ffmpeg carries it. Fast proxies on the video chip. *Next.*
+1. **Jellyfin** — done: older Intel video chips (like the archive's i7-4790S) need the
+   i965 driver; their ffmpeg carries it. Proxies are made on the video chip, and
+   kinds of file the chip cannot read (10-bit HEVC from drones) are learnt and
+   sent straight to the processor.
 2. **ASC MHL** (MIT) — done: every copy is recorded beside the footage in the
    film industry's copy-proof format, with XXH3-128 fingerprints; tidy-up and
    its undo carry them along; older copies are checked against their originals once.
