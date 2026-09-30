@@ -228,7 +228,7 @@ class CopyTests(unittest.TestCase):
              patch.object(self.mod.os, 'rename', side_effect=press_pause_after_first):
             self.assertEqual(self.run_copy(), 1)
         self.assertEqual(self.reports[-1]['phase'], 'paused')
-        self.assertEqual(len(list(self.dest.iterdir())), 1)
+        self.assertEqual(len([p for p in self.dest.iterdir() if p.name != 'ascmhl']), 1)   # beside the proof of it
         self.assertFalse(self.mod.DONE.exists())
         with patch.object(self.mod, 'control', return_value={}):   # Resume
             self.assertEqual(self.run_copy(), 0)
@@ -396,6 +396,85 @@ class ProxyFollowsTests(unittest.TestCase):
         self.assertEqual(seen[0][0], 'proxy moved')
         pa.write_text('another'); m.move_proxy(str(a), str(b), o)       # something already there: left alone
         self.assertEqual(pb.read_text(), 'proxy'); self.assertEqual(pa.read_text(), 'another')
+
+
+class ProofTests(unittest.TestCase):
+    """ASC MHL records beside the footage: written from the copy's own fingerprints,
+    following tidy-up moves, and filled in and re-checked by the checker."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+    run_copy = CopyTests.run_copy
+
+    def mhl_ok(self, root):
+        """The reference tool agrees, when it is installed here."""
+        try:
+            from click.testing import CliRunner
+            from ascmhl.cli.ascmhl import mhltool_cli
+        except ImportError:
+            return
+        if sys.version_info < (3, 11): return        # ascmhl itself needs 3.11 (datetime.UTC)
+        # `ascmhl create` re-reads every file, checks it against the record
+        # (chain included) and fails on any difference; on a copy, so the
+        # record under test is not changed.
+        import shutil
+        twin = self.root / 'twin'; shutil.rmtree(twin, ignore_errors=True); shutil.copytree(root, twin)
+        r = CliRunner().invoke(mhltool_cli, ['create', '-h', 'xxh128', str(twin)])
+        self.assertEqual(r.exit_code, 0, r.output)
+
+    def setUp2(self):
+        if self.mod.new_fingerprint()[1] != 'xxh128': self.skipTest('xxhash not installed')
+
+    def test_a_copy_writes_its_proof_and_a_second_run_adds_a_generation(self):
+        self.setUp2(); m = self.mod
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        (self.source / 'sub').mkdir(); (self.source / 'sub' / 'b.mov').write_bytes(b'b' * 20)
+        self.assertEqual(self.run_copy(), 0)
+        h = m.new_fingerprint()[0]; h.update(b'b' * 20)
+        self.assertEqual(m.mhl_read(str(self.dest))['sub/b.mov'][0], h.hexdigest())
+        self.assertIn('shoot', (m.STATUS / 'proof-roots.txt').read_text())
+        self.mhl_ok(self.dest)
+        (self.source / 'c.mov').write_bytes(b'c' * 5)
+        self.assertEqual(self.run_copy(), 0)
+        self.assertEqual(len(list((self.dest / 'ascmhl').glob('*.mhl'))), 2)
+        self.assertEqual(len(m.mhl_read(str(self.dest))), 3)
+        self.mhl_ok(self.dest)
+
+    def test_fingerprints_follow_a_move_and_an_emptied_record_is_kept(self):
+        self.setUp2(); m = self.mod
+        (self.source / 'x').mkdir(); (self.source / 'x' / 'a.mov').write_bytes(b'a' * 10)
+        self.assertEqual(self.run_copy(), 0)
+        old, new = self.dest / 'x' / 'a.mov', self.archive / 'Shelf' / '2024 Parks' / 'x' / 'a.mov'
+        new.parent.mkdir(parents=True); os.rename(old, new)
+        seen = []
+        o = type('O', (), {'add': lambda self, *r: seen.append(r)})()
+        m.mhl_follow([(str(old), str(new))], o, 'tidy-up 1')
+        self.assertIn('x/a.mov', m.mhl_read(str(self.archive / 'Shelf' / '2024 Parks')))
+        self.assertFalse((self.dest / 'ascmhl').exists())
+        self.assertTrue(list((self.archive / '_rushes' / 'ascmhl-moved').rglob('*.mhl')))
+        self.mhl_ok(self.archive / 'Shelf' / '2024 Parks')
+
+    def test_the_checker_proves_older_copies_then_finds_damage(self):
+        self.setUp2(); m = self.mod
+        good, bad = self.source / 'good.mov', self.source / 'bad.mov'
+        good.write_bytes(b'g' * 30); bad.write_bytes(b'b' * 30)
+        (self.archive / 'old').mkdir()
+        (self.archive / 'old' / 'good.mov').write_bytes(b'g' * 30)
+        (self.archive / 'old' / 'bad.mov').write_bytes(b'x' * 30)          # same size, different bytes
+        m.ORIGIN.mkdir(parents=True)
+        (m.ORIGIN / '20200101-000000 old folder.tsv').write_text(''.join(
+            f'copied\t{s}\t{self.archive / "old" / s.name}\t30\t\n' for s in (good, bad)))
+        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO):
+            while m.check_some(): pass
+        known = m.mhl_read(str(self.archive / 'old'))
+        self.assertEqual(sorted(known), ['good.mov'])
+        hist = (m.STATUS / 'ingest-history.tsv').read_text()
+        self.assertIn('1 differ (bad.mov)', hist)
+        self.assertIn('checked', hist)                                   # then the archive check ran over it
+        # a disk damages the good one: the next check finds it
+        (self.archive / 'old' / 'good.mov').write_bytes(b'G' * 30)
+        pf = m.HOME / 'proof.json'; st = json.loads(pf.read_text()); st['checked'] = {}; pf.write_text(json.dumps(st))
+        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO):
+            while m.check_some(): pass
+        self.assertIn('1 differ from their fingerprint (good.mov)', (m.STATUS / 'ingest-history.tsv').read_text())
 
 
 class DescribeLaneTests(unittest.TestCase):

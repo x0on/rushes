@@ -8,7 +8,7 @@
 //   GET  ?where                                 the addresses Rushes can be reached at (helpers follow a change)
 //   GET  ?control                               pause, "try again now", folders to skip
 //   GET  ?builtin                               "yes" when this machine should run it (for runner.sh)
-//   POST action=pause|resume|nudge|reconnect-off|reconnect-on   the helper's switches (Manage, or its own window)
+//   POST action=pause|resume|nudge|reconnect-off|reconnect-on|check-pause|check-resume   the helper's switches (Manage, or its own window)
 //   POST action=skip path                        skip a folder (signed in)
 //   POST action=scripts                         install the updated .sh scripts (signed in)
 //
@@ -100,7 +100,7 @@ SH, 'text/plain; charset=utf-8');
 // own work — nothing is moved or deleted — so its own window on the Mac may
 // press them without a password, like Manage. Everything else needs sign-in.
 $act = (string)($_POST['action'] ?? '');
-if (!in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'nudge'], true)
+if (!in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge'], true)
     && !may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
@@ -109,6 +109,8 @@ if ($act === 'pause' || $act === 'resume') {
     $c['describe_paused'] = $act === 'describe-pause';  // the describing lane only; copying carries on
 } elseif ($act === 'reconnect-off' || $act === 'reconnect-on') {
     $c['no_reconnect'] = $act === 'reconnect-off';     // the helper stops (or starts) connecting dropped shares by itself
+} elseif ($act === 'check-pause' || $act === 'check-resume') {
+    $c['check_paused'] = $act === 'check-pause';       // checking copies (older ones, then the archive) waits; copying is not affected
 } elseif ($act === 'nudge') {
     $c['nudge'] = time();                           // the helper stops waiting and looks again
 } elseif ($act === 'skip') {

@@ -881,6 +881,324 @@ def trace(src_root, archive):
 
 NOTE = "Where this came from.txt"
 
+# ───────────────────────── copy proof: ASC MHL ─────────────────────────────
+# The film world's standard record of "these are the exact bytes that were
+# copied" (ASC MHL 2.0, by the American Society of Cinematographers): an
+# `ascmhl` folder beside the footage holding one numbered file per event —
+# copied, moved, checked — and a chain file that fingerprints each of those,
+# so none can be edited quietly afterwards. Any MHL tool (ascmhl, Hedge,
+# Silverstack, Pomfort) reads and verifies it without Rushes. Written from the
+# fingerprints taken while copying: nothing is read a second time for it.
+MHL = "ascmhl"
+MHL_NS = "{urn:ASC:MHL:v2.0}"
+MHL_CHAIN_NS = "{urn:ASC:MHL:DIRECTORY:v2.0}"
+MHL_IGNORE = (".DS_Store", MHL, MHL + "/", NOTE, "*.part")
+
+
+def _when(t=None):
+    import datetime
+    return datetime.datetime.fromtimestamp(time.time() if t is None else t).astimezone().isoformat(timespec="seconds")
+
+
+def _history_above(path, stop=None):
+    """The nearest folder above `path`, up to `stop`, that has an ascmhl record."""
+    stop = (stop or NAS_MOUNT).rstrip(os.sep)
+    d = os.path.dirname(path)
+    while d == stop or d.startswith(stop + os.sep):
+        if os.path.isdir(os.path.join(d, MHL)):
+            return d
+        if d == stop: break
+        d = os.path.dirname(d)
+    return None
+
+
+def mhl_read(root):
+    """rel path -> (xxh128, when it was taken), for every file root's record knows."""
+    import xml.etree.ElementTree as ET
+    known = {}
+    for g in sorted(Path(root, MHL).glob("*.mhl")):
+        try: t = ET.parse(g)
+        except (OSError, ET.ParseError): continue
+        for h in t.iter(MHL_NS + "hash"):
+            p, x = h.find(MHL_NS + "path"), h.find(MHL_NS + "xxh128")
+            if p is None or x is None or not p.text or x.get("action") == "failed":
+                continue
+            prev = h.findtext(MHL_NS + "previousPath")
+            if prev: known.pop(prev, None)
+            known[p.text] = (x.text, x.get("hashdate") or "")
+    return known
+
+
+def mhl_write(root, files, comment, process="in-place"):
+    """Add one generation to root's record. files: (path, size, xxh128, action,
+    when taken — "" for now). Returns the new file's path, or None."""
+    import xml.etree.ElementTree as ET
+    from xml.sax.saxutils import escape, quoteattr
+    if not files: return None
+    d = os.path.join(root, MHL)
+    os.makedirs(d, exist_ok=True)
+    chain = os.path.join(d, "ascmhl_chain.xml")
+    links = []
+    if os.path.exists(chain):     # never rewritten from a chain it could not read: that would lose links
+        for e in ET.parse(chain).getroot():
+            links.append((int(e.get("sequencenr")), e.findtext(MHL_CHAIN_NS + "path"), e.findtext(MHL_CHAIN_NS + "c4")))
+    seq = max([n for n, _, _ in links] + [int(f[:4]) for f in os.listdir(d) if f[:4].isdigit()] + [0]) + 1
+    name = f"{seq:04d}_{os.path.basename(root.rstrip(os.sep))}_{time.strftime('%Y-%m-%d_%H%M%SZ', time.gmtime())}.mhl"
+    now, rows = _when(), []
+    for path, size, hexd, action, taken in sorted(files):
+        try: mod = f' lastmodificationdate="{_when(os.stat(path).st_mtime)}"'
+        except OSError: mod = ""
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        rows.append(f'    <hash>\n      <path size="{int(size)}"{mod}>{escape(rel)}</path>\n'
+                    f'      <xxh128 action="{action}" hashdate="{taken or now}">{hexd}</xxh128>\n    </hash>\n')
+    text = ('<?xml version="1.0" encoding="UTF-8"?>\n<hashlist version="2.0" xmlns="urn:ASC:MHL:v2.0">\n'
+            f'  <creatorinfo>\n    <creationdate>{now}</creationdate>\n    <hostname>{escape(platform.node())}</hostname>\n'
+            f'    <tool version={quoteattr(VERSION or "1")}>Rushes (github.com/x0on/rushes)</tool>\n'
+            f'    <comment>{escape(comment)}</comment>\n  </creatorinfo>\n'
+            f'  <processinfo>\n    <process>{process}</process>\n    <ignore>\n'
+            + "".join(f"      <pattern>{escape(p)}</pattern>\n" for p in MHL_IGNORE)
+            + '    </ignore>\n  </processinfo>\n  <hashes>\n' + "".join(rows) + '  </hashes>\n</hashlist>\n')
+    gen = os.path.join(d, name)
+    with open(gen + ".part", "w", encoding="utf-8") as f:
+        f.write(text); f.flush(); os.fsync(f.fileno())
+    os.replace(gen + ".part", gen)
+    abc = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"       # C4, the chain's fingerprint
+    n, c4 = int(hashlib.sha512(text.encode("utf-8")).hexdigest(), 16), ""
+    while n: n, r = divmod(n, 58); c4 = abc[r] + c4
+    links.append((seq, name, "c4" + c4.rjust(88, "1")))
+    with open(chain + ".part", "w", encoding="utf-8") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<ascmhldirectory xmlns="urn:ASC:MHL:DIRECTORY:v2.0">\n'
+                + "".join(f'  <hashlist sequencenr="{s}">\n    <path>{escape(p)}</path>\n    <c4>{c}</c4>\n  </hashlist>\n'
+                          for s, p, c in links) + '</ascmhldirectory>\n')
+        f.flush(); os.fsync(f.fileno())
+    os.replace(chain + ".part", chain)
+    try:                              # the checker's list of every record, by its place on the archive
+        rel = os.path.relpath(root, NAS_MOUNT)
+        roots = STATUS / "proof-roots.txt"
+        if rel not in (roots.read_text(errors="replace").splitlines() if roots.exists() else []):
+            with _io, open(roots, "a") as f:
+                f.write(rel + "\n")
+    except (OSError, ValueError):
+        pass
+    return gen
+
+
+def mhl_copied(top, files, o, source):
+    """A copy run's proof: one generation per record the copied files belong to."""
+    groups = defaultdict(list)
+    for dest, size, hexd in files:
+        groups[_history_above(dest, top) or top].append((dest, size, hexd, "original", ""))
+    for root, fs in groups.items():
+        try:
+            g = mhl_write(root, fs, f"Copied by Rushes from {source}. Each file was read back from the "
+                                    "archive and matched its original before it was put in place.", "transfer")
+            o.add("proof", g, "", len(fs), "ASC MHL record of this copy")
+        except (OSError, ValueError) as e:
+            print(f"  ! could not write the copy proof in {root} ({e}) — each file's fingerprint is still in the record")
+
+
+def mhl_follow(pairs, o, why):
+    """Files that moved (a tidy-up, its undo) take their fingerprints along: a
+    generation in the record where they landed. A record left with no footage
+    is kept in _rushes/ascmhl-moved, never thrown away."""
+    known, groups = {}, defaultdict(list)
+    for old, new in pairs:
+        r = _history_above(old)
+        if not r: continue
+        if r not in known: known[r] = mhl_read(r)
+        rel = os.path.relpath(old, r)
+        h = known[r].get(rel.replace(os.sep, "/"))
+        if not h: continue
+        # The record goes to the same folder in its new place: the part of the
+        # path the move kept tells where that is.
+        a, b = rel.split(os.sep), new.split(os.sep)
+        k = 0
+        while k < len(a) and k < len(b) - 1 and a[-1 - k] == b[-1 - k]: k += 1
+        nr = os.sep.join(b[:len(b) - k]) if k else os.path.dirname(new)
+        nr = _history_above(new, nr) or nr
+        try: size = os.path.getsize(new)
+        except OSError: continue
+        groups[(r, nr)].append((new, size, h[0], "original", h[1]))
+    for (r, nr), fs in groups.items():
+        try:
+            g = mhl_write(nr, fs, f"Moved here by Rushes ({why}) from {r}. Fingerprints as first taken; "
+                                  "the earlier record is in that folder or in _rushes/ascmhl-moved.")
+            o.add("proof", g, "", len(fs), "ASC MHL record follows the files")
+        except (OSError, ValueError) as e:
+            print(f"  ! could not write the proof in {nr} ({e})")
+    for r in known:
+        left = False
+        for dp, dn, fn in os.walk(r):
+            if MHL in dn: dn.remove(MHL)
+            if any(f not in (NOTE, ".DS_Store") for f in fn):
+                left = True; break
+        if left: continue
+        to = os.path.join(NAS_MOUNT, "_rushes", "ascmhl-moved", os.path.relpath(r, NAS_MOUNT), time.strftime("%Y%m%d-%H%M%S"))
+        try:
+            os.makedirs(os.path.dirname(to), exist_ok=True)
+            os.rename(os.path.join(r, MHL), to)
+            o.add("proof kept", os.path.join(r, MHL), to, 0, "its footage all moved; the record is kept here")
+        except OSError as e:
+            print(f"  ! left the record in {r} ({e})")
+
+
+# ───────────── checking: older copies once, then the archive for ever ──────
+# Work for when there is nothing to copy, on the copying lane, one folder at a
+# time, stopping between files the moment a copy is asked for or Pause is
+# pressed, and carrying on from the same file next time:
+#  1. Once: files copied before every copy was read back had only their size
+#     checked. Each is read again beside its original; a match puts its
+#     fingerprint into the folder's ASC MHL record, a difference is reported.
+#  2. Always: as the backup tools restic and Borg do, every recorded file is
+#     read again now and then (each folder every 90 days, a setting) and
+#     compared with its fingerprint, so a disk quietly damaging a file is
+#     found while the original or a backup can still replace it. Each check is
+#     a generation in the record too.
+# ponytail: reads over the network from this computer; in the server package
+# the same code runs on the archive machine, reading its own disks.
+
+def _proof_state():                       # the checker's place in its work, on this computer
+    try: return json.loads((HOME / "proof.json").read_text())
+    except (OSError, ValueError): return {}
+
+
+def _proof_save(st):
+    tmp = HOME / "proof.json.part"
+    tmp.write_text(json.dumps(st)); os.replace(tmp, HOME / "proof.json")
+
+
+def _older_todo():
+    """record folder -> [[copy, original], …]: what the records put in the
+    archive that no ASC MHL record knows yet — copied before copies were read back."""
+    todo, under, seen = defaultdict(list), {}, {}
+    for arch, rows in replay().items():
+        d = os.path.dirname(arch)
+        if d not in under: under[d] = _history_above(arch)
+        r = under[d]
+        if r:
+            if r not in seen: seen[r] = mhl_read(r)
+            if os.path.relpath(arch, r).replace(os.sep, "/") in seen[r]: continue
+        # ponytail: a folder no record covers gets its own record; a copied
+        # folder's top would be tidier, but the records do not keep it after a tidy-up
+        src = next((s for w, s, _ in rows if w != "already"), rows[0][1])
+        todo[r or d].append([arch, src])
+    return dict(todo)
+
+
+def check_some(budget=300):
+    """Some of the checking, for up to `budget` seconds. False: nothing to do."""
+    if new_fingerprint()[1] != "xxh128":
+        return False                       # an older app without XXH3: no record it could write
+    global _HEARTBEAT
+    st, until, now_ = _proof_state(), time.time() + budget, {}
+    stop = lambda: time.time() > until or control().get("paused") or control().get("check_paused")
+    beat = [0.0]
+    def hb():                              # a long file still reports it is alive
+        if time.time() - beat[0] > 60: beat[0] = time.time(); status(**now_)
+    _HEARTBEAT = hb
+    try:
+        # 1 · older copies, against their originals
+        o = st.setdefault("older", {})
+        if "todo" not in o or (not o["todo"] and time.time() - o.get("built", 0) > 7 * 86400):
+            status(phase="proving", step="older", source="", note="listing the copies made before copies were read back")
+            o.update(todo=_older_todo(), built=time.time(), got={}); _proof_save(st)
+        while o["todo"]:
+            root = next(iter(o["todo"]))
+            items, res = o["todo"][root], o["got"].setdefault(root, {"ok": [], "bad": [], "away": 0, "t0": time.time()})
+            while items:
+                if stop(): _proof_save(st); return True
+                arch, src = items[0]
+                now_ = dict(phase="proving", step="older", source=root, file=os.path.basename(arch),
+                            n=len(res["ok"]) + len(res["bad"]) + res["away"] + 1, of=len(res["ok"]) + len(res["bad"]) + res["away"] + len(items),
+                            ok=len(res["ok"]), bad=len(res["bad"]), missing=res["away"])
+                status(**now_); beat[0] = time.time()
+                try:
+                    if not os.path.isfile(arch):
+                        res["bad"].append([arch, src, "not in the archive any more"])
+                    elif not os.path.isfile(src):
+                        res["away"] += 1           # original not reachable now: tried again in a week
+                    elif os.path.getsize(src) != os.path.getsize(arch):
+                        res["bad"].append([arch, src, "a different size from its original"])
+                    else:
+                        mine = read_back(arch)
+                        if mine == read_back(src): res["ok"].append([arch, os.path.getsize(arch), mine])
+                        else: res["bad"].append([arch, src, "different bytes from its original"])
+                except OSError:
+                    if not os.path.isdir(STATUS): _proof_save(st); return True   # the archive went away: later
+                    res["away"] += 1
+                items.pop(0); _proof_save(st)
+            secs = time.time() - res["t0"]
+            if res["ok"]:
+                try:
+                    mhl_write(root, [(p, s, h, "original", "") for p, s, h in res["ok"]],
+                              "Checked by Rushes: copied before copies were read back, now read again from the "
+                              "archive and matched byte for byte with the original.")
+                except (OSError, ValueError) as e:
+                    print(f"  ! could not write the proof in {root} ({e})")
+            if res["bad"]:
+                rec = Origin("check", root, root, "archive", root)
+                for arch, src, why in res["bad"]: rec.add("differs", src, arch, 0, why)
+                rec.close()
+            note = ", ".join(x for x in (f"{len(res['bad'])} differ ({os.path.basename(res['bad'][0][0])}{' …' if len(res['bad']) > 1 else ''})" if res["bad"] else "",
+                                          f"{res['away']} originals not reachable" if res["away"] else "") if x) or "all match their originals"
+            history("proven", root, len(res["ok"]), sum(s for _, s, _ in res["ok"]), secs, note)
+            print(f"{time.strftime('%H:%M:%S')}  older copies in {root}: {len(res['ok'])} proven — {note}")
+            del o["todo"][root]; o["got"].pop(root, None); _proof_save(st)
+
+        # 2 · the archive, against its fingerprints
+        days = float(setting("proof.check_every_days") or 90)
+        last, cur = st.setdefault("checked", {}), st.get("scrub")
+        if not cur:
+            try: roots = (STATUS / "proof-roots.txt").read_text(errors="replace").splitlines()
+            except OSError: roots = []
+            due = [r for r in dict.fromkeys(roots) if r and time.time() - last.get(r, 0) > days * 86400
+                   and os.path.isdir(os.path.join(NAS_MOUNT, r, MHL))]
+            if not due: return False
+            cur = st["scrub"] = {"root": min(due, key=lambda r: last.get(r, 0)), "done": [], "missing": [], "tries": {}, "t0": time.time()}
+        root = os.path.join(NAS_MOUNT, cur["root"])
+        known = mhl_read(root)
+        seen = {d[0] for d in cur["done"]} | set(cur["missing"])
+        for rel in sorted(known):
+            if rel in seen: continue
+            if stop(): _proof_save(st); return True
+            path = os.path.join(root, rel)
+            now_ = dict(phase="proving", step="archive", source=root, file=os.path.basename(rel), n=len(seen) + 1, of=len(known),
+                        ok=sum(d[3] == "verified" for d in cur["done"]), bad=sum(d[3] != "verified" for d in cur["done"]), missing=len(cur["missing"]))
+            status(**now_); beat[0] = time.time()
+            try:
+                if not os.path.isfile(path):
+                    if not os.path.isdir(STATUS): _proof_save(st); return True
+                    cur["missing"].append(rel)
+                else:
+                    h = read_back(path)
+                    cur["done"].append([rel, os.path.getsize(path), h, "verified" if h == known[rel][0] else "failed"])
+            except OSError as e:
+                if not os.path.isdir(STATUS): _proof_save(st); return True
+                cur["tries"][rel] = cur["tries"].get(rel, 0) + 1
+                if cur["tries"][rel] < 3: _proof_save(st); return True     # a blip: that file again next time
+                cur["done"].append([rel, 0, "", f"could not be read ({e.strerror or e})"])
+            seen.add(rel); _proof_save(st)
+        read = [d for d in cur["done"] if d[2]]
+        try:
+            mhl_write(root, [(os.path.join(root, r), s, h, a, "") for r, s, h, a in read],
+                      "Checked by Rushes: every file read again from the archive and compared with its fingerprint.")
+        except (OSError, ValueError) as e:
+            print(f"  ! could not write the check into {root} ({e})")
+        bad = [d for d in cur["done"] if d[3] != "verified"]
+        if bad or cur["missing"]:
+            rec = Origin("check", root, root, "archive", root)
+            for r, _, _, a in bad: rec.add("damaged" if a == "failed" else "unreadable", "", os.path.join(root, r), 0, a)
+            for r in cur["missing"]: rec.add("missing", "", os.path.join(root, r), 0, "recorded here, not found")
+            rec.close()
+        note = ", ".join(x for x in (f"{len(bad)} differ from their fingerprint ({os.path.basename(bad[0][0])}{' …' if len(bad) > 1 else ''})" if bad else "",
+                                      f"{len(cur['missing'])} missing" if cur["missing"] else "") if x) or "all match"
+        history("checked", root, len(read), sum(d[1] for d in read), time.time() - cur["t0"], note)
+        print(f"{time.strftime('%H:%M:%S')}  checked {root}: {len(read)} files — {note}")
+        last[cur["root"]] = time.time(); st.pop("scrub"); _proof_save(st)
+        return True
+    finally:
+        _HEARTBEAT = lambda: None
+
 
 def _fetch(url):
     with urllib.request.urlopen(url, timeout=30) as r:
@@ -1040,6 +1358,7 @@ def tidy(plan_id):
         if i % 500 == 0:
             print(f"  {i:,} of {len(work):,} — {len(moved):,} moved")
             status(phase="tidying", source=plan_id, copied=len(moved), of=len(work))
+    mhl_follow(moved, o, f"tidy-up {plan_id}")
     rm = clear_out([a for a, _ in moved], ARCHIVE, o, examples)
     o.close()
     left = o.n["skipped"] + o.n["failed"]
@@ -1083,6 +1402,7 @@ def untidy(name):
                 move_proxy(new, old, o)
             except OSError as e:
                 o.add("failed", new, old, size, str(e))
+    mhl_follow(back, o, f"undo of {name}")
     # Empty folders the tidy-up made on the shelf go; the department folders stay.
     shelf = _shelf()
     for dept in {os.path.join(shelf, n[len(shelf) + 1:].split(os.sep)[0]) for n, _ in back if n.startswith(shelf + os.sep)}:
@@ -1672,6 +1992,12 @@ def watch(root, every=20):
             break                                      # one at a time, in order
 
         if not did:
+            # Nothing to copy: some checking (older copies, then the archive), a few minutes at a time.
+            try: busy = not c.get("check_paused") and check_some()
+            except Exception as e:                 # never let checking stop the helper
+                print(f"  ! checking stopped: {e}"); busy = False
+            if busy:
+                continue
             status(phase="waiting", source="", note="nothing queued")
             wait(every)
 
@@ -1985,6 +2311,8 @@ def main():
 
     stopped = ""                          # why the whole folder stopped, if it did
     log = open(LOG, "w")
+    proof = []                            # (copy, size, xxh128): this run's ASC MHL record
+    top = a.into or os.path.join(mirror, os.path.relpath(a.source, src_root))
 
     def bring(f):
         """One file from the plan: -> "copied" or "already", or raises OSError."""
@@ -2051,6 +2379,8 @@ def main():
             # Kept in the where-it-came-from record: years from now, the archive
             # copy can still be proven to be the original.
             copied += 1; copied_b += size; kind, note = "copied", f"verified {algo} {h.hexdigest()}"
+            if algo == "xxh128":
+                proof.append((dest, size, h.hexdigest()))
         cp.landed(dest, size)
         cp.complete_file(a.job, a.source, src, size, kind)
         o.add(kind, src, dest, size, note)
@@ -2103,6 +2433,7 @@ def main():
         failed += 1
         print(f"  ! could not read {getattr(e, 'filename', '') or 'a folder'}: {e.strerror or e}")
         o.add("failed", getattr(e, "filename", "") or "", "", 0, f"could not be read: {e.strerror or e}")
+    mhl_copied(top, proof, o, a.source)   # stopped part-way too: what did land is proven
     o.close()
     key = a.into.rstrip("/") if a.into else a.source.rstrip("/")
 
@@ -2115,7 +2446,6 @@ def main():
         history("interrupted", key, copied, copied_b, time.time() - t0, why)
         sys.exit(1)
 
-    top = a.into or os.path.join(mirror, os.path.relpath(a.source, src_root))
     if os.path.isdir(top):
         leave_a_note(top, o, a.source, src_name)
     print(f"\ncopied {copied:,}" + (f", {failed} could not be copied — each is listed in the record" if failed else ""))

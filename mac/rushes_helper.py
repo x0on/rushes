@@ -271,6 +271,7 @@ class Window:
             c = rushes(self.s["url"], "/db/helper.php?control")
             h["paused"], h["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
             h["describe_paused"] = bool(c.get("describe_paused"))
+            h["check_paused"] = bool(c.get("check_paused"))
             st = rushes(self.s["url"], "/db/state.php")
             h["now"] = st.get("copy") or {}
             h["describing"] = ((st.get("helper") or {}).get("describe")) or {}
@@ -337,7 +338,7 @@ class Window:
         elif do == "service-on":
             self.run("Starting …", lambda: self.set(said="Running ✓ It carries on where it left off."
                                                     if start_service() else "Could not start it — see setup.log."))
-        elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "nudge"):
+        elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "check-pause", "check-resume", "nudge"):
             self.run("Asking Rushes …", lambda: self.switch(do))
 
     def switch(self, do):
@@ -351,6 +352,8 @@ class Window:
             "describe-resume": "Describing resumed ✓ It carries on with the next file.",
             "reconnect-off": "Off ✓ It no longer connects dropped network drives by itself — no more “problem connecting” windows. Connect them in Finder; it carries on once they are back.",
             "reconnect-on": "On ✓ It connects dropped network drives again by itself, only when the server answers.",
+            "check-pause": "Checking paused ✓ It stops after the file it is reading; where it got to is kept.",
+            "check-resume": "Checking resumed ✓ It carries on whenever there is nothing to copy.",
             "nudge": "Asked ✓ It stops waiting and looks again now."}[do])
         log(f"switch: {do}")
 
@@ -586,6 +589,8 @@ function home(s) {
       sw(on && !s.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage',
         'The second lane, beside copying: this Mac\'s chip reads each shot and what is said. Off pauses it; files already described are kept.' +
         (s.describing && s.describing.phase === 'analysing' ? ' Now: ' + esc(s.describing.label || '') + (s.describing.of ? ' · ' + esc(s.describing.n) + ' of ' + esc(s.describing.of) : '') : ''), !on || !s.rushes) +
+      sw(on && !s.check_paused, ['check-resume', 'check-pause'], 'Check copies',
+        'When there is nothing to copy: older copies are read again beside their originals (once), then every file in the archive now and then, against its fingerprint. Reading only. Off pauses it; where it got to is kept.', !on || !s.rushes) +
       sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes) +
     '</div>' +
     '<p class="muted" style="font-size:12.5px">Updates: Rushes Helper keeps its own code the same as your Rushes server\'s (' + esc(s.url) +

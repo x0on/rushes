@@ -144,10 +144,12 @@ licenses stay theirs; CREDITS.md says what came from where):
 
 1. **Jellyfin** — older Intel video chips (like the archive's i7-4790S) need the
    i965 driver; their ffmpeg carries it. Fast proxies on the video chip. *Next.*
-2. **ASC MHL** (MIT) — the film industry's copy-proof file, read by Hedge,
-   Silverstack and Resolve. Copies recorded in it, with xxHash fingerprints.
-3. **restic / Borg** — scrubbing: re-read the archive on a schedule and compare
-   every file with its stored fingerprint, to catch disks slowly corrupting files.
+2. **ASC MHL** (MIT) — done: every copy is recorded beside the footage in the
+   film industry's copy-proof format, with XXH3-128 fingerprints; tidy-up and
+   its undo carry them along; older copies are checked against their originals once.
+3. **restic / Borg** — done: when there is nothing to copy, every recorded file
+   is read again (each folder every 90 days, `proof.check_every_days`) and
+   compared with its fingerprint; a Pause checking switch in Manage and the helper.
 4. **git-annex** — how many copies of each file exist, and a warning when only one does.
 5. **ExifTool / MediaInfo** — what cameras write inside files: timecode, reel,
    real recording time, camera. Better time of day and resolution in search.
@@ -184,6 +186,20 @@ Decided: the ASC MHL record lives beside the footage, as the standard intends
 (an `ascmhl` folder in each copied folder, XXH3-128 fingerprints taken while
 copying — no extra read), so Hedge, Silverstack and Resolve can check it. When a
 tidy-up moves files, it writes a new generation recording where they went.
+
+Built: each copy run writes a generation (a stopped run too, for what landed);
+a record inside a copied folder is used for the files under it. A tidy-up (and
+its undo) writes the files' fingerprints into the record where they land, found
+by the part of the path the move kept; a record whose footage has all moved goes
+to `_rushes/ascmhl-moved`, never deleted. Checked by the ASC's `ascmhl` tool and
+schema in the tests. The helper keeps its place in `proof.json` and lists every
+record in `_rushes/proof-roots.txt`; problems are in Activity and in a record in
+`_rushes/origin` (kind "check").
+
+Limits, for later: checking reads over the network from the helper's computer
+(the server package runs the same code on the archive machine); an older copy
+no record covers gets a record in its own folder, since the records do not keep
+which folder it was copied as once a tidy-up has moved it.
 
 ## Order
 

@@ -142,6 +142,17 @@ window.helperNow = function (c) {
     return {busy: true, pct: p2, title: 'Tidying up', short: 'tidying up · ' + p2 + '%',
       facts: [[num(c.copied) + ' / ' + num(c.of), 'files moved']]};
   }
+  // Checking, when there is nothing to copy: older copies against their
+  // originals (once), then every recorded file against its fingerprint.
+  if (c.phase === 'proving') {
+    var older = c.step === 'older', p5 = c.of ? Math.floor(((c.n || 1) - 1) / c.of * 100) : null;
+    return {busy: true, pct: p5, file: c.file,
+      title: (older ? 'Checking older copies against their originals · ' : 'Checking the archive for damage · ') + name,
+      short: (older ? 'checking older copies' : 'checking the archive') + (c.of ? ' · ' + num(c.n) + ' of ' + num(c.of) : ''),
+      facts: c.of ? [[num(c.n) + ' / ' + num(c.of), 'files in this folder'], [num(c.ok), 'match'], [num(c.bad), 'differ'],
+                     [num(c.missing), older ? 'originals not reachable' : 'missing'], ['reading only', 'nothing moves']]
+                  : [[c.note || 'getting ready', '']]};
+  }
   if (c.phase === 'paused') return {short: 'paused', title: 'Paused from Manage — nothing new starts until Resume'};
   if (c.phase === 'blocked') return {bad: true, short: 'copying stopped · source gone', title: c.note || 'The helper cannot see the source'};
   if (c.phase === 'stopped') return {bad: true, short: 'copying paused · archive nearly full', title: c.note || ''};

@@ -42,11 +42,28 @@ How each copy is made safe:
    every file one by one; it carries on from the same place when there is room.
 8. A name with accents ("Día") can be stored two ways that look identical; both
    count as the same name, so an earlier copy is recognised instead of copied again.
+9. Each copied folder gets an ASC MHL record beside the footage: an `ascmhl`
+   folder with one numbered file per event (copied, moved by a tidy-up, checked)
+   and a chain that fingerprints each of those files. It is the film industry's
+   open copy-proof format, so any tool that reads ASC MHL (the free `ascmhl`
+   tool, Hedge, Silverstack, Pomfort) can check the footage without Rushes.
+   Rushes writes it itself, from the fingerprints of point 3; the tests check it
+   with the ASC's own `ascmhl` tool and its published schema.
+10. Files copied before point 3 existed had only their size checked. When there
+    is nothing to copy, Rushes reads each of them again beside its original,
+    once; a match goes into the folder's ASC MHL record, a difference is reported.
+11. Then, for as long as it runs, it reads every recorded file again now and
+    then (each folder every 90 days) and compares it with its fingerprint, so a
+    disk quietly damaging a file is found while the original or a backup can
+    still replace it. Each check is written into the record too.
 
 Ideas, not code, taken from rsync and rclone, whose years of use found these
 problems first: rsync checks every transferred file against a whole-file
 checksum (point 3); rclone aborts a file that changes while it is read (5) and
-treats the two ways of storing accented names as one (8).
+treats the two ways of storing accented names as one (8). The record of point 9
+is the ASC MHL format, by the American Society of Cinematographers (its
+reference tool `ascmhl` is MIT-licensed, github.com/ascmitc/mhl). Point 11 is
+what the backup tools restic and Borg call checking or scrubbing.
 
 rsync and rclone have years of real-world use behind them; this code has less.
 Its tests (tests/ in the repository) cover interrupted copies, dropped drives,

@@ -340,7 +340,8 @@ if (is_readable("$WEB/ingest-history.tsv")) {
         $tidy = preg_match('/^(un)?tidy /', $f[2]);
         $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
                  'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted',
-                 'dropped' => 'dropped', 'analysed' => 'described'][$f[1]] ?? 'looked at';
+                 'dropped' => 'dropped', 'analysed' => 'described',
+                 'proven' => 'checked against its originals', 'checked' => 'checked for damage'][$f[1]] ?? 'looked at';
         $recent[] = ['when' => $f[0], 'what' => $what,
                      'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
                      'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
@@ -440,6 +441,7 @@ echo json_encode([
             'paused'  => (bool)$ctl['paused'],
             'no_reconnect' => !empty($ctl['no_reconnect']),
             'describe_paused' => !empty($ctl['describe_paused']),
+            'check_paused' => !empty($ctl['check_paused']),
             // the describing lane, live: what it is on
             'describe' => (function () use ($WEB) {
                 $s = [];
