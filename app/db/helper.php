@@ -100,6 +100,8 @@ $act = (string)($_POST['action'] ?? '');
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';
+} elseif ($act === 'reconnect-off' || $act === 'reconnect-on') {
+    $c['no_reconnect'] = $act === 'reconnect-off';     // the helper stops (or starts) connecting dropped shares by itself
 } elseif ($act === 'nudge') {
     $c['nudge'] = time();                           // the helper stops waiting and looks again
 } elseif ($act === 'skip') {

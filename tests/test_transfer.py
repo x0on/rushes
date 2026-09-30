@@ -312,6 +312,18 @@ class DescribeTests(unittest.TestCase):
         self.assertIn('not installed', seen[-1]['note'])
 
 
+class QuietReconnectTests(unittest.TestCase):
+    """A server that does not answer is not asked to mount: no macOS error window every two minutes."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_server_not_answering_means_no_mount_attempt(self):
+        m = self.mod
+        self.assertFalse(m.reachable("//someone@127.0.0.1/share", timeout=1))
+        with patch.object(m.sys, "platform", "darwin"), patch.object(m.subprocess, "run") as run:
+            self.assertFalse(m.reconnect(str(self.root / "gone"), "//someone@127.0.0.1/share"))
+        run.assert_not_called()
+
+
 class ProxyFollowsTests(unittest.TestCase):
     """A tidy-up moves each original's proxy with it, so the two stay linked."""
     setUp, tearDown = CopyTests.setUp, CopyTests.tearDown

@@ -154,4 +154,9 @@ and each transcript records which model made it.
    and picks what runs there; the large model files download inside the
    installer with progress shown, and can be added later. Nobody installs any
    of it by hand.
+   **Managed computers (endpoint security software):** nothing Rushes
+   runs is a loose script written to disk. The helper's code lives inside the
+   app, the app is signed with a Developer ID and notarized, and updates arrive
+   as a new signed version instead of files the helper writes over itself. IT
+   then allows one known publisher once, instead of being alerted by every update.
 

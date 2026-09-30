@@ -20,7 +20,7 @@ How it avoids reading 40 TB to answer "do we already have this?":
 Same shape as everything else: preview, look, apply, log, undo.
 """
 
-import argparse, hashlib, json, os, platform, re, shutil, subprocess, sys, threading, time
+import argparse, hashlib, json, os, platform, re, shutil, socket, subprocess, sys, threading, time
 import urllib.parse, urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -550,9 +550,21 @@ def share_of(path):
     return None, None
 
 
+def reachable(srv, timeout=3):
+    """Is the server answering at all? Asked quietly, before asking macOS:
+    every mount macOS cannot make puts up a "problem connecting" window, and
+    a server that is down for an hour would get one every two minutes."""
+    host = srv.lstrip("/").split("/")[0].rsplit("@", 1)[-1].split(":")[0]
+    try:
+        socket.create_connection((host, 445), timeout).close()      # 445: file sharing (SMB)
+        return True
+    except OSError:
+        return False
+
+
 def reconnect(root, srv):
     """Ask macOS to connect the share again. True when its folder is back."""
-    if sys.platform != "darwin" or not srv:
+    if sys.platform != "darwin" or not srv or not reachable(srv):
         return False
     try:
         subprocess.run(["osascript", "-e", f'mount volume "smb:{srv}"'],
@@ -577,6 +589,8 @@ class Dropped:
         to reconnect, and the watcher simply waits for the folder."""
         if not self.srv or os.path.isdir(self.root) or time.time() < self.next:
             return False
+        if control().get("no_reconnect"):            # turned off in Manage: leave it to the person
+            return False
         self.tries += 1
         print(f"{time.strftime('%H:%M:%S')}  reconnecting {self.name} ({self.srv}), try {self.tries} …")
         if reconnect(self.root, self.srv):
@@ -588,6 +602,8 @@ class Dropped:
         since = time.strftime("%H:%M", time.localtime(self.at))
         if not self.srv or os.path.isdir(self.root):
             return f"cannot see {self.path} since {since} — connect it again in Finder"
+        if control().get("no_reconnect"):
+            return f"{self.name} dropped at {since} — reconnecting is off (Manage); connect it in Finder when the network is back"
         if self.tries >= 5:
             return (f"{self.name} dropped at {since} and does not reconnect by itself — connect it in Finder "
                     "(Go → Connect to Server) and tick “Remember this password in my keychain” so it can next time")
