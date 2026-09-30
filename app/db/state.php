@@ -467,7 +467,8 @@ echo json_encode([
             'describe' => (function () use ($WEB) {
                 $s = [];
                 foreach (@file("$WEB/describe-status.tsv") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }
-                return $s && time() - (int)($s['ts'] ?? 0) < 300 ? $s : null;
+                // long listening says nothing for minutes; the lane says so the moment it stops (see describing_now)
+                return $s && time() - (int)($s['ts'] ?? 0) < (($s['phase'] ?? '') === 'analysing' ? 1800 : 300) ? $s : null;
             })(),
             'analysis' => $hv['analysis'],          // can it describe footage, and with what
             'builtin' => trim((string)@file_get_contents("$WEB/helper-builtin.txt")),
