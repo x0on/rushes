@@ -118,10 +118,9 @@ class CopyTests(unittest.TestCase):
             self.assertEqual(self.run_copy(), 0)
         self.assertEqual((self.dest / 'a.mov').read_bytes(), b'a' * 10)
         self.assertFalse((self.dest / 'a.mov.part').exists())
-        import hashlib
-        want = hashlib.blake2b(b'a' * 10, digest_size=16).hexdigest()
+        h, algo = self.mod.new_fingerprint(); h.update(b'a' * 10); want = f'{algo} {h.hexdigest()}'
         record = ''.join(p.read_text() for p in (self.archive / '_rushes' / 'origin').glob('*.tsv'))
-        self.assertIn(f'verified blake2b {want}', record)
+        self.assertIn(f'verified {want}', record)
 
     def test_an_original_that_changes_while_copied_is_not_kept(self):
         (self.source / 'a.mov').write_bytes(b'a' * 10)

@@ -328,12 +328,26 @@ def save_cache():
 _HEARTBEAT = lambda: None     # set while copying, so a long hash still reports progress
 
 
+# The copy proof's fingerprint: XXH3-128, what the film world's copy-proof
+# standard (ASC MHL) and tools like Hedge and Silverstack use — very fast, and
+# made for checking copies. It ships inside Rushes Helper (python-xxhash, BSD).
+# Without it (an older app), BLAKE2 from Python itself: just as safe, but not
+# one ASC MHL reads. Every record names the one it used.
+try:
+    import xxhash
+    def new_fingerprint():
+        return xxhash.xxh3_128(), "xxh128"
+except ImportError:
+    def new_fingerprint():
+        return hashlib.blake2b(digest_size=16), "blake2b"
+
+
 def read_back(path):
-    """A file's fingerprint (BLAKE2), read from where it lies. Used on each new
+    """A file's fingerprint (see new_fingerprint), read from where it lies. Used on each new
     copy, read back from the archive: asked without the Mac's cache of what it
     has just written (F_NOCACHE, as far as macOS allows), so a bad write to the
     archive's disk cannot hide behind a good copy in memory."""
-    h = hashlib.blake2b(digest_size=16)
+    h, _ = new_fingerprint()
     with open(path, "rb") as f:
         if sys.platform == "darwin":
             try:
@@ -1955,7 +1969,7 @@ def main():
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             tmp = dest + ".part"
             progress(name, force=True)
-            h = hashlib.blake2b(digest_size=16)      # the original's fingerprint, taken while reading it anyway
+            h, algo = new_fingerprint()              # the original's fingerprint, taken while reading it anyway
             before = os.stat(src)
             try:
                 with open(src, "rb") as fi, open(tmp, "wb") as fo:
@@ -1988,7 +2002,7 @@ def main():
             log.write(f"{src}\t{dest}\n"); log.flush()
             # Kept in the where-it-came-from record: years from now, the archive
             # copy can still be proven to be the original.
-            copied += 1; copied_b += size; kind, note = "copied", "verified blake2b " + h.hexdigest()
+            copied += 1; copied_b += size; kind, note = "copied", f"verified {algo} {h.hexdigest()}"
         cp.landed(dest, size)
         cp.complete_file(a.job, a.source, src, size, kind)
         o.add(kind, src, dest, size, note)

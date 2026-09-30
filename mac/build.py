@@ -11,7 +11,7 @@ Runs on Linux or a Mac. Needs, next to this file or on the PATH:
   - zig, to compile the launcher for both chips (pip install ziglang)
   - rcodesign, to sign it (github.com/indygreg/apple-platform-rs, apple-codesign)
 """
-import os, plistlib, shutil, struct, subprocess, sys, tarfile
+import os, plistlib, shutil, struct, subprocess, sys, tarfile, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = HERE
@@ -79,7 +79,15 @@ for a, z in ARCHES.items():
     std = os.path.join(lib, "python3.12")
     for d in DROP_LIB:
         p = os.path.join(std, d); shutil.rmtree(p) if os.path.isdir(p) else os.path.exists(p) and os.remove(p)
-    os.makedirs(os.path.join(std, "site-packages"))
+    site = os.path.join(std, "site-packages"); os.makedirs(site)
+    # Python packages the helper uses beyond Python itself, as ready-made wheels
+    # for this chip, next to this file (pip download --only-binary=:all:
+    # --platform macosx_11_0_arm64 / macosx_10_9_x86_64 --python-version 3.12 xxhash).
+    for w in os.listdir(TOP):
+        if w.endswith(".whl") and ("-cp312-" in w) and ({"arm64": "arm64", "x86_64": "x86_64"}[a] in w or "universal2" in w):
+            with zipfile.ZipFile(os.path.join(TOP, w)) as zf:
+                zf.extractall(site)
+            print(f"  {a}: {w}")
     dyn = os.path.join(std, "lib-dynload")
     for f in os.listdir(dyn):
         if f.startswith(("_tkinter", "_test", "_xxtest", "_ctypes_test")) or "xxlimited" in f:

@@ -30,7 +30,7 @@ How each copy is made safe:
 
 1. Written under a temporary name, so an interrupted copy never looks finished.
 2. Confirmed as stored on the archive's disk (fsync) before it gets its real name.
-3. Verified byte for byte: the original's BLAKE2 fingerprint is taken while it is
+3. Verified byte for byte: the original's XXH3-128 fingerprint (BLAKE2 on an older app) is taken while it is
    read, the copy is read back from the archive and fingerprinted again, and the
    two must match. A copy that does not match is thrown away and made again.
 4. The fingerprint is kept in the file's where-it-came-from record, so the
@@ -58,6 +58,7 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | Python 3.12 | The language the helper is written in; a private copy inside the app | Inside Rushes Helper | PSF License | python.org |
 | python-build-standalone | The ready-to-ship build of that Python | Inside Rushes Helper | MPL-2.0 | github.com/astral-sh/python-build-standalone (Astral) |
+| xxHash (python-xxhash) | The XXH3-128 fingerprint that proves each copy matches its original — the one ASC MHL and professional copy tools read | Inside Rushes Helper | BSD-2-Clause | Yann Collet (xxHash); github.com/ifduyue/python-xxhash |
 | macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive; open | Part of macOS | Apple | Apple |
 
 ## On this Mac: describing footage
