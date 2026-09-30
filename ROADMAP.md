@@ -64,7 +64,6 @@ with everything the final stage needs inside it.
 
 ### Not built yet
 
-- Premiere relinking after tidy-up.
 - Playing proxies in search, jumping to a described moment.
 - Faces.
 - The analysis tools in the installer (today they are the pilot's, on the Mac).
@@ -165,7 +164,12 @@ licenses stay theirs; CREDITS.md says what came from where):
    sidecars turn out to be needed.
 6. **XMP sidecars** — descriptions and keywords in Adobe's format beside the
    footage, so Premiere and Bridge show them too.
-7. **OpenTimelineIO** (Apache-2.0) — pulls as editing timelines, and Premiere relinking.
+7. **OpenTimelineIO** (Apache-2.0) — Premiere relinking is done, without it: OTIO
+   cannot read a Premiere project, but a project is gzipped XML, so Reorganize →
+   05 opens it in the browser, sends only its file paths, and saves a copy pointed
+   at where each tidy-up moved the clips (Mac or Windows paths alike; the project
+   never leaves the editor's computer). Still to do: pulls as timelines (OTIO's
+   Premiere XML), once clips carry length and frame rate (the media ledger has them).
 8. **Immich** — background jobs, retries, re-organising by template, images
    (ideas only: its face model is not free for every use).
 9. **rsync / rclone** — done: whole-file verification, sources that change

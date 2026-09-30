@@ -116,6 +116,23 @@ check($r['counted'] === 2 && $r['not_in_search'] === 1 && $sum['twice'][0] === 1
       'copies: a file whose original is still there is kept twice; one whose original went is only in the archive');
 check(str_contains(json_encode((function () use ($root) { ob_start(); include "$root/app/db/state.php"; return ob_get_clean(); })()), 'now exist only in the archive'),
       'Overview warns when files lose their second copy');
+// Relinking a Premiere project: every tidy-up (and undo) played forward, matched by the part inside the archive.
+@mkdir("$root/archive/_rushes/origin", 0777, true);
+$H = "$root/archive";      // the helper sees the archive at the same place in this fixture
+file_put_contents("$root/archive/_rushes/origin/20260101-000000 archive tidy.tsv",
+    "moved\t$H/ARCHIVE/pa/Parks/Kite/A001.MXF\t$H/Library/PARKS/Kite/A001.MXF\t5\t\n" .
+    "moved\t$H/ARCHIVE/pa/Parks/Kite/A002.MXF\t$H/Library/PARKS/Kite/A002.MXF\t5\t\n");
+file_put_contents("$root/archive/_rushes/origin/20260102-000000 archive untidy.tsv",
+    "moved\t$H/Library/PARKS/Kite/A002.MXF\t$H/ARCHIVE/pa/Parks/Kite/A002.MXF\t5\tundo\n");
+@mkdir("$root/archive/Library/PARKS/Kite", 0777, true); file_put_contents("$root/archive/Library/PARKS/Kite/A001.MXF", 'x');
+$_POST = ['paths' => json_encode(['/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A001.MXF', 'Z:\ARCHIVE\pa\Parks\Kite\A001.MXF',
+                                  '/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A002.MXF', '/Users/me/Music/song.wav', 'A001.MXF'])];
+ob_start(); include "$root/app/db/relink.php"; $rl = json_decode(ob_get_clean(), true);
+check(($rl['map']['/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A001.MXF'] ?? '') === '/Volumes/VIDEO/Library/PARKS/Kite/A001.MXF'
+      && ($rl['map']['Z:\ARCHIVE\pa\Parks\Kite\A001.MXF'] ?? '') === 'Z:\Library\PARKS\Kite\A001.MXF',
+      'relink: a moved clip is pointed at its new place, however the editor reaches the archive (Mac or Windows)');
+check(count($rl['map']) === 2 && $rl['missing'] === [],
+      'relink: a clip put back by an undo, a file outside the archive and a bare file name are left as they are');
 mkdir("$root/archive/shelf"); rename("$root/archive/b4k.mov", "$root/archive/shelf/b4k.mov");
 $_POST = ['moves' => "$root/archive/b4k.mov\t$root/archive/shelf/b4k.mov"];
 ob_start(); include "$root/app/db/moved.php"; ob_end_clean();

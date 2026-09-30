@@ -309,6 +309,69 @@ $opts = function (string $cur) use ($folders, $e) {
         </div></div></div>
       <div id="tRuns"></div>
     </div>
+
+    <!-- ══ Premiere projects after a tidy-up ══ -->
+    <div class="grp" id="relink">
+      <h2><span>05 /</span> Premiere projects after a tidy-up</h2>
+      <p>A tidy-up moves footage, so a Premiere project that used it opens with &ldquo;media offline&rdquo;.
+         Choose the project here and Rushes points every clip at where the tidy-up put it, from the record
+         of every move. You get a copy, &ldquo;<i>name</i> (relinked).prproj&rdquo;; the project you chose is not changed.
+         It is read on this computer: only the file paths written in it are sent to Rushes, never the project.</p>
+      <div class="btns">
+        <button class="btn" type="button" id="rlGo">Choose a Premiere project&hellip;</button>
+        <input type="file" id="rlPick" accept=".prproj" hidden>
+      </div>
+      <p class="note" id="rlSaid" style="margin:10px 0 0"></p>
+      <div id="rlOut"></div>
+    </div>
+    <script>
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      var ENT = {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"};
+      var dec = function (s) { return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, function (m, e) {
+        return e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e] || m); }); };
+      var enc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+      var TEXT = />([^<>]{3,2000})</g;                 // every piece of text in the project
+      var isPath = function (s) { return /[\\/]/.test(s) && /\.\w{2,5}$/.test(s); };
+      $('rlGo').onclick = function () { $('rlPick').value = ''; $('rlPick').click(); };
+      $('rlPick').onchange = async function () {
+        var f = (this.files || [])[0], said = $('rlSaid'), out = $('rlOut');
+        if (!f) return;
+        out.innerHTML = ''; said.textContent = 'Reading ' + f.name + ' on this computer…';
+        try {
+          if (!window.DecompressionStream) throw new Error('this browser is too old to open a Premiere project (Safari 16.4 or newer, or Chrome, is needed)');
+          var buf = await f.arrayBuffer(), b = new Uint8Array(buf, 0, 2);
+          var xml = b[0] === 0x1f && b[1] === 0x8b      // a .prproj is gzipped XML
+            ? await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+            : new TextDecoder().decode(buf);
+          if (!/<PremiereData/.test(xml.slice(0, 4000))) throw new Error(f.name + ' is not a Premiere project');
+          var found = new Set();
+          xml.replace(TEXT, function (m, t) { var d = dec(t); if (isPath(d)) found.add(d); return m; });
+          said.textContent = 'Asking Rushes where the ' + found.size.toLocaleString() + ' files this project names are now…';
+          var r = await (await fetch('/db/relink.php', {method: 'POST', body: new URLSearchParams({paths: JSON.stringify(Array.from(found))})})).json();
+          if (r.error) throw new Error(r.error);
+          if (!r.moved) {
+            said.textContent = '';
+            out.innerHTML = '<div class="banner ok"><div class="txt"><b>Nothing in ' + esc(f.name) + ' was moved by a tidy-up.</b> ' +
+              (r.tidyups ? 'Its ' + found.size.toLocaleString() + ' files are where the project expects them, as far as Rushes moved them.'
+                         : 'No tidy-up has run yet, so every file is where it was.') + ' No copy is needed.</div></div>';
+            return;
+          }
+          var n = 0, fixed = xml.replace(TEXT, function (m, t) { var to = r.map[dec(t)]; if (!to) return m; n++; return '>' + enc(to) + '<'; });
+          var gz = await new Response(new Blob([fixed]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
+          var name = f.name.replace(/\.prproj$/i, '') + ' (relinked).prproj', url = URL.createObjectURL(gz);
+          said.textContent = '';
+          out.innerHTML = '<div class="banner ok"><div class="txt"><b>' + r.moved.toLocaleString() + ' file' + (r.moved === 1 ? '' : 's') +
+            ' pointed at where the tidy-up put ' + (r.moved === 1 ? 'it' : 'them') + '</b> (' + n.toLocaleString() + ' places in the project); ' +
+            r.kept.toLocaleString() + ' left as they were. Open the copy in Premiere; the one you chose is unchanged.' +
+            (r.missing.length ? '<br><b>' + r.missing.length + ' of them are not where the last tidy-up put them</b> — moved since, outside Rushes: ' +
+              r.missing.slice(0, 5).map(esc).join(', ') + (r.missing.length > 5 ? ' …' : '') : '') +
+            '<div class="btns" style="margin-top:10px"><a class="btn" id="rlGet" href="' + url + '" download="' + esc(name) + '">Save ' + esc(name) + '</a></div></div></div>';
+        } catch (e) { said.textContent = 'Could not relink it: ' + e.message; }
+      };
+    })();
+    </script>
     <script>
     (function () {
       var SHELF = <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>, data = null;
