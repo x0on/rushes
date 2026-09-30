@@ -21,6 +21,13 @@ $helperRoot = rtrim(helper_archive(), '/');
 // it ("PARK COLLECTION/2019/a.mov"), never where it is. Those names are enough:
 // the archive file whose path ends in one of them is in that folder.
 //   GET ?locate[]=<folder>/<...>/<file>   up to 5  ->  the archive folders it can be
+// GET ?plan=<folder>  what it holds and how much is left to make (instant)
+if (isset($_GET['plan'])) {
+    require_once __DIR__ . '/prepare.php';
+    $rel = trim(str_replace('\\', '/', (string)$_GET['plan']), '/');
+    if ($rel === '' || str_contains($rel, '..') || !is_dir("$root/$rel")) out(['error' => "There is no folder “{$rel}” in the archive."]);
+    out(['folder' => $rel] + prepare_plan($rel, true));
+}
 if (isset($_GET['locate'])) {
     require_once __DIR__ . '/schema.php';
     $find = db()->prepare('SELECT path FROM files WHERE name = ?');

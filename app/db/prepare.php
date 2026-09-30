@@ -55,6 +55,31 @@ function media_import(): array {
     return ['added' => $n, 'not_in_search' => $lost];
 }
 
+// What a folder holds, from the search catalogue: instant, no job to wait for.
+// When its turn comes, proxy.sh reads the folder itself again, so footage that
+// arrived since still gets its proxy. Kept 10 minutes, so the list stays quick.
+function prepare_plan(string $rel, bool $fresh = false): array {
+    $f = web_dir() . '/prepare-plan.json';
+    $cache = json_decode((string)@file_get_contents($f), true) ?: [];
+    if (!$fresh && isset($cache[$rel]) && time() - $cache[$rel]['at'] < 600) return $cache[$rel];
+    require_once __DIR__ . '/schema.php';
+    $root = rtrim(archive_dir(), '/'); $px = "$root/PROXIES";
+    // a range, not LIKE, so the path index answers it
+    $st = db()->prepare('SELECT path, bytes FROM files WHERE path >= ? AND path < ?');
+    $st->bindValue(1, "$root/$rel/"); $st->bindValue(2, "$root/$rel" . '0');     // '0' sorts right after '/'
+    $r = $st->execute();
+    $p = ['videos' => 0, 'have' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time()];
+    while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) {
+        if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
+        $p['videos']++; $p['bytes'] += (int)$x[1];
+        if (is_file(preg_replace('/\.[^.\/]*$/', '.mp4', $px . substr($x[0], strlen($root))))) $p['have']++;
+        else $p['to_read'] += (int)$x[1];
+    }
+    $cache[$rel] = $p;
+    @file_put_contents("$f.new", json_encode($cache)) && @rename("$f.new", $f);
+    return $p;
+}
+
 // rel folder => when it was (last) asked for
 function prepare_list(): array {
     $out = [];
@@ -143,7 +168,7 @@ function prepare_table(): array {
             $ds = ['step' => 'queued'];
         else
             $ds = ['step' => in_array($px['step'], ['done', 'again'], true) ? 'next' : 'waiting'];
-        $rows[] = ['folder' => $rel, 'asked' => $asked, 'proxies' => $px, 'describe' => $ds];
+        $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => prepare_plan($rel), 'proxies' => $px, 'describe' => $ds];
     }
     return $rows;
 }

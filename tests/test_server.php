@@ -103,4 +103,14 @@ $_POST = ['moves' => "$root/archive/b4k.mov\t$root/archive/shelf/b4k.mov"];
 ob_start(); include "$root/app/db/moved.php"; ob_end_clean();
 check(db()->querySingle("SELECT path FROM files WHERE name='b4k.mov'") === "$root/archive/shelf/b4k.mov" && $ledger() === '3840x2160 29.97 h264 125.5',
       'after a tidy-up moves the original, the ledger still follows it');
+// A folder's plan comes from the catalogue at once: videos, what already has a proxy, what is left to read.
+@mkdir("$root/archive/PARKS/day1", 0777, true); @mkdir("$root/archive/PROXIES/PARKS/day1", 0777, true);
+foreach (['a.MOV' => 100, 'b.mxf' => 200, 'notes.txt' => 5] as $n => $size) {
+    file_put_contents("$root/archive/PARKS/day1/$n", str_repeat('x', $size)); landed("$root/archive/PARKS/day1/$n", $size);
+}
+file_put_contents("$root/archive/PARKS0.mov", 'not in the folder'); landed("$root/archive/PARKS0.mov", 17);
+file_put_contents("$root/archive/PROXIES/PARKS/day1/a.mp4", 'proxy');
+$plan = prepare_plan('PARKS', true);
+check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 300 && $plan['to_read'] === 200,
+      'a folder is planned at once from the catalogue: its videos, the ones with a proxy, what is left to read');
 echo "Server tests complete. Fixture: $root\n";

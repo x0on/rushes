@@ -227,16 +227,16 @@ if (isset($_POST['_newpass'])) {
                   and tags, and everything said, in the language it was said. Kept in <code>_rushes/analysis</code>;
                   nothing in the archive is changed. It starts by itself when a folder's proxies are done.</p></div>
             </div>
-            <p class="note" style="margin:12px 0 8px">Choose a folder, press Plan to see what it would take (nothing changes), then Prepare. Folders go one after another, in the
-              order you add them; nothing is ever done twice, so preparing a folder again later only does what is new.</p>
+            <p class="note" style="margin:12px 0 8px">Add as many folders as you like: each shows at once what is in it and what is left to make.
+              They run one at a time, top to bottom, and the list below shows where each one is. Nothing is ever done twice,
+              so adding a folder again later only does what is new.</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <button class="btn quiet" id="prepChoose" type="button">Choose in Finder…</button>
               <input id="prepPick" type="file" webkitdirectory hidden>
               <input id="prepPath" placeholder="or type it: a folder in the archive, e.g. PARK COLLECTION"
                      style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
-              <button class="btn quiet" data-px="proxy-plan" type="button">1 · Plan (changes nothing)</button>
-              <button class="btn" id="prepGo" type="button">2 · Prepare this folder</button>
+              <button class="btn" id="prepGo" type="button">+ Add to the list</button>
               <button class="btn quiet" data-px="proxy-stop" type="button">Stop proxies</button>
             </div>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
@@ -988,30 +988,49 @@ $('prepPick').onchange = async function () {
   try {
     const r = await (await fetch('analyze.php?' + q)).json();
     const f = r.folders || [];
-    if (f.length === 1) { $('prepPath').value = f[0]; said.textContent = 'Found it ✓ ' + f[0] + ' — now Plan, then Prepare.'; }
+    if (f.length === 1) { $('prepPath').value = f[0]; planOf(f[0]); }
     else if (f.length > 1) {
       said.innerHTML = 'There are ' + f.length + ' folders like that in the archive — which one? ' +
         f.map(function (p) { return '<button class="btn quiet" data-pick="' + esc(p) + '" type="button">' + esc(p) + '</button>'; }).join(' ');
       said.querySelectorAll('[data-pick]').forEach(function (b) {
-        b.onclick = function () { $('prepPath').value = b.dataset.pick; said.textContent = 'Picked ✓ ' + b.dataset.pick + ' — now Plan, then Prepare.'; };
+        b.onclick = function () { $('prepPath').value = b.dataset.pick; planOf(b.dataset.pick); };
       });
     } else said.textContent = '“' + top + '” is not in the archive (or search has not seen it yet). Pick it from the archive share in Finder.';
   } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
 };
+
+// What a folder holds, the moment it is chosen or typed: from the search
+// catalogue, so it is instant and starts no job.
+const gb = function (b) { b = +b || 0; return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : Math.round(b / 1e9) + ' GB'; };
+const planLine = function (p) {
+  const left = p.videos - p.have;
+  return (+p.videos || 0).toLocaleString() + ' videos · ' + (+p.have || 0).toLocaleString() + ' already have a proxy · ' +
+    (left ? '<b>' + left.toLocaleString() + ' to make</b>, ' + gb(p.to_read) + ' to read' : '<b>nothing left to make</b>');
+};
+async function planOf(folder) {
+  const said = $('prepSaid');
+  said.innerHTML = '<span class="spin"></span> Looking at ' + esc(folder) + ' …';
+  try {
+    const p = await (await fetch('analyze.php?plan=' + encodeURIComponent(folder))).json();
+    said.innerHTML = p.error ? esc(p.error) : '✓ <b>' + esc(folder) + '</b>: ' + planLine(p) + ' — press + Add to the list.';
+  } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
+}
+$('prepPath').onchange = function () { const v = this.value.trim().replace(/\/+$/, ''); if (v) planOf(v); };
 
 // Prepare: one confirmation on the button itself, then say what happened.
 let prepArmed = 0;
 $('prepGo').onclick = async function () {
   const path = $('prepPath').value.trim().replace(/\/+$/, ''), b = this;
   if (!path) { $('prepSaid').textContent = 'Type or pick a folder first.'; return; }
-  if (Date.now() > prepArmed) { prepArmed = Date.now() + 5000; b.textContent = 'Sure? Prepare ' + path.split('/').pop(); return; }
+  if (Date.now() > prepArmed) { prepArmed = Date.now() + 5000; b.textContent = 'Sure? Add ' + path.split('/').pop(); return; }
   prepArmed = 0; b.disabled = true; b.textContent = 'Asking…';
   try {
     const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'prepare', path: path }) })).json();
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
-      : 'Added ✓ ' + path + ' — its proxies start within a minute if nothing else is being made, then it is described.';
+      : 'Added ✓ ' + path + ' — it is on the list below; it starts as soon as the folders before it are done.';
+    if (!r.error) $('prepPath').value = '';
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
-  b.disabled = false; b.textContent = '2 · Prepare this folder'; loadAnalysis();
+  b.disabled = false; b.textContent = '+ Add to the list'; loadAnalysis();
 };
 async function forgetFolder(folder, b) {
   if (!confirm('Take ' + folder + ' off this list? Nothing is deleted: its proxies and descriptions stay.')) return;
@@ -1038,9 +1057,15 @@ function drawPrepare(rows) {
       : d.step === 'next' ? 'starting'
       : '<span class="dim">waiting for proxies</span>';
   };
-  $('prepTable').innerHTML = '<table class="prep"><tr><th>Folder</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
+  const busy = function (r) { return r.proxies.step === 'making' || r.proxies.step === 'again' || ['describing', 'queued', 'next'].includes(r.describe.step); };
+  const doneRow = function (r) { return ['done'].includes(r.proxies.step) && r.describe.step === 'done'; };
+  let place = 0;          // place in line among the folders not finished yet: 1 is the one running now
+  $('prepTable').innerHTML = '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
     rows.map(function (r) {
-      return '<tr><td><b>' + esc(r.folder) + '</b></td><td>' + px(r.proxies) + '</td><td>' + ds(r.describe) + '</td>' +
+      const where = doneRow(r) ? '<span class="ok">✓ done</span>' : (++place, busy(r) || place === 1 ? '<span class="busy">now</span>' : '#' + place);
+      const p = r.plan || {};
+      return '<tr><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
+        (+p.videos || 0).toLocaleString() + ' videos · ' + gb(p.bytes) + '</td><td>' + px(r.proxies) + '</td><td>' + ds(r.describe) + '</td>' +
         '<td style="text-align:right"><button class="btn quiet" data-forget="' + esc(r.folder) + '" style="padding:3px 9px;font-size:12px">Take off the list</button></td></tr>';
     }).join('') + '</table>';
   $('prepTable').querySelectorAll('[data-forget]').forEach(function (b) { b.onclick = function () { forgetFolder(b.dataset.forget, b); }; });
