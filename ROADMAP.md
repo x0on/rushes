@@ -199,6 +199,11 @@ so nobody has to wonder whether someone can reach in.
   what to say, and saves the diagnostics on the Desktop to read first (issues are
   public; attach only if nothing in it is private). Support access is "None":
   there is no way for anyone to connect to the computer through Rushes.
+- **Later, for organisations that support their own clients:** a live support
+  session as an add-on, not part of the open-source default. Same rules as
+  everything else: off unless the person at that computer turns it on in Rushes
+  Helper, time-limited, shown on screen the whole time it is open, closed with
+  one button, and every session written in a record the person can read.
 - **Fixes arrive as signed updates** that say what they change and wait for "Install".
 
 ## Copy proof: ASC MHL records beside the footage
