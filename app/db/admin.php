@@ -218,8 +218,9 @@ if (isset($_POST['_newpass'])) {
           <div style="padding:14px">
             <div class="steps2">
               <div><b>1 · Proxies</b> <span class="note">on the archive machine</span>
-                <p>A small, light copy of each video (1080p, H.264) that plays in any browser and reads much faster
-                  than the camera original. Kept in their own folder, <code>PROXIES</code>, with the same paths as the
+                <p>A small, light copy of each video (720p, H.264) that plays in any browser and reads much faster
+                  than the camera original. Describing finds the cuts and hears the sound in it, and takes its still
+                  pictures from the original, at full quality. Kept in their own folder, <code>PROXIES</code>, with the same paths as the
                   originals, so nothing mixes with the footage. Made at low priority; a file that arrived in the last
                   two hours waits for a later run, so nothing still being copied is touched.</p></div>
               <div><b>2 · Descriptions</b> <span class="note">on the helper</span>

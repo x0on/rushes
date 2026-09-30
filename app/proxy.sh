@@ -14,8 +14,14 @@
 #
 # These same files serve three purposes:
 #   1. the web player (a browser cannot play MXF at all)
-#   2. the analysis pass, which reads frames far more cheaply from a proxy
-#   3. Premiere proxies, so editors cut 1080p instead of pulling 4K over the wire
+#   2. the analysis pass: it finds the cuts and hears the sound in the proxy,
+#      and takes its few still pictures from the original, at full quality
+#   3. Premiere proxies, so editors cut 720p instead of pulling 4K over the wire
+#
+# 720p at 4 Mbit/s: the archive's older video chip (Haswell) needs more bits
+# than a software encoder for the same picture, and at 1080p/2 Mbit/s moving
+# shots broke into blocks. Fewer pixels, twice the bits: clean, still light
+# (about 30 MB a minute).
 
 set -u
 
@@ -24,8 +30,9 @@ PROXY_ROOT=${PROXY_ROOT:-$SHARE/PROXIES}
 INDEX=${INDEX:-/share/Web/index.txt}
 PLAN=${PLAN:-/share/Web/proxy-plan.tsv}
 LOG=${LOG:-/share/Web/proxy-built.tsv}
-HEIGHT=${HEIGHT:-1080}
-BITRATE=${BITRATE:-2M}
+HEIGHT=${HEIGHT:-720}
+BITRATE=${BITRATE:-4M}
+MAXRATE=${MAXRATE:-6M}   # a busy moment may use more, briefly
 TAB=$(printf '\t')
 MODE=${1:-plan}
 ONLY=${PROXY_ONLY:-}     # one folder of the archive (e.g. "PARK COLLECTION"), or empty for all of it
@@ -134,7 +141,7 @@ encode() {
     if [ "$HW" = 1 ] && ! { [ -n "$kind" ] && grep -qxF "$kind" "$CANNOT" 2>/dev/null; }; then
         how="video chip"
         run_ff -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -i "$1" \
-            -vf "scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2" && return 0
+            -vf "scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" -maxrate "$MAXRATE" $AUDIO "$2" && return 0
         chip_failed=1
     else
         chip_failed=0
@@ -142,7 +149,7 @@ encode() {
     if [ "$HW" = 1 ]; then
         how="video chip (read by the processor)"
         if run_ff -vaapi_device /dev/dri/renderD128 -i "$1" \
-            -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2"; then
+            -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" -maxrate "$MAXRATE" $AUDIO "$2"; then
             # the chip could not read this kind, the processor could: remember it
             if [ "$chip_failed" = 1 ] && [ -n "$kind" ] && ! grep -qxF "$kind" "$CANNOT" 2>/dev/null; then
                 echo "$kind" >> "$CANNOT"; echo "  learnt: the chip cannot read \"$kind\" — such files go straight to the processor from now on"
@@ -278,7 +285,7 @@ while IFS="$TAB" read -r src out; do
         case "$how" in "video chip") chip=$((chip + 1)) ;; software) soft=$((soft + 1)) ;; *) mixed=$((mixed + 1)) ;; esac
         # What the original is (4K or HD, frame rate, codec, length) and what the
         # camera wrote inside it (its clock, timecode, reel, make and model),
-        # read once here, where the file is: the proxy is always 1080p, the original is not.
+        # read once here, where the file is: the proxy is always 720p, the original is not.
         probe=$($FFMPEG -hide_banner -nostdin -i "$src" 2>&1 \
             | grep -E 'Duration:|Video:|creation_time|modification_date|timecode|reel_name|model|make|product_name|company_name|encoder' \
             | head -24 | tr '\t\n' '  ')

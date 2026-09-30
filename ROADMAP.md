@@ -52,7 +52,7 @@ with everything the final stage needs inside it.
 - Transfer history: patched to show copied and already-present for older
   folders; not yet one consistent history.
 - Preparing a folder (Manage → Describe): its proxies are made on the archive
-  machine first (1080p, in `PROXIES` with the same paths, never on a folder
+  machine first (720p at 4 Mbit/s, in `PROXIES` with the same paths, never on a folder
   still arriving), then the helper describes it from those proxies. One step
   after the other, by itself, never twice.
 - The media ledger, in the database: for every original, what it is (4K or

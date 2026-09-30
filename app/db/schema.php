@@ -114,7 +114,7 @@ function db_init(): void {
     $db->exec("CREATE TABLE IF NOT EXISTS media (
         file_id  INTEGER PRIMARY KEY,
         width    INTEGER, height INTEGER, fps REAL, codec TEXT, duration REAL,
-        proxy_at INTEGER                -- when its 1080p proxy was made
+        proxy_at INTEGER                -- when its proxy (720p) was made
     )");
     // What the camera wrote inside the file (read with its proxy): its clock
     // as written, timecode, reel or clip name, make and model.

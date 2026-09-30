@@ -391,7 +391,7 @@ function inspect(r) {
       (r.camera ? '<div class="k">Camera</div><div class="v">' + esc(r.camera) + '</div>' : '') +
       (r.timecode || r.reel ? '<div class="k">Timecode</div><div class="v">' + esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · ')) + '</div>' : '') +
       '<div class="k">Copies</div><div class="v">' + copiesText(r.copies) + '</div>' +
-      (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its 1080p proxy (downloads and pulls use the original)</div>' : '') +
+      (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its 720p proxy (downloads and pulls use the original)</div>' : '') +
       (r.event ? '<div class="k">Shoot</div><div class="v">' + esc(r.event) + '</div>' : '') +
       (r.year  ? '<div class="k">Year</div><div class="v">' + esc(r.year) + '</div>' : '') +
       '<div class="k">Where it lives</div><div class="v">' + esc(short(r.path)) + '</div>' +

@@ -310,7 +310,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
             pass
     ext = path.suffix.lower()
     t0 = time.time()
-    src = proxy or path                     # the pictures and sound are read from the proxy when there is one
+    src = proxy or path                     # cuts and sound from the proxy when there is one; stills from the original
     duration, has_audio, has_video, clock = (0.0, False, True, "") if ext in IMAGE else probe(src)
     if proxy:                               # the camera clock is in the original
         clock = probe(path)[3] or clock
@@ -325,6 +325,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
 
     if ext in IMAGE or (ext not in AUDIO and has_video):
         cuts = [(0.0, 0.0)] if ext in IMAGE else shots_of(src, duration)
+        pics = {"original": 0, "proxy": 0}
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             for i, (a, b) in enumerate(cuts):
@@ -336,8 +337,15 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                     frames = [str(f)] if f.exists() else []
                 else:
                     for k, at in enumerate(sample_times(a, b)):
-                        if frame(src, at, td / f"f{k}.jpg"):
-                            frames.append(str(td / f"f{k}.jpg"))
+                        # The still from the ORIGINAL: full quality for the model, and
+                        # one seek reads only a few MB of it. The proxy is where the
+                        # cuts were found and the sound is heard; its picture is only
+                        # used when the original cannot give one (RAW, unreadable).
+                        f = td / f"f{k}.jpg"
+                        if frame(path, at, f):
+                            pics["original"] += 1; frames.append(str(f))
+                        elif proxy and frame(proxy, at, f):
+                            pics["proxy"] += 1; frames.append(str(f))
                 if not frames:
                     continue
                 shutil.copyfile(frames[0], thumbs / f"{i:04d}.jpg")          # the picture search shows
@@ -350,6 +358,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                 rec["shots"].append(shot)
                 say(file=path.name, n=n, of=of, shot=i + 1, shots=len(cuts),
                     per_shot=round((time.time() - t0) / (i + 1), 1), failed=rec["failed_shots"])
+        rec["pictures_from"] = {k: v for k, v in pics.items() if v}     # which file each still came from
         for s in rec["shots"]:        # one title read by two frames, merged
             s["text_on_screen"] = merge_text([s.get("text_on_screen", [])])
 

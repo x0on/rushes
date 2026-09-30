@@ -99,7 +99,7 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | PHP | Serves the Rushes pages | Archive machine | PHP License 3.01 | php.net |
 | SQLite | The search catalogue, the media ledger, transfers | Archive machine and the helper | Public domain | sqlite.org |
-| FFmpeg | Makes the 1080p proxies, and reads what the camera wrote inside each original (its clock, timecode, reel, make and model) | Archive machine | LGPL-2.1+ (some builds GPL) | ffmpeg.org |
+| FFmpeg | Makes the 720p proxies, and reads what the camera wrote inside each original (its clock, timecode, reel, make and model) | Archive machine | LGPL-2.1+ (some builds GPL) | ffmpeg.org |
 | Czkawka | Finds duplicate files | Archive machine (its container) | MIT | Rafał Mikrut — github.com/qarmin/czkawka |
 | BusyBox and the NAS system | The shell the scheduled jobs run in | Archive machine | GPL-2.0 (part of the NAS system) | busybox.net |
 
