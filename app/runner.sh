@@ -47,7 +47,7 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
         echo "running" > /share/Web/helper-builtin.txt
     else
         [ -f /share/Web/helper.log ] && [ "$(wc -c < /share/Web/helper.log)" -gt 5000000 ] && mv /share/Web/helper.log /share/Web/helper.log.old
-        nohup "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
+        "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
         echo $! > /share/Web/helper.pid
         echo "started" > /share/Web/helper-builtin.txt
         echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper" >> "$LOG"
@@ -60,12 +60,15 @@ fi
 # Is a proxy build really running? The number in proxy.pid can outlive its
 # job and be given to another program later: only trust it if that process is
 # proxy.sh, or the list would wait for ever for a build that is not there.
+# No nohup here: the NAS's shell does not have it (it failed with "nohup: command
+# not found" every minute), and a job started from cron keeps running after the
+# runner ends anyway. Input from /dev/null so nothing waits on a terminal.
 proxy_alive() { pid=$(cat /share/Web/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
 NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
 if [ -n "$NEXT" ]; then
     if ! proxy_alive; then
         rm -f /share/Web/proxy-next.txt
-        PROXY_ONLY="$NEXT" nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
+        PROXY_ONLY="$NEXT" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
         echo $! > /share/Web/proxy.pid
         echo "$(date '+%Y-%m-%d %H:%M:%S')  making proxies for $NEXT" >> "$LOG"
     fi
@@ -392,7 +395,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             if proxy_alive; then
                 echo "proxies are already being made (process $pid, detail in proxy.log)" >> "$LOG"
             else
-                PROXY_ONLY="$QUERY" nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
+                PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
                 echo $! > /share/Web/proxy.pid
                 echo "making proxies in the background: progress in Manage → Describe, detail in proxy.log" >> "$LOG"
             fi
