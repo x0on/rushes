@@ -1080,7 +1080,9 @@ document.querySelectorAll('[data-px]').forEach(function (b) {
 let descPaused = false;                // for the list, which says "paused" instead of "queued"
 function drawDescribeTools(h) {
   descPaused = !!(h && h.describe_paused);
-  const b = $('anPause'), on = h && h.label && h.fresh;
+  // Always there: it is a switch Rushes keeps, so it works even while the helper is
+  // away (it sees it when it is back).
+  const b = $('anPause'), on = !!(h && h.label);
   b.hidden = !on;
   if (on && !b.disabled) b.textContent = descPaused ? 'Resume describing' : 'Pause describing';
   if (on && !$('anPauseSaid').dataset.keep)
