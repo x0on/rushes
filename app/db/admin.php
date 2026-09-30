@@ -950,9 +950,10 @@ function drawProxies(p) {
 // Proxy buttons: the same runner jobs, for the folder typed above (or all of it).
 document.querySelectorAll('[data-px]').forEach(function (b) {
   b.onclick = async function () {
-    const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '');
+    const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '') || (what === 'proxy-test' ? prepFirst : '');
     if (what === 'proxy-plan' && !folder) { $('prepSaid').textContent = 'Choose a folder first — Plan looks at one folder.'; return; }
     if (what === 'proxy-test' && !folder) { $('prepSaid').textContent = 'Choose a folder (or type a clip) first — the test uses its biggest video.'; return; }
+    if (what === 'proxy-test') $('prepSaid').textContent = 'Testing with ' + folder + (folder.match(/\.\w{2,4}$/) ? '' : ' — its biggest video') + '.';
     if (what === 'proxy-stop' && !b.dataset.sure) {
       const w = b.textContent; b.dataset.sure = '1'; b.textContent = 'Sure? Stop';
       setTimeout(function () { if (b.dataset.sure) { delete b.dataset.sure; b.textContent = w; } }, 5000);
@@ -1083,7 +1084,9 @@ const hm = function (secs) {
   secs = Math.max(60, +secs || 0); const h = Math.floor(secs / 3600), m = Math.round(secs % 3600 / 60);
   return h ? h + ' h' + (m ? ' ' + m + ' min' : '') : m + ' min';
 };
+let prepFirst = '';                    // the first folder on the list: what "Test proxy settings" uses when nothing is typed
 function drawPrepare(rows, a) {
+  prepFirst = rows && rows.length ? rows[0].folder : '';
   const n = function (x) { return (+x || 0).toLocaleString(); };
   a = a || {};
   if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is on the list yet.</div>'; return; }
