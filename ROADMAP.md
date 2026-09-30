@@ -137,6 +137,28 @@ and each transcript records which model made it.
   its fingerprints do not match the old one's. Names are kept and carried over
   to the new groups.
 
+## Learning from established software
+
+What long-running open-source tools already solved, taken as ideas (their
+licenses stay theirs; CREDITS.md says what came from where):
+
+1. **Jellyfin** — older Intel video chips (like the archive's i7-4790S) need the
+   i965 driver; their ffmpeg carries it. Fast proxies on the video chip. *Next.*
+2. **ASC MHL** (MIT) — the film industry's copy-proof file, read by Hedge,
+   Silverstack and Resolve. Copies recorded in it, with xxHash fingerprints.
+3. **restic / Borg** — scrubbing: re-read the archive on a schedule and compare
+   every file with its stored fingerprint, to catch disks slowly corrupting files.
+4. **git-annex** — how many copies of each file exist, and a warning when only one does.
+5. **ExifTool / MediaInfo** — what cameras write inside files: timecode, reel,
+   real recording time, camera. Better time of day and resolution in search.
+6. **XMP sidecars** — descriptions and keywords in Adobe's format beside the
+   footage, so Premiere and Bridge show them too.
+7. **OpenTimelineIO** (Apache-2.0) — pulls as editing timelines, and Premiere relinking.
+8. **Immich** — background jobs, retries, re-organising by template, images
+   (ideas only: its face model is not free for every use).
+9. **rsync / rclone** — done: whole-file verification, sources that change
+   mid-copy, no half files, a full archive stops once, accented names.
+
 ## Order
 
 1. **Finish the loop on a real archive.** The copy completes, then tidy-up,
