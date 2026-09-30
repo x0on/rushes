@@ -236,6 +236,58 @@ def log_tail(n=12):
     return [l for l in lines if l.strip()][-n:]
 
 
+def diagnostics(url):
+    """Everything someone helping would ask for, in one plain text file on the
+    Desktop, for the person to read before sending it anywhere — or not at all.
+    Versions, switches, what the helper said lately. It names folders and files
+    (that is what the log is about); it holds no footage and no passwords, and
+    nothing is sent: where it goes next is the person's choice."""
+    import platform, hashlib
+    lines = []
+    def add(title, value=""):
+        lines.append(f"{title}: {value}" if value != "" else f"\n── {title} ──")
+    try:
+        with open(os.path.join(APP, "Contents", "Info.plist"), "rb") as f:
+            ver = plistlib.load(f).get("CFBundleShortVersionString", "?")
+    except (OSError, plistlib.InvalidFileException):
+        ver = "?"
+    add("Rushes diagnostics", time.strftime("%Y-%m-%d %H:%M:%S"))
+    add("What this is", "written by Rushes Helper when you pressed Collect diagnostics; nothing was sent anywhere")
+    add("Rushes Helper", f"{ver} · {APP}")
+    add("macOS", f"{platform.mac_ver()[0]} · {platform.machine()}")
+    add("Rushes server", url or "(not set up)")
+    loaded, pid = service_running()
+    add("Running in the background", f"yes (process {pid})" if loaded else "no")
+    add("Full Disk Access", "yes" if has_full_disk_access() else "no")
+    for f in FILES + ("analyze.py",):
+        try: add(f, hashlib.sha256(open(os.path.join(DIR, f), "rb").read()).hexdigest()[:12])
+        except OSError: add(f, "missing")
+    try: add("Drives connected", ", ".join(sorted(os.listdir("/Volumes"))))
+    except OSError: pass
+    add("Rushes' switches for this helper")
+    try: lines.append(json.dumps(rushes(url, "/db/helper.php?control"), indent=1))
+    except Exception as e: lines.append(f"(Rushes did not answer: {e})")
+    add("What the helper is doing, as Rushes sees it")
+    try:
+        st = rushes(url, "/db/state.php")
+        lines.append(json.dumps({k: st.get(k) for k in ("copy", "helper", "transfer", "conditions")}, indent=1, ensure_ascii=False))
+    except Exception as e: lines.append(f"(Rushes did not answer: {e})")
+    for name, n in (("helper.log", 300), ("setup.log", 80)):
+        add(f"The last {n} lines of {name}")
+        try:
+            with open(os.path.join(LOGS, name), "rb") as f:
+                f.seek(0, 2); f.seek(max(0, f.tell() - 200000))
+                lines += f.read().decode("utf-8", "replace").splitlines()[-n:]
+        except OSError:
+            lines.append("(none)")
+    out = os.path.join(HOME, "Desktop", time.strftime("Rushes diagnostics %Y-%m-%d %H.%M.txt"))
+    with open(out, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    subprocess.run(["open", "-R", out])          # shown in Finder, to read first
+    log(f"diagnostics written to {out}")
+    return out
+
+
 # ── the window ──────────────────────────────────────────────────────────────
 class Window:
     """Everything the page shows, and what its buttons do. The page asks for
@@ -331,6 +383,9 @@ class Window:
             self.set(step="home", said="")
         elif do == "done":
             self.quit.set()
+        elif do == "diagnostics":
+            self.run("Collecting diagnostics …", lambda: self.set(said="Saved ✓ " + os.path.basename(diagnostics(s["url"])) +
+                     " is on your Desktop, shown in Finder. Read it first; nothing was sent anywhere."))
         # switches, once set up: each says what it did
         elif do == "service-off":
             self.run("Stopping …", lambda: self.set(said="Stopped ✓ It will not run, not even after a restart, until you turn it on here."
@@ -596,6 +651,9 @@ function home(s) {
     // Support: said here, where the person at this Mac sees it, so nobody has
     // to wonder whether someone can reach in. Off, and not built yet.
     '<div class="box">' +
+      '<div class="row"><div class="t">Diagnostics<small>Everything someone helping you would ask for, in one text file on your Desktop, ' +
+        'to read before you send it to anyone: versions, switches, and what the helper said lately. It names folders and files; ' +
+        'it holds no footage and no passwords. Nothing is sent.</small></div>' + btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
       '<div class="row"><div class="t">Support access<small>Off. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
         'When support sessions exist they will be off by default, turned on only here by you, time-limited, shown on screen while open, and closed with one button.</small></div>' +
       '<button class="sw" disabled title="Not built yet: nobody can turn this on"></button></div>' +
