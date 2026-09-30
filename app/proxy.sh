@@ -30,6 +30,11 @@ PROXY_ROOT=${PROXY_ROOT:-$SHARE/PROXIES}
 INDEX=${INDEX:-/share/Web/index.txt}
 PLAN=${PLAN:-/share/Web/proxy-plan.tsv}
 LOG=${LOG:-/share/Web/proxy-built.tsv}
+# The setting chosen in Manage → Describe after "Test proxy settings" (height,
+# Mbit/s), when one was chosen; otherwise 720p at 4.
+if [ -z "${HEIGHT:-}" ] && read -r ph pb < /share/Web/proxy-setting.txt 2>/dev/null; then
+    case "$ph:$pb" in 720:[2346]|1080:[2346]) HEIGHT=$ph; BITRATE=${pb}M; MAXRATE=$(( pb * 3 / 2 ))M ;; esac
+fi
 HEIGHT=${HEIGHT:-720}
 BITRATE=${BITRATE:-4M}
 MAXRATE=${MAXRATE:-6M}   # a busy moment may use more, briefly

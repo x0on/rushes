@@ -238,16 +238,28 @@ if (isset($_POST['_newpass'])) {
                      style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
               <button class="btn" id="prepGo" type="button">+ Add to the list</button>
-              <button class="btn quiet" data-px="proxy-test" type="button">Test proxy settings</button>
               <button class="btn quiet" data-px="proxy-stop" type="button">Stop proxies</button>
             </div>
-            <p class="note" style="margin:6px 0 0">Test proxy settings: 20 seconds of the folder's biggest clip (or the clip typed) made at
-              several sizes and bitrates on the video chip, side by side in <code>_rushes/proxy-test</code> with a still from each and
-              one from the original — to choose before a whole folder is made. Nothing else changes.</p>
-            <div id="pxTest"></div>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
             <div id="pxState" class="note" style="margin-top:6px"></div>
             <div id="prepTable" style="margin-top:12px"></div>
+          </div>
+        </div>
+
+        <!-- How proxies are made: tested on this machine's own video chip, chosen here. -->
+        <div class="panel" style="margin-top:14px">
+          <header><b>Proxy settings</b> <span class="note">· how proxies are made, tried on this machine's video chip first</span></header>
+          <div style="padding:14px">
+            <p id="ptNow" style="margin:0 0 8px"></p>
+            <p class="note" style="margin:0 0 10px">Pick one clip from the archive in Finder. Twenty seconds of it are made at several sizes and
+              bitrates on the video chip, and a still from each appears below beside one from the original, at the same moment. Choose the
+              one you like: proxies made from then on use it (the ones already made stay as they are). Nothing is uploaded — Safari's button
+              says Upload, but only the clip's name and size are read — and nothing in the archive changes. The test clips are kept in
+              <code>_rushes/proxy-test</code> on VIDEO, to play full screen.</p>
+            <button class="btn" id="ptGo" type="button">Test proxy settings…</button>
+            <input id="ptPick" type="file" accept="video/*,.mxf,.MXF,.mts,.MTS" hidden>
+            <p class="note" id="ptSaid" style="margin:8px 0 0"></p>
+            <div id="pxTest"></div>
           </div>
         </div>
 
@@ -821,11 +833,7 @@ async function load() {
   drawHelper(d);
   drawDescribeTools(d.helper);
   drawProxies(d.proxies);
-  const pt = d.proxy_test, ptRun = d.running === 'proxy-test' || (d.queued || []).includes('proxy-test');
-  $('pxTest').innerHTML = ptRun || pt ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px">' +
-      '<b>Proxy settings test</b> · ' + (d.running === 'proxy-test' ? '<span class="spin"></span>making them now (a few minutes)'
-        : ptRun ? '<span class="spin"></span>asked — starts within a minute' : 'finished ' + esc(clock(pt.at))) +
-      (pt ? '<pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' + esc(pt.text) + '</pre>' : '') + '</div>' : '';
+  drawProxyTest(d);
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {
@@ -907,6 +915,67 @@ async function load() {
   if (busy && !d.running && !tq.length) busy = null;
 }
 
+// ── proxy settings: test on one clip, see the stills side by side, choose ──
+function drawProxyTest(d) {
+  const ps = d.proxy_setting || [720, 4], pt = d.proxy_test;
+  const running = d.running === 'proxy-test', asked = (d.queued || []).includes('proxy-test');
+  $('ptNow').innerHTML = 'In use: <b>' + ps[0] + 'p at ' + ps[1] + ' Mbit/s</b>';
+  $('ptGo').disabled = running || asked;
+  $('ptGo').textContent = running ? 'Testing…' : asked ? 'Asked…' : 'Test proxy settings…';
+  if (!pt && !running && !asked) { $('pxTest').innerHTML = ''; return; }
+  const mb = {};                               // "720p at 4Mbit/s: 30 MB a minute" -> {"720-4M": 30}
+  ((pt && pt.text) || '').replace(/(\d+)p at (\d+)Mbit\/s: (\d+) MB a minute/g, function (_, h, b, m) { mb[h + '-' + b + 'M'] = m; });
+  const soft = ((pt && pt.text) || '').match(/in software, for comparison: (\d+) MB a minute/);
+  const order = ['original', '720-2M', '720-3M', '720-4M', '720-6M', '1080-4M', '1080-6M', 'software'];
+  const have = (pt && pt.stills) || [];
+  const tiles = order.filter(function (k) { return have.includes(k + '.jpg'); }).map(function (k) {
+    const m = /^(\d+)-(\d)M$/.exec(k), inUse = m && +m[1] === ps[0] && +m[2] === ps[1];
+    const label = k === 'original' ? 'The original' : k === 'software' ? '720p in software <span class="note">(for comparison)</span>'
+      : m[1] + 'p · ' + m[2] + ' Mbit/s';
+    const size = k === 'original' ? 'the camera file' : k === 'software' ? (soft ? soft[1] + ' MB a minute' : '') : (mb[k] ? mb[k] + ' MB a minute' : '');
+    return '<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden' + (inUse ? ';outline:2px solid var(--accent)' : '') + '">' +
+      '<a href="../proxy-test/' + k + '.jpg?t=' + pt.at + '" target="_blank" title="Open it full size">' +
+      '<img src="../proxy-test/' + k + '.jpg?t=' + pt.at + '" style="display:block;width:100%;aspect-ratio:16/9;object-fit:cover" alt=""></a>' +
+      '<div style="padding:8px 10px"><b>' + label + '</b><div class="note">' + esc(size) + '</div>' +
+      (m ? (inUse ? '<div class="note" style="margin-top:6px">✓ in use</div>'
+                  : '<button class="btn quiet" style="margin-top:6px" data-use="' + m[1] + ' ' + m[2] + '" type="button">Use this</button>') : '') +
+      '</div></div>';
+  });
+  $('pxTest').innerHTML = '<div style="margin-top:12px">' +
+    (running ? '<p><span class="spin"></span><b>Making the test clips now</b> — a few minutes; the stills appear here when they are done.</p>'
+      : asked ? '<p><span class="spin"></span><b>Asked</b> — the archive machine starts it within a minute.</p>'
+      : '<p><b>Last test</b> · ' + esc(new Date(pt.at * 1000).toLocaleString()) + ' · click a still to see it full size</p>') +
+    (tiles.length && !running ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">' + tiles.join('') + '</div>' : '') +
+    (pt ? '<details style="margin-top:8px"><summary class="note">What the archive machine said</summary><pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' +
+      esc(pt.text) + '</pre></details>' : '') + '</div>';
+  $('pxTest').querySelectorAll('[data-use]').forEach(function (b) {
+    b.onclick = async function () {
+      const v = b.dataset.use.split(' '); b.disabled = true; b.textContent = 'Saving…';
+      try {
+        const j = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'proxy-setting', height: v[0], mbits: v[1] }) })).json();
+        $('ptSaid').textContent = j.error ? 'Did not happen: ' + j.error
+          : 'Saved ✓ Proxies made from now on are ' + v[0] + 'p at ' + v[1] + ' Mbit/s. The ones already made stay as they are.';
+      } catch (e) { $('ptSaid').textContent = 'Could not reach the archive: ' + e.message; }
+      load();
+    };
+  });
+}
+$('ptGo').onclick = function () { $('ptPick').value = ''; $('ptPick').click(); };
+$('ptPick').onchange = async function () {
+  const f = (this.files || [])[0], said = $('ptSaid');
+  if (!f) return;
+  said.textContent = 'Finding “' + f.name + '” in the archive… (only its name and size are read)';
+  try {
+    const r = await (await fetch('analyze.php?' + new URLSearchParams({ file: f.name, size: f.size }))).json();
+    const rel = (r.files || [])[0];
+    if (!rel) { said.textContent = '“' + f.name + '” is not in the archive (or search has not seen it yet). Pick a clip from the VIDEO share.'; return; }
+    if (/[^A-Za-z0-9 _.\/&(),+-]/.test(rel)) { said.textContent = 'Its name or folder has a character the archive machine\'s jobs cannot take (' + rel + '). Pick another clip.'; return; }
+    const j = await (await fetch('../run.php', { method: 'POST', body: new URLSearchParams({ action: 'proxy-test', query: rel }) })).json();
+    said.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓ Testing with ' + rel + ' — the stills appear below in a few minutes.';
+  } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
+  load();
+};
+
 // ── describing footage ─────────────────────────────────────────────────────
 // Asks, and says what happened; the helper does the work and the live box shows it.
 let anArmed = 0;
@@ -950,17 +1019,15 @@ function drawProxies(p) {
 // Proxy buttons: the same runner jobs, for the folder typed above (or all of it).
 document.querySelectorAll('[data-px]').forEach(function (b) {
   b.onclick = async function () {
-    const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '') || (what === 'proxy-test' ? prepFirst : '');
+    const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '');
     if (what === 'proxy-plan' && !folder) { $('prepSaid').textContent = 'Choose a folder first — Plan looks at one folder.'; return; }
-    if (what === 'proxy-test' && !folder) { $('prepSaid').textContent = 'Choose a folder (or type a clip) first — the test uses its biggest video.'; return; }
-    if (what === 'proxy-test') $('prepSaid').textContent = 'Testing with ' + folder + (folder.match(/\.\w{2,4}$/) ? '' : ' — its biggest video') + '.';
     if (what === 'proxy-stop' && !b.dataset.sure) {
       const w = b.textContent; b.dataset.sure = '1'; b.textContent = 'Sure? Stop';
       setTimeout(function () { if (b.dataset.sure) { delete b.dataset.sure; b.textContent = w; } }, 5000);
       return;
     }
     delete b.dataset.sure;
-    const was = what === 'proxy-stop' ? 'Stop proxies' : what === 'proxy-test' ? 'Test proxy settings' : b.textContent; b.disabled = true; b.textContent = 'Asking…';
+    const was = what === 'proxy-stop' ? 'Stop proxies' : b.textContent; b.disabled = true; b.textContent = 'Asking…';
     try {
       const j = await (await fetch('../run.php', { method: 'POST',
         body: new URLSearchParams({ action: what, query: folder }) })).json();
@@ -1084,9 +1151,7 @@ const hm = function (secs) {
   secs = Math.max(60, +secs || 0); const h = Math.floor(secs / 3600), m = Math.round(secs % 3600 / 60);
   return h ? h + ' h' + (m ? ' ' + m + ' min' : '') : m + ' min';
 };
-let prepFirst = '';                    // the first folder on the list: what "Test proxy settings" uses when nothing is typed
 function drawPrepare(rows, a) {
-  prepFirst = rows && rows.length ? rows[0].folder : '';
   const n = function (x) { return (+x || 0).toLocaleString(); };
   a = a || {};
   if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is on the list yet.</div>'; return; }

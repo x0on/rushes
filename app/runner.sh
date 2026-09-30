@@ -410,6 +410,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 elif [ -z "$clip" ]; then echo "No video found at ${QUERY:-(nothing chosen)}."
                 else
                     mkdir -p "$T" && rm -f "$T"/*
+                    W=/share/Web/proxy-test; mkdir -p "$W" && rm -f "$W"/*     # the stills again, for the page to show side by side
                     name=$(basename "$clip"); name=${name%.*}
                     info=$($D -i "$clip" 2>&1)
                     dur=$(printf '%s' "$info" | sed -n 's/.*Duration: \([0-9]*\):\([0-9]*\):\([0-9]*\).*/\1 \2 \3/p' | head -1 | awk '{print $1*3600+$2*60+$3}')
@@ -418,6 +419,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                     echo "  $(printf '%s' "$info" | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
                     echo "20 seconds from ${at}s, each setting made on the video chip (the way proxies are made):"
                     $D -loglevel error -ss $(( at + 10 )) -i "$clip" -frames:v 1 -q:v 2 "$T/$name - 0 original - still.jpg" 2>/dev/null
+                    cp "$T/$name - 0 original - still.jpg" "$W/original.jpg" 2>/dev/null
                     for s in "720 2M" "720 3M" "720 4M" "720 6M" "1080 4M" "1080 6M"; do
                         set -- $s; h=$1; b=$2; m=$(( ${b%M} * 3 / 2 ))M; o="$T/$name - ${h}p ${b}.mp4"; t0=$(date +%s)
                         if $D -loglevel error -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -ss $at -t 20 -i "$clip" \
@@ -425,12 +427,14 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                            || $D -loglevel error -vaapi_device /dev/dri/renderD128 -ss $at -t 20 -i "$clip" \
                                -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$h" -c:v h264_vaapi -b:v $b -maxrate $m -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null; then
                             $D -loglevel error -ss 10 -i "$o" -frames:v 1 -q:v 2 "$T/$name - ${h}p ${b} - still.jpg" 2>/dev/null
+                            cp "$T/$name - ${h}p ${b} - still.jpg" "$W/$h-$b.jpg" 2>/dev/null
                             echo "  ${h}p at ${b}bit/s: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
                         else rm -f "$o"; echo "  ${h}p at ${b}bit/s: the chip could not make it"; fi
                     done
                     o="$T/$name - 720p software crf23.mp4"; t0=$(date +%s)
                     if $D -loglevel error -ss $at -t 20 -i "$clip" -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null; then
                         $D -loglevel error -ss 10 -i "$o" -frames:v 1 -q:v 2 "$T/$name - 720p software crf23 - still.jpg" 2>/dev/null
+                        cp "$T/$name - 720p software crf23 - still.jpg" "$W/software.jpg" 2>/dev/null
                         echo "  720p in software, for comparison: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
                     fi
                     chown -R "$(stat -c %u:%g /share/VIDEO)" "$T" 2>/dev/null

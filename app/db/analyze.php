@@ -28,6 +28,18 @@ if (isset($_GET['plan'])) {
     if ($rel === '' || str_contains($rel, '..') || !is_dir("$root/$rel")) out(['error' => "There is no folder “{$rel}” in the archive."]);
     out(['folder' => $rel] + prepare_plan($rel, true));
 }
+// A clip picked in Finder: its name and size are all a browser tells (nothing
+// is uploaded). The archive file with that name and exactly that size is it.
+//   GET ?file=<name>&size=<bytes>  ->  where it is in the archive
+if (isset($_GET['file'])) {
+    require_once __DIR__ . '/schema.php';
+    $find = db()->prepare('SELECT path FROM files WHERE name = ? AND bytes = ? LIMIT 20');
+    $find->bindValue(1, basename((string)$_GET['file'])); $find->bindValue(2, (int)($_GET['size'] ?? 0));
+    $r = $find->execute(); $files = [];
+    while ($x = $r->fetchArray(SQLITE3_NUM))
+        if (str_starts_with($x[0], "$root/") && !str_starts_with($x[0], "$root/PROXIES/")) $files[] = substr($x[0], strlen($root) + 1);
+    out(['files' => $files]);
+}
 if (isset($_GET['locate'])) {
     require_once __DIR__ . '/schema.php';
     $find = db()->prepare('SELECT path FROM files WHERE name = ?');
@@ -50,6 +62,14 @@ require_once __DIR__ . '/prepare.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
+    // The proxy setting chosen after "Test proxy settings": proxy.sh reads it
+    // for every proxy made from now on. Existing proxies stay as they are.
+    if (($_POST['action'] ?? '') === 'proxy-setting') {
+        $h = (int)($_POST['height'] ?? 0); $b = (int)($_POST['mbits'] ?? 0);
+        if (!in_array($h, [720, 1080], true) || !in_array($b, [2, 3, 4, 6], true)) bail(400, 'not one of the tested settings');
+        if (file_put_contents(web_dir() . '/proxy-setting.txt', "$h $b\n") === false) bail(500, 'could not save it');
+        out(['ok' => 'proxy-setting', 'height' => $h, 'mbits' => $b]);
+    }
     $rel = trim(str_replace('\\', '/', (string)($_POST['path'] ?? '')), '/');
     // Prepare: proxies first, then descriptions; the order is kept by prepare_advance.
     // Order and "try again": the list keeps each folder's place and when it was asked.
