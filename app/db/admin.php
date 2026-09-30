@@ -284,6 +284,10 @@ if (isset($_POST['_newpass'])) {
           <header><b>Describing</b></header>
           <div style="padding:14px">
             <div id="anTools" class="note"></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
+              <button class="btn quiet" id="anPause" type="button" hidden></button>
+              <span class="note" id="anPauseSaid"></span>
+            </div>
             <div class="tiles" id="anTiles" style="margin-top:12px"></div>
           </div>
         </div>
@@ -932,6 +936,18 @@ async function load() {
   if (busy && !d.running && !tq.length) busy = null;
 }
 
+$('anPause').onclick = async function () {
+  const b = this, act = descPaused ? 'describe-resume' : 'describe-pause'; b.disabled = true; b.textContent = 'Asking…';
+  try {
+    const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: act }) })).json();
+    $('anPauseSaid').textContent = r.error ? 'Did not happen: ' + r.error : act === 'describe-pause'
+      ? 'Paused ✓ It stops after the file it is on; files already described are kept. Copying carries on.'
+      : 'Resumed ✓ It carries on with the next file within a few seconds.';
+  } catch (e) { $('anPauseSaid').textContent = 'Could not reach the archive: ' + e.message; }
+  $('anPauseSaid').dataset.keep = '1'; setTimeout(function () { delete $('anPauseSaid').dataset.keep; }, 8000);
+  b.disabled = false; load();
+};
+
 // ── proxy settings: test on one clip, see the stills side by side, choose ──
 let ptOpen = false, ptLast = '';        // the log stays as you left it; nothing redrawn that did not change
 function drawProxyTest(d) {
@@ -1061,7 +1077,15 @@ document.querySelectorAll('[data-px]').forEach(function (b) {
     setTimeout(function () { b.textContent = was; b.disabled = false; load(); }, 3000);
   };
 });
+let descPaused = false;                // for the list, which says "paused" instead of "queued"
 function drawDescribeTools(h) {
+  descPaused = !!(h && h.describe_paused);
+  const b = $('anPause'), on = h && h.label && h.fresh;
+  b.hidden = !on;
+  if (on && !b.disabled) b.textContent = descPaused ? 'Resume describing' : 'Pause describing';
+  if (on && !$('anPauseSaid').dataset.keep)
+    $('anPauseSaid').textContent = descPaused ? 'Paused — nothing more is described until Resume. Files already described are kept; copying carries on.'
+      : h.describe && h.describe.phase === 'analysing' ? 'Pause stops it after the file it is on; that file is done again on Resume.' : '';
   const an = (h && h.analysis) || {};
   $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'
     : !an.model ? 'The helper on <b>' + esc(h.label) + '</b> has not said yet whether it can describe footage.'
@@ -1198,6 +1222,7 @@ function drawPrepare(rows, a) {
         '<div class="note">' + (d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' : 'looking at ') +
         (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>'
       : d.step === 'done' ? '<span class="ok">✓ ' + n(d.files) + ' files</span>' + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
+      : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
       : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
       : d.step === 'next' ? 'starting'
       : '<span class="dim">waiting for proxies</span>') + off;
