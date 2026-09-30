@@ -33,10 +33,12 @@ $os  = preg_replace('/[^a-z0-9]/', '', strtolower((string)($_POST['os'] ?? '')))
 $ver  = preg_replace('/[^a-f0-9]/', '', (string)($_POST['ver'] ?? ''));
 $how  = in_array($_POST['how'] ?? '', ['service', 'window'], true) ? $_POST['how'] : '';
 $host = substr(preg_replace('/[^A-Za-z0-9 ._-]/', '', (string)($_POST['host'] ?? '')), 0, 60);
+// a drive it has been waiting on for minutes, named, so the page can say which
+$stuck = substr(str_replace(["\t", "\n"], ' ', (string)($_POST['stuck'] ?? '')), 0, 300);
 // Whether it can describe footage, and with which models: shown on Describe.
 $an = implode("\t", array_map(fn($x) => substr(preg_replace('/[^A-Za-z0-9 ._\/-]/', '', $x), 0, 120),
                                array_slice(explode("\t", (string)($_POST['an'] ?? '')), 0, 3)));
-$out = "at\t" . time() . "\nos\t$os\nver\t$ver\nhow\t$how\nhost\t$host\nan\t$an\n" . implode("\n", $keep) . "\n";
+$out = "at\t" . time() . "\nos\t$os\nver\t$ver\nhow\t$how\nhost\t$host\nan\t$an\nstuck\t$stuck\n" . implode("\n", $keep) . "\n";
 
 // Beside, then rename: a page reading half a list would offer half the drives.
 $f = web_dir() . '/helper-volumes.tsv';

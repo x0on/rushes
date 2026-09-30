@@ -781,7 +781,8 @@ function drawHelper(d) {
   el.innerHTML = '<span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span>' +
     '<span class="t"><b>Helper on ' + esc(h.label) + '</b> · ' + esc([how, seen].filter(Boolean).join(' · ')) +
     esc(updating) + (h.paused ? ' · <b>copying paused</b>' : '') + (h.describe_paused ? ' · <b>describing paused</b>'
-      : h.describe && h.describe.phase === 'analysing' ? ' · describing ' + esc((h.describe.label || '')) + (h.describe.of ? ' (' + esc(h.describe.n) + ' of ' + esc(h.describe.of) + ')' : '') : '') + (h.check_paused ? ' · <b>checking paused</b>' : '') + (h.drives_late ? ' · a connected drive is not answering, so cards plugged in now may not show in Ingest' : '') + (h.no_reconnect ? ' · <b>not reconnecting shares</b>' : '') + '</span>' +
+      : h.describe && h.describe.phase === 'analysing' ? ' · describing ' + esc((h.describe.label || '')) + (h.describe.of ? ' (' + esc(h.describe.n) + ' of ' + esc(h.describe.of) + ')' : '') : '') + (h.check_paused ? ' · <b>checking paused</b>' : '') + (h.drives_late ? ' · ' + (h.drive_stuck ? '<b>' + esc(h.drive_stuck.split('/').pop()) + '</b> is not answering (' + esc(h.drive_stuck) + ')' : 'a connected drive is not answering') +
+      ', so cards plugged in now may not show in Ingest — eject it in Finder, or connect it again' : '') + (h.no_reconnect ? ' · <b>not reconnecting shares</b>' : '') + '</span>' +
     btns.map(function (b) {
       const sure = armed.what === b[0] && now < armed.until;
       return '<button class="btn quiet" data-h="' + b[0] + '">' + esc(sure ? 'Sure? ' + b[1] : b[1]) + '</button>'; }).join('') +

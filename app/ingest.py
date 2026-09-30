@@ -460,6 +460,7 @@ def volumes():
                  if os.path.isdir(b) for n in sorted(os.listdir(b))]
     out = []
     for r in roots:
+        _looking[0] = r                       # which drive it is on, in case one stops answering
         try:
             if not os.path.isdir(r): continue
             use = shutil.disk_usage(r)
@@ -471,6 +472,7 @@ def volumes():
                     "total": use.total, "free": use.free,
                     "card": bool(CARD_MARKS & set(top)),
                     "archive": "_rushes" in top, "top": top[:200]})
+    _looking[0] = ""
     return out
 
 
@@ -1483,6 +1485,7 @@ def tell_search(paths):
     cp.flush(force=True)
 
 _looked = [[], 0.0]        # the latest look at what is plugged in here, and when
+_looking = [""]            # the drive being looked at right now
 
 
 def look_forever(every=20):
@@ -1524,14 +1527,15 @@ def report_forever(every=20):
         try:
             lines, at = _looked
             if at and time.time() - at > 120 and not late:
-                print(f"{time.strftime('%H:%M:%S')}  ! a connected drive is not answering — "
+                print(f"{time.strftime('%H:%M:%S')}  ! {_looking[0] or 'a connected drive'} is not answering — "
                       "cards plugged in now may not show in Ingest until it does. Copies carry on.")
             late = bool(at) and time.time() - at > 120
             py, model, speech = analysis_tools()
+            stuck = _looking[0] if late or (not at and _looking[0]) else ""
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
                                            "an": ("ready" if py else "missing") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
                                            "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
-                                           "host": platform.node()}).encode()
+                                           "host": platform.node(), "stuck": stuck}).encode()
             urllib.request.urlopen(NAS_URL + "/db/report.php", data=body, timeout=15).read()
             if failing:
                 print(f"{time.strftime('%H:%M:%S')}  telling Rushes what is plugged in again ✓")
