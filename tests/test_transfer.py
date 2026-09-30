@@ -123,6 +123,45 @@ class CopyTests(unittest.TestCase):
         record = ''.join(p.read_text() for p in (self.archive / '_rushes' / 'origin').glob('*.tsv'))
         self.assertIn(f'verified blake2b {want}', record)
 
+    def test_an_original_that_changes_while_copied_is_not_kept(self):
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        grow = [True]
+        real = self.mod.shutil.copystat
+        def still_writing(s, d):
+            if grow[0]:                                # the camera writes more, mid-copy (first try only)
+                grow[0] = False
+                with open(s, 'ab') as f: f.write(b'more')
+                os.utime(s, ns=(1, 1))
+            return real(s, d)
+        with patch.object(self.mod.shutil, 'copystat', side_effect=still_writing), patch.object(self.mod.time, 'sleep'):
+            self.run_copy()
+        # Neither version is kept this run, nothing half-copied is left, and the
+        # record says why; the next run lists it at its new size and copies it.
+        self.assertFalse((self.dest / 'a.mov.part').exists())
+        self.assertFalse((self.dest / 'a.mov').exists())
+        record = ''.join(p.read_text() for p in (self.archive / '_rushes' / 'origin').glob('*.tsv'))
+        self.assertIn('the original has changed since it was listed', record)
+
+    def test_a_full_archive_stops_once_and_leaves_no_half_file(self):
+        import errno
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        (self.source / 'b.mov').write_bytes(b'b' * 10)
+        def full(fd): raise OSError(errno.ENOSPC, 'No space left on device')
+        with patch.object(self.mod.os, 'fsync', side_effect=full), patch.object(self.mod.time, 'sleep'):
+            self.assertNotEqual(self.run_copy(), 0)
+        self.assertEqual(list(self.dest.glob('*.part')), [])
+        self.assertEqual(self.reports[-1]['failed'], 0)          # not written down as failed files: it stopped
+
+    def test_an_accented_name_already_there_in_the_other_form_is_not_copied_again(self):
+        import unicodedata
+        nfc, nfd = unicodedata.normalize('NFC', 'Día.mov'), unicodedata.normalize('NFD', 'Día.mov')
+        (self.source / nfc).write_bytes(b'x' * 10)
+        self.dest.mkdir(parents=True)
+        (self.dest / nfd).write_bytes(b'x' * 10)                 # an earlier copy, stored the other way
+        with patch.object(self.mod.time, 'sleep'):
+            self.assertEqual(self.run_copy(), 0)
+        self.assertEqual(sorted(p.name for p in self.dest.iterdir() if p.suffix == '.mov'), [nfd])
+
     def test_disconnection_stops_the_folder_and_it_resumes(self):
         (self.source / 'a.mov').write_bytes(b'a' * 10)
         (self.source / 'b.mov').write_bytes(b'b' * 20)

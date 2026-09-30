@@ -22,7 +22,7 @@ How it avoids reading 40 TB to answer "do we already have this?":
 Same shape as everything else: preview, look, apply, log, undo.
 """
 
-import argparse, hashlib, json, os, platform, re, shutil, socket, subprocess, sys, threading, time
+import argparse, errno, hashlib, json, os, platform, re, shutil, socket, subprocess, sys, threading, time, unicodedata
 import urllib.parse, urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -1929,6 +1929,15 @@ def main():
         nonlocal copied, copied_b, done_b
         size, src, dest = int(f[1]), f[2], f[3]
         name = os.path.basename(src)
+        # The same name can be stored two ways: "Día" as one character or as
+        # "i" plus an accent (macOS often gives the second). They look the same
+        # and are not the same bytes, so a copy could land beside itself. As
+        # rclone does, treat both as one name: use the one already there.
+        if not os.path.exists(dest):
+            for form in ("NFC", "NFD"):
+                alt = unicodedata.normalize(form, dest)
+                if alt != dest and os.path.exists(alt):
+                    dest = alt; break
         if f[0] == "skip":               # identical file already in the archive
             if not os.path.isfile(dest) or os.path.getsize(dest) != size:
                 raise OSError("its match in the archive is not there any more")
@@ -1947,16 +1956,32 @@ def main():
             tmp = dest + ".part"
             progress(name, force=True)
             h = hashlib.blake2b(digest_size=16)      # the original's fingerprint, taken while reading it anyway
-            with open(src, "rb") as fi, open(tmp, "wb") as fo:
-                while True:
-                    buf = fi.read(8 << 20)
-                    if not buf: break
-                    fo.write(buf); h.update(buf); done_b += len(buf)
-                    progress(name)
-                fo.flush(); os.fsync(fo.fileno())    # stored on the archive's disk, not only on its way there
-            shutil.copystat(src, tmp)
+            before = os.stat(src)
+            try:
+                with open(src, "rb") as fi, open(tmp, "wb") as fo:
+                    while True:
+                        buf = fi.read(8 << 20)
+                        if not buf: break
+                        fo.write(buf); h.update(buf); done_b += len(buf)
+                        progress(name)
+                    fo.flush(); os.fsync(fo.fileno())    # stored on the archive's disk, not only on its way there
+                shutil.copystat(src, tmp)
+                # As rclone does: an original that changed while it was read
+                # (still being written by a camera or another copy) gives a copy
+                # of neither version. Thrown away; it is tried again later.
+                after = os.stat(src)
+                if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+                    raise OSError("the original changed while it was being copied (still being written?)")
+            except BaseException:
+                # No half-copied file is ever left behind, whatever stopped it.
+                try: os.remove(tmp)
+                except OSError: pass
+                raise
             if os.path.getsize(tmp) != size:
-                os.remove(tmp); raise OSError("size mismatch after copy")
+                os.remove(tmp)
+                if os.path.getsize(src) != size:
+                    raise OSError("the original has changed since it was listed (still being written?) — it is copied on the next run")
+                raise OSError("size mismatch after copy")
             if read_back(tmp) != h.hexdigest():      # the copy, read back from the archive
                 os.remove(tmp); raise OSError("the copy did not match the original byte for byte")
             os.rename(tmp, dest)
@@ -1994,6 +2019,10 @@ def main():
             except OSError as e:
                 if gone():                   # not this file's fault: stop, resume later
                     stopped = str(e); break
+                if e.errno in (errno.ENOSPC, errno.EDQUOT):
+                    # A full archive fails every file the same way: stop, say
+                    # so once, and carry on from here when there is room.
+                    stopped = "the archive is full — free some space, then it carries on from here"; break
                 if attempt == 1:
                     retry_next.append(f); continue
                 # Twice now. Write it down, say so, carry on with the rest:

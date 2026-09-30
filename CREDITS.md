@@ -35,6 +35,18 @@ How each copy is made safe:
    two must match. A copy that does not match is thrown away and made again.
 4. The fingerprint is kept in the file's where-it-came-from record, so the
    archive copy can be proven to be the original years later.
+5. An original that changes while it is being read (a camera or another copy
+   still writing it) is not kept; it is copied on a later run, once it has settled.
+6. Nothing half-copied is ever left behind, whatever stopped the copy.
+7. A full archive stops the copy once, with that reason, instead of failing
+   every file one by one; it carries on from the same place when there is room.
+8. A name with accents ("Día") can be stored two ways that look identical; both
+   count as the same name, so an earlier copy is recognised instead of copied again.
+
+Ideas, not code, taken from rsync and rclone, whose years of use found these
+problems first: rsync checks every transferred file against a whole-file
+checksum (point 3); rclone aborts a file that changes while it is read (5) and
+treats the two ways of storing accented names as one (8).
 
 rsync and rclone have years of real-world use behind them; this code has less.
 Its tests (tests/ in the repository) cover interrupted copies, dropped drives,
