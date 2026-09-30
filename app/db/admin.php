@@ -906,7 +906,9 @@ function drawProxies(p) {
         (p.hw !== '1' && p.hw_why ? '<br><span class="note">Why not the video chip: ' + esc(p.hw_why) + '.' +
           (p.cpu ? ' Processor: ' + esc(p.cpu) + '.' : '') + '</span>' : '')
     : p.state === 'building' && p.running
-      ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed · ' +
+      ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made' +
+        (p.hw === '1' ? ' (' + n(p.chip) + ' on the video chip' + (+p.mixed ? ', ' + n(p.mixed) + ' read by the processor' : '') + (+p.soft ? ', ' + n(p.soft) + ' in software' : '') + ')' : ' in software') +
+        ' · ' + n(p.failed) + ' failed · ' +
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
     : p.state === 'building'
       ? '<span class="warnline" style="display:block">The proxy build stopped without finishing (the machine restarted?) at ' +

@@ -42,8 +42,25 @@ state() {
 }
 
 # ---------- find ffmpeg ----------
-# QTS hides it; Container Station may be the only place it exists.
+# Best: the complete ffmpeg in Container Station (linuxserver/ffmpeg). It
+# carries Intel's older video driver, i965, which chips from before 2015 need
+# (Jellyfin's documentation says so, and Manage → Test the video chip showed it
+# on this machine: twice as fast as software, a fifth of the processor).
+# It runs gently (--cpu-shares) and sees only the archive share.
 FFMPEG=${FFMPEG:-}
+DOCKER=${DOCKER:-$(command -v docker 2>/dev/null)}
+if [ -z "$DOCKER" ]; then
+    CS=$(getcfg container-station Install_Path -f /etc/config/qpkg.conf 2>/dev/null)
+    for d in "$CS/bin/docker" "$CS/usr/bin/docker" /usr/local/bin/docker /share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker; do
+        [ -x "$d" ] && DOCKER=$d && break
+    done
+fi
+if [ -z "$FFMPEG" ] && [ -n "$DOCKER" ] && "$DOCKER" image inspect linuxserver/ffmpeg >/dev/null 2>&1; then
+    FFMPEG="$DOCKER run --rm --cpu-shares 256 -v $SHARE:$SHARE"
+    [ -e /dev/dri/renderD128 ] && FFMPEG="$FFMPEG --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME:-i965}"
+    FFMPEG="$FFMPEG linuxserver/ffmpeg"
+fi
+# Then an ffmpeg of the NAS's own (software only, on this machine).
 if [ -z "$FFMPEG" ]; then
     for c in /usr/local/medialibrary/bin/ffmpeg \
              /usr/local/bin/ffmpeg \
@@ -79,12 +96,30 @@ if [ -z "$HW_WHY" ] && [ -n "$FFMPEG" ] && hw_err=$($FFMPEG -nostdin -loglevel e
         -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=320x240:d=0.2 \
         -vf 'format=nv12|vaapi,hwupload' -c:v h264_vaapi -f null - 2>&1); then
     HW=1
-    ENC="-vaapi_device /dev/dri/renderD128 -vf format=nv12|vaapi,hwupload,scale_vaapi=w=-2:h=$HEIGHT -c:v h264_vaapi"
 else
     HW=0
     [ -z "$HW_WHY" ] && HW_WHY="the video chip is there and this ffmpeg can use it, but the chip refused a test frame: $(printf '%s' "${hw_err:-no ffmpeg}" | head -1 | cut -c1-160)"
-    ENC="-vf scale=-2:$HEIGHT -c:v libx264 -preset veryfast -crf 23"
 fi
+
+# One proxy: the fastest way that works for this file. All on the chip (H.264,
+# MPEG-2/MXF); if the chip cannot read the file (HEVC on older chips), the
+# processor reads it and the chip resizes and encodes; software is the last
+# resort. $how says which way it was made. Each try runs in the background so
+# Stop (from Manage) can end it at once.
+run_ff() { $NICE $FFMPEG -nostdin -loglevel error -y "$@" 2>>"$LOG.err" & ff=$!; wait "$ff"; }
+AUDIO="-c:a aac -b:a 128k -movflags +faststart"
+encode() {
+    if [ "$HW" = 1 ]; then
+        how="video chip"
+        run_ff -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -i "$1" \
+            -vf "scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2" && return 0
+        how="video chip (read by the processor)"
+        run_ff -vaapi_device /dev/dri/renderD128 -i "$1" \
+            -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2" && return 0
+    fi
+    how="software"
+    run_ff -i "$1" -vf "scale=-2:$HEIGHT" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"
+}
 
 # ---------- what is missing ----------
 # One folder: read the folder itself, so footage that landed since the last
@@ -160,7 +195,7 @@ fi
 
 # ---------- build ----------
 total=$missing
-done_n=0; ok=0; failed=0; later=0; tmp=""; ff=""
+done_n=0; ok=0; failed=0; later=0; tmp=""; ff=""; chip=0; mixed=0; soft=0
 : > "$LOG"
 echo "building $total proxies..."
 # Low priority: copies, search and editors reading the share come first.
@@ -179,17 +214,15 @@ while IFS="$TAB" read -r src out; do
     mt=$(stat -c %Y "$src" 2>/dev/null || echo 0)
     if [ $(( $(date +%s) - mt )) -lt "$RECENT" ]; then later=$((later + 1)); continue; fi
     state "state${TAB}building" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" \
-          "later${TAB}$later" "file${TAB}${src#$SHARE/}" "hw${TAB}$HW"
+          "later${TAB}$later" "file${TAB}${src#$SHARE/}" "hw${TAB}$HW" "chip${TAB}$chip" "mixed${TAB}$mixed" "soft${TAB}$soft"
     mkdir -p "$(dirname "$out")"
     # encode to a temp name so an interrupted run never leaves a playable-looking
     # but truncated file behind
     tmp="$out.part.mp4"
-    $NICE $FFMPEG -nostdin -loglevel error -y -i "$src" \
-        $ENC -b:v "$BITRATE" -c:a aac -b:a 128k -movflags +faststart "$tmp" 2>>"$LOG.err" &
-    ff=$!
-    if wait "$ff"; then
+    if encode "$src" "$tmp"; then
         mv -f "$tmp" "$out"
-        printf '%s\t%s\n' "$src" "$out" >> "$LOG"
+        printf '%s\t%s\t%s\n' "$src" "$out" "$how" >> "$LOG"
+        case "$how" in "video chip") chip=$((chip + 1)) ;; software) soft=$((soft + 1)) ;; *) mixed=$((mixed + 1)) ;; esac
         # What the original is (4K or HD, frame rate, codec, length), read once
         # here, where the file is: the proxy is always 1080p, the original is not.
         probe=$($FFMPEG -hide_banner -nostdin -i "$src" 2>&1 | grep -E 'Duration:|Video:' | head -2 | tr '\t\n' '  ')
@@ -206,7 +239,7 @@ while IFS="$TAB" read -r src out; do
 done < "$PLAN"
 
 ff=""; tmp=""
-state "state${TAB}done" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later"
+state "state${TAB}done" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "later${TAB}$later" "chip${TAB}$chip" "mixed${TAB}$mixed" "soft${TAB}$soft"
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ONLY" done "$ok" "$failed" "$later" "$total" "$(date +%s)" >> "$RUNS"
 echo "built $ok proxies, $failed failed, $later left for the next run (still arriving)"
 [ "$failed" -gt 0 ] && echo "errors in $LOG.err"
