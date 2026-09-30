@@ -1029,7 +1029,7 @@ $('prepGo').onclick = async function () {
   b.disabled = false; b.textContent = '+ Add to the list'; loadAnalysis();
 };
 // The list's buttons: each asks once more on the button itself, then acts.
-let listArmed = {key: '', until: 0}, openFails = {};
+let listArmed = {key: '', until: 0}, openFails = {}, saidOpen = false;
 async function listAct(action, folder, b, sure) {
   const key = action + '|' + folder;
   if (sure && (listArmed.key !== key || Date.now() > listArmed.until)) {
@@ -1060,7 +1060,7 @@ function drawPrepare(rows, a) {
     return p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>' + fails
       : p.step === 'done' ? '<span class="ok">✓ ' + n(p.ok) + ' made</span>' + fails + (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
       : p.step === 'again' ? 'making the ones that were still arriving' + fails
-      : p.step === 'stopped' ? '<span class="bad">stopped</span> · ' + n(p.ok) + ' made · Try again carries on' + fails
+      : p.step === 'stopped' ? '<span class="bad">stopped' + (p.why ? ': ' + esc(p.why) : '') + '</span> · ' + n(p.ok) + ' made · Try again carries on' + fails
       : p.step === 'no-room' ? '<span class="bad">not enough room on the archive: about ' + gb(p.need) + ' needed, ' + gb(p.free) + ' free</span> · free some space, then Try again'
       : p.step === 'no-ffmpeg' ? '<span class="bad">this machine cannot make video yet (no ffmpeg)</span>'
       : '<span class="dim">waiting its turn</span>';
@@ -1090,7 +1090,7 @@ function drawPrepare(rows, a) {
   // the proxy maker's own words, one click away — nothing it does is hidden
   const pl = a.proxy_log || {};
   const said = (pl.lines || []).length || (pl.errors || []).length
-    ? '<details style="margin:0 0 10px"><summary class="note" style="cursor:pointer">What the archive machine said last' +
+    ? '<details id="pxSaid"' + (saidOpen ? ' open' : '') + ' style="margin:0 0 10px"><summary class="note" style="cursor:pointer">What the archive machine said last' +
       (pl.at ? ' (' + esc(clock(pl.at)) + ')' : '') + '</summary><pre style="white-space:pre-wrap;margin:6px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' +
       esc((pl.lines || []).join('\n')) + ((pl.errors || []).length ? '\n\nffmpeg errors:\n' + esc(pl.errors.join('\n')) : '') + '</pre></details>'
     : '<p class="note" style="margin:0 0 10px">The archive machine has not written anything about proxies yet (no proxy.log): no proxy run has started there.</p>';
@@ -1119,6 +1119,8 @@ function drawPrepare(rows, a) {
         n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left ? ' · <b>about ' + hm(r.left) + '</b>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe) + '</td>' +
         '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + fails;
     }).join('') + '</table>';
+  const ps = document.getElementById('pxSaid');
+  if (ps) ps.ontoggle = function () { saidOpen = ps.open; };    // stays as you left it when the list refreshes
   $('prepTable').querySelectorAll('.ltools button').forEach(function (b) { b.style.cssText = 'padding:3px 9px;font-size:12px;margin-left:4px'; });
   $('prepTable').querySelectorAll('[data-l]').forEach(function (b) {
     // a redraw keeps a "Sure?" that is still waiting for its second press

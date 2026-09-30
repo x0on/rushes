@@ -60,7 +60,10 @@ fi
 if [ -z "$FFMPEG" ] && [ -n "$DOCKER" ] && "$DOCKER" image inspect linuxserver/ffmpeg >/dev/null 2>&1; then
     FFMPEG="$DOCKER run --rm --cpu-shares 256 -v $SHARE:$SHARE"
     [ -e /dev/dri/renderD128 ] && FFMPEG="$FFMPEG --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME:-i965}"
-    FFMPEG="$FFMPEG linuxserver/ffmpeg"
+    # ffmpeg itself, not the image's wrapper: the wrapper runs it as the owner of
+    # the camera file, who may not write in PROXIES ("Permission denied"). Owners
+    # are set below instead, to match each original.
+    FFMPEG="$FFMPEG --entrypoint /usr/local/bin/ffmpeg linuxserver/ffmpeg"
 fi
 # Then an ffmpeg of the NAS's own (software only, on this machine).
 if [ -z "$FFMPEG" ]; then
@@ -200,6 +203,7 @@ fi
 # Room first: a proxy is about 4% of its original. Checked before starting, so a
 # full archive is said once, plainly, instead of failing file after file.
 mkdir -p "$PROXY_ROOT"
+chown "$(stat -c %u:%g "$SHARE")" "$PROXY_ROOT" 2>/dev/null   # PROXIES belongs to whoever owns the share
 need=$(while IFS="$TAB" read -r src out; do stat -c %s "$src" 2>/dev/null; done < "$PLAN" | awk '{ s += $1 } END { printf "%.0f", s * 0.05 + 2e9 }')
 free=$(df -Pk "$PROXY_ROOT" 2>/dev/null | awk 'NR == 2 { printf "%.0f", $4 * 1024 }')
 if [ -n "$free" ] && [ "$free" -lt "$need" ]; then
@@ -235,6 +239,12 @@ while IFS="$TAB" read -r src out; do
     tmp="$out.part.mp4"
     t0=$(date +%s)
     if encode "$src" "$tmp"; then
+        # The proxy and its folders belong to whoever owns the original, like
+        # the original: readable on the share, and movable when tidy-up moves it.
+        own=$(stat -c %u:%g "$src" 2>/dev/null) && {
+            chown "$own" "$tmp" 2>/dev/null
+            d=$(dirname "$out"); while [ "$d" != "$PROXY_ROOT" ] && [ "$d" != "/" ]; do chown "$own" "$d" 2>/dev/null; d=$(dirname "$d"); done
+        }
         printf '%s\t%s\t%s\n' "$(stat -c %s "$src" 2>/dev/null || echo 0)" "$(( $(date +%s) - t0 ))" "$how" >> "$SPEED"
         mv -f "$tmp" "$out"
         printf '%s\t%s\t%s\n' "$src" "$out" "$how" >> "$LOG"
@@ -248,6 +258,16 @@ while IFS="$TAB" read -r src out; do
         rm -f "$tmp"
         printf 'FAILED\t%s\n' "$src" >> "$LOG"
         printf '%s\t%s\t%s\n' "$src" "$(date +%s)" "$(tail -1 "$ERRF" 2>/dev/null | tr '\t' ' ' | cut -c1-200)" >> "$FAILS"
+        # Not this file's fault: nothing can be written in PROXIES. Stop once,
+        # saying why, instead of failing every file the same way.
+        if grep -q "Permission denied\|No space left" "$ERRF" 2>/dev/null; then
+            why=$(grep -m1 "Permission denied\|No space left" "$ERRF" | cut -c1-200)
+            failed=$((failed + 1))
+            state "state${TAB}stopped" "only${TAB}$ONLY" "done${TAB}$done_n" "total${TAB}$total" "ok${TAB}$ok" "failed${TAB}$failed" "why${TAB}$why"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ONLY" stopped "$ok" "$failed" "$later" "$total" "$(date +%s)" >> "$RUNS"
+            echo "stopped: the proxies cannot be written — $why"
+            exit 1
+        fi
         failed=$((failed + 1))
     fi
     if [ $((done_n % 25)) -eq 0 ]; then

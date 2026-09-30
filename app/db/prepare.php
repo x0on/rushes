@@ -206,7 +206,7 @@ function prepare_table(): array {
         elseif (($now['state'] ?? '') === 'no-ffmpeg')
             $px = ['step' => 'no-ffmpeg'];
         elseif ($mine && $run['state'] === 'stopped')
-            $px = ['step' => 'stopped'] + $run;
+            $px = ['step' => 'stopped', 'why' => ($now['only'] ?? '') === $rel ? ($now['why'] ?? '') : ''] + $run;
         elseif ($mine && $run['state'] === 'done')
             // files that were still arriving get their proxies on a run two hours later
             $px = ['step' => ($run['later'] > 0 && time() - $run['at'] > 7200) ? 'again' : 'done'] + $run;
