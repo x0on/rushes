@@ -928,6 +928,7 @@ async function load() {
 }
 
 // ── proxy settings: test on one clip, see the stills side by side, choose ──
+let ptOpen = false, ptLast = '';        // the log stays as you left it; nothing redrawn that did not change
 function drawProxyTest(d) {
   const ps = d.proxy_setting || [720, 4], pt = d.proxy_test;
   const running = d.running === 'proxy-test', asked = (d.queued || []).includes('proxy-test');
@@ -954,13 +955,16 @@ function drawProxyTest(d) {
                   : '<button class="btn quiet" style="margin-top:6px" data-use="' + m[1] + ' ' + m[2] + '" type="button">Use this</button>') : '') +
       '</div></div>';
   });
-  $('pxTest').innerHTML = '<div style="margin-top:12px">' +
+  const html = '<div style="margin-top:12px">' +
     (running ? '<p><span class="spin"></span><b>Making the test clips now</b> — a few minutes; the stills appear here when they are done.</p>'
       : asked ? '<p><span class="spin"></span><b>Asked</b> — the archive machine starts it within a minute.</p>'
       : '<p><b>Last test</b> · ' + esc(new Date(pt.at * 1000).toLocaleString()) + ' · click a still to see it full size</p>') +
     (tiles.length && !running ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">' + tiles.join('') + '</div>' : '') +
-    (pt ? '<details style="margin-top:8px"><summary class="note">What the archive machine said</summary><pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' +
+    (pt ? '<details id="ptLog" style="margin-top:8px"' + (ptOpen ? ' open' : '') + '><summary class="note">What the archive machine said</summary><pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' +
       esc(pt.text) + '</pre></details>' : '') + '</div>';
+  if (html === ptLast) return;              // the same as shown: the page is left alone (no flicker, no closing)
+  ptLast = html; $('pxTest').innerHTML = html;
+  if ($('ptLog')) $('ptLog').ontoggle = function () { ptOpen = this.open; ptLast = ''; };
   $('pxTest').querySelectorAll('[data-use]').forEach(function (b) {
     b.onclick = function () { b.disabled = true; b.textContent = 'Saving…'; useSetting(b.dataset.use); };
   });
