@@ -204,6 +204,13 @@ so nobody has to wonder whether someone can reach in.
   everything else: off unless the person at that computer turns it on in Rushes
   Helper, time-limited, shown on screen the whole time it is open, closed with
   one button, and every session written in a record the person can read.
+- **Later, for a company that runs Rushes for its clients: a live session as an
+  add-on**, never in Rushes itself. Installed only by that company, and even then
+  off until the person at the computer asks for it in Rushes Helper; time-limited,
+  shown on screen while open, ended with one button, and every session written in
+  the log. It should use a remote-support tool that company already runs and
+  answers for (rather than a way in written for Rushes), so the open-source app
+  keeps no way in at all, and anyone can check that it has none.
 - **Fixes arrive as signed updates** that say what they change and wait for "Install".
 
 ## Copy proof: ASC MHL records beside the footage
