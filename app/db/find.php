@@ -340,6 +340,15 @@ function draw() {
 // machine that has the archive mounted, so copying the path comes first because
 // it always works.
 // What the original is, however small its proxy: 4K, HD, 720p or SD.
+// "2024-05-03 14:22:10" as the camera wrote it -> "3 May 2024, 2:22 pm · afternoon".
+// Never converted between time zones: cameras disagree about which one they mean.
+function recorded(t) {
+  const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(t || '');
+  if (!m) return t;
+  const h = +m[4], day = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString([], {day: 'numeric', month: 'short', year: 'numeric'});
+  const part = h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night';
+  return day + ', ' + ((h % 12) || 12) + ':' + m[5] + (h < 12 ? ' am' : ' pm') + ' · ' + part;
+}
 function res(r) {
   if (!r.width) return '';
   const w = Math.max(r.width, r.height), h = Math.min(r.width, r.height);
@@ -367,6 +376,9 @@ function inspect(r) {
         (r.fps ? ' · ' + (+r.fps).toFixed(2).replace(/\.?0+$/, '') + ' fps' : '') +
         (r.codec ? ' · ' + esc(r.codec.toUpperCase()) : '') +
         (r.duration ? ' · ' + clock(r.duration) : '') + '</div>' : '') +
+      (r.recorded ? '<div class="k">Recorded</div><div class="v">' + esc(recorded(r.recorded)) + ' <small>(the camera\'s clock)</small></div>' : '') +
+      (r.camera ? '<div class="k">Camera</div><div class="v">' + esc(r.camera) + '</div>' : '') +
+      (r.timecode || r.reel ? '<div class="k">Timecode</div><div class="v">' + esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · ')) + '</div>' : '') +
       (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its 1080p proxy (downloads and pulls use the original)</div>' : '') +
       (r.event ? '<div class="k">Shoot</div><div class="v">' + esc(r.event) + '</div>' : '') +
       (r.year  ? '<div class="k">Year</div><div class="v">' + esc(r.year) + '</div>' : '') +

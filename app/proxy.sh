@@ -276,9 +276,12 @@ while IFS="$TAB" read -r src out; do
         mv -f "$tmp" "$out"
         printf '%s\t%s\t%s\n' "$src" "$out" "$how" >> "$LOG"
         case "$how" in "video chip") chip=$((chip + 1)) ;; software) soft=$((soft + 1)) ;; *) mixed=$((mixed + 1)) ;; esac
-        # What the original is (4K or HD, frame rate, codec, length), read once
-        # here, where the file is: the proxy is always 1080p, the original is not.
-        probe=$($FFMPEG -hide_banner -nostdin -i "$src" 2>&1 | grep -E 'Duration:|Video:' | head -2 | tr '\t\n' '  ')
+        # What the original is (4K or HD, frame rate, codec, length) and what the
+        # camera wrote inside it (its clock, timecode, reel, make and model),
+        # read once here, where the file is: the proxy is always 1080p, the original is not.
+        probe=$($FFMPEG -hide_banner -nostdin -i "$src" 2>&1 \
+            | grep -E 'Duration:|Video:|creation_time|modification_date|timecode|reel_name|model|make|product_name|company_name|encoder' \
+            | head -24 | tr '\t\n' '  ')
         printf '%s\t%s\t%s\n' "$src" "$(date +%s)" "$probe" >> "$MADE"
         ok=$((ok + 1))
     else

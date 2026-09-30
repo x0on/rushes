@@ -116,6 +116,13 @@ function db_init(): void {
         width    INTEGER, height INTEGER, fps REAL, codec TEXT, duration REAL,
         proxy_at INTEGER                -- when its 1080p proxy was made
     )");
+    // What the camera wrote inside the file (read with its proxy): its clock
+    // as written, timecode, reel or clip name, make and model.
+    $have = [];
+    $cols = $db->query('PRAGMA table_info(media)');
+    while ($c = $cols->fetchArray(SQLITE3_ASSOC)) $have[] = $c['name'];
+    foreach (['recorded', 'timecode', 'reel', 'camera'] as $c)
+        if (!in_array($c, $have, true)) $db->exec("ALTER TABLE media ADD COLUMN $c TEXT");
 
     $db->exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)");
 

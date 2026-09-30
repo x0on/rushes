@@ -19,9 +19,24 @@ function media_probe(string $s): array {
     preg_match('/Video: (\w+).*?, (\d{2,5})x(\d{2,5})/', $s, $v);
     preg_match('/([\d.]+) fps/', $s, $f);
     preg_match('/Duration: (\d+):(\d+):([\d.]+)/', $s, $d);
+    // What the camera wrote, as FFmpeg shows it: "name   : value", one per
+    // line (the lines arrive joined with spaces, so a value ends at a run of them).
+    $tag = function (string $names) use ($s) {
+        return preg_match('/(?:' . $names . ')\s*:\s*(.+?)(?:\s{2,}|$)/', $s, $m) ? trim($m[1]) : null;
+    };
+    $when  = $tag('creation_time|modification_date');
+    $model = $tag('com\.apple\.quicktime\.model|product_name|\bmodel');
+    $make  = $tag('com\.apple\.quicktime\.make|company_name|\bmake');
+    $enc   = $tag('\bencoder');
+    $camera = $model ? ($make && stripos($model, $make) !== 0 ? "$make $model" : $model)
+            : ($enc && preg_match('/^(DJI|GoPro)/i', $enc) ? $enc : null);   // drones and action cameras name themselves here
+    $recorded = $when && preg_match('/^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d:\d\d)/', $when, $w)
+            && $w[1] > '1980' ? "$w[1] $w[2]" : null;                     // a camera that never had its clock set says 1970 or 1904
+    $tc = preg_match('/timecode\s*:\s*(\d\d:\d\d:\d\d[:;.]\d\d)/', $s, $t) ? $t[1] : null;
     return ['codec' => $v[1] ?? null, 'width' => isset($v[2]) ? (int)$v[2] : null,
             'height' => isset($v[3]) ? (int)$v[3] : null, 'fps' => isset($f[1]) ? (float)$f[1] : null,
-            'duration' => $d ? $d[1] * 3600 + $d[2] * 60 + (float)$d[3] : null];
+            'duration' => $d ? $d[1] * 3600 + $d[2] * 60 + (float)$d[3] : null,
+            'recorded' => $recorded, 'timecode' => $tc, 'reel' => $tag('reel_name'), 'camera' => $camera];
 }
 
 // proxy-made.tsv (appended by proxy.sh, never emptied) -> the media ledger.
@@ -35,7 +50,8 @@ function media_import(): array {
     if ($at > filesize($src)) $at = 0;                // the file was started again
     $h = fopen($src, 'r'); fseek($h, $at);
     $id  = $db->prepare('SELECT id FROM files WHERE path = ?');
-    $put = $db->prepare('INSERT OR REPLACE INTO media (file_id,width,height,fps,codec,duration,proxy_at) VALUES (?,?,?,?,?,?,?)');
+    $put = $db->prepare('INSERT OR REPLACE INTO media (file_id,width,height,fps,codec,duration,proxy_at,recorded,timecode,reel,camera)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?)');
     $n = 0; $lost = 0;
     $db->exec('BEGIN');
     while (($l = fgets($h)) !== false) {
@@ -45,7 +61,8 @@ function media_import(): array {
         $id->bindValue(1, $path); $r = $id->execute()->fetchArray(SQLITE3_NUM); $id->reset();
         if (!$r) { $lost++; continue; }                // ponytail: not in search yet; its proxy still exists, only the details are missing
         $p = media_probe($probe);
-        foreach ([$r[0], $p['width'], $p['height'], $p['fps'], $p['codec'], $p['duration'], (int)$ts] as $i => $v)
+        foreach ([$r[0], $p['width'], $p['height'], $p['fps'], $p['codec'], $p['duration'], (int)$ts,
+                  $p['recorded'], $p['timecode'], $p['reel'], $p['camera']] as $i => $v)
             $put->bindValue($i + 1, $v);
         $put->execute(); $put->reset(); $n++;
     }

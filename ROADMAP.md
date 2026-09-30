@@ -57,7 +57,8 @@ with everything the final stage needs inside it.
   after the other, by itself, never twice.
 - The media ledger, in the database: for every original, what it is (4K or
   HD, frame rate, codec, length, read when its proxy is made) and when its
-  proxy was made. It belongs to the file's row, so it follows the file when a
+  proxy was made, and what the camera wrote (its clock, timecode, reel, make and
+  model). It belongs to the file's row, so it follows the file when a
   tidy-up moves it; the tidy-up moves the proxy along too, and descriptions are
   named by content, so nothing comes unlinked. Search shows 4K / HD on each file.
 
@@ -151,8 +152,11 @@ licenses stay theirs; CREDITS.md says what came from where):
    is read again (each folder every 90 days, `proof.check_every_days`) and
    compared with its fingerprint; a Pause checking switch in Manage and the helper.
 4. **git-annex** — how many copies of each file exist, and a warning when only one does.
-5. **ExifTool / MediaInfo** — what cameras write inside files: timecode, reel,
-   real recording time, camera. Better time of day and resolution in search.
+5. **ExifTool / MediaInfo** — done, with the FFmpeg already there: the camera's
+   clock, timecode, reel and make and model go into the media ledger when the
+   proxy is made; search finds "FX6" or "A001", and a file shows when it was
+   recorded and the part of the day. ExifTool only if maker notes or Sony's XML
+   sidecars turn out to be needed.
 6. **XMP sidecars** — descriptions and keywords in Adobe's format beside the
    footage, so Premiere and Bridge show them too.
 7. **OpenTimelineIO** (Apache-2.0) — pulls as editing timelines, and Premiere relinking.

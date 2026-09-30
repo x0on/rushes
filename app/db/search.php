@@ -30,12 +30,14 @@ $limit  = min(max((int)($_GET['limit'] ?? 200), 1), 1000);
 $offset = max((int)($_GET['offset'] ?? 0), 0);
 
 $where = []; $args = [];
-// Each word must appear somewhere in the path. ESCAPE goes on every LIKE, so
+// Each word must appear somewhere in the path, or in the camera or reel the
+// file itself names (a search for "FX6" or "A001"). ESCAPE goes on every LIKE, so
 // a search for "50%" or "a_b" looks for those characters rather than acting
 // as a wildcard.
 foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
-    $where[] = "path LIKE ? ESCAPE '\\'";
-    $args[]  = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
+    $where[] = "(path LIKE ? ESCAPE '\\' OR media.camera LIKE ? ESCAPE '\\' OR media.reel LIKE ? ESCAPE '\\')";
+    $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
+    array_push($args, $like, $like, $like);
 }
 if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
@@ -59,7 +61,7 @@ if ($where === []) {
 
 // the rows
 $st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept,
-                           width, height, fps, codec, duration, proxy_at
+                           width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera
                     FROM files LEFT JOIN media ON media.file_id = files.id$sql ORDER BY path LIMIT ? OFFSET ?");
 $bind($st, $args);
 $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
@@ -71,7 +73,7 @@ while ($r = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
 
 // true totals, and per-kind counts for the chips — one scan, not five
 $counts = ['all' => 0];
-$cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files$sql GROUP BY kind");
+$cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$sql GROUP BY kind");
 $bind($cs, $args);
 $cr = $cs->execute();
 if ($cr === false) { echo json_encode(['error' => 'counts query: ' . $db->lastErrorMsg()]); exit; }

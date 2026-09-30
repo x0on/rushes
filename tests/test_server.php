@@ -98,6 +98,16 @@ check(media_import()['added'] === 1, 'proxies made are read into the media ledge
 $ledger = fn() => db()->querySingle("SELECT width||'x'||height||' '||fps||' '||codec||' '||duration FROM files JOIN media ON file_id=id WHERE name='b4k.mov'");
 check($ledger() === '3840x2160 29.97 h264 125.5', 'the ledger knows the original is 4K, whatever size its proxy is');
 check(media_import()['added'] === 0, 'a half-written line is left for next time, nothing read twice');
+// What cameras write, as FFmpeg prints it (lines joined with spaces by proxy.sh).
+$j = fn($t) => str_replace("\n", ' ', $t);
+$fx6 = media_probe($j("  Metadata:\n    major_brand     : XAVC\n    creation_time   : 2024-05-03T14:22:10.000000Z\n    com.apple.quicktime.make: Sony\n    com.apple.quicktime.model: ILME-FX6\n  Duration: 00:01:02.03, start: 0.000000, bitrate: 50000 kb/s\n  Stream #0:0: Video: h264 (High 4:2:2 Intra) (avc1 / 0x31637661), yuv422p10le, 3840x2160 [SAR 1:1 DAR 16:9], 23.98 fps\n    Metadata:\n      timecode        : 14:22:09:12"));
+check($fx6['camera'] === 'Sony ILME-FX6' && $fx6['recorded'] === '2024-05-03 14:22:10' && $fx6['timecode'] === '14:22:09:12' && $fx6['width'] === 3840,
+      'a camera file gives its make and model, its clock and its timecode');
+$mxf = media_probe($j("  Metadata:\n    company_name    : Sony\n    product_name    : PXW-Z750\n    modification_date: 1970-01-01T00:00:00.000000Z\n    reel_name       : A001\n    timecode        : 01:00:00;00\n  Duration: 00:00:10.00\n  Stream #0:0: Video: mpeg2video, yuv422p, 1920x1080, 29.97 fps"));
+check($mxf['camera'] === 'Sony PXW-Z750' && $mxf['reel'] === 'A001' && $mxf['recorded'] === null && $mxf['timecode'] === '01:00:00;00',
+      'an MXF gives its reel; a clock never set (1970) is left out, not shown as a date');
+$dji = media_probe($j("  Metadata:\n    creation_time   : 2025-06-01T19:40:00.000000Z\n    encoder         : DJI Mini 4 Pro\n  Duration: 00:00:30.00\n  Stream #0:0: Video: hevc (Main 10), yuv420p10le, 3840x2160, 29.97 fps"));
+check($dji['camera'] === 'DJI Mini 4 Pro' && media_probe($j("    encoder : Lavf58.76.100"))['camera'] === null, 'a drone names itself; a program that re-saved a file is not a camera');
 mkdir("$root/archive/shelf"); rename("$root/archive/b4k.mov", "$root/archive/shelf/b4k.mov");
 $_POST = ['moves' => "$root/archive/b4k.mov\t$root/archive/shelf/b4k.mov"];
 ob_start(); include "$root/app/db/moved.php"; ob_end_clean();
