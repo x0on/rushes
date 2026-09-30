@@ -300,6 +300,34 @@ class TraceResumeTests(unittest.TestCase):
         self.assertEqual([w for w in walked if w in 'AB'], ['B'])        # A is not read again
         self.assertEqual(saved.read_text().count('B.mov'), 1)            # and B's half-list was not kept twice
 
+    def test_after_a_pause_the_copies_already_matched_are_not_checked_again(self):
+        m = self.mod
+        src = self.root / 'server'; (src / 'A').mkdir(parents=True)
+        for n in ('1', '2'): (src / 'A' / f'{n}.mov').write_bytes(n.encode() * 50)
+        (self.archive / '2020').mkdir()
+        for n in ('1', '2'): (self.archive / '2020' / f'old{n}.mov').write_bytes(n.encode() * 50)
+        m.SETTINGS = {'archive': {'local': str(self.archive)}, 'sources': [{'label': 'server', 'path': str(src)}]}
+        m.STATUS.mkdir(parents=True, exist_ok=True)
+        (m.STATUS / 'ingest-sections.tsv').write_text(f"section\t{src}/A\t2\t100\n")
+        checked = []
+        real = m.digest
+        def dig(path, full=False):
+            if '/2020/' in str(path): checked.append(os.path.basename(path))
+            return real(path, full)
+        # the first run is stopped (Pause, a drop) right after its first match
+        real_add = m.Origin.add
+        def add_then_stop(self, *r):
+            real_add(self, *r); self.f.flush(); raise SystemExit(1)
+        with patch.object(m, 'digest', dig), patch.object(m.Origin, 'add', add_then_stop), patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit): m.trace(str(src), str(self.archive))
+        self.assertTrue(m.needs_trace(str(src), str(self.archive)))      # not finished: still needed
+        first = list(checked); checked.clear()
+        with patch.object(m, 'digest', dig), patch('sys.stdout', new_callable=io.StringIO):
+            m.trace(str(src), str(self.archive))
+        self.assertEqual(set(first) | set(checked), {'old1.mov', 'old2.mov'})   # both checked, each in one run only
+        self.assertFalse(set(first) & set(checked))
+        self.assertFalse(m.needs_trace(str(src), str(self.archive)))     # and now it counts as done
+
 
 class ReconnectTests(unittest.TestCase):
     """A share that drops is connected again by the helper, and the drop is recorded."""

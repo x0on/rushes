@@ -734,7 +734,8 @@ function drawHelper(d) {
   const cur = d.transfer && d.transfer.phase !== 'done' ? d.transfer.source : '';
   // Something is wrong only when a folder stopped and the helper has not been
   // back on it for three minutes (a retry is normally seconds away).
-  const stuck = cur && h.fresh && !h.paused && d.transfer.phase === 'interrupted' && !liveFor(d.transfer, d.copy)
+  // (Just resumed: the helper's own status still says paused for a few seconds — not stuck.)
+  const stuck = cur && h.fresh && !h.paused && !(d.copy && d.copy.phase === 'paused') && d.transfer.phase === 'interrupted' && !liveFor(d.transfer, d.copy)
     && Date.now() / 1000 - d.transfer.updated > 180;
   const btns = [];
   if (h.fresh) btns.push(h.paused ? ['resume', 'Resume copying'] : ['pause', 'Pause copying']);

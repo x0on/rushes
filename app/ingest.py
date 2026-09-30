@@ -765,10 +765,11 @@ def needs_trace(src_root, archive):
 
 def trace_paused():
     """Pause from Manage stops the matching too. It only reads, so nothing is
-    half-done: after Resume it starts over, and the record it leaves unfinished
-    never counts (needs_trace wants "# finished")."""
+    half-done: after Resume it carries on, skipping every copy an earlier run
+    already matched (those lines are in its record and count). Only a run that
+    got to the end marks the source as traced (needs_trace wants "# finished")."""
     if control().get("paused"):
-        print("\n*** paused from Manage — the matching starts over after Resume (it only reads)")
+        print("\n*** paused from Manage — the matching carries on from here after Resume (it only reads)")
         status(phase="paused", source="", note="paused from Manage")
         sys.exit(1)
 
@@ -844,9 +845,28 @@ def trace(src_root, archive):
             keep.write(f"# read\t{sec}\n"); keep.flush()
     print(f"  {n:,} originals listed\n")
 
+    # Copies an earlier run already matched keep their answer — it stopped
+    # part-way (Pause, a drop, a sleeping Mac), but every line it wrote is in
+    # its record and counts. Without this, each Pause started hours of
+    # matching over from the first file.
+    done = set()
+    for f in ORIGIN.glob("*.tsv") if ORIGIN.exists() else []:
+        with open(f, errors="replace") as fh:
+            head = fh.read(2000)
+            if ("# kind\ttraced" not in head or f"# source root\t{src_root}\n" not in head
+                    or f"# into\t{archive}\n" not in head):
+                continue
+            fh.seek(0)
+            for l in fh:
+                p = l.rstrip("\n").split("\t")
+                if len(p) > 2 and p[0] in ("traced", "untraced"): done.add(p[2])
+    left = [p for p in copies if p not in done]
+    if done:
+        print(f"{len(copies) - len(left):,} already matched on an earlier run — {len(left):,} left")
+
     o = Origin("traced", src_root, src_root, name, archive)
-    t0 = time.time(); i = 0
-    for p in copies:
+    t0 = time.time(); i = len(copies) - len(left)
+    for p in left:
             i += 1
             try: size = os.path.getsize(p)
             except OSError: continue
