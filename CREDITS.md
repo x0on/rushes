@@ -1,8 +1,11 @@
 # What Rushes is made of
 
-Rushes is by Alejandro Renteria, open source at https://github.com/x0on/rushes.
-It stands on other people's work, listed here with what each part does in Rushes,
-where it runs, and its license. Each belongs to its authors; Rushes claims none of it.
+Rushes Media Management Software was created by Alejandro Renteria and is open
+source: https://github.com/x0on/rushes.
+
+It is built on the work of many other open-source projects. Each one is listed
+below with what it does in Rushes, where it runs and its license. They remain
+the work of their authors, and Rushes claims none of them as its own.
 
 ## Rushes itself
 
