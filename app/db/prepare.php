@@ -80,6 +80,30 @@ function prepare_plan(string $rel, bool $fresh = false): array {
     return $p;
 }
 
+// How fast proxies are really made here: bytes per second over the last 200
+// made (proxy.sh writes one line per proxy). 0 until the first ones exist.
+function proxy_rate(): float {
+    $b = 0; $s = 0;
+    foreach (array_slice(@file(web_dir() . '/proxy-speed.tsv') ?: [], -200) as $l) {
+        [$bytes, $secs] = array_pad(explode("\t", rtrim($l)), 2, 0);
+        if ((int)$secs > 0) { $b += (int)$bytes; $s += (int)$secs; }
+    }
+    return $s > 0 ? $b / $s : 0.0;
+}
+
+// Files in a folder whose proxy could not be made, and why (ffmpeg's words),
+// leaving out any made since.
+function proxy_failures(string $rel): array {
+    $root = rtrim(archive_dir(), '/'); $out = [];
+    foreach (@file(web_dir() . '/proxy-failed.tsv') ?: [] as $l) {
+        [$src, $at, $why] = array_pad(explode("\t", rtrim($l, "\n"), 3), 3, '');
+        if (!str_starts_with($src, "$root/$rel/")) continue;
+        $out[$src] = ['file' => substr($src, strlen("$root/$rel/")), 'at' => (int)$at, 'why' => $why];
+    }
+    return array_values(array_filter($out, fn($f) =>
+        !is_file(preg_replace('/\.[^.\/]*$/', '.mp4', "$root/PROXIES/$rel/" . $f['file']))));
+}
+
 // rel folder => when it was (last) asked for
 function prepare_list(): array {
     $out = [];
@@ -140,13 +164,15 @@ function describing_now(): array {
 // both the page and prepare_advance, so they can never disagree.
 function prepare_table(): array {
     $h = rtrim(helper_archive(), '/');
-    $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now();
+    $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now(); $rate = proxy_rate();
     $queue = array_map('rtrim', @file(web_dir() . '/ingest-queue.tsv') ?: []);
     $rows = [];
     foreach (prepare_list() as $rel => $asked) {
         $run = $runs[$rel] ?? null;
         $mine = $run && $run['at'] >= $asked;                      // a run since it was asked for
-        if (!empty($now['running']) && ($now['only'] ?? '') === $rel && ($now['state'] ?? '') === 'building')
+        if (($now['state'] ?? '') === 'no-room' && ($now['only'] ?? '') === $rel && (int)($now['at'] ?? 0) >= $asked)
+            $px = ['step' => 'no-room', 'need' => (int)$now['need'], 'free' => (int)$now['free']];
+        elseif (!empty($now['running']) && ($now['only'] ?? '') === $rel && ($now['state'] ?? '') === 'building')
             $px = ['step' => 'making', 'done' => (int)$now['done'], 'total' => (int)$now['total'], 'ok' => (int)$now['ok']];
         elseif (($now['state'] ?? '') === 'no-ffmpeg')
             $px = ['step' => 'no-ffmpeg'];
@@ -168,7 +194,15 @@ function prepare_table(): array {
             $ds = ['step' => 'queued'];
         else
             $ds = ['step' => in_array($px['step'], ['done', 'again'], true) ? 'next' : 'waiting'];
-        $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => prepare_plan($rel), 'proxies' => $px, 'describe' => $ds];
+        // time left for its proxies, from the speed measured here
+        $plan = prepare_plan($rel); $left = null;
+        if ($rate > 0 && !in_array($px['step'], ['done'], true)) {
+            $bytes = $plan['to_read'];
+            if ($px['step'] === 'making' && $px['total'] > 0) $bytes = $plan['bytes'] * (1 - $px['done'] / $px['total']);
+            $left = (int)round($bytes / $rate);
+        }
+        $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => $plan, 'left' => $left,
+                   'failures' => array_slice(proxy_failures($rel), 0, 100), 'proxies' => $px, 'describe' => $ds];
     }
     return $rows;
 }

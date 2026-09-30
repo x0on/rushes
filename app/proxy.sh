@@ -33,6 +33,8 @@ ONLY=${ONLY%/}
 STATE=${STATE:-/share/Web/proxy-status.txt}
 RUNS=${RUNS:-/share/Web/proxy-folders.tsv}   # one line per finished or stopped run, per folder: what Rushes reads to know a folder is ready
 MADE=${MADE:-/share/Web/proxy-made.tsv}      # never emptied: every proxy made, with what the original is (Rushes keeps it in its media ledger)
+SPEED=${SPEED:-/share/Web/proxy-speed.tsv}    # bytes and seconds of each proxy made: how Rushes knows the time left
+FAILS=${FAILS:-/share/Web/proxy-failed.tsv}   # each file that could not be made, and why, in ffmpeg's own words
 RECENT=${RECENT:-7200}   # seconds: a file written this recently may still be arriving; left for the next run
 
 # What the page shows: one small file, rewritten whole, so it is never half-read.
@@ -106,7 +108,8 @@ fi
 # processor reads it and the chip resizes and encodes; software is the last
 # resort. $how says which way it was made. Each try runs in the background so
 # Stop (from Manage) can end it at once.
-run_ff() { $NICE $FFMPEG -nostdin -loglevel error -y "$@" 2>>"$LOG.err" & ff=$!; wait "$ff"; }
+ERRF=${ERRF:-/share/Web/proxy-last.err}
+run_ff() { $NICE $FFMPEG -nostdin -loglevel error -y "$@" 2>"$ERRF" & ff=$!; wait "$ff"; r=$?; cat "$ERRF" >> "$LOG.err"; return $r; }
 AUDIO="-c:a aac -b:a 128k -movflags +faststart"
 encode() {
     if [ "$HW" = 1 ]; then
@@ -194,6 +197,17 @@ if [ "$MODE" != "--build" ]; then
 fi
 
 # ---------- build ----------
+# Room first: a proxy is about 4% of its original. Checked before starting, so a
+# full archive is said once, plainly, instead of failing file after file.
+mkdir -p "$PROXY_ROOT"
+need=$(while IFS="$TAB" read -r src out; do stat -c %s "$src" 2>/dev/null; done < "$PLAN" | awk '{ s += $1 } END { printf "%.0f", s * 0.05 + 2e9 }')
+free=$(df -Pk "$PROXY_ROOT" 2>/dev/null | awk 'NR == 2 { printf "%.0f", $4 * 1024 }')
+if [ -n "$free" ] && [ "$free" -lt "$need" ]; then
+    state "state${TAB}no-room" "only${TAB}$ONLY" "need${TAB}$need" "free${TAB}$free"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ONLY" no-room 0 0 0 "$missing" "$(date +%s)" >> "$RUNS"
+    echo "not enough room for the proxies: about $((need / 1000000000)) GB needed, $((free / 1000000000)) GB free"
+    exit 1
+fi
 total=$missing
 done_n=0; ok=0; failed=0; later=0; tmp=""; ff=""; chip=0; mixed=0; soft=0
 : > "$LOG"
@@ -219,7 +233,9 @@ while IFS="$TAB" read -r src out; do
     # encode to a temp name so an interrupted run never leaves a playable-looking
     # but truncated file behind
     tmp="$out.part.mp4"
+    t0=$(date +%s)
     if encode "$src" "$tmp"; then
+        printf '%s\t%s\t%s\n' "$(stat -c %s "$src" 2>/dev/null || echo 0)" "$(( $(date +%s) - t0 ))" "$how" >> "$SPEED"
         mv -f "$tmp" "$out"
         printf '%s\t%s\t%s\n' "$src" "$out" "$how" >> "$LOG"
         case "$how" in "video chip") chip=$((chip + 1)) ;; software) soft=$((soft + 1)) ;; *) mixed=$((mixed + 1)) ;; esac
@@ -231,6 +247,7 @@ while IFS="$TAB" read -r src out; do
     else
         rm -f "$tmp"
         printf 'FAILED\t%s\n' "$src" >> "$LOG"
+        printf '%s\t%s\t%s\n' "$src" "$(date +%s)" "$(tail -1 "$ERRF" 2>/dev/null | tr '\t' ' ' | cut -c1-200)" >> "$FAILS"
         failed=$((failed + 1))
     fi
     if [ $((done_n % 25)) -eq 0 ]; then

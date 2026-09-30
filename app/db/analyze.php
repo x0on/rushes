@@ -52,6 +52,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
     $rel = trim(str_replace('\\', '/', (string)($_POST['path'] ?? '')), '/');
     // Prepare: proxies first, then descriptions; the order is kept by prepare_advance.
+    // Order and "try again": the list keeps each folder's place and when it was asked.
+    if (in_array($_POST['action'] ?? '', ['up', 'down', 'retry'], true)) {
+        $list = prepare_list();
+        if (!isset($list[$rel])) bail(400, "“{$rel}” is not on the list.");
+        if ($_POST['action'] === 'retry') { $list[$rel] = time(); }
+        else {
+            $keys = array_keys($list); $i = array_search($rel, $keys, true); $j = $_POST['action'] === 'up' ? $i - 1 : $i + 1;
+            if ($j >= 0 && $j < count($keys)) { [$keys[$i], $keys[$j]] = [$keys[$j], $keys[$i]]; }
+            $list = array_combine($keys, array_map(fn($k) => $list[$k], $keys));
+        }
+        if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?');
+        prepare_advance();
+        out(['ok' => $_POST['action'], 'folder' => $rel]);
+    }
     if (($_POST['action'] ?? '') === 'prepare' || ($_POST['action'] ?? '') === 'forget') {
         if ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[A-Za-z0-9 _./&(),+-]+$#', $rel))
             bail(400, 'Pick a folder inside the archive (letters, numbers, spaces and . _ - & ( ) , + only).');
@@ -87,5 +101,5 @@ $stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
 $latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
     language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
-out(['table' => prepare_table(), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
+out(['table' => prepare_table(), 'rate' => proxy_rate(), 'helper_fresh' => (bool)(helper_volumes()['fresh'] ?? false), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
      'stats' => $stats, 'latest' => $latest, 'helper' => helper_name()]);

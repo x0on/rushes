@@ -970,7 +970,7 @@ async function loadAnalysis() {
         (m.tags ? '<small>' + esc(m.tags) + '</small>' : '') +
         '<small title="' + esc(m.path) + '">' + esc(m.path.split('/').pop()) + '</small></div></div>';
     }).join('') : '<div class="note">Nothing described yet.</div>';
-    drawPrepare(a.table);
+    drawPrepare(a.table, a);
   } catch (e) { $('prepTable').textContent = 'Could not read the list: ' + e.message; }
 }
 // Choose in Finder: open the archive share there and pick the folder. The browser
@@ -1032,43 +1032,89 @@ $('prepGo').onclick = async function () {
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
   b.disabled = false; b.textContent = '+ Add to the list'; loadAnalysis();
 };
-async function forgetFolder(folder, b) {
-  if (!confirm('Take ' + folder + ' off this list? Nothing is deleted: its proxies and descriptions stay.')) return;
-  b.disabled = true;
-  try { await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'forget', path: folder }) }); } catch (e) {}
+// The list's buttons: each asks once more on the button itself, then acts.
+let listArmed = {key: '', until: 0}, openFails = {};
+async function listAct(action, folder, b, sure) {
+  const key = action + '|' + folder;
+  if (sure && (listArmed.key !== key || Date.now() > listArmed.until)) {
+    listArmed = {key: key, until: Date.now() + 5000}; b.textContent = 'Sure? ' + b.textContent; return;
+  }
+  listArmed = {key: '', until: 0}; b.disabled = true;
+  try {
+    const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: action, path: folder }) })).json();
+    $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
+      : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
+         up: 'Moved up ✓ ' + folder, down: 'Moved down ✓ ' + folder,
+         retry: 'Trying again ✓ ' + folder + ' — the files still missing a proxy are made again, in its place in the list.'}[action];
+  } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
   loadAnalysis();
 }
-function drawPrepare(rows) {
+const hm = function (secs) {
+  secs = Math.max(60, +secs || 0); const h = Math.floor(secs / 3600), m = Math.round(secs % 3600 / 60);
+  return h ? h + ' h' + (m ? ' ' + m + ' min' : '') : m + ' min';
+};
+function drawPrepare(rows, a) {
   const n = function (x) { return (+x || 0).toLocaleString(); };
-  if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is being prepared yet.</div>'; return; }
-  const px = function (p) {
-    return p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>'
-      : p.step === 'done' ? '<span class="ok">✓ ' + n(p.ok) + ' made</span>' + (+p.failed ? ' · <span class="bad">' + n(p.failed) + ' failed</span>' : '') +
-                            (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
-      : p.step === 'again' ? 'making the ones that were still arriving'
-      : p.step === 'stopped' ? '<span class="bad">stopped</span> · ' + n(p.ok) + ' made · press Prepare to carry on'
+  a = a || {};
+  if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is on the list yet.</div>'; return; }
+  const px = function (r) {
+    const p = r.proxies, f = (r.failures || []).length;
+    const fails = f ? ' · <a href="#" class="bad" data-fails="' + esc(r.folder) + '">' + n(f) + ' could not be made — see why</a>' : '';
+    return p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>' + fails
+      : p.step === 'done' ? '<span class="ok">✓ ' + n(p.ok) + ' made</span>' + fails + (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
+      : p.step === 'again' ? 'making the ones that were still arriving' + fails
+      : p.step === 'stopped' ? '<span class="bad">stopped</span> · ' + n(p.ok) + ' made · Try again carries on' + fails
+      : p.step === 'no-room' ? '<span class="bad">not enough room on the archive: about ' + gb(p.need) + ' needed, ' + gb(p.free) + ' free</span> · free some space, then Try again'
       : p.step === 'no-ffmpeg' ? '<span class="bad">this machine cannot make video yet (no ffmpeg)</span>'
       : '<span class="dim">waiting its turn</span>';
   };
   const ds = function (d) {
-    return d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>'
+    const off = a.helper_fresh === false && ['queued', 'next', 'describing'].includes(d.step)
+      ? ' · <span class="bad">the helper Mac is off or asleep, so this waits</span>' : '';
+    return (d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>'
       : d.step === 'done' ? '<span class="ok">✓ ' + n(d.files) + ' files</span>' + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
       : d.step === 'queued' ? 'queued on the helper, after any copies'
       : d.step === 'next' ? 'starting'
-      : '<span class="dim">waiting for proxies</span>';
+      : '<span class="dim">waiting for proxies</span>') + off;
   };
   const busy = function (r) { return r.proxies.step === 'making' || r.proxies.step === 'again' || ['describing', 'queued', 'next'].includes(r.describe.step); };
-  const doneRow = function (r) { return ['done'].includes(r.proxies.step) && r.describe.step === 'done'; };
-  let place = 0;          // place in line among the folders not finished yet: 1 is the one running now
-  $('prepTable').innerHTML = '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
-    rows.map(function (r) {
+  const doneRow = function (r) { return r.proxies.step === 'done' && r.describe.step === 'done'; };
+  // the whole list: how much proxy time is left, at the speed measured on this machine
+  const open = rows.filter(function (r) { return !doneRow(r); });
+  const total = open.reduce(function (t, r) { return t + (r.left || 0); }, 0);
+  const head = '<p class="note" style="margin:0 0 8px">' + n(open.length) + ' of ' + n(rows.length) + ' folder' + (rows.length === 1 ? '' : 's') + ' still to finish' +
+    (a.rate > 0 ? ' · proxies: about <b>' + hm(total) + '</b> left, at ' + (a.rate / 1e6).toFixed(0) + ' MB/s measured here'
+                : ' · the time left shows once the first proxies are made and the speed is known') + '</p>';
+  let place = 0;
+  $('prepTable').innerHTML = head + '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
+    rows.map(function (r, i) {
       const where = doneRow(r) ? '<span class="ok">✓ done</span>' : (++place, busy(r) || place === 1 ? '<span class="busy">now</span>' : '#' + place);
       const p = r.plan || {};
-      return '<tr><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
-        (+p.videos || 0).toLocaleString() + ' videos · ' + gb(p.bytes) + '</td><td>' + px(r.proxies) + '</td><td>' + ds(r.describe) + '</td>' +
-        '<td style="text-align:right"><button class="btn quiet" data-forget="' + esc(r.folder) + '" style="padding:3px 9px;font-size:12px">Take off the list</button></td></tr>';
+      const tools = (i > 0 ? '<button class="btn quiet" data-l="up" title="Move up">↑</button>' : '') +
+        (i < rows.length - 1 ? '<button class="btn quiet" data-l="down" title="Move down">↓</button>' : '') +
+        (['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0)
+          ? '<button class="btn quiet" data-l="retry">Try again</button>' : '') +
+        '<button class="btn quiet" data-l="forget">Take off the list</button>';
+      const fails = openFails[r.folder] && (r.failures || []).length
+        ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
+          '<b>Could not be made</b> — in ffmpeg\'s own words:' +
+          '<ul style="margin:6px 0 8px;padding-left:18px">' + r.failures.map(function (f) {
+            return '<li><b>' + esc(f.file) + '</b> — ' + esc(f.why || 'no reason given') + '</li>'; }).join('') + '</ul>' +
+          '<span class="note">A damaged or unusual camera file is the usual cause; the original is untouched. Try again makes just these once more.</span></div></td></tr>'
+        : '';
+      return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
+        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left ? ' · <b>about ' + hm(r.left) + '</b>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + fails;
     }).join('') + '</table>';
-  $('prepTable').querySelectorAll('[data-forget]').forEach(function (b) { b.onclick = function () { forgetFolder(b.dataset.forget, b); }; });
+  $('prepTable').querySelectorAll('.ltools button').forEach(function (b) { b.style.cssText = 'padding:3px 9px;font-size:12px;margin-left:4px'; });
+  $('prepTable').querySelectorAll('[data-l]').forEach(function (b) {
+    // a redraw keeps a "Sure?" that is still waiting for its second press
+    if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
+    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry'].includes(b.dataset.l)); };
+  });
+  $('prepTable').querySelectorAll('[data-fails]').forEach(function (x) {
+    x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };
+  });
 }
 loadAnalysis(); setInterval(loadAnalysis, 10000);
 

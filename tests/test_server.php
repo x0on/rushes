@@ -113,4 +113,10 @@ file_put_contents("$root/archive/PROXIES/PARKS/day1/a.mp4", 'proxy');
 $plan = prepare_plan('PARKS', true);
 check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 300 && $plan['to_read'] === 200,
       'a folder is planned at once from the catalogue: its videos, the ones with a proxy, what is left to read');
+file_put_contents("$root/app/proxy-speed.tsv", "100000000\t10\tvideo chip\n300000000\t10\tvideo chip\n5\t0\tsoftware\n");
+check(abs(proxy_rate() - 20000000) < 1, 'the speed is measured from the proxies really made (bytes per second)');
+file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n");
+$f = proxy_failures('PARKS');
+check(count($f) === 1 && $f[0]['file'] === 'day1/b.mxf' && $f[0]['why'] === 'moov atom not found',
+      "a folder's failures say which file and why, and leave out ones made since and other folders");
 echo "Server tests complete. Fixture: $root\n";
