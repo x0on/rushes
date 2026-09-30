@@ -386,6 +386,7 @@ echo json_encode([
     // asked from Manage, waiting for the runner's next turn
     'queued'   => array_values(array_filter(array_map(fn($j) => preg_match('/^ACTION=(.+)$/m', (string)@file_get_contents($j), $m) ? trim($m[1]) : '',
                     glob("$WEB/queue/*.job") ?: []))),
+    'proxy_test' => is_readable("$WEB/proxy-test.txt") ? ['text' => (string)file_get_contents("$WEB/proxy-test.txt"), 'at' => filemtime("$WEB/proxy-test.txt")] : null,
     'gpu_test' => is_readable("$WEB/gpu-test.txt") ? ['text' => (string)file_get_contents("$WEB/gpu-test.txt"), 'at' => filemtime("$WEB/gpu-test.txt")] : null,
     'conditions' => $c,
     'copies'   => $copies,

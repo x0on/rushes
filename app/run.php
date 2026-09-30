@@ -15,7 +15,7 @@ $allowed = ['plan', 'apply', 'undo', 'reindex', 'cachescan', 'cacheclean', 'df',
             // 'organize-apply' is off: it sorts the whole archive by date, which is
             // no longer the plan. The read-only proposal and the undo stay.
             'organize', 'organize-undo', 'scan', 'manifest', 'holding',
-            'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test'];
+            'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test'];
 
 $action    = $_POST['action']    ?? '';
 $pass      = $_POST['pass']      ?? '';

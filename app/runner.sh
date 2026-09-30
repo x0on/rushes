@@ -385,6 +385,61 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             cp "$out" /share/VIDEO/_rushes/gpu-test.txt 2>/dev/null
             cat "$out" >> "$LOG"
             ;;
+        proxy-test)
+            # Which proxy setting looks right on THIS machine's video chip? The
+            # same 20 seconds of one real clip, made at several sizes and
+            # bitrates exactly the way proxies are made, kept side by side in
+            # _rushes/proxy-test with a still from each (and one from the
+            # original, at the same moment) — to look at before a whole folder
+            # is made. Changes nothing else. QUERY: a clip, or a folder (its
+            # biggest video, usually the longest).
+            out=/share/Web/proxy-test.txt
+            T=/share/VIDEO/_rushes/proxy-test
+            src="/share/VIDEO/$QUERY"
+            clip=""
+            if [ -f "$src" ]; then clip=$src
+            elif [ -d "$src" ]; then
+                clip=$(find "$src" -type f 2>/dev/null | grep -iE '\.(mp4|mov|mxf|mts|m4v)$' | grep -v '/PROXIES/' \
+                       | while IFS= read -r f; do printf '%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null || echo 0)" "$f"; done \
+                       | sort -rn | head -1 | cut -f2-)
+            fi
+            D="$DOCKER run --rm --cpu-shares 256 -v /share/VIDEO:/share/VIDEO --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=i965 --entrypoint /usr/local/bin/ffmpeg linuxserver/ffmpeg -hide_banner -nostdin -y"
+            {
+                echo "Proxy settings test · $(date '+%Y-%m-%d %H:%M')"
+                if [ -z "$DOCKER" ]; then echo "Container Station's docker was not found, so nothing could be made."
+                elif [ -z "$clip" ]; then echo "No video found at ${QUERY:-(nothing chosen)}."
+                else
+                    mkdir -p "$T" && rm -f "$T"/*
+                    name=$(basename "$clip"); name=${name%.*}
+                    info=$($D -i "$clip" 2>&1)
+                    dur=$(printf '%s' "$info" | sed -n 's/.*Duration: \([0-9]*\):\([0-9]*\):\([0-9]*\).*/\1 \2 \3/p' | head -1 | awk '{print $1*3600+$2*60+$3}')
+                    at=$(( ${dur:-0} > 45 ? ${dur:-0} * 3 / 10 : 0 ))       # 30% in: past the start, where the camera settles
+                    echo "clip: ${clip#/share/VIDEO/}"
+                    echo "  $(printf '%s' "$info" | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
+                    echo "20 seconds from ${at}s, each setting made on the video chip (the way proxies are made):"
+                    $D -loglevel error -ss $(( at + 10 )) -i "$clip" -frames:v 1 -q:v 2 "$T/$name - 0 original - still.jpg" 2>/dev/null
+                    for s in "720 2M" "720 3M" "720 4M" "720 6M" "1080 4M" "1080 6M"; do
+                        set -- $s; h=$1; b=$2; m=$(( ${b%M} * 3 / 2 ))M; o="$T/$name - ${h}p ${b}.mp4"; t0=$(date +%s)
+                        if $D -loglevel error -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -ss $at -t 20 -i "$clip" \
+                               -vf "scale_vaapi=w=-2:h=$h" -c:v h264_vaapi -b:v $b -maxrate $m -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null \
+                           || $D -loglevel error -vaapi_device /dev/dri/renderD128 -ss $at -t 20 -i "$clip" \
+                               -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$h" -c:v h264_vaapi -b:v $b -maxrate $m -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null; then
+                            $D -loglevel error -ss 10 -i "$o" -frames:v 1 -q:v 2 "$T/$name - ${h}p ${b} - still.jpg" 2>/dev/null
+                            echo "  ${h}p at ${b}bit/s: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
+                        else rm -f "$o"; echo "  ${h}p at ${b}bit/s: the chip could not make it"; fi
+                    done
+                    o="$T/$name - 720p software crf23.mp4"; t0=$(date +%s)
+                    if $D -loglevel error -ss $at -t 20 -i "$clip" -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k -movflags +faststart "$o" 2>/dev/null; then
+                        $D -loglevel error -ss 10 -i "$o" -frames:v 1 -q:v 2 "$T/$name - 720p software crf23 - still.jpg" 2>/dev/null
+                        echo "  720p in software, for comparison: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
+                    fi
+                    chown -R "$(stat -c %u:%g /share/VIDEO)" "$T" 2>/dev/null
+                    echo "Look at them in _rushes/proxy-test on VIDEO: each clip, and a still from each at the same moment."
+                    [ -f /share/Web/proxy.pid ] && echo "(Proxies were being made meanwhile, so the times are slower than on a quiet chip.)"
+                fi
+            } > "$out" 2>&1
+            cat "$out" >> "$LOG"
+            ;;
         proxy-plan)
             PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh >> "$LOG" 2>&1
             ;;

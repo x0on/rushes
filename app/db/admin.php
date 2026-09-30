@@ -224,7 +224,7 @@ if (isset($_POST['_newpass'])) {
                   originals, so nothing mixes with the footage. Made at low priority; a file that arrived in the last
                   two hours waits for a later run, so nothing still being copied is touched.</p></div>
               <div><b>2 · Descriptions</b> <span class="note">on the helper</span>
-                <p>Every shot, read from its proxy: a sentence, the text on screen, shot size, people, light, themes
+                <p>Every shot — the cuts and the sound from its proxy, the pictures from the original at full quality: a sentence, the text on screen, shot size, people, light, themes
                   and tags, and everything said, in the language it was said. Kept in <code>_rushes/analysis</code>;
                   nothing in the archive is changed. It starts by itself when a folder's proxies are done.</p></div>
             </div>
@@ -238,8 +238,13 @@ if (isset($_POST['_newpass'])) {
                      style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
               <button class="btn" id="prepGo" type="button">+ Add to the list</button>
+              <button class="btn quiet" data-px="proxy-test" type="button">Test proxy settings</button>
               <button class="btn quiet" data-px="proxy-stop" type="button">Stop proxies</button>
             </div>
+            <p class="note" style="margin:6px 0 0">Test proxy settings: 20 seconds of the folder's biggest clip (or the clip typed) made at
+              several sizes and bitrates on the video chip, side by side in <code>_rushes/proxy-test</code> with a still from each and
+              one from the original — to choose before a whole folder is made. Nothing else changes.</p>
+            <div id="pxTest"></div>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
             <div id="pxState" class="note" style="margin-top:6px"></div>
             <div id="prepTable" style="margin-top:12px"></div>
@@ -816,6 +821,11 @@ async function load() {
   drawHelper(d);
   drawDescribeTools(d.helper);
   drawProxies(d.proxies);
+  const pt = d.proxy_test, ptRun = d.running === 'proxy-test' || (d.queued || []).includes('proxy-test');
+  $('pxTest').innerHTML = ptRun || pt ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px">' +
+      '<b>Proxy settings test</b> · ' + (d.running === 'proxy-test' ? '<span class="spin"></span>making them now (a few minutes)'
+        : ptRun ? '<span class="spin"></span>asked — starts within a minute' : 'finished ' + esc(clock(pt.at))) +
+      (pt ? '<pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' + esc(pt.text) + '</pre>' : '') + '</div>' : '';
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {
@@ -884,7 +894,7 @@ async function load() {
   // Every tool says where it is: asked, running, finished — and the video
   // chip test shows its result right here.
   const TOOL = {manifest: 'Rebuild the file list', import: 'Rebuild search', verify: 'Check the holding folder', df: 'Measure free space',
-    'proxy-plan': 'Plan proxies', 'proxy-build': 'Make proxies', 'gpu-test': 'Test the video chip', scan: 'Find duplicates'};
+    'proxy-plan': 'Plan proxies', 'proxy-build': 'Make proxies', 'gpu-test': 'Test the video chip', 'proxy-test': 'Test proxy settings', scan: 'Find duplicates'};
   const tq = d.queued || [];
   $('toolState').innerHTML =
     (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running) + '</b>' +
@@ -942,13 +952,14 @@ document.querySelectorAll('[data-px]').forEach(function (b) {
   b.onclick = async function () {
     const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '');
     if (what === 'proxy-plan' && !folder) { $('prepSaid').textContent = 'Choose a folder first — Plan looks at one folder.'; return; }
+    if (what === 'proxy-test' && !folder) { $('prepSaid').textContent = 'Choose a folder (or type a clip) first — the test uses its biggest video.'; return; }
     if (what === 'proxy-stop' && !b.dataset.sure) {
       const w = b.textContent; b.dataset.sure = '1'; b.textContent = 'Sure? Stop';
       setTimeout(function () { if (b.dataset.sure) { delete b.dataset.sure; b.textContent = w; } }, 5000);
       return;
     }
     delete b.dataset.sure;
-    const was = what === 'proxy-stop' ? 'Stop proxies' : b.textContent; b.disabled = true; b.textContent = 'Asking…';
+    const was = what === 'proxy-stop' ? 'Stop proxies' : what === 'proxy-test' ? 'Test proxy settings' : b.textContent; b.disabled = true; b.textContent = 'Asking…';
     try {
       const j = await (await fetch('../run.php', { method: 'POST',
         body: new URLSearchParams({ action: what, query: folder }) })).json();
