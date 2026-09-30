@@ -340,6 +340,32 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 done
                 enc "software (libx264), for comparison" "$DOCKER" run --rm linuxserver/ffmpeg -hide_banner -loglevel error \
                     $SRC -c:v libx264 -preset veryfast -crf 23 -f null -
+                # The real work: one of the archive's own clips, 30 seconds of it,
+                # read, made 1080p and encoded — the way a proxy is made — and how
+                # busy the processor was meanwhile (the chip's point is to free it).
+                clip=$(awk -F'\t' '$1 > 100000000 && tolower($2) ~ /\.(mp4|mov|mxf|mts)$/ && $2 !~ /\/(PROXIES|_rushes|_duplicates)\// { print $2; exit }' /share/Web/manifest.tsv 2>/dev/null)
+                if [ -n "$clip" ] && [ -f "$clip" ]; then
+                    echo "With a real clip: ${clip#/share/VIDEO/}"
+                    echo "  $("$DOCKER" run --rm -v /share/VIDEO:/share/VIDEO:ro linuxserver/ffmpeg -hide_banner -i "$clip" 2>&1 | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
+                    busy() { awk '/^cpu /{print $2+$3+$4+$7+$8, $2+$3+$4+$5+$6+$7+$8}' /proc/stat; }
+                    real() {
+                        lab=$1; shift; set -- $(busy) "$@"; b0=$1; t0=$2; shift 2; s0=$(date +%s)
+                        if msg=$("$@" 2>&1); then
+                            set -- $(busy); echo "  $lab: WORKS — 30 s of footage in $(( $(date +%s) - s0 )) s, processor $(( 100 * ($1 - b0) / ($2 - t0 + 1) ))% busy"
+                        else echo "  $lab: does not work — $(printf '%s' "$msg" | tail -2 | tr '\n' ' ' | cut -c1-200)"; fi
+                    }
+                    RUN="$DOCKER run --rm -v /share/VIDEO:/share/VIDEO:ro"
+                    real "all on the chip (read, resize, encode)" $RUN --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=i965 linuxserver/ffmpeg \
+                        -hide_banner -loglevel error -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi \
+                        -ss 5 -t 30 -i "$clip" -vf scale_vaapi=w=-2:h=1080 -c:v h264_vaapi -b:v 2M -an -f null -
+                    real "read by the processor, resize and encode on the chip" $RUN --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=i965 linuxserver/ffmpeg \
+                        -hide_banner -loglevel error -vaapi_device /dev/dri/renderD128 \
+                        -ss 5 -t 30 -i "$clip" -vf 'format=nv12,hwupload,scale_vaapi=w=-2:h=1080' -c:v h264_vaapi -b:v 2M -an -f null -
+                    real "all in software" $RUN linuxserver/ffmpeg -hide_banner -loglevel error \
+                        -ss 5 -t 30 -i "$clip" -vf scale=-2:1080 -c:v libx264 -preset veryfast -crf 23 -an -f null -
+                else
+                    echo "With a real clip: none found in the file list"
+                fi
             } > "$out" 2>&1
             cp "$out" /share/VIDEO/_rushes/gpu-test.txt 2>/dev/null
             cat "$out" >> "$LOG"
