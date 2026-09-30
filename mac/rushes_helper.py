@@ -383,6 +383,8 @@ class Window:
             self.set(step="home", said="")
         elif do == "done":
             self.quit.set()
+        elif do == "ask-help":
+            self.run("Collecting diagnostics …", lambda: self.ask_help())
         elif do == "diagnostics":
             self.run("Collecting diagnostics …", lambda: self.set(said="Saved ✓ " + os.path.basename(diagnostics(s["url"])) +
                      " is on your Desktop, shown in Finder. Read it first; nothing was sent anywhere."))
@@ -395,6 +397,26 @@ class Window:
                                                     if start_service() else "Could not start it — see setup.log."))
         elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "check-pause", "check-resume", "nudge"):
             self.run("Asking Rushes …", lambda: self.switch(do))
+
+    def ask_help(self):
+        """Help is asked for in the open: a new GitHub issue for Rushes, filled in
+        with what to say, and the diagnostics on the Desktop to read first and
+        attach only if nothing in it is private (issues are public)."""
+        import platform
+        out = diagnostics(self.s["url"])
+        try:
+            with open(os.path.join(APP, "Contents", "Info.plist"), "rb") as f:
+                ver = plistlib.load(f).get("CFBundleShortVersionString", "?")
+        except (OSError, plistlib.InvalidFileException):
+            ver = "?"
+        body = ("**What happened**\n\n\n**What I expected**\n\n\n"
+                f"Rushes Helper {ver} · macOS {platform.mac_ver()[0]} · {platform.machine()}\n\n"
+                "Diagnostics: Rushes Helper saved them on my Desktop. (Read the file first — issues are public — "
+                "and drag it here only if nothing in it is private.)")
+        subprocess.run(["open", "https://github.com/x0on/rushes/issues/new?" +
+                        urllib.parse.urlencode({"title": "Help: ", "body": body})])
+        self.set(said="A new GitHub issue is open in your browser, and " + os.path.basename(out) +
+                 " is on your Desktop. Issues are public: read the file before you attach it. Nothing was sent.")
 
     def switch(self, do):
         r = rushes(self.s["url"], "/db/helper.php", {"action": do})
@@ -654,9 +676,11 @@ function home(s) {
       '<div class="row"><div class="t">Diagnostics<small>Everything someone helping you would ask for, in one text file on your Desktop, ' +
         'to read before you send it to anyone: versions, switches, and what the helper said lately. It names folders and files; ' +
         'it holds no footage and no passwords. Nothing is sent.</small></div>' + btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
-      '<div class="row"><div class="t">Support access<small>Off. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
-        'When support sessions exist they will be off by default, turned on only here by you, time-limited, shown on screen while open, and closed with one button.</small></div>' +
-      '<button class="sw" disabled title="Not built yet: nobody can turn this on"></button></div>' +
+      '<div class="row"><div class="t">Ask for help<small>Opens a new issue for Rushes on GitHub, where help is asked for in the open, ' +
+        'and saves the diagnostics on your Desktop. GitHub issues are public: read the file, and attach it only if nothing in it is private.</small></div>' +
+        btn('Ask for help', 'ask-help', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Support access<small>None. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
+        'Help happens in the open, on GitHub, with what you choose to share.</small></div></div>' +
     '</div>' +
     '<p class="muted" style="font-size:12.5px">Updates: Rushes Helper keeps its own code the same as your Rushes server\'s (' + esc(s.url) +
       ', never anywhere else), checking every few minutes and only between jobs. Nothing else can reach this Mac through it.</p>' +

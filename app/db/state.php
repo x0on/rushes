@@ -287,8 +287,10 @@ $to   = settings()['archive']['label'] ?? basename(archive_dir());
 
 // The helper stopped while there is work for it. A background helper comes
 // back by itself; one in a Terminal window needs starting again.
+// Alive if either of its two reports is recent: the drive report, or its live
+// status (a drive that stops answering can hold up the first while copying goes on).
 $hvNow = helper_volumes();
-if ($transferOpen && !$hvNow['fresh']) {
+if ($transferOpen && !$hvNow['fresh'] && !($mac && !$mac_stale)) {
     $c[] = ['level' => 'bad', 'title' => 'The helper is not running',
         'body' => ($hvNow['how'] === 'service'
             ? 'It runs in the background on ' . helper_name() . ' and restarts by itself within a minute. If it does not come back: is that computer on, awake and logged in?'
@@ -442,7 +444,7 @@ echo json_encode([
         $p['ago'] = isset($p['at']) ? time() - (int)$p['at'] : null;
         return $p;
     })(),
-    'helper'   => (function () use ($ago, $WEB, $mac, $mac_stale) {
+    'helper'   => (function () use ($ago, $WEB, $mac, $mac_stale, $mac_at) {
         $hv = helper_volumes(); $ctl = helper_control();
         return [
             'mode'    => helper_mode(),
@@ -450,7 +452,9 @@ echo json_encode([
             'command' => helper_command(),
             // Alive if it reported its drives lately OR its live status is fresh:
             // a slow network share can hold up the drive report for a while.
-            'seen'    => $hv['at'], 'seen_ago' => $ago($hv['at']), 'fresh' => $hv['fresh'] || ($mac && !$mac_stale),
+            'seen'    => max($hv['at'], $mac_at), 'seen_ago' => $ago(max($hv['at'], $mac_at)), 'fresh' => $hv['fresh'] || ($mac && !$mac_stale),
+            // its drive report is late while it works: a drive not answering (said on the page, not hidden)
+            'drives_late' => $hv['at'] && !$hv['fresh'] && $mac && !$mac_stale,
             'how'     => $hv['how'], 'ver' => $hv['ver'],
             // the version on the archive; a helper with another one updates itself
             'current' => substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),

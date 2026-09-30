@@ -1482,13 +1482,14 @@ def tell_search(paths):
         except OSError: pass
     cp.flush(force=True)
 
-def report_forever(every=20):
-    """Tell the archive what is plugged in here, for as long as this runs.
+_looked = [[], 0.0]        # the latest look at what is plugged in here, and when
 
-    Its own thread, because a four-hour copy must not hide a card that was
-    plugged in during it."""
+
+def look_forever(every=20):
+    """What is plugged in, looked at over and over in a thread of its own. A
+    network drive that stops answering can hold a look up for minutes (the
+    system waits on it); only this thread waits, and the reports carry on."""
     ok = lambda x: "\t" not in x and "\n" not in x
-    failing = False        # said so once; do not repeat it every 20 seconds
     while True:
         try:
             lines = []
@@ -1502,6 +1503,30 @@ def report_forever(every=20):
                 lines += ["\t".join(["day", v["path"], d, str(c[0]), str(c[1])])
                           for d, c in sorted(days.items())]
                 lines += ["\t".join(["dir", v["path"], d]) for d in v["top"] if ok(d)]
+            _looked[:] = [lines, time.time()]
+        except Exception:
+            pass
+        time.sleep(every)
+
+
+def report_forever(every=20):
+    """Tell the archive what is plugged in here, for as long as this runs —
+    which is also how Rushes knows this helper is alive. Its own thread, because
+    a four-hour copy must not hide a card plugged in during it; the looking has
+    a thread of its own too, so a drive that stops answering never silences it."""
+    failing = False        # said so once; do not repeat it every 20 seconds
+    late = False
+    threading.Thread(target=look_forever, daemon=True).start()
+    for _ in range(20):                    # the first look, before the first report (up to 10 s)
+        if _looked[1]: break
+        time.sleep(0.5)
+    while True:
+        try:
+            lines, at = _looked
+            if at and time.time() - at > 120 and not late:
+                print(f"{time.strftime('%H:%M:%S')}  ! a connected drive is not answering — "
+                      "cards plugged in now may not show in Ingest until it does. Copies carry on.")
+            late = bool(at) and time.time() - at > 120
             py, model, speech = analysis_tools()
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
                                            "an": ("ready" if py else "missing") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
