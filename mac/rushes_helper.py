@@ -1,3 +1,5 @@
+# Rushes — Media Management Software, by Alejandro Renteria.
+# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """Rushes Helper — the Mac app around the helper.
 
 Opened from Finder, it sets itself up: where Rushes is, a background service

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Rushes — Media Management Software, by Alejandro Renteria.
+# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """ingest.py — copy in only what the archive does not already have.
 
 Runs on the Mac, the only machine that can see both servers.

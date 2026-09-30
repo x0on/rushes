@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Rushes — Media Management Software, by Alejandro Renteria.
+# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """analyze.py — describe footage so it can be found by what it shows and says.
 
     analyze.py FOLDER_OR_FILE --store /Volumes/VIDEO/_rushes/analysis [--url RUSHES]
