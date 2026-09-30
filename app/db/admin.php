@@ -1194,9 +1194,11 @@ function drawPrepare(rows, a) {
   const ds = function (d) {
     const off = a.helper_fresh === false && ['queued', 'next', 'describing'].includes(d.step)
       ? ' · <span class="bad">the helper Mac is off or asleep, so this waits</span>' : '';
-    return (d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>'
+    return (d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>' +
+        '<div class="note">' + (d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' : 'looking at ') +
+        (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>'
       : d.step === 'done' ? '<span class="ok">✓ ' + n(d.files) + ' files</span>' + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
-      : d.step === 'queued' ? 'queued on the helper, after any copies'
+      : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
       : d.step === 'next' ? 'starting'
       : '<span class="dim">waiting for proxies</span>') + off;
   };
@@ -1233,7 +1235,7 @@ function drawPrepare(rows, a) {
           ? (why.state === 'making' || r.proxies.step === 'making' ? '<button class="btn" disabled title="Proxies are being made now">Running</button>'
             : why.state === 'asked' || why.state === 'starting' ? '<button class="btn" disabled title="Asked; the archive machine starts it within a minute">Starting…</button>'
             : '<button class="btn" data-l="start">Start now</button>') : '') +
-        (r.proxies.step === 'done' ? '<button class="btn quiet" data-l="remake" title="Throw its proxies away and make them again with the setting in use">Remake proxies</button>' : '') +
+        (r.proxies.step === 'done' && r.describe.step !== 'describing' ? '<button class="btn quiet" data-l="remake" title="Throw its proxies away and make them again with the setting in use">Remake proxies</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
         ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +

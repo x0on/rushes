@@ -204,7 +204,10 @@ function describing_now(): array {
     foreach (['describe-status.tsv', 'ingest-status.tsv'] as $file) {      // its own lane; an older helper says it in the copy status
         $s = [];
         foreach (@file(web_dir() . "/$file") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }
-        if (isset($s['ts']) && time() - (int)$s['ts'] < 300 && ($s['phase'] ?? '') === 'analysing') return $s;
+        // Listening to a long file says nothing for minutes (a newer helper repeats itself
+        // every minute); the lane says idle or paused the moment it stops, so "analysing"
+        // within half an hour is still at it.
+        if (isset($s['ts']) && time() - (int)$s['ts'] < 1800 && ($s['phase'] ?? '') === 'analysing') return $s;
     }
     return [];
 }
@@ -236,7 +239,8 @@ function prepare_table(): array {
         $path = "$h/$rel";
         $d = $desc[$path] ?? null;
         if ($dnow && ($dnow['source'] ?? '') === $path)
-            $ds = ['step' => 'describing', 'n' => (int)($dnow['n'] ?? 0), 'of' => (int)($dnow['of'] ?? 0)];
+            $ds = ['step' => 'describing', 'n' => (int)($dnow['n'] ?? 0), 'of' => (int)($dnow['of'] ?? 0),
+                   'file' => basename((string)($dnow['file'] ?? '')), 'doing' => (string)($dnow['step'] ?? '')];
         elseif ($d && $d['asked'] === $asked)            // described for this very request
             $ds = ['step' => 'done'] + $d;
         elseif (in_array("analyze\t$path\t$asked", $queue, true))

@@ -2150,7 +2150,16 @@ def describe_folder(path, asked=""):
         cmd = ["caffeinate", "-i"] + cmd
     status(phase="analysing", source=path, label=name, step="loading the model")
     t0, done, stopped = time.time(), {}, ""
+    last = dict(phase="analysing", source=path, label=name, step="loading the model")
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    def beat():
+        # Listening to a long file, or loading the model, says nothing for
+        # minutes: the page is told again every minute that it is still at it.
+        _lane.name = "describe"
+        while p.poll() is None:
+            time.sleep(60)
+            if p.poll() is None: status(**last)
+    threading.Thread(target=beat, daemon=True).start()
     for line in p.stdout:
         if line.startswith("@@ "):
             try:
@@ -2159,9 +2168,10 @@ def describe_folder(path, asked=""):
                 continue
             if d.get("finished"):
                 done = d; continue
-            status(phase="analysing", source=path, label=name, file=d.get("file", ""),
-                   n=d.get("n", 0), of=d.get("of", 0), shot=d.get("shot", 0), shots=d.get("shots", 0),
-                   per_shot=d.get("per_shot", ""), failed=d.get("failed", 0), step=d.get("step", "shots"))
+            last = dict(phase="analysing", source=path, label=name, file=d.get("file", ""),
+                        n=d.get("n", 0), of=d.get("of", 0), shot=d.get("shot", 0), shots=d.get("shots", 0),
+                        per_shot=d.get("per_shot", ""), failed=d.get("failed", 0), step=d.get("step", "shots"))
+            status(**last)
         else:
             print(line.rstrip(), flush=True)
         c = control()                         # Pause describing stops it between lines; a file part-done is redone
