@@ -159,6 +159,32 @@ licenses stay theirs; CREDITS.md says what came from where):
 9. **rsync / rclone** — done: whole-file verification, sources that change
    mid-copy, no half files, a full archive stops once, accented names.
 
+## Support: never a back door
+
+How Rushes gets fixed and improved is stated in the code and shown in the apps,
+so nobody has to wonder whether someone can reach in.
+
+- **Today:** scripts that run with full rights on the archive machine wait for
+  an admin's "Install it" in Manage. Pages arrive through the drop folder on the
+  archive share. Rushes Helper updates its own code from the Rushes server it is
+  set up with (only that server, never the internet), between files; its window
+  will say so and have a switch for it.
+- **Diagnostics** (like Test the video chip) run inside the app and show their
+  result where you are; a "Collect diagnostics" button will gather versions,
+  test results and recent errors — no footage, no passwords — into a file the
+  person reads before sending it anywhere.
+- **A support session is off by default.** Only the person at Rushes Helper can
+  turn it on, it is time-limited, shown on screen while open, and closed by one
+  button. (Over a private network such as Tailscale when the machine has it.)
+- **Fixes arrive as signed updates** that say what they change and wait for "Install".
+
+## Copy proof: ASC MHL records beside the footage
+
+Decided: the ASC MHL record lives beside the footage, as the standard intends
+(an `ascmhl` folder in each copied folder, XXH3-128 fingerprints taken while
+copying — no extra read), so Hedge, Silverstack and Resolve can check it. When a
+tidy-up moves files, it writes a new generation recording where they went.
+
 ## Order
 
 1. **Finish the loop on a real archive.** The copy completes, then tidy-up,

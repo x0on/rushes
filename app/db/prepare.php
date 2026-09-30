@@ -134,6 +134,15 @@ function prepare_why(): array {
     $now = proxy_now(); $nf = web_dir() . '/proxy-next.txt';
     if (!empty($now['running']))
         return ['state' => 'making', 'text' => 'Proxies are being made now' . (($now['only'] ?? '') !== '' ? ' for ' . $now['only'] : '') . '.'];
+    // asked with Start now (or Manage's tools), not started yet
+    foreach (glob(web_dir() . '/queue/*.job') ?: [] as $j)
+        if (preg_match('/^ACTION=proxy-build$/m', (string)@file_get_contents($j))) {
+            preg_match('/^QUERY=(.*)$/m', (string)@file_get_contents($j), $m);
+            $age = time() - (int)filemtime($j);
+            return $age < 180
+                ? ['state' => 'asked', 'text' => 'Asked ' . $age . ' s ago: the archive machine starts ' . ($m[1] ?? 'the proxies') . ' at its next turn, within a minute.']
+                : ['state' => 'stuck', 'text' => 'Asked ' . (int)round($age / 60) . ' minutes ago and the archive machine has not taken the job. Is its runner going? Overview says when it was last seen.'];
+        }
     if (is_file($nf)) {
         $age = time() - (int)filemtime($nf); $f = trim((string)@file_get_contents($nf));
         return $age < 180

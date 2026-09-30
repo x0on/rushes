@@ -886,11 +886,7 @@ function drawProxies(p) {
   const size = function (gb) { gb = +gb || 0; return gb >= 1000 ? (gb / 1024).toFixed(1) + ' TB' : gb + ' GB'; };
   const when = p.ago == null ? '' : ' <span class="note">(' + (p.ago < 90 ? 'just now' : Math.round(p.ago / 60) + ' min ago') + ')</span>';
   // Asked, not started: the runner looks at its list once a minute.
-  if (p.asked) {
-    el.innerHTML = '<span class="spin"></span> <b>' + (p.asked.what === 'proxy-plan' ? 'Plan' : 'Make proxies') + '</b>' +
-      (p.asked.only ? ' for ' + esc(p.asked.only) : ' for the whole archive') + ' · asked ' + p.asked.ago + ' s ago; the archive machine starts it at its next turn (within a minute).';
-    return;
-  }
+  if (p.asked) { el.innerHTML = ''; return; }     // the list above says it, once
   el.innerHTML = p.state === 'planning'
       ? '<span class="spin"></span> <b>Planning' + (p.only ? ' ' + esc(p.only) : ' the whole archive') + '</b> · ' + esc(p.step || '') +
         (p.videos ? ' · ' + n(p.seen) + ' of ' + n(p.videos) + ' videos' : '')
@@ -1089,7 +1085,7 @@ function drawPrepare(rows, a) {
   // why it is where it is, in words; Start now when it should have started and has not
   const why = a.why || {};
   const head2 = why.text ? '<p class="note" style="margin:0 0 8px">' + (why.state === 'stuck' ? '<span class="bad">' + esc(why.text) + '</span>'
-    : (why.state === 'making' || why.state === 'starting' ? '<span class="spin"></span>' : '') + esc(why.text)) + '</p>' : '';
+    : (why.state === 'making' || why.state === 'starting' || why.state === 'asked' ? '<span class="spin"></span>' : '') + esc(why.text)) + '</p>' : '';
   let place = 0;          // place in line among the folders not finished yet: 1 is the one running now
   $('prepTable').innerHTML = head + head2 + '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
     rows.map(function (r, i) {
@@ -1099,8 +1095,11 @@ function drawPrepare(rows, a) {
         (i < rows.length - 1 ? '<button class="btn quiet" data-l="down" title="Move down">↓</button>' : '') +
         (['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0)
           ? '<button class="btn quiet" data-l="retry">Try again</button>' : '') +
-        (place === 1 && !doneRow(r) && why.state !== 'making' && ['waiting', 'stopped'].includes(r.proxies.step)
-          ? '<button class="btn" data-l="start">Start now</button>' : '') +
+        // the first folder's start button says what is happening, and cannot start anything twice
+        (place === 1 && !doneRow(r) && (['waiting', 'stopped', 'making'].includes(r.proxies.step) || why.state === 'making')
+          ? (why.state === 'making' || r.proxies.step === 'making' ? '<button class="btn" disabled title="Proxies are being made now">Running</button>'
+            : why.state === 'asked' || why.state === 'starting' ? '<button class="btn" disabled title="Asked; the archive machine starts it within a minute">Starting…</button>'
+            : '<button class="btn" data-l="start">Start now</button>') : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
         ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
