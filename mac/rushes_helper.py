@@ -2,18 +2,26 @@
 # Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """Rushes Helper — the Mac app around the helper.
 
-Opened from Finder, it sets itself up: where Rushes is, a background service
-that starts at login, and the one switch in System Settings macOS needs a
-person to turn on. Started by macOS with arguments, it runs the helper.
+Opened from Finder, it shows one window that stays open from start to end:
+the first time, setup as steps (where Rushes is, the background service, the
+one switch in System Settings macOS needs a person to turn on) ending on
+"All set"; after that, what the helper is doing and its switches. Started by
+macOS with arguments, it runs the helper, with no window.
 
-Everything it does is written to ~/Library/Logs/Rushes/setup.log, and every
-step says what happened. Nothing is written inside the app itself.
+The window is the app's own (see launcher.c); this file serves the page in it,
+on this computer only, behind a random key. Everything it does is written to
+~/Library/Logs/Rushes/setup.log. Nothing is written inside the app itself.
 """
+import http.server
+import json
 import os
 import plistlib
+import re
 import subprocess
 import sys
+import threading
 import time
+import urllib.parse
 import urllib.request
 
 APP = os.environ.get("RUSHES_APP") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -23,7 +31,6 @@ LOGS = os.path.join(HOME, "Library", "Logs", "Rushes")
 LABEL = "org.rushes.helper"
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
-ICON = os.path.join(APP, "Contents", "Resources", "AppIcon.icns")
 FILES = ("ingest.py", "transfer_state.py")
 TCC = os.path.join(HOME, "Library", "Application Support", "com.apple.TCC", "TCC.db")
 LAN_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork",
@@ -44,42 +51,6 @@ def log(msg):
         pass
 
 
-# ── talking to the person: plain macOS dialogs, with the app's icon ──────────
-def _q(s):
-    return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def dialog_script(text, buttons, default=None, answer=None, wait=None):
-    s = (f"activate\nset r to display dialog {_q(text)} with title \"Rushes Helper\""
-         f" with icon (POSIX file {_q(ICON)})"
-         f" buttons {{{', '.join(_q(b) for b in buttons)}}} default button {_q(default or buttons[-1])}")
-    if answer is not None:
-        s += f" default answer {_q(answer)}"
-    if wait:
-        s += f" giving up after {int(wait)}"
-    s += "\nreturn (button returned of r)"
-    if answer is not None:
-        s += " & linefeed & (text returned of r)"
-    return s
-
-
-def ask(text, buttons=("OK",), default=None, answer=None):
-    """The button pressed (and the text typed, if asked for). None when closed with Cancel."""
-    r = subprocess.run(["osascript", "-e", dialog_script(text, buttons, default, answer)],
-                       capture_output=True, text=True)
-    if r.returncode:
-        return None
-    out = r.stdout.rstrip("\n")
-    if answer is not None:
-        b, _, t = out.partition("\n")
-        return b, t.strip()
-    return out
-
-
-def say(text):
-    ask(text, ("OK",))
-
-
 # ── what is true right now ──────────────────────────────────────────────────
 def has_full_disk_access():
     """Asked by a fresh process each time: macOS answers the question for new
@@ -95,6 +66,13 @@ def service_points_here():
         return p.get("ProgramArguments", [""])[0].startswith(HOMEAPP + "/")
     except (OSError, plistlib.InvalidFileException):
         return False
+
+
+def service_running():
+    """(loaded, pid): whether macOS has the background service, and its process."""
+    r = launchctl("print", f"gui/{UID}/{LABEL}")
+    m = re.search(r"\bpid = (\d+)", r.stdout)
+    return r.returncode == 0, int(m.group(1)) if m else 0
 
 
 def saved_url():
@@ -135,12 +113,15 @@ def guess_url():
             pass
         return ""
     downloads = os.path.join(HOME, "Downloads")
-    for p in [APP] + [os.path.join(downloads, f) for f in sorted(os.listdir(downloads) if os.path.isdir(downloads) else [])
-                      if f.startswith("Rushes Helper")]:
-        u = from_where(p)
-        if u:
-            return u
-    clip = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout.strip()
+    try:
+        for p in [APP] + [os.path.join(downloads, f) for f in sorted(os.listdir(downloads) if os.path.isdir(downloads) else [])
+                          if f.startswith("Rushes Helper")]:
+            u = from_where(p)
+            if u:
+                return u
+        clip = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return ""
     if clip.startswith(("http://", "https://")) and "\n" not in clip and len(clip) < 200:
         return clip.split("/db/")[0].rstrip("/")
     return ""
@@ -161,7 +142,10 @@ def fetch_files(url):
 
 
 def launchctl(*args):
-    return subprocess.run(["launchctl", *args], capture_output=True, text=True)
+    try:
+        return subprocess.run(["launchctl", *args], capture_output=True, text=True)
+    except OSError as e:
+        return subprocess.CompletedProcess(args, 1, "", str(e))
 
 
 def install_service(url):
@@ -181,6 +165,10 @@ def install_service(url):
     with open(PLIST + ".new", "wb") as f:
         plistlib.dump(plist, f)
     os.replace(PLIST + ".new", PLIST)
+    return start_service()
+
+
+def start_service():
     launchctl("bootout", f"gui/{UID}/{LABEL}")          # the old one, whatever it was
     for _ in range(5):
         r = launchctl("bootstrap", f"gui/{UID}", PLIST)
@@ -191,183 +179,446 @@ def install_service(url):
     return False
 
 
+def stop_service():
+    """Stops it and keeps it stopped, also after a restart, until started again here."""
+    r = launchctl("bootout", f"gui/{UID}/{LABEL}")
+    return r.returncode == 0 or not service_running()[0]
+
+
 def restart_service():
     launchctl("kickstart", "-k", f"gui/{UID}/{LABEL}")
 
 
-# ── setup, as the person sees it ────────────────────────────────────────────
-WELCOME = """Rushes Helper copies footage into your Rushes archive in the background, and Rushes → Manage shows everything it does.
-
-It carries its own copy of Python — the free, open-source programming language the helper is written in, and one of the most widely used in the world. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.
-
-Setting up takes a minute: where Rushes is, and two permissions from macOS — to talk to your network (press Allow when it asks), and one switch in System Settings."""
-
-FDA = """One switch left: Full Disk Access.
-
-macOS keeps apps away from network drives and other disks until you allow it. Rushes Helper needs that to read footage from the source and write it into the archive — nothing more.
-
-Next, System Settings opens at Full Disk Access, and Finder shows Rushes Helper. Turn Rushes Helper on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).
-
-If System Settings opens somewhere else, type Full Disk Access into its search field, top left.
-
-Then come back here: this window notices the switch by itself."""
-
-
-def move_to_applications():
-    """Run from ~/Applications, so the background service has a place that
-    stays put — not Downloads, and not the temporary copy macOS runs a
-    downloaded app from."""
+def copy_to_applications():
+    """The background service runs the copy in Applications (in your home
+    folder): a place that stays put — not Downloads, and not the temporary
+    copy macOS runs a downloaded app from. Copied, then setup simply carries
+    on in this same window."""
     here = os.path.realpath(APP)
     if here == os.path.realpath(HOMEAPP):
-        return False
+        return ""
     log(f"copying the app from {here} to {HOMEAPP}")
     os.makedirs(os.path.dirname(HOMEAPP), exist_ok=True)
     if os.path.exists(HOMEAPP):
         subprocess.run(["rm", "-rf", HOMEAPP])
     r = subprocess.run(["ditto", here, HOMEAPP], capture_output=True, text=True)
     if r.returncode:
-        say(f"Could not copy Rushes Helper into Applications in your home folder:\n\n{r.stderr.strip()}")
-        sys.exit(1)
+        return r.stderr.strip() or "ditto failed"
     # It came from the download that was already allowed to open.
     subprocess.run(["xattr", "-dr", "com.apple.quarantine", HOMEAPP], capture_output=True)
-    subprocess.run(["open", "-n", HOMEAPP])
-    log("opened the copy in Applications; this one stops here")
-    return True
+    return ""
 
 
-def show_fda():
-    """Settings at Full Disk Access, and the app in Finder to drag into the list."""
-    open_pane(FDA_PANE)
-    subprocess.run(["open", "-R", HOMEAPP])
-
-
-def wait_for_access():
-    """A waiting window that closes itself when the switch is on. Its button
-    takes you back to the right place, as often as needed."""
-    while True:
-        w = subprocess.Popen(["osascript", "-e", dialog_script(
-            "Waiting for Full Disk Access to be turned on for Rushes Helper …\n\n"
-            "Lost the place? Press Show me where. If System Settings does not land on it, type "
-            "Full Disk Access into its search field, top left.\n\n"
-            "This window closes by itself when it is on.",
-            ("Stop waiting", "Show me where"), default="Show me where", wait=1800)],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-        try:
-            while w.poll() is None:
-                if has_full_disk_access():
-                    return True
-                time.sleep(2)
-        finally:
-            if w.poll() is None:
-                w.terminate()
-        if (w.stdout.read() or "").strip() != "Show me where":
-            return has_full_disk_access()
-        log("showing Full Disk Access again")
-        show_fda()
-
-
-def setup():
-    log(f"opened: {APP}")
-    if move_to_applications():
-        return 0
-    url = saved_url()
-    ready = url and service_points_here() and has_full_disk_access()
-
-    if ready:
-        b = ask("Rushes Helper is set up and running in the background.\n\n"
-                f"Rushes: {url}\nIts log: ~/Library/Logs/Rushes/helper.log",
-                ("Remove…", "Open Rushes", "Done"), default="Done")
-        if b == "Open Rushes":
-            subprocess.run(["open", url + "/db/admin.php"])
-        elif b == "Remove…":
-            return remove()
-        return 0
-
-    if ask(WELCOME, ("Cancel", "Set up"), default="Set up") != "Set up":
-        log("setup cancelled at the start"); return 0
-    # The first try makes macOS ask about Local Network now, before the address
-    # question, instead of failing the address silently.
-    url = url or guess_url()
-    if url:
-        reachable(url)
-
-    # 1 · where Rushes is
-    while True:
-        a = ask("Where is Rushes? The address you open it at in the browser.\n\n"
-                "Setup → 04 Helper in Rushes has it, with a Copy button.",
-                ("Cancel", "Next"), default="Next", answer=url or "http://")
-        if not a or a[0] != "Next":
-            log("setup cancelled at the address"); return 0
-        url = a[1].strip().rstrip("/").split("/db/")[0]
-        if "://" not in url:
-            url = "http://" + url
-        ok, why, blocked = reachable(url)
-        if ok:
-            break
-        if blocked:
-            log(f"macOS refused the connection to {url}: Local Network is off for Rushes Helper")
-            if ask("macOS is not letting Rushes Helper talk to your network yet.\n\n"
-                   "If it asked whether Rushes Helper may “find and connect to devices on your local network”, "
-                   "press Allow, then Next again.\n\n"
-                   "If it did not ask: open Local Network settings, turn on Rushes Helper, then Next again.",
-                   ("Try again", "Open Local Network settings"), default="Open Local Network settings") \
-                    == "Open Local Network settings":
-                open_pane(LAN_PANE)
-            continue
-        log(f"could not reach {url}: {why}")
-        say(f"Could not reach Rushes at\n{url}\n\n{why or 'It answered, but not like Rushes.'}\n\n"
-            "Check the address, and that this Mac is on the same network.")
-    log(f"Rushes is at {url}")
-
-    # 2 · the helper itself, and the service that runs it
-    try:
-        fetch_files(url)
-    except Exception as e:
-        say(f"Could not download the helper from Rushes:\n\n{e}"); return 1
-    log("helper downloaded")
-    if not install_service(url):
-        say("macOS would not start the background service. The detail is in\n"
-            "~/Library/Logs/Rushes/setup.log"); return 1
-    log("background service installed and started")
-
-    # 3 · the switch only a person can turn on
-    if not has_full_disk_access():
-        if ask(FDA, ("Later", "Open System Settings"), default="Open System Settings") != "Open System Settings":
-            say("Rushes Helper is installed, but cannot reach the drives until Full Disk Access is on.\n\n"
-                "Open Rushes Helper again any time to finish.")
-            log("stopped before Full Disk Access"); return 0
-        show_fda()
-        log("waiting for Full Disk Access")
-        if not wait_for_access():
-            say("Full Disk Access is not on yet.\n\nOpen Rushes Helper again any time to finish.")
-            log("gave up waiting for Full Disk Access"); return 0
-        log("Full Disk Access is on")
-        restart_service()                                # so the running helper has it too
-
-    b = ask("✓ Rushes Helper is set up.\n\n"
-            "It runs in the background, starts when you log in, restarts itself if it stops, "
-            "and keeps itself up to date from Rushes. Rushes → Manage shows what it is doing.\n\n"
-            "macOS may show a notice that Rushes Helper can run in the background — that is this.",
-            ("Open Rushes", "Done"), default="Done")
-    if b == "Open Rushes":
-        subprocess.run(["open", url + "/db/admin.php"])
-    log("setup finished")
-    return 0
-
-
-def remove():
-    if ask("Remove Rushes Helper?\n\nIt stops, and no longer starts at login. Anything half-copied "
-           "stays where it is and carries on if you set it up again.",
-           ("Cancel", "Remove"), default="Cancel") != "Remove":
-        return 0
+def remove_service():
     launchctl("bootout", f"gui/{UID}/{LABEL}")
     try:
         os.remove(PLIST)
     except OSError:
         pass
     log("removed the background service")
-    say("✓ Removed. It will not start again.\n\nTo finish, drag Rushes Helper from Applications "
-        "(in your home folder) to the Trash, and switch it off in Full Disk Access.")
+
+
+# ── Rushes: what the helper is doing, and its switches ──────────────────────
+def rushes(url, path, data=None):
+    body = urllib.parse.urlencode(data).encode() if data is not None else None
+    with urllib.request.urlopen(url.rstrip("/") + path, data=body, timeout=6) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def log_tail(n=12):
+    """The helper's own words, newest last: what it did lately."""
+    try:
+        with open(os.path.join(LOGS, "helper.log"), "rb") as f:
+            f.seek(0, 2); f.seek(max(0, f.tell() - 16000))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return []
+    return [l for l in lines if l.strip()][-n:]
+
+
+# ── the window ──────────────────────────────────────────────────────────────
+class Window:
+    """Everything the page shows, and what its buttons do. The page asks for
+    this state every second and draws it; slow work runs in a thread and moves
+    the state on, so the window never freezes and never goes away mid-way."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
+                  "done": [], "waiting": False, "lan_asked": False}
+        if self.s["url"] and service_points_here() and has_full_disk_access():
+            self.s["step"] = "home"
+        elif service_points_here() and self.s["url"]:
+            self.s["step"] = "fda"                       # came back to finish the last switch
+            self._watch_access()
+        self.quit = threading.Event()
+
+    def set(self, **kw):
+        with self.lock:
+            self.s.update(kw)
+
+    def state(self):
+        with self.lock:
+            s = dict(self.s)
+        if s["step"] == "home":
+            s.update(self.home())
+        return s
+
+    def home(self):
+        loaded, pid = service_running()
+        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": os.path.join(LOGS, "helper.log")}
+        try:
+            c = rushes(self.s["url"], "/db/helper.php?control")
+            h["paused"], h["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
+            st = rushes(self.s["url"], "/db/state.php")
+            h["now"] = st.get("copy") or {}
+            h["rushes"] = True
+        except Exception as e:
+            h["rushes"] = False; h["rushes_why"] = str(getattr(e, "reason", e))
+        return h
+
+    def run(self, what, fn):
+        """Slow work: shown as busy, never twice at once."""
+        with self.lock:
+            if self.s["busy"]:
+                return
+            self.s["busy"] = what; self.s["error"] = ""
+        def go():
+            try:
+                fn()
+            except Exception as e:
+                log(f"{what}: {e}")
+                self.set(error=str(e))
+            finally:
+                self.set(busy="")
+        threading.Thread(target=go, daemon=True).start()
+
+    # the buttons
+    def act(self, do, a):
+        s = self.s
+        if do == "start":
+            url = s["url"] or guess_url()
+            self.set(step="address", url=url, error="")
+            if url and not s["lan_asked"]:
+                # The first try makes macOS ask about Local Network now, while
+                # the person is looking, instead of failing the address silently.
+                self.set(lan_asked=True)
+                threading.Thread(target=reachable, args=(url,), daemon=True).start()
+        elif do in ("address", "retry"):
+            url = (a.get("url") or s["url"]).strip().rstrip("/").split("/db/")[0]
+            if "://" not in url:
+                url = "http://" + url
+            self.set(url=url)
+            self.run("Looking for Rushes at " + url + " …", lambda: self.check(url))
+        elif do == "network-settings":
+            open_pane(LAN_PANE)
+        elif do == "fda-open":
+            self.show_fda(); self.set(waiting=True)
+        elif do == "later":
+            self.set(step="later")
+        elif do == "open-rushes":
+            subprocess.run(["open", s["url"] + "/db/admin.php"])
+        elif do == "show-log":
+            subprocess.run(["open", "-a", "Console", os.path.join(LOGS, "helper.log")])
+        elif do == "remove":
+            self.set(step="remove")
+        elif do == "remove-yes":
+            remove_service(); self.set(step="removed")
+        elif do == "back-home":
+            self.set(step="home", said="")
+        elif do == "done":
+            self.quit.set()
+        # switches, once set up: each says what it did
+        elif do == "service-off":
+            self.run("Stopping …", lambda: self.set(said="Stopped ✓ It will not run, not even after a restart, until you turn it on here."
+                                                    if stop_service() else "Could not stop it — see setup.log."))
+        elif do == "service-on":
+            self.run("Starting …", lambda: self.set(said="Running ✓ It carries on where it left off."
+                                                    if start_service() else "Could not start it — see setup.log."))
+        elif do in ("pause", "resume", "reconnect-off", "reconnect-on", "nudge"):
+            self.run("Asking Rushes …", lambda: self.switch(do))
+
+    def switch(self, do):
+        r = rushes(self.s["url"], "/db/helper.php", {"action": do})
+        if r.get("error"):
+            self.set(said="Did not happen: " + r["error"]); return
+        self.set(said={
+            "pause": "Paused ✓ What is running stops at its next safe point; nothing new starts until Resume.",
+            "resume": "Resumed ✓ It carries on within a few seconds.",
+            "reconnect-off": "Off ✓ It no longer connects dropped network drives by itself — no more “problem connecting” windows. Connect them in Finder; it carries on once they are back.",
+            "reconnect-on": "On ✓ It connects dropped network drives again by itself, only when the server answers.",
+            "nudge": "Asked ✓ It stops waiting and looks again now."}[do])
+        log(f"switch: {do}")
+
+    def check(self, url):
+        ok, why, blocked = reachable(url)
+        if blocked:
+            log(f"macOS refused the connection to {url}: Local Network is off for Rushes Helper")
+            self.set(step="network"); return
+        if not ok:
+            log(f"could not reach {url}: {why}")
+            self.set(step="address", error=f"Could not reach Rushes at {url}: {why or 'it answered, but not like Rushes'}. "
+                                           "Check the address, and that this Mac is on the same network."); return
+        log(f"Rushes is at {url}")
+        self.set(step="install", done=[])
+        self.install(url)
+
+    def install(self, url):
+        def did(line):
+            log(line)
+            with self.lock:
+                self.s["done"] = self.s["done"] + [line]
+        err = copy_to_applications()
+        if err:
+            raise RuntimeError("Could not copy Rushes Helper into Applications in your home folder: " + err)
+        did("Rushes Helper is in Applications, in your home folder")
+        fetch_files(url)
+        did("Downloaded the helper from Rushes")
+        if not install_service(url):
+            raise RuntimeError("macOS would not start the background service. The detail is in ~/Library/Logs/Rushes/setup.log")
+        did("Background service installed and started — it starts by itself when you log in")
+        if has_full_disk_access():
+            restart_service(); self.set(step="all-set")
+        else:
+            self.set(step="fda", waiting=False); self._watch_access()
+
+    def show_fda(self):
+        """Settings at Full Disk Access, and the app in Finder to drag into the list."""
+        open_pane(FDA_PANE)
+        subprocess.run(["open", "-R", HOMEAPP])
+
+    def _watch_access(self):
+        def watch():
+            while self.s["step"] == "fda" and not self.quit.is_set():
+                if has_full_disk_access():
+                    log("Full Disk Access is on")
+                    restart_service()                    # so the running helper has it too
+                    self.set(step="all-set"); return
+                time.sleep(2)
+        threading.Thread(target=watch, daemon=True).start()
+
+
+PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>Rushes Helper</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--fg:#1d1d1b;--muted:#6b6a66;--line:#e3e1dc;--accent:#2f7d74;--accent-fg:#fff;--ok:#2f7d4a;--warn:#9a6a12;--bad:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1c1b;--card:#252523;--fg:#ecebe7;--muted:#a3a19b;--line:#3a3936;--accent:#4fa396;--accent-fg:#0d1f1c;--ok:#6cc08a;--warn:#e2b04a;--bad:#f08a80}}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;background:var(--bg);color:var(--fg);display:flex;-webkit-user-select:none;user-select:none}
+nav{width:190px;padding:26px 16px;border-right:1px solid var(--line)}
+nav h1{font-size:15px;margin:0 0 22px}nav h1 small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+nav ol{list-style:none;margin:0;padding:0}nav li{padding:7px 0 7px 26px;position:relative;color:var(--muted)}
+nav li:before{content:"";position:absolute;left:4px;top:12px;width:10px;height:10px;border-radius:50%;border:2px solid var(--line)}
+nav li.on{color:var(--fg);font-weight:600}nav li.on:before{border-color:var(--accent);background:var(--accent)}
+nav li.ok{color:var(--fg)}nav li.ok:before{border-color:var(--ok);background:var(--ok)}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.body{flex:1;overflow:auto;padding:28px 32px}
+h2{font-size:20px;margin:0 0 12px}p{margin:0 0 12px}.muted{color:var(--muted)}
+.foot{display:flex;gap:10px;justify-content:flex-end;align-items:center;padding:14px 22px;border-top:1px solid var(--line)}
+.foot .left{margin-right:auto;display:flex;gap:8px}.foot button{white-space:nowrap}
+button{font:inherit;padding:7px 16px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+button.go{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+input{font:inherit;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--fg);-webkit-user-select:text;user-select:text}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 14px}
+.err{color:var(--bad)}.said{color:var(--ok)}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:s .9s linear infinite;vertical-align:-1px;margin-right:6px}
+@keyframes s{to{transform:rotate(360deg)}}
+ul.did{list-style:none;padding:0;margin:0}ul.did li{padding:3px 0}ul.did li:before{content:"✓ ";color:var(--ok)}
+.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}
+.row .t{flex:1}.row .t small{display:block;color:var(--muted)}
+.sw{appearance:none;-webkit-appearance:none;width:38px;height:22px;border-radius:11px;background:var(--line);position:relative;cursor:pointer;flex:none;border:0;padding:0}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s}
+.sw.on{background:var(--accent)}.sw.on:after{left:18px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:6px}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
+pre{font:12px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;margin:0;color:var(--muted);-webkit-user-select:text;user-select:text}
+h3{font-size:14px;margin:18px 0 6px}table{width:100%;border-collapse:collapse;font-size:12.5px;-webkit-user-select:text;user-select:text}
+th,td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid var(--line)}th{color:var(--muted);font-weight:500}
+.big{font-size:40px;line-height:1;margin:6px 0 14px;color:var(--ok)}
+</style></head><body>
+<nav><h1>Rushes Helper<small>Rushes Media Management Software</small></h1><ol id="steps"></ol></nav>
+<main><div class="body" id="body"></div><div class="foot" id="foot"></div></main>
+<script>
+const K = location.pathname;       // the page's own key, needed for every question
+const STEPS = [['welcome','Welcome'],['address','Where Rushes is'],['install','Installing'],['fda','Full Disk Access'],['all-set','All set']];
+let S = {}, typed = null, sent = '', credits = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function act(d, extra) {
+  sent = d;
+  try { await fetch(K + 'act', {method: 'POST', body: JSON.stringify(Object.assign({do: d}, extra || {}))}); } catch (e) {}
+  if (d === 'done') { document.body.innerHTML = ''; return; }
+  poll();
+}
+function btn(label, d, go, dis) { return '<button' + (go ? ' class="go"' : '') + (dis ? ' disabled' : '') + ' data-do="' + d + '">' + esc(label) + '</button>'; }
+// What Rushes is made of: every part, what it does, its license. Opens over
+// any screen and goes back to it.
+function drawCredits() {
+  const rows = credits.split('\n'), out = [];
+  let table = false;
+  rows.forEach(l => {
+    if (l.startsWith('# ')) out.push('<h2>' + esc(l.slice(2)) + '</h2>');
+    else if (l.startsWith('## ')) { if (table) { out.push('</table>'); table = false; } out.push('<h3>' + esc(l.slice(3)) + '</h3>'); }
+    else if (l.startsWith('|')) {
+      if (/^\|[-| ]+\|$/.test(l)) return;
+      const c = l.split('|').slice(1, -1).map(x => x.trim());
+      if (!table) { out.push('<table>'); table = true; out.push('<tr>' + c.map(x => '<th>' + esc(x) + '</th>').join('') + '</tr>'); }
+      else out.push('<tr>' + c.map(x => '<td>' + esc(x) + '</td>').join('') + '</tr>');
+    } else if (l.trim()) {
+      if (table) { out.push('</table>'); table = false; }
+      if (out.length && out[out.length - 1].startsWith('<p>')) out[out.length - 1] = out[out.length - 1].replace(/<\/p>$/, ' ' + esc(l) + '</p>');
+      else out.push('<p>' + esc(l) + '</p>');
+    }
+  });
+  if (table) out.push('</table>');
+  $('body').innerHTML = out.join('');
+  $('foot').innerHTML = '<button class="go" id="back">Back</button>';
+  $('back').onclick = () => { credits = null; draw(); };
+}
+function draw() {
+  if (credits != null) return;              // reading the list: the screen underneath waits
+  const s = S, busy = s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '';
+  const setupStep = STEPS.findIndex(x => x[0] === (s.step === 'network' ? 'address' : s.step === 'later' ? 'fda' : s.step));
+  $('steps').innerHTML = s.step === 'home' || s.step === 'remove' || s.step === 'removed'
+    ? '<li class="on">This Mac</li>'
+    : STEPS.map((x, i) => '<li class="' + (i < setupStep ? 'ok' : i === setupStep ? 'on' : '') + '">' + x[1] + '</li>').join('');
+  let b = '', f = '';
+  const err = s.error ? '<p class="err">' + esc(s.error) + '</p>' : '';
+  switch (s.step) {
+  case 'welcome':
+    b = '<h2>Set up Rushes Helper</h2>' +
+      '<p>Rushes Helper copies footage into your Rushes archive in the background, and Rushes → Manage shows everything it does.</p>' +
+      '<p>It carries its own copy of Python — the free, open-source programming language the helper is written in. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.</p>' +
+      '<p>Setting up takes a minute, in this window: where Rushes is, and two permissions from macOS — to talk to your network (press Allow when macOS asks), and one switch in System Settings. The last step tells you when everything is done.</p>';
+    f = btn('Cancel', 'done') + btn('Set up', 'start', true); break;
+  case 'address':
+    b = '<h2>Where is Rushes?</h2><p>The address you open Rushes at in the browser. Setup → 04 Helper in Rushes shows it, with a Copy button.</p>' +
+      '<input id="url" placeholder="http://" value="' + esc(typed != null ? typed : s.url) + '">' +
+      '<p class="muted" style="margin-top:10px">If macOS asks whether Rushes Helper may find and connect to devices on your local network, press Allow.</p>' + err + busy;
+    f = btn('Cancel', 'done') + btn('Next', 'address', true, !!s.busy); break;
+  case 'network':
+    b = '<h2>macOS is not letting Rushes Helper talk to your network yet</h2>' +
+      '<p>If it asked whether Rushes Helper may “find and connect to devices on your local network”, press Allow, then Try again.</p>' +
+      '<p>If it did not ask: open Local Network settings, turn on Rushes Helper, then Try again.</p>' + err + busy;
+    f = btn('Cancel', 'done') + btn('Open Local Network settings', 'network-settings') + btn('Try again', 'retry', true, !!s.busy); break;
+  case 'install':
+    b = '<h2>Installing</h2><ul class="did">' + (s.done || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
+      (s.busy ? '<p style="margin-top:10px"><span class="spin"></span>Working …</p>' : '') + err;
+    f = s.error ? btn('Try again', 'retry', true) : ''; break;
+  case 'fda':
+    b = '<h2>One switch left: Full Disk Access</h2>' +
+      '<p>macOS keeps apps away from network drives and other disks until you allow it. Rushes Helper needs that to read footage from the source and write it into the archive — nothing more.</p>' +
+      '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows Rushes Helper. Turn Rushes Helper on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).</p>' +
+      '<p class="muted">If System Settings opens somewhere else, type Full Disk Access into its search field, top left.</p>' +
+      (s.waiting ? '<div class="box"><span class="spin"></span>Waiting for the switch … this window moves on by itself the moment it is on.</div>' : '');
+    f = btn('Later', 'later') + btn(s.waiting ? 'Show me where again' : 'Open System Settings', 'fda-open', true); break;
+  case 'later':
+    b = '<h2>Not finished yet</h2><p>Rushes Helper is installed and running, but it cannot reach the drives until Full Disk Access is on.</p><p>Open Rushes Helper again any time to finish; it starts right at that step.</p>';
+    f = btn('Done', 'done', true); break;
+  case 'all-set':
+    b = '<div class="big">✓</div><h2>All set</h2>' +
+      '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
+      '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>' +
+      '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
+    f = btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
+  case 'home': b = home(s); f = '<span class="left">' + btn('Remove…', 'remove') + '</span>' + btn('Show the log', 'show-log') + btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
+  case 'remove':
+    b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
+    f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
+  case 'removed':
+    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag Rushes Helper from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access.</p>';
+    f = btn('Done', 'done', true); break;
+  }
+  if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left"><button data-credits="1">What it is made of</button> ')
+    : '<span class="left"><button data-credits="1">What it is made of</button></span>' + f);
+  const keep = $('url') && document.activeElement === $('url');
+  $('body').innerHTML = b; $('foot').innerHTML = f;
+  if ($('url')) { $('url').oninput = e => typed = e.target.value; if (keep) { $('url').focus(); } $('url').onkeydown = e => { if (e.key === 'Enter') act('address', {url: $('url').value}); }; }
+  document.querySelectorAll('[data-credits]').forEach(x => x.onclick = async () => {
+    try { credits = await (await fetch(K + 'credits')).text(); } catch (e) { credits = 'Could not read the list.'; }
+    drawCredits();
+  });
+  document.querySelectorAll('[data-do]').forEach(x => x.onclick = () => {
+    const d = x.dataset.do; x.disabled = true;
+    act(d, d === 'address' ? {url: $('url').value} : null);
+  });
+}
+const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
+  analysing:'Describing footage', tidying:'Tidying up', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned'};
+function home(s) {
+  const n = s.now || {}, on = s.running;
+  const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
+    : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work.'
+    : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
+  const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and two of the switches are not available. The log below still shows its work.</p>'
+    : n.phase ? '<p><b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(n.source.split('/').pop()) : '') + '</p>' +
+        (n.note ? '<p class="muted">' + esc(n.note) + '</p>' : '') + (n.file ? '<p class="muted">now: ' + esc(n.file.split('/').pop()) + '</p>' : '')
+    : '<p class="muted">Nothing to do right now.</p>';
+  const sw = (on_, off, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
+    '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? off[1] : off[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
+  return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' +
+    '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div>' + now + '</div>' +
+    (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
+    '<div class="box">' +
+      sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here.') +
+      sw(on && !s.paused, ['resume', 'pause'], 'Copy and describe', 'Off pauses the work at its next safe point; nothing is lost. Rushes → Manage has the same switch.', !on || !s.rushes) +
+      sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes) +
+    '</div>' +
+    '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
+      esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
+}
+async function poll() {
+  try { S = await (await fetch(K + 'state')).json(); draw(); } catch (e) {}
+}
+poll(); setInterval(poll, 1500);
+</script></body></html>"""
+
+
+def serve(port, key):
+    w = Window()
+    log(f"window opened ({w.s['step']})")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, body, kind="application/json"):
+            data = body.encode() if isinstance(body, str) else body
+            self.send_response(code)
+            self.send_header("Content-Type", kind + "; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path == f"/{key}/":
+                return self._send(200, PAGE, "text/html")
+            if self.path == f"/{key}/credits":
+                try:
+                    return self._send(200, open(os.path.join(APP, "Contents", "Resources", "CREDITS.md"), "rb").read(), "text/plain")
+                except OSError:
+                    return self._send(200, "The list is missing from this copy of the app. It is also at github.com/x0on/rushes (CREDITS.md).", "text/plain")
+            if self.path == f"/{key}/state":
+                return self._send(200, json.dumps(w.state()))
+            self._send(404, "{}")
+
+        def do_POST(self):
+            if self.path != f"/{key}/act":
+                return self._send(404, "{}")
+            try:
+                a = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 10000)) or b"{}")
+                w.act(str(a.get("do", "")), a)
+            except Exception as e:
+                log(f"window: {e}")
+            self._send(200, "{}")
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), H)
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    w.quit.wait()
+    time.sleep(0.3)                        # the Done answer reaches the page first
+    log("window closed")
     return 0
 
 
@@ -389,4 +640,9 @@ def service(args):
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    sys.exit(service(a) if "--service" in a or "--watch" in a else setup())
+    if "--window" in a:
+        i = a.index("--window")
+        sys.exit(serve(int(a[i + 1]), a[i + 2]))
+    if "--service" in a or "--watch" in a:
+        sys.exit(service(a))
+    print("Rushes Helper: open it from Finder to see its window.")

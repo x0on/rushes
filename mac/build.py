@@ -91,6 +91,9 @@ for a, z in ARCHES.items():
 # ── the rest of the app ─────────────────────────────────────────────────────
 shutil.copy(os.path.join(HERE, "rushes_helper.py"), os.path.join(C, "Resources"))
 shutil.copy(os.path.join(HERE, "AppIcon.icns"), os.path.join(C, "Resources"))
+# What Rushes is made of, and whose each part is: shown in the app's window.
+shutil.copy(os.path.join(HERE, "..", "CREDITS.md") if os.path.exists(os.path.join(HERE, "..", "CREDITS.md"))
+            else os.path.join(HERE, "CREDITS.md"), os.path.join(C, "Resources"))
 with open(os.path.join(C, "Info.plist"), "wb") as f:
     plistlib.dump({
         "CFBundleIdentifier": "org.rushes.helper",
@@ -99,7 +102,9 @@ with open(os.path.join(C, "Info.plist"), "wb") as f:
         "CFBundlePackageType": "APPL", "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
         "LSMinimumSystemVersion": "11.0",
-        "LSUIElement": True,                     # no Dock icon: it has no windows of its own
+        "LSUIElement": True,                     # no Dock icon in the background; the window adds one while open
+        # The window shows a page this app serves on this computer only (127.0.0.1).
+        "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
         # Without this line macOS refuses local-network connections without asking ("No route to host").
         "NSLocalNetworkUsageDescription": "Rushes Helper talks to Rushes on your network: it asks what to copy "
                                           "and reports what it is doing.",

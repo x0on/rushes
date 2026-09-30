@@ -8,7 +8,8 @@
 //   GET  ?where                                 the addresses Rushes can be reached at (helpers follow a change)
 //   GET  ?control                               pause, "try again now", folders to skip
 //   GET  ?builtin                               "yes" when this machine should run it (for runner.sh)
-//   POST action=pause|resume|nudge|skip [path]  the buttons in Manage (signed in)
+//   POST action=pause|resume|nudge|reconnect-off|reconnect-on   the helper's switches (Manage, or its own window)
+//   POST action=skip path                        skip a folder (signed in)
 //   POST action=scripts                         install the updated .sh scripts (signed in)
 //
 // ponytail: the GETs need no password, like report.php — the helper has none.
@@ -95,8 +96,12 @@ SH, 'text/plain; charset=utf-8');
 }
 
 // ── the buttons ─────────────────────────────────────────────────────────────
-if (!may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
+// Pause, resume, reconnecting and "look again" only start or stop the helper's
+// own work — nothing is moved or deleted — so its own window on the Mac may
+// press them without a password, like Manage. Everything else needs sign-in.
 $act = (string)($_POST['action'] ?? '');
+if (!in_array($act, ['pause', 'resume', 'reconnect-off', 'reconnect-on', 'nudge'], true)
+    && !may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';
