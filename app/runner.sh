@@ -463,6 +463,28 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 echo "making proxies in the background: progress in Manage → Describe, detail in proxy.log" >> "$LOG"
             fi
             ;;
+        proxy-remake)
+            # A folder's proxies thrown away and made again (Manage → Describe →
+            # Remake proxies), after the Proxy setting changed. Here, because this
+            # machine may delete them: in Finder they belong to whoever owns the
+            # footage. Only inside PROXIES, only a folder, never while a build runs.
+            case "$QUERY" in ""|/*|*..*) echo "  refused remake of '$QUERY' (not a folder in the archive)" >> "$LOG" ;;
+            *)
+                if proxy_alive; then
+                    echo "  not remade: proxies are being made right now (process $pid)" >> "$LOG"
+                elif [ -d "/share/VIDEO/PROXIES/$QUERY" ]; then
+                    n=$(find "/share/VIDEO/PROXIES/$QUERY" -type f -name '*.mp4' | wc -l)
+                    rm -rf "/share/VIDEO/PROXIES/$QUERY"
+                    echo "  threw away $n proxies of $QUERY — making them again with the setting in use" >> "$LOG"
+                    PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
+                    echo $! > /share/Web/proxy.pid
+                else
+                    echo "  $QUERY has no proxies to remake — making them" >> "$LOG"
+                    PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
+                    echo $! > /share/Web/proxy.pid
+                fi ;;
+            esac
+            ;;
         proxy-stop)
             if proxy_alive; then
                 kill "$pid"; echo "asked the proxy build to stop" >> "$LOG"

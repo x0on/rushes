@@ -82,6 +82,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             bail(500, 'Could not ask the archive machine — is its queue folder writable?');
         out(['ok' => 'start', 'folder' => $rel]);
     }
+    // Remake: its proxies thrown away and made again (a new Proxy setting). On the
+    // archive machine itself, which may delete them; never while they are being
+    // made, or while describing is reading them.
+    if (($_POST['action'] ?? '') === 'remake') {
+        if (!isset(prepare_list()[$rel])) bail(400, "“{$rel}” is not on the list.");
+        if (proxy_alive()) bail(409, 'Proxies are being made right now — press Stop proxies first, or wait until they are done.');
+        $d = describing_now();
+        if ($d && str_ends_with(rtrim($d['source'] ?? '', '/'), '/' . $rel))
+            bail(409, 'The helper is describing ' . $rel . ' now, from these proxies. Remake them when it is done, or pause describing first.');
+        $q = web_dir() . '/queue';
+        if (!is_dir($q)) @mkdir($q, 0777, true);
+        if (@file_put_contents("$q/" . date('Ymd-His') . '-remake.job', "ACTION=proxy-remake\nQUERY=$rel\n") === false)
+            bail(500, 'Could not ask the archive machine — is its queue folder writable?');
+        @unlink(web_dir() . '/prepare-plan.json');          // its plan is out of date the moment they go
+        out(['ok' => 'remake', 'folder' => $rel]);
+    }
     if (in_array($_POST['action'] ?? '', ['up', 'down', 'retry'], true)) {
         $list = prepare_list();
         if (!isset($list[$rel])) bail(400, "“{$rel}” is not on the list.");

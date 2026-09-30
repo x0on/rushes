@@ -1167,7 +1167,8 @@ async function listAct(action, folder, b, sure) {
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
          up: 'Moved up ✓ ' + folder, down: 'Moved down ✓ ' + folder,
          retry: 'Trying again ✓ ' + folder + ' — the files still missing a proxy are made again, in its place in the list.',
-         start: 'Asked ✓ The archive machine starts the proxies for ' + folder + ' at its next turn, within a minute.'}[action];
+         start: 'Asked ✓ The archive machine starts the proxies for ' + folder + ' at its next turn, within a minute.',
+         remake: 'Asked ✓ Within a minute the archive machine throws away the proxies of ' + folder + ' and makes them again with the setting in use. The footage is not touched.'}[action];
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
   loadAnalysis();
 }
@@ -1232,6 +1233,7 @@ function drawPrepare(rows, a) {
           ? (why.state === 'making' || r.proxies.step === 'making' ? '<button class="btn" disabled title="Proxies are being made now">Running</button>'
             : why.state === 'asked' || why.state === 'starting' ? '<button class="btn" disabled title="Asked; the archive machine starts it within a minute">Starting…</button>'
             : '<button class="btn" data-l="start">Start now</button>') : '') +
+        (r.proxies.step === 'done' ? '<button class="btn quiet" data-l="remake" title="Throw its proxies away and make them again with the setting in use">Remake proxies</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
         ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
@@ -1253,7 +1255,7 @@ function drawPrepare(rows, a) {
   $('prepTable').querySelectorAll('[data-l]').forEach(function (b) {
     // a redraw keeps a "Sure?" that is still waiting for its second press
     if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
-    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start'].includes(b.dataset.l)); };
+    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake'].includes(b.dataset.l)); };
   });
   $('prepTable').querySelectorAll('[data-fails]').forEach(function (x) {
     x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };
