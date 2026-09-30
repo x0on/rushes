@@ -57,10 +57,13 @@ fi
 # Folders being prepared (Manage → Describe): Rushes writes the next folder that
 # needs proxies into proxy-next.txt; start it here when nothing is being made.
 # Rushes only decides; this is the only place a build is started from.
+# Is a proxy build really running? The number in proxy.pid can outlive its
+# job and be given to another program later: only trust it if that process is
+# proxy.sh, or the list would wait for ever for a build that is not there.
+proxy_alive() { pid=$(cat /share/Web/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
 NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
 if [ -n "$NEXT" ]; then
-    pid=$(cat /share/Web/proxy.pid 2>/dev/null)
-    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    if ! proxy_alive; then
         rm -f /share/Web/proxy-next.txt
         PROXY_ONLY="$NEXT" nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
         echo $! > /share/Web/proxy.pid
@@ -386,9 +389,8 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             # Hours to days, so in the background: the runner stays free for
             # everything else (deploys, search, other jobs). Resumable: every
             # proxy already made is skipped, so stopping and starting costs nothing.
-            pid=$(cat /share/Web/proxy.pid 2>/dev/null)
-            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                echo "proxies are already being made (proxy.log)" >> "$LOG"
+            if proxy_alive; then
+                echo "proxies are already being made (process $pid, detail in proxy.log)" >> "$LOG"
             else
                 PROXY_ONLY="$QUERY" nohup sh /share/Web/proxy.sh --build >> /share/Web/proxy.log 2>&1 &
                 echo $! > /share/Web/proxy.pid
@@ -396,8 +398,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             fi
             ;;
         proxy-stop)
-            pid=$(cat /share/Web/proxy.pid 2>/dev/null)
-            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            if proxy_alive; then
                 kill "$pid"; echo "asked the proxy build to stop" >> "$LOG"
             else
                 echo "no proxy build was running" >> "$LOG"

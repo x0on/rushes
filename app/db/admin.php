@@ -1045,7 +1045,8 @@ async function listAct(action, folder, b, sure) {
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
          up: 'Moved up ✓ ' + folder, down: 'Moved down ✓ ' + folder,
-         retry: 'Trying again ✓ ' + folder + ' — the files still missing a proxy are made again, in its place in the list.'}[action];
+         retry: 'Trying again ✓ ' + folder + ' — the files still missing a proxy are made again, in its place in the list.',
+         start: 'Asked ✓ The archive machine starts the proxies for ' + folder + ' at its next turn, within a minute.'}[action];
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
   loadAnalysis();
 }
@@ -1085,8 +1086,12 @@ function drawPrepare(rows, a) {
   const head = '<p class="note" style="margin:0 0 8px">' + n(open.length) + ' of ' + n(rows.length) + ' folder' + (rows.length === 1 ? '' : 's') + ' still to finish' +
     (a.rate > 0 ? ' · proxies: about <b>' + hm(total) + '</b> left, at ' + (a.rate / 1e6).toFixed(0) + ' MB/s measured here'
                 : ' · the time left shows once the first proxies are made and the speed is known') + '</p>';
-  let place = 0;
-  $('prepTable').innerHTML = head + '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
+  // why it is where it is, in words; Start now when it should have started and has not
+  const why = a.why || {};
+  const head2 = why.text ? '<p class="note" style="margin:0 0 8px">' + (why.state === 'stuck' ? '<span class="bad">' + esc(why.text) + '</span>'
+    : (why.state === 'making' || why.state === 'starting' ? '<span class="spin"></span>' : '') + esc(why.text)) + '</p>' : '';
+  let place = 0;          // place in line among the folders not finished yet: 1 is the one running now
+  $('prepTable').innerHTML = head + head2 + '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
     rows.map(function (r, i) {
       const where = doneRow(r) ? '<span class="ok">✓ done</span>' : (++place, busy(r) || place === 1 ? '<span class="busy">now</span>' : '#' + place);
       const p = r.plan || {};
@@ -1094,6 +1099,8 @@ function drawPrepare(rows, a) {
         (i < rows.length - 1 ? '<button class="btn quiet" data-l="down" title="Move down">↓</button>' : '') +
         (['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0)
           ? '<button class="btn quiet" data-l="retry">Try again</button>' : '') +
+        (place === 1 && !doneRow(r) && why.state !== 'making' && ['waiting', 'stopped'].includes(r.proxies.step)
+          ? '<button class="btn" data-l="start">Start now</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
         ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
@@ -1110,7 +1117,7 @@ function drawPrepare(rows, a) {
   $('prepTable').querySelectorAll('[data-l]').forEach(function (b) {
     // a redraw keeps a "Sure?" that is still waiting for its second press
     if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
-    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry'].includes(b.dataset.l)); };
+    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start'].includes(b.dataset.l)); };
   });
   $('prepTable').querySelectorAll('[data-fails]').forEach(function (x) {
     x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };

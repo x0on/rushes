@@ -122,11 +122,31 @@ function prepare_save(array $list): bool {
 }
 
 // The proxy build going on now, if any (proxy.sh writes it as it goes).
+// A proxy build is running only if the process in proxy.pid really is proxy.sh:
+// the number can outlive its job and belong to another program later.
+function proxy_alive(): bool {
+    $pid = (int)@file_get_contents(web_dir() . '/proxy.pid');
+    return $pid > 0 && str_contains((string)@file_get_contents("/proc/$pid/cmdline"), 'proxy.sh');
+}
+
+// Why the list is where it is, in words, for the page.
+function prepare_why(): array {
+    $now = proxy_now(); $nf = web_dir() . '/proxy-next.txt';
+    if (!empty($now['running']))
+        return ['state' => 'making', 'text' => 'Proxies are being made now' . (($now['only'] ?? '') !== '' ? ' for ' . $now['only'] : '') . '.'];
+    if (is_file($nf)) {
+        $age = time() - (int)filemtime($nf); $f = trim((string)@file_get_contents($nf));
+        return $age < 180
+            ? ['state' => 'starting', 'text' => "$f starts at the archive machine's next turn, within a minute."]
+            : ['state' => 'stuck', 'text' => "$f was due to start " . max(3, (int)round($age / 60)) . " minutes ago and has not. Press Start now; if it still does not start, the raw log in Overview says why."];
+    }
+    return ['state' => 'idle', 'text' => ''];
+}
+
 function proxy_now(): array {
     $p = [];
     foreach (@file(web_dir() . '/proxy-status.txt') ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $p[$f[0]] = $f[1] ?? ''; }
-    $pid = (int)@file_get_contents(web_dir() . '/proxy.pid');
-    $p['running'] = $pid > 0 && @file_exists("/proc/$pid");
+    $p['running'] = proxy_alive();
     return $p;
 }
 

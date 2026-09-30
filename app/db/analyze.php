@@ -53,6 +53,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rel = trim(str_replace('\\', '/', (string)($_POST['path'] ?? '')), '/');
     // Prepare: proxies first, then descriptions; the order is kept by prepare_advance.
     // Order and "try again": the list keeps each folder's place and when it was asked.
+    // Start now: the proxies for this folder, through the runner's own job queue.
+    if (($_POST['action'] ?? '') === 'start') {
+        if (!isset(prepare_list()[$rel])) bail(400, "“{$rel}” is not on the list.");
+        $q = web_dir() . '/queue';
+        if (!is_dir($q)) @mkdir($q, 0777, true);
+        if (@file_put_contents("$q/" . date('Ymd-His') . '-start.job', "ACTION=proxy-build\nQUERY=$rel\n") === false)
+            bail(500, 'Could not ask the archive machine — is its queue folder writable?');
+        out(['ok' => 'start', 'folder' => $rel]);
+    }
     if (in_array($_POST['action'] ?? '', ['up', 'down', 'retry'], true)) {
         $list = prepare_list();
         if (!isset($list[$rel])) bail(400, "“{$rel}” is not on the list.");
@@ -101,5 +110,5 @@ $stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
 $latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
     language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
-out(['table' => prepare_table(), 'rate' => proxy_rate(), 'helper_fresh' => (bool)(helper_volumes()['fresh'] ?? false), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
+out(['table' => prepare_table(), 'why' => prepare_why(), 'rate' => proxy_rate(), 'helper_fresh' => (bool)(helper_volumes()['fresh'] ?? false), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
      'stats' => $stats, 'latest' => $latest, 'helper' => helper_name()]);

@@ -420,8 +420,8 @@ echo json_encode([
                 $p['asked'] = ['what' => $m[1], 'only' => $q[1] ?? '', 'ago' => time() - filemtime($j)];
             }
         if (!$p) return null;
-        $pid = (int)@file_get_contents("$WEB/proxy.pid");
-        $p['running'] = $pid > 0 && @file_exists("/proc/$pid");
+        require_once __DIR__ . '/prepare.php';
+        $p['running'] = proxy_alive();
         $p['ago'] = isset($p['at']) ? time() - (int)$p['at'] : null;
         return $p;
     })(),
