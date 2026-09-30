@@ -1112,8 +1112,11 @@ function drawPrepare(rows, a) {
         ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
           '<b>Could not be made</b> — in ffmpeg\'s own words:' +
           '<ul style="margin:6px 0 8px;padding-left:18px">' + r.failures.map(function (f) {
-            return '<li><b>' + esc(f.file) + '</b> — ' + esc(f.why || 'no reason given') + '</li>'; }).join('') + '</ul>' +
-          '<span class="note">A damaged or unusual camera file is the usual cause; the original is untouched. Try again makes just these once more.</span></div></td></tr>'
+            // a failure from before this folder was (re)started is being made again right now
+            const old = f.at && f.at < r.asked && r.proxies.step === 'making';
+            return '<li><b>' + esc(f.file) + '</b> — ' + esc(f.why || 'no reason given') +
+              ' <span class="note">(' + (old ? 'from an earlier run — being made again now' : esc(clock(f.at))) + ')</span></li>'; }).join('') + '</ul>' +
+          '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
         n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left ? ' · <b>about ' + hm(r.left) + '</b>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe) + '</td>' +
