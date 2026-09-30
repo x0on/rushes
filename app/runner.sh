@@ -343,8 +343,17 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 # The real work: one of the archive's own clips, 30 seconds of it,
                 # read, made 1080p and encoded — the way a proxy is made — and how
                 # busy the processor was meanwhile (the chip's point is to free it).
-                clip=$(awk -F'\t' '$1 > 100000000 && tolower($2) ~ /\.(mp4|mov|mxf|mts)$/ && $2 !~ /\/(PROXIES|_rushes|_duplicates)\// { print $2; exit }' /share/Web/manifest.tsv 2>/dev/null)
-                if [ -n "$clip" ] && [ -f "$clip" ]; then
+                # The first big video in the file list that is really still there
+                # (the list can be a day old; files move).
+                clip=""
+                TAB=$(printf '\t')
+                while IFS="$TAB" read -r size path; do
+                    [ "$size" -gt 100000000 ] 2>/dev/null || continue
+                    case "$path" in */PROXIES/*|*/_rushes/*|*/_duplicates/*|*/@Recycle/*) continue ;; esac
+                    case "$path" in *.[mM][pP]4|*.[mM][oO][vV]|*.[mM][xX][fF]|*.[mM][tT][sS]) ;; *) continue ;; esac
+                    [ -f "$path" ] && { clip=$path; break; }
+                done < /share/Web/manifest.tsv
+                if [ -n "$clip" ]; then
                     echo "With a real clip: ${clip#/share/VIDEO/}"
                     echo "  $("$DOCKER" run --rm -v /share/VIDEO:/share/VIDEO:ro linuxserver/ffmpeg -hide_banner -i "$clip" 2>&1 | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
                     busy() { awk '/^cpu /{print $2+$3+$4+$7+$8, $2+$3+$4+$5+$6+$7+$8}' /proc/stat; }
