@@ -114,14 +114,41 @@ fi
 ERRF=${ERRF:-/share/Web/proxy-last.err}
 run_ff() { $NICE $FFMPEG -nostdin -loglevel error -y "$@" 2>"$ERRF" & ff=$!; wait "$ff"; r=$?; cat "$ERRF" >> "$LOG.err"; return $r; }
 AUDIO="-c:a aac -b:a 128k -movflags +faststart"
+
+# The kinds of file the chip cannot read (say HEVC 10-bit from a drone), learnt
+# once and kept: such a file goes straight to the way that works, instead of
+# failing on the chip first every time. A kind is the codec, its profile and
+# its pixel format, read in a moment by the NAS's own ffmpeg (no container).
+CANNOT=${CANNOT:-/share/Web/proxy-chip-cannot.txt}
+PEEK=${PEEK:-}
+[ -z "$PEEK" ] && for c in /usr/local/medialibrary/bin/ffmpeg /mnt/ext/opt/medialibrary/bin/ffmpeg /usr/local/bin/ffmpeg; do
+    [ -x "$c" ] && PEEK=$c && break
+done
+kind_of() {
+    [ -n "$PEEK" ] || return 0
+    $PEEK -hide_banner -nostdin -i "$1" 2>&1 | grep -m1 'Video:' | sed -e 's/.*Video: //' -e 's/ ([a-z0-9]* \/ 0x[0-9a-f]*)//' -e 's/\([a-z0-9]\)([^)]*)/\1/g' -e 's/, [0-9][0-9]*x[0-9].*//' | cut -c1-80
+}
+
 encode() {
-    if [ "$HW" = 1 ]; then
+    kind=$(kind_of "$1")
+    if [ "$HW" = 1 ] && ! { [ -n "$kind" ] && grep -qxF "$kind" "$CANNOT" 2>/dev/null; }; then
         how="video chip"
         run_ff -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -i "$1" \
             -vf "scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2" && return 0
+        chip_failed=1
+    else
+        chip_failed=0
+    fi
+    if [ "$HW" = 1 ]; then
         how="video chip (read by the processor)"
-        run_ff -vaapi_device /dev/dri/renderD128 -i "$1" \
-            -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2" && return 0
+        if run_ff -vaapi_device /dev/dri/renderD128 -i "$1" \
+            -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=$HEIGHT" -c:v h264_vaapi -b:v "$BITRATE" $AUDIO "$2"; then
+            # the chip could not read this kind, the processor could: remember it
+            if [ "$chip_failed" = 1 ] && [ -n "$kind" ] && ! grep -qxF "$kind" "$CANNOT" 2>/dev/null; then
+                echo "$kind" >> "$CANNOT"; echo "  learnt: the chip cannot read \"$kind\" — such files go straight to the processor from now on"
+            fi
+            return 0
+        fi
     fi
     how="software"
     run_ff -i "$1" -vf "scale=-2:$HEIGHT" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"
