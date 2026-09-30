@@ -55,19 +55,26 @@ Return ONLY valid JSON. Every key in double quotes. No text before or after it.
 Keys:
   description     one factual sentence describing what is visible
   text_on_screen  array of the exact text you can read in the frame (titles, lower thirds,
-                  signs, banners, jerseys, dates), copied verbatim, each once. [] if none.
-  shot_size       one of: {sizes}
+                  signs, banners, jerseys, dates), copied verbatim, each once. One entry
+                  per line, read left to right as a whole: a sign reading "I ❤ RIVERTON" is
+                  one entry, never split into its words or symbols. [] if none.
+  shot_size       one of: {sizes} — extreme-wide: a landscape or a whole
+                  building or park from far away; wide: a whole place, or a group; full: a
+                  person head to toe; medium: a person from the waist up, or an object
+                  filling about half the frame; close-up: a face, or an object filling most
+                  of the frame; extreme-close-up: a small detail
   people          one of: none, one, two, few, crowd
   ages            array, any of: {ages} — only for people clearly visible, [] if none
   setting         one of: indoor, outdoor, mixed
   light           one of: {light}
   mood            one or two words, e.g. celebratory, tense, routine, solemn, energetic
-  themes          array of 1 to 3, chosen ONLY from: {themes}
+  themes          array of 0 to 3, chosen ONLY from: {themes} — only a theme
+                  the shot is clearly about; [] when none fits
   tags            array of 3-8 short lowercase words for objects, actions and places you
                   see — not the on-screen text again
 
 Be literal. Describe only what you can see. Do not guess who people are or where this is
-unless it is written in the frame. "full" means a person seen head to toe.
+unless it is written in the frame.
 If the frame looks like two images blended together, it is a dissolve: say so and
 describe the clearer one."""
 
@@ -150,7 +157,22 @@ def shots_of(path, duration):
         found = []
     if not found:
         return [(0.0, duration)]
-    return [(s.get_seconds(), e.get_seconds()) for s, e in found]
+    return whole_shots([(s.get_seconds(), e.get_seconds()) for s, e in found])
+
+
+def whole_shots(cuts, least=1.0):
+    """A "shot" under a second is a flash, a dissolve or a false cut, not a shot
+    anyone looks for: it becomes part of the shot before it (the first, of the
+    one after)."""
+    out = []
+    for a, b in cuts:
+        if out and b - a < least:
+            out[-1] = (out[-1][0], b)
+        else:
+            out.append((a, b))
+    if len(out) > 1 and out[0][1] - out[0][0] < least:
+        out[1] = (out[0][0], out[1][1]); out.pop(0)
+    return out
 
 
 def sample_times(a, b):
@@ -215,6 +237,10 @@ def tidy(raw, themes):
     """One consistent record, whatever the model's habits: known values only,
     each list without repeats, tags that do not echo the on-screen text."""
     text = uniq([str(t).strip() for t in (raw.get("text_on_screen") or []) if str(t).strip()])[:12]
+    # A lone letter or symbol ("I", "❤") is a piece of a line the model split up,
+    # not text anyone searches for: kept only when it is all there is.
+    whole = [t for t in text if len(re.sub(r"\W", "", t)) >= 2]
+    text = whole or text
     said = {t.lower() for t in text}
     tags = uniq([str(t).strip().lower() for t in (raw.get("tags") or []) if str(t).strip()])
     tags = [t for t in tags if t not in said and not any(t in s or s in t for s in said)][:8]
@@ -466,6 +492,11 @@ def selftest():
     assert r["themes"] == ["Parks & Recreation"] and r["ages"] == ["adult"]
     assert [people_of(x) for x in (1, 2, 5, 40, "Crowd")] == ["one", "two", "few", "crowd", "crowd"]
     assert merge_text([["CENTRAL PAR", "CENTRAL PARK", "RIVERTON"]]) == ["CENTRAL PARK", "RIVERTON"]
+    assert tidy({"text_on_screen": ["RIVERTON", "❤️", "I"]}, th)["text_on_screen"] == ["RIVERTON"]   # the pieces of a split line
+    assert tidy({"text_on_screen": ["❤️"]}, th)["text_on_screen"] == ["❤️"]                    # unless that is all there is
+    assert tidy({"themes": []}, th)["themes"] == []                                             # no theme is an answer
+    assert whole_shots([(0, 5), (5, 5.2), (5.2, 9), (9, 9.5)]) == [(0, 5.2), (5.2, 9.5)]
+    assert whole_shots([(0, 0.4), (0.4, 6)]) == [(0, 6)] and whole_shots([(0, 0.4)]) == [(0, 0.4)]
     assert part_of_day("2025-12-03T15:20:11.000000Z") == "afternoon" and part_of_day("") == ""
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "a.mov"; p.write_bytes(b"x" * 100)
