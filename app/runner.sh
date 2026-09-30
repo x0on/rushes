@@ -184,6 +184,16 @@ build_index() {
 
 field() { grep "^$1=" "$2" 2>/dev/null | head -1 | cut -d= -f2- ; }
 
+# Container Station's docker: cron starts this script with a short PATH that
+# does not include it, so look where Container Station installs it.
+DOCKER=$(command -v docker 2>/dev/null)
+if [ -z "$DOCKER" ]; then
+    CS=$(getcfg container-station Install_Path -f /etc/config/qpkg.conf 2>/dev/null)
+    for d in "$CS/bin/docker" "$CS/usr/bin/docker" /usr/local/bin/docker /share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker; do
+        [ -x "$d" ] && DOCKER=$d && break
+    done
+fi
+
 # After anything that moves files, the system's picture of the share is out of
 # date. Re-look, automatically. These are the cheap observations — seconds to a
 # few minutes. The duplicate scan is hours, so it stays on the nightly schedule
@@ -296,6 +306,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             df -h /share/VIDEO >> "$LOG" 2>&1
             ;;
         gpu-test)
+            [ -n "$DOCKER" ] || echo "Container Station's docker was not found, so the container part of this test cannot run." >> "$LOG"
             # Can this machine make video on its video chip? Changes nothing: it
             # makes a 20-second test picture and keeps none of it. It tries the
             # NAS's own ffmpeg, then a complete one in a container
@@ -321,13 +332,13 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                     else echo "  $c: built without hardware encoding"; fi
                 done
                 echo "A complete ffmpeg in a container (linuxserver/ffmpeg):"
-                docker pull -q linuxserver/ffmpeg >/dev/null 2>&1 || echo "  could not download it (is the NAS online? is Container Station running?)"
+                "$DOCKER" pull -q linuxserver/ffmpeg >/dev/null 2>&1 || echo "  could not download it (is the NAS online? is Container Station running?)"
                 for drv in i965 iHD; do
-                    enc "video chip, driver $drv" docker run --rm --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=$drv \
+                    enc "video chip, driver $drv" "$DOCKER" run --rm --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=$drv \
                         linuxserver/ffmpeg -hide_banner -loglevel error -vaapi_device /dev/dri/renderD128 $SRC \
                         -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 2M -f null -
                 done
-                enc "software (libx264), for comparison" docker run --rm linuxserver/ffmpeg -hide_banner -loglevel error \
+                enc "software (libx264), for comparison" "$DOCKER" run --rm linuxserver/ffmpeg -hide_banner -loglevel error \
                     $SRC -c:v libx264 -preset veryfast -crf 23 -f null -
             } > "$out" 2>&1
             cp "$out" /share/VIDEO/_rushes/gpu-test.txt 2>/dev/null
@@ -382,7 +393,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             # mounted there as /storage, and /config is the volume we already read
             # results from. Hours for 41 TB — the lock keeps other jobs waiting.
             echo "hashing the whole share — this takes hours" >> "$LOG"
-            docker exec czkawka czkawka_cli dup \
+            "$DOCKER" exec czkawka czkawka_cli dup \
                 -d /storage \
                 -e /storage/_duplicates -e /storage/@Recycle \
                 -f /config/results_duplicates.txt > /share/Web/scan-output.txt 2>&1

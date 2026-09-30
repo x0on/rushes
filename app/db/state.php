@@ -371,6 +371,10 @@ echo json_encode([
     'disk'     => $disk,
     'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive)],
     'running'  => $running, 'progress' => $progress,
+    // asked from Manage, waiting for the runner's next turn
+    'queued'   => array_values(array_filter(array_map(fn($j) => preg_match('/^ACTION=(.+)$/m', (string)@file_get_contents($j), $m) ? trim($m[1]) : '',
+                    glob("$WEB/queue/*.job") ?: []))),
+    'gpu_test' => is_readable("$WEB/gpu-test.txt") ? ['text' => (string)file_get_contents("$WEB/gpu-test.txt"), 'at' => filemtime("$WEB/gpu-test.txt")] : null,
     'conditions' => $c,
     'recent'   => $recent,
     'sections' => $sections,

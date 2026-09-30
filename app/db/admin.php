@@ -265,6 +265,7 @@ if (isset($_POST['_newpass'])) {
           <header><b>Run something by hand</b></header>
           <div style="padding:14px">
             <div class="btns" id="tools"></div>
+            <div id="toolState" class="note" style="margin-top:10px"></div>
             <p class="note" style="margin:12px 0 0">
               These run whether or not anything above says you need them.</p>
           </div>
@@ -858,7 +859,20 @@ async function load() {
     b.onclick = function () { act(b.dataset.t, b); };
   });
 
-  if (busy && !d.running) busy = null;
+  // Every tool says where it is: asked, running, finished — and the video
+  // chip test shows its result right here.
+  const TOOL = {manifest: 'Rebuild the file list', import: 'Rebuild search', verify: 'Check the holding folder', df: 'Measure free space',
+    'proxy-plan': 'Plan proxies', 'proxy-build': 'Make proxies', 'gpu-test': 'Test the video chip', scan: 'Find duplicates'};
+  const tq = d.queued || [];
+  $('toolState').innerHTML =
+    (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running) + '</b>' +
+        (d.progress ? ' · ' + d.progress.pct + '%' : '') + ' — each step shows in the raw log (Overview)</p>' : '') +
+    (tq.length ? '<p><span class="spin"></span>Asked: <b>' + tq.map(function (x) { return esc(TOOL[x] || x); }).join(', ') +
+        '</b> — the archive machine starts it at its next turn, within a minute</p>' : '') +
+    (d.gpu_test ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px">' +
+        '<b>Video chip test</b> · ' + (d.running === 'gpu-test' ? 'running now' : 'finished ' + esc(clock(d.gpu_test.at))) +
+        '<pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' + esc(d.gpu_test.text) + '</pre></div>' : '');
+  if (busy && !d.running && !tq.length) busy = null;
 }
 
 // ── describing footage ─────────────────────────────────────────────────────
