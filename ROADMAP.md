@@ -190,9 +190,15 @@ so nobody has to wonder whether someone can reach in.
   set up with (only that server, never the internet), between files; its window
   will say so and have a switch for it.
 - **Diagnostics** (like Test the video chip) run inside the app and show their
-  result where you are; a "Collect diagnostics" button will gather versions,
-  test results and recent errors — no footage, no passwords — into a file the
-  person reads before sending it anywhere.
+  result where you are. Built: Rushes Helper → Collect diagnostics writes
+  versions, switches, what Rushes says the helper is doing and the recent log —
+  no footage, no passwords, nothing sent — into one text file on the Desktop,
+  shown in Finder, for the person to read before sending it anywhere.
+- **The live session, still to decide:** who it connects to (the author, the
+  organisation's IT, a GitHub issue), and whether it needs more than a screen
+  share the person starts themselves in a tool they already trust (Teams,
+  FaceTime, macOS Screen Sharing), in which case Rushes never opens a way in
+  at all and the switch goes.
 - **A support session is off by default.** Rushes Helper's window already says so, with the switch shown off and not yet built. Only the person at Rushes Helper can
   turn it on, it is time-limited, shown on screen while open, and closed by one
   button. (Over a private network such as Tailscale when the machine has it.)
