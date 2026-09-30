@@ -1087,7 +1087,14 @@ function drawPrepare(rows, a) {
   const head2 = why.text ? '<p class="note" style="margin:0 0 8px">' + (why.state === 'stuck' ? '<span class="bad">' + esc(why.text) + '</span>'
     : (why.state === 'making' || why.state === 'starting' || why.state === 'asked' ? '<span class="spin"></span>' : '') + esc(why.text)) + '</p>' : '';
   let place = 0;          // place in line among the folders not finished yet: 1 is the one running now
-  $('prepTable').innerHTML = head + head2 + '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
+  // the proxy maker's own words, one click away — nothing it does is hidden
+  const pl = a.proxy_log || {};
+  const said = (pl.lines || []).length || (pl.errors || []).length
+    ? '<details style="margin:0 0 10px"><summary class="note" style="cursor:pointer">What the archive machine said last' +
+      (pl.at ? ' (' + esc(clock(pl.at)) + ')' : '') + '</summary><pre style="white-space:pre-wrap;margin:6px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' +
+      esc((pl.lines || []).join('\n')) + ((pl.errors || []).length ? '\n\nffmpeg errors:\n' + esc(pl.errors.join('\n')) : '') + '</pre></details>'
+    : '<p class="note" style="margin:0 0 10px">The archive machine has not written anything about proxies yet (no proxy.log): no proxy run has started there.</p>';
+  $('prepTable').innerHTML = head + head2 + said + '<table class="prep"><tr><th>#</th><th>Folder</th><th>What is in it</th><th>1 · Proxies</th><th>2 · Descriptions</th><th></th></tr>' +
     rows.map(function (r, i) {
       const where = doneRow(r) ? '<span class="ok">✓ done</span>' : (++place, busy(r) || place === 1 ? '<span class="busy">now</span>' : '#' + place);
       const p = r.plan || {};

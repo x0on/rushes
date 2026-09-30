@@ -110,5 +110,10 @@ $stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
 $latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
     language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
-out(['table' => prepare_table(), 'why' => prepare_why(), 'rate' => proxy_rate(), 'helper_fresh' => (bool)(helper_volumes()['fresh'] ?? false), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
+// what the proxy maker last said, in its own words (its log on the archive machine)
+$plog = @file(web_dir() . '/proxy.log', FILE_IGNORE_NEW_LINES) ?: [];
+$perr = @file(web_dir() . '/proxy-built.tsv.err', FILE_IGNORE_NEW_LINES) ?: [];
+out(['table' => prepare_table(), 'why' => prepare_why(),
+     'proxy_log' => ['lines' => array_slice($plog, -25), 'at' => (int)@filemtime(web_dir() . '/proxy.log'),
+                     'errors' => array_slice($perr, -8)], 'rate' => proxy_rate(), 'helper_fresh' => (bool)(helper_volumes()['fresh'] ?? false), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],
      'stats' => $stats, 'latest' => $latest, 'helper' => helper_name()]);
