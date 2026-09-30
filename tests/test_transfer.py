@@ -106,6 +106,23 @@ class CopyTests(unittest.TestCase):
         self.assertEqual((self.dest / 'b.mov').read_bytes(), b'b' * 20)
         self.assertEqual(self.mod._CHECKPOINTS.db.execute('SELECT COUNT(*) FROM search').fetchone()[0], 0)
 
+    def test_every_copy_is_verified_and_its_fingerprint_kept(self):
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        real = self.mod.read_back
+        bad = [True]
+        def once_bad(path):                            # the first copy comes back damaged
+            if bad[0]:
+                bad[0] = False; return 'damaged'
+            return real(path)
+        with patch.object(self.mod, 'read_back', side_effect=once_bad), patch.object(self.mod.time, 'sleep'):
+            self.assertEqual(self.run_copy(), 0)
+        self.assertEqual((self.dest / 'a.mov').read_bytes(), b'a' * 10)
+        self.assertFalse((self.dest / 'a.mov.part').exists())
+        import hashlib
+        want = hashlib.blake2b(b'a' * 10, digest_size=16).hexdigest()
+        record = ''.join(p.read_text() for p in (self.archive / '_rushes' / 'origin').glob('*.tsv'))
+        self.assertIn(f'verified blake2b {want}', record)
+
     def test_disconnection_stops_the_folder_and_it_resumes(self):
         (self.source / 'a.mov').write_bytes(b'a' * 10)
         (self.source / 'b.mov').write_bytes(b'b' * 20)

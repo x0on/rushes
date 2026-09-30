@@ -8,7 +8,37 @@ where it runs, and its license. Each belongs to its authors; Rushes claims none 
 
 | Part | What it does in Rushes | Where it runs | License | Where it comes from |
 |---|---|---|---|---|
-| Rushes | Copying footage: Rushes' own code reads each file and writes it in 8 MB pieces with Python's standard library — no copy tool such as rsync or rclone — to a temporary name, checks the size, then puts it in place. Recognising files already in the archive: a BLAKE2 fingerprint of each file's start and end (Python's standard library). Also matching earlier copies to their originals, tidy-up, search, the pages | Archive machine and the helper | Open source | github.com/x0on/rushes — written with AI coding assistants (Claude by Anthropic, Codex by OpenAI) |
+| Rushes | Copying footage with its own code (below, why), each copy verified byte for byte by BLAKE2 fingerprint; matching earlier copies to their originals, tidy-up, search, the pages | Archive machine and the helper | Open source | github.com/x0on/rushes — written with AI coding assistants (Claude by Anthropic, Codex by OpenAI) |
+
+### Why Rushes copies with its own code, not rsync or rclone
+
+The copying itself is a few lines: read 8 MB, write 8 MB, with Python's standard
+library. What makes it Rushes is what sits around those lines, which copy tools
+such as rsync and rclone do not do:
+
+- **It skips what is already anywhere in the archive.** rsync and rclone only
+  compare against the same path at the destination. Rushes recognises a file
+  even when an earlier copy sits in another folder, under another structure, so
+  nothing is copied twice.
+- **A permanent where-it-came-from record for every file**, which tidy-up, its
+  undo and Premiere relinking all depend on.
+- **Live progress in Rushes, Pause at a safe point, and resuming exactly where it
+  stopped** after a network drive drops.
+- **Search is updated file by file**, so a new file can be found as soon as it lands.
+
+How each copy is made safe:
+
+1. Written under a temporary name, so an interrupted copy never looks finished.
+2. Confirmed as stored on the archive's disk (fsync) before it gets its real name.
+3. Verified byte for byte: the original's BLAKE2 fingerprint is taken while it is
+   read, the copy is read back from the archive and fingerprinted again, and the
+   two must match. A copy that does not match is thrown away and made again.
+4. The fingerprint is kept in the file's where-it-came-from record, so the
+   archive copy can be proven to be the original years later.
+
+rsync and rclone have years of real-world use behind them; this code has less.
+Its tests (tests/ in the repository) cover interrupted copies, dropped drives,
+damaged copies and resuming, and every file it copies is checked as above.
 
 ## On this Mac: Rushes Helper
 

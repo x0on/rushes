@@ -432,7 +432,7 @@ ul.did{list-style:none;padding:0;margin:0}ul.did li{padding:3px 0}ul.did li:befo
 .sw.on{background:var(--accent)}.sw.on:after{left:18px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:6px}.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
 pre{font:12px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;margin:0;color:var(--muted);-webkit-user-select:text;user-select:text}
-h3{font-size:14px;margin:18px 0 6px}table{width:100%;border-collapse:collapse;font-size:12.5px;-webkit-user-select:text;user-select:text}
+h3{font-size:14px;margin:18px 0 6px}h4{font-size:13.5px;margin:16px 0 6px}ul,ol{margin:0 0 12px;padding-left:20px}li{margin:3px 0}table{width:100%;border-collapse:collapse;font-size:12.5px;-webkit-user-select:text;user-select:text}
 th,td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid var(--line)}th{color:var(--muted);font-weight:500}
 .big{font-size:40px;line-height:1;margin:6px 0 14px;color:var(--ok)}
 </style></head><body>
@@ -454,26 +454,43 @@ function btn(label, d, go, dis) { return '<button' + (go ? ' class="go"' : '') +
 // What Rushes is made of: every part, what it does, its license. Opens over
 // any screen and goes back to it.
 function drawCredits() {
-  const rows = credits.split('\n'), out = [];
-  let table = false;
-  rows.forEach(l => {
-    if (l.startsWith('# ')) out.push('<h2>' + esc(l.slice(2)) + '</h2>');
-    else if (l.startsWith('## ')) { if (table) { out.push('</table>'); table = false; } out.push('<h3>' + esc(l.slice(3)) + '</h3>'); }
-    else if (l.startsWith('|')) {
-      if (/^\|[-| ]+\|$/.test(l)) return;
-      const c = l.split('|').slice(1, -1).map(x => x.trim());
-      if (!table) { out.push('<table>'); table = true; out.push('<tr>' + c.map(x => '<th>' + esc(x) + '</th>').join('') + '</tr>'); }
-      else out.push('<tr>' + c.map(x => '<td>' + esc(x) + '</td>').join('') + '</tr>');
-    } else if (l.trim()) {
-      if (table) { out.push('</table>'); table = false; }
-      if (out.length && out[out.length - 1].startsWith('<p>')) out[out.length - 1] = out[out.length - 1].replace(/<\/p>$/, ' ' + esc(l) + '</p>');
-      else out.push('<p>' + esc(l) + '</p>');
-    }
-  });
-  if (table) out.push('</table>');
-  $('body').innerHTML = out.join('');
+  $('body').innerHTML = md(credits);
   $('foot').innerHTML = '<button class="go" id="back">Back</button>';
   $('back').onclick = () => { credits = null; draw(); };
+}
+// Just enough Markdown for CREDITS.md: headings, paragraphs, lists, tables, bold.
+function md(t) {
+  const inl = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const out = []; let cur = null;
+  const close = () => {
+    if (!cur) return;
+    if (cur.tag === 'p') out.push('<p>' + inl(cur.text) + '</p>');
+    else if (cur.tag === 'table') out.push('<table>' + cur.rows.join('') + '</table>');
+    else out.push('<' + cur.tag + '>' + cur.items.map(x => '<li>' + inl(x) + '</li>').join('') + '</' + cur.tag + '>');
+    cur = null;
+  };
+  t.split('\n').forEach(l => {
+    let m;
+    if (!l.trim()) return close();
+    if ((m = l.match(/^(#{1,3}) (.*)/))) { close(); const h = 'h' + (m[1].length + 1); out.push('<' + h + '>' + inl(m[2]) + '</' + h + '>'); return; }
+    if (l.startsWith('|')) {
+      if (/^\|[-| ]+\|$/.test(l)) return;
+      const c = l.split('|').slice(1, -1).map(x => x.trim());
+      if (!cur || cur.tag !== 'table') { close(); cur = {tag: 'table', rows: ['<tr>' + c.map(x => '<th>' + inl(x) + '</th>').join('') + '</tr>']}; }
+      else cur.rows.push('<tr>' + c.map(x => '<td>' + inl(x) + '</td>').join('') + '</tr>');
+      return;
+    }
+    if ((m = l.match(/^(-|\d+\.) (.*)/))) {
+      const tag = m[1] === '-' ? 'ul' : 'ol';
+      if (!cur || cur.tag !== tag) { close(); cur = {tag: tag, items: []}; }
+      cur.items.push(m[2]); return;
+    }
+    if (cur && (cur.tag === 'ul' || cur.tag === 'ol') && /^\s/.test(l)) { cur.items[cur.items.length - 1] += ' ' + l.trim(); return; }
+    if (cur && cur.tag === 'p') { cur.text += ' ' + l.trim(); return; }
+    close(); cur = {tag: 'p', text: l.trim()};
+  });
+  close();
+  return out.join('');
 }
 function draw() {
   if (credits != null) return;              // reading the list: the screen underneath waits

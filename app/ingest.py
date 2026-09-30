@@ -328,6 +328,24 @@ def save_cache():
 _HEARTBEAT = lambda: None     # set while copying, so a long hash still reports progress
 
 
+def read_back(path):
+    """A file's fingerprint (BLAKE2), read from where it lies. Used on each new
+    copy, read back from the archive: asked without the Mac's cache of what it
+    has just written (F_NOCACHE, as far as macOS allows), so a bad write to the
+    archive's disk cannot hide behind a good copy in memory."""
+    h = hashlib.blake2b(digest_size=16)
+    with open(path, "rb") as f:
+        if sys.platform == "darwin":
+            try:
+                import fcntl
+                fcntl.fcntl(f, 48, 1)                       # F_NOCACHE
+            except (ImportError, OSError):
+                pass
+        for chunk in iter(lambda: f.read(8 << 20), b""):
+            h.update(chunk); _HEARTBEAT()
+    return h.hexdigest()
+
+
 def digest(path, full=False):
     """Hash the ends of a file, or all of it. Cached by path+size+mtime."""
     try: st = os.stat(path)
@@ -1922,23 +1940,30 @@ def main():
                 raise OSError("a different file with this name is already there — left untouched")
             kind, note = "already", "there from an earlier run"
         else:
-            # copy to a temp name, check the size, then put it in place —
-            # so an interrupted transfer never looks like a finished file
+            # Copy to a temp name, make sure it is on the archive's disk, check
+            # it byte for byte, then put it in place — so an interrupted or bad
+            # copy never looks like a finished file.
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             tmp = dest + ".part"
             progress(name, force=True)
+            h = hashlib.blake2b(digest_size=16)      # the original's fingerprint, taken while reading it anyway
             with open(src, "rb") as fi, open(tmp, "wb") as fo:
                 while True:
                     buf = fi.read(8 << 20)
                     if not buf: break
-                    fo.write(buf); done_b += len(buf)
+                    fo.write(buf); h.update(buf); done_b += len(buf)
                     progress(name)
+                fo.flush(); os.fsync(fo.fileno())    # stored on the archive's disk, not only on its way there
             shutil.copystat(src, tmp)
             if os.path.getsize(tmp) != size:
                 os.remove(tmp); raise OSError("size mismatch after copy")
+            if read_back(tmp) != h.hexdigest():      # the copy, read back from the archive
+                os.remove(tmp); raise OSError("the copy did not match the original byte for byte")
             os.rename(tmp, dest)
             log.write(f"{src}\t{dest}\n"); log.flush()
-            copied += 1; copied_b += size; kind, note = "copied", ""
+            # Kept in the where-it-came-from record: years from now, the archive
+            # copy can still be proven to be the original.
+            copied += 1; copied_b += size; kind, note = "copied", "verified blake2b " + h.hexdigest()
         cp.landed(dest, size)
         cp.complete_file(a.job, a.source, src, size, kind)
         o.add(kind, src, dest, size, note)
