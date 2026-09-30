@@ -398,6 +398,43 @@ class ProxyFollowsTests(unittest.TestCase):
         self.assertEqual(pb.read_text(), 'proxy'); self.assertEqual(pa.read_text(), 'another')
 
 
+class DescribeLaneTests(unittest.TestCase):
+    """Describing has its own lane: it runs the queue's describing jobs beside the copies,
+    has its own pause, and reports its own status."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    class Stop(BaseException):
+        pass
+
+    def run_lane(self, control, sleeps=2):
+        m = self.mod; ran = []
+        def fake(path, asked=""):
+            ran.append((path, asked)); m.status(phase="analysing", source=path); return 0
+        n = [0]
+        def sleep(_):
+            n[0] += 1
+            if n[0] >= sleeps: raise self.Stop()
+        with patch.object(m, "describe_folder", side_effect=fake), patch.object(m, "control", return_value=control), \
+             patch.object(m.time, "sleep", side_effect=sleep), patch.object(m, "_push"), patch("sys.stdout", new_callable=io.StringIO):
+            try: m.describe_lane()
+            except self.Stop: pass
+        return ran
+
+    def test_it_describes_the_queued_folder_once_and_says_so_in_its_own_status(self):
+        m = self.mod
+        m._describe_jobs[:] = [(str(self.archive), "123")]
+        self.assertEqual(self.run_lane({}, sleeps=3), [(str(self.archive), "123")])
+        self.assertIn(f"analyze {self.archive} 123", m.DONE.read_text())
+        self.assertIn("idle", (m.STATUS / "describe-status.tsv").read_text())      # its own status file
+        self.assertFalse((m.STATUS / "ingest-status.tsv").exists())                 # the copying lane's is untouched
+
+    def test_its_pause_holds_it_and_says_so(self):
+        m = self.mod
+        m._describe_jobs[:] = [(str(self.archive), "")]
+        self.assertEqual(self.run_lane({"describe_paused": True}), [])
+        self.assertIn("paused", (m.STATUS / "describe-status.tsv").read_text())
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

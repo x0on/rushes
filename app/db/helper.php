@@ -100,11 +100,13 @@ SH, 'text/plain; charset=utf-8');
 // own work — nothing is moved or deleted — so its own window on the Mac may
 // press them without a password, like Manage. Everything else needs sign-in.
 $act = (string)($_POST['action'] ?? '');
-if (!in_array($act, ['pause', 'resume', 'reconnect-off', 'reconnect-on', 'nudge'], true)
+if (!in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'nudge'], true)
     && !may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';
+} elseif ($act === 'describe-pause' || $act === 'describe-resume') {
+    $c['describe_paused'] = $act === 'describe-pause';  // the describing lane only; copying carries on
 } elseif ($act === 'reconnect-off' || $act === 'reconnect-on') {
     $c['no_reconnect'] = $act === 'reconnect-off';     // the helper stops (or starts) connecting dropped shares by itself
 } elseif ($act === 'nudge') {

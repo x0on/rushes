@@ -126,6 +126,17 @@ def checkpoints():
         _CHECKPOINTS = TransferState(HOME / ("transfer-" + key + ".sqlite"), NAS_URL)
     return _CHECKPOINTS
 
+# ── two lanes ──────────────────────────────────────────────────────────────
+# Copying (the main loop) and describing (a thread of its own) run side by
+# side: one uses the network, the other this Mac's chip reading proxies. Each
+# has its own Pause and its own live status; they share a few files, so writes
+# to those take turns.
+_lane = threading.local()          # .name == "describe" in the describing lane
+_describing = threading.Event()    # set while a folder is being described
+_io = threading.Lock()             # history, the done list: one writer at a time
+_describe_jobs = []                # (folder, asked) — the queue's describing jobs, in order
+
+
 def history(kind, source, files, byts, secs, note=""):
     """One line per run, appended, never rewritten. This is the answer to
     "where did I leave off" — the section list shows state, this shows order."""
@@ -140,17 +151,17 @@ def history(kind, source, files, byts, secs, note=""):
                 lines = recent.read().decode("utf-8", "replace").splitlines()
             if lines and "\t".join(lines[-1].split("\t")[1:5]) == event:
                 return
-        with open(path, "a") as f:
+        with _io, open(path, "a") as f:
             f.write(f"{time.strftime('%Y-%m-%d %H:%M')}\t{event}\t{int(secs)}\t{note}\n")
     except OSError:
         pass
 
 
-_last_push = [0.0, ""]
+_last_push = {}                    # lane -> [when, phase]
 
-def _push(text):
+def _push(text, lane=""):
     try:
-        body = urllib.parse.urlencode({"status": text}).encode()
+        body = urllib.parse.urlencode({"status": text, "lane": lane}).encode()
         urllib.request.urlopen(NAS_URL + "/db/status.php", data=body, timeout=5).read()
     except Exception:
         pass        # the file on the share still gets there, within a minute
@@ -162,9 +173,10 @@ def status(**kw):
     # time — and read "15:08" as twelve hours ago. A count cannot be misread.
     text = (f"at\t{time.strftime('%Y-%m-%d %H:%M:%S')}\nts\t{int(time.time())}\n"
             + "".join(f"{k}\t{v}\n" for k, v in kw.items()))
+    lane = getattr(_lane, "name", "")          # each lane has its own live status
     try:
         STATUS.mkdir(parents=True, exist_ok=True)
-        with open(STATUS / "ingest-status.tsv", "w") as f:
+        with open(STATUS / ("describe-status.tsv" if lane == "describe" else "ingest-status.tsv"), "w") as f:
             f.write(text)
     except OSError:
         pass        # the share may be unmounted; never let reporting stop a copy
@@ -172,11 +184,12 @@ def status(**kw):
     # archive next copies the file over. A change of phase is sent at once;
     # progress at most every two seconds, without ever holding the copy up.
     phase = str(kw.get("phase", ""))
-    if phase != _last_push[1]:
-        _last_push[:] = [time.time(), phase]; _push(text)
-    elif time.time() - _last_push[0] >= 2:
-        _last_push[0] = time.time()
-        threading.Thread(target=_push, args=(text,), daemon=True).start()
+    last = _last_push.setdefault(lane, [0.0, ""])
+    if phase != last[1]:
+        last[:] = [time.time(), phase]; _push(text, lane)
+    elif time.time() - last[0] >= 2:
+        last[0] = time.time()
+        threading.Thread(target=_push, args=(text, lane), daemon=True).start()
 
 
 class Speed:
@@ -880,7 +893,7 @@ def _shelf():
 
 def _mark_done(key):
     HOME.mkdir(exist_ok=True)
-    with open(DONE, "a") as f:
+    with _io, open(DONE, "a") as f:
         f.write(key + "\n")
 
 
@@ -1287,6 +1300,9 @@ def rushes_elsewhere():
 def move_to(url, why):
     """Carry on at a new address: this computer's saved progress moves with
     it, and the helper restarts itself in place pointing there."""
+    if _describing.is_set():
+        print(f"  Rushes has moved to {url}; following it once describing reaches a stopping point")
+        return
     for sfx in ("", "-wal", "-shm"):
         old = HOME / f"transfer-{hashlib.sha256(NAS_URL.encode()).hexdigest()[:16]}.sqlite{sfx}"
         new = HOME / f"transfer-{hashlib.sha256(url.encode()).hexdigest()[:16]}.sqlite{sfx}"
@@ -1335,8 +1351,8 @@ def update_self():
     never during a copy; after an update it restarts itself in place, so a
     change to the archive's copy reaches every computer without anyone
     touching it. A half-downloaded or broken file is never put in place."""
-    if time.time() - _checked[0] < 300:
-        return
+    if time.time() - _checked[0] < 300 or _describing.is_set():
+        return                        # a restart would cut a folder being described in half: later
     _checked[0] = time.time()
     try:
         with urllib.request.urlopen(NAS_URL + "/db/helper.php?hash", timeout=10) as r:
@@ -1413,6 +1429,7 @@ def watch(root, every=20):
     last = None
     blocked = False        # said the source was gone; do not say it again
     threading.Thread(target=report_forever, daemon=True).start()
+    threading.Thread(target=describe_lane, daemon=True).start()      # the second lane
     if sys.platform == "darwin":
         print("The Mac is kept awake while a copy runs (the screen can still sleep).\n")
     paused = False         # said it was paused; once
@@ -1459,6 +1476,11 @@ def watch(root, every=20):
                 # a card, the folder it goes in, and — for a card that spans
                 # several days — which day's files belong in that folder
                 want.append(("ingest", f[1], f[2] + ("\t" + f[3] if len(f) > 3 and f[3] else "")))
+
+        # Describing is the other lane's: hand it over, and keep copying here.
+        with _io:
+            _describe_jobs[:] = [(p, i) for v, p, i in want if v == "analyze"]
+        want = [w for w in want if w[0] != "analyze"]
 
         if body != last:
             print(f"{time.strftime('%H:%M:%S')}  " +
@@ -1588,15 +1610,6 @@ def watch(root, every=20):
                 did = True
                 print(f"\n=== undoing tidy-up {path} ===")
                 run_self("--untidy", path); break
-            if verb == "analyze":
-                if not os.path.exists(path):
-                    continue                          # not there right now: the next thing goes first
-                did = True
-                print(f"\n=== describing {path} (vision model and speech) ===")
-                if describe_folder(path, into) == 0:
-                    _mark_done(f"analyze {path}{' ' + into if into else ''}")
-                time.sleep(5)
-                break
             if verb == "copy" and path in c.get("skip", []):
                 continue                               # skipped from Manage
             item = job_items.get(path) if verb == "copy" else None
@@ -1677,6 +1690,40 @@ def analysis_tools():
     return (py if os.path.exists(py) else ""), model, a.get("whisper", "mlx-community/whisper-large-v3-turbo")
 
 
+def describe_lane(every=20):
+    """The describing lane: the queue's describing jobs, one folder at a time,
+    beside the copies. Its own Pause (Manage, or Rushes Helper's window)."""
+    _lane.name = "describe"
+    said = ""
+    while True:
+        try:
+            if control().get("describe_paused"):
+                if said != "paused":
+                    status(phase="paused", note="describing paused — Resume describing carries on"); said = "paused"
+                time.sleep(10); continue
+            with _io:
+                jobs = list(_describe_jobs)
+                done = set(DONE.read_text().splitlines()) if DONE.exists() else set()
+            todo = [(p, a) for p, a in jobs
+                    if f"analyze {p}{' ' + a if a else ''}" not in done and os.path.exists(p)]
+            if not todo:
+                if said != "idle":
+                    status(phase="idle", note="nothing to describe"); said = "idle"
+                time.sleep(every); continue
+            path, asked = todo[0]; said = ""
+            print(f"\n=== describing {path} (vision model and speech), beside the copies ===")
+            _describing.set()
+            try:
+                if describe_folder(path, asked) == 0:
+                    _mark_done(f"analyze {path}{' ' + asked if asked else ''}")
+            finally:
+                _describing.clear()
+            time.sleep(5)
+        except Exception as e:                # the lane never takes the copies down with it
+            print(f"  describing: {e} — trying again in a minute")
+            time.sleep(60)
+
+
 def describe_folder(path, asked=""):
     py, model, whisper = analysis_tools()
     name = os.path.basename(path.rstrip("/")) or path
@@ -1707,14 +1754,15 @@ def describe_folder(path, asked=""):
                    per_shot=d.get("per_shot", ""), failed=d.get("failed", 0), step=d.get("step", "shots"))
         else:
             print(line.rstrip(), flush=True)
-        c = control()                         # Pause stops it between lines; a file part-done is redone
-        if c.get("paused") or path in c.get("skip", []):
-            stopped = "paused from Manage" if c.get("paused") else "skipped from Manage"
+        c = control()                         # Pause describing stops it between lines; a file part-done is redone
+        if c.get("describe_paused") or path in c.get("skip", []):
+            stopped = "describing paused" if c.get("describe_paused") else "skipped from Manage"
             p.terminate(); break
     rc = p.wait()
     secs = time.time() - t0
     if stopped:
         print(f"*** {stopped} — the files already described are kept")
+        status(phase="paused", source=path, label=name, note=f"{stopped} — the files already described are kept")
         return 1
     history("analysed", path, done.get("done", 0) + done.get("already", 0), 0, secs,
             "; ".join(x for x in (f"asked={asked}" if asked else "",

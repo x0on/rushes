@@ -23,6 +23,7 @@ foreach (explode("\n", $raw) as $l) {
 }
 if (!$keep) { http_response_code(400); echo '{"error":"no status"}'; exit; }
 
-$f = web_dir() . '/ingest-status.tsv';
+// Two lanes, two files: copying (ingest-status) and describing (describe-status).
+$f = web_dir() . (($_POST['lane'] ?? '') === 'describe' ? '/describe-status.tsv' : '/ingest-status.tsv');
 $ok = @file_put_contents("$f.new", implode("\n", $keep) . "\n") !== false && @rename("$f.new", $f);
 echo json_encode(['ok' => $ok]);

@@ -724,13 +724,15 @@ function drawHelper(d) {
   const stuck = cur && h.fresh && !h.paused && d.transfer.phase === 'interrupted' && !liveFor(d.transfer, d.copy)
     && Date.now() / 1000 - d.transfer.updated > 180;
   const btns = [];
-  if (h.fresh) btns.push(h.paused ? ['resume', 'Resume'] : ['pause', 'Pause']);
+  if (h.fresh) btns.push(h.paused ? ['resume', 'Resume copying'] : ['pause', 'Pause copying']);
+  if (h.fresh) btns.push(h.describe_paused ? ['describe-resume', 'Resume describing'] : ['describe-pause', 'Pause describing']);
   btns.push(['nudge', 'Try again now']);
   btns.push(h.no_reconnect ? ['reconnect-on', 'Reconnect shares by itself'] : ['reconnect-off', 'Stop reconnecting shares']);
   const now = Date.now();
   el.innerHTML = '<span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span>' +
     '<span class="t"><b>Helper on ' + esc(h.label) + '</b> · ' + esc([how, seen].filter(Boolean).join(' · ')) +
-    esc(updating) + (h.paused ? ' · <b>paused</b>' : '') + (h.no_reconnect ? ' · <b>not reconnecting shares</b>' : '') + '</span>' +
+    esc(updating) + (h.paused ? ' · <b>copying paused</b>' : '') + (h.describe_paused ? ' · <b>describing paused</b>'
+      : h.describe && h.describe.phase === 'analysing' ? ' · describing ' + esc((h.describe.label || '')) + (h.describe.of ? ' (' + esc(h.describe.n) + ' of ' + esc(h.describe.of) + ')' : '') : '') + (h.no_reconnect ? ' · <b>not reconnecting shares</b>' : '') + '</span>' +
     btns.map(function (b) {
       const sure = armed.what === b[0] && now < armed.until;
       return '<button class="btn quiet" data-h="' + b[0] + '">' + esc(sure ? 'Sure? ' + b[1] : b[1]) + '</button>'; }).join('') +
@@ -755,6 +757,8 @@ function drawHelper(d) {
               resume: 'Resumed ✓ It carries on within a few seconds.',
               nudge: 'Asked ✓ It stops waiting and looks again now.',
               skip: 'Skipped ✓ That folder is out of this transfer. Tick it again in Transfers to bring it back.',
+              'describe-pause': 'Describing paused ✓ It stops at its next safe point; files already described are kept. Copying carries on.',
+              'describe-resume': 'Describing resumed ✓ It carries on with the next file. Copying is not affected.',
               'reconnect-off': 'Off ✓ The helper no longer connects dropped shares by itself (no more "problem connecting" windows). Connect them in Finder; copying carries on once they are back.',
               'reconnect-on': 'On ✓ The helper connects dropped shares again by itself, only when the server answers.' }[what] };
       } catch (e) { said = { until: Date.now() + 8000, text: 'Could not reach the archive: ' + e.message }; }

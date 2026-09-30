@@ -184,9 +184,12 @@ function described_runs(): array {
 
 function describing_now(): array {
     $s = [];
-    foreach (@file(web_dir() . '/ingest-status.tsv') ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }
-    $fresh = isset($s['ts']) && time() - (int)$s['ts'] < 300;
-    return ($fresh && ($s['phase'] ?? '') === 'analysing') ? $s : [];
+    foreach (['describe-status.tsv', 'ingest-status.tsv'] as $file) {      // its own lane; an older helper says it in the copy status
+        $s = [];
+        foreach (@file(web_dir() . "/$file") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }
+        if (isset($s['ts']) && time() - (int)$s['ts'] < 300 && ($s['phase'] ?? '') === 'analysing') return $s;
+    }
+    return [];
 }
 
 // Where each prepared folder stands, step by step. The one source of truth for
