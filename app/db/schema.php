@@ -124,6 +124,14 @@ function db_init(): void {
     foreach (['recorded', 'timecode', 'reel', 'camera'] as $c)
         if (!in_array($c, $have, true)) $db->exec("ALTER TABLE media ADD COLUMN $c TEXT");
 
+    // ── copies: where else each file exists (git-annex's idea) ──
+    // One row per file and place: the place a file came from (a source server,
+    // by its name in Settings), whether the same file was still there when the
+    // helper last looked, and when. The archive itself is always one copy.
+    $db->exec("CREATE TABLE IF NOT EXISTS copies (
+        file_id INTEGER, place TEXT, present INTEGER, checked INTEGER,
+        PRIMARY KEY (file_id, place))");
+
     $db->exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)");
 
     // ── pulls: clips gathered for a job ───────────────────────────────────

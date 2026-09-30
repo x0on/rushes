@@ -61,7 +61,8 @@ if ($where === []) {
 
 // the rows
 $st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept,
-                           width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera
+                           width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera,
+                           (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies
                     FROM files LEFT JOIN media ON media.file_id = files.id$sql ORDER BY path LIMIT ? OFFSET ?");
 $bind($st, $args);
 $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);

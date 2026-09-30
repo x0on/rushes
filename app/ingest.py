@@ -1145,7 +1145,42 @@ def check_some(budget=300):
             print(f"{time.strftime('%H:%M:%S')}  older copies in {root}: {len(res['ok'])} proven — {note}")
             del o["todo"][root]; o["got"].pop(root, None); _proof_save(st)
 
-        # 2 · the archive, against its fingerprints
+        # 2 · how many copies (git-annex's idea): once a week, is the original
+        # each file came from still there, at the same size? Only looking at
+        # names and sizes, so it is quick. A source not connected now is not
+        # looked at: its last answer stands, rather than a false "gone".
+        cc = st.setdefault("copies", {})
+        if time.time() - cc.get("done", 0) > 7 * 86400:
+            at = replay()
+            todo = sorted(p for p in at if p > cc.get("pos", ""))
+            up, total = {}, len(at)
+            while True:
+                chunk, todo = todo[:2000], todo[2000:]
+                seen = {}
+                for arch in chunk:
+                    for _, src, size in at[arch]:
+                        root, name = source_root(src)
+                        if root not in up: up[root] = os.path.isdir(root)
+                        if not up[root]: continue
+                        try: ok = os.path.getsize(src) == int(size or -1)
+                        except (OSError, ValueError): ok = False
+                        seen[(arch, name)] = seen.get((arch, name)) or ok
+                now_ = dict(phase="proving", step="copies", source="", n=total - len(todo), of=total, ok=sum(seen.values()),
+                            bad=len(seen) - sum(seen.values()), missing=0)
+                status(**now_)
+                body = urllib.parse.urlencode({"copies": "\n".join(f"{a_}\t{n}\t{int(v)}" for (a_, n), v in seen.items()),
+                                               "done": "" if todo else "1"}).encode()
+                try:
+                    with urllib.request.urlopen(NAS_URL + "/db/copies.php", data=body, timeout=120) as r: r.read()
+                except Exception:
+                    return True                        # Rushes did not answer: the same files again next time
+                if not todo: break
+                cc["pos"] = chunk[-1]; _proof_save(st)
+                if stop(): return True
+            history("counted", "copies", total, 0, 0, "the original each file came from, looked for where it was")
+            cc.update(done=time.time(), pos=""); _proof_save(st)
+
+        # 3 · the archive, against its fingerprints
         days = float(setting("proof.check_every_days") or 90)
         last, cur = st.setdefault("checked", {}), st.get("scrub")
         if not cur:

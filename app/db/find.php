@@ -349,6 +349,17 @@ function recorded(t) {
   const part = h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night';
   return day + ', ' + ((h % 12) || 12) + ':' + m[5] + (h < 12 ? ' am' : ' pm') + ' · ' + part;
 }
+// "oldserver|1|1727700000;…" -> how many copies, and where.
+function copiesText(s) {
+  const day = function (t) { return new Date(t * 1000).toLocaleDateString([], {day: 'numeric', month: 'short'}); };
+  const rows = (s || '').split(';').filter(Boolean).map(function (x) { const f = x.split('|'); return {place: f[0], there: f[1] === '1', at: +f[2]}; });
+  const there = rows.filter(function (x) { return x.there; });
+  if (there.length) return (1 + there.length) + ' — here, and the original on ' +
+    there.map(function (x) { return esc(x.place) + ' (seen ' + day(x.at) + ')'; }).join(', ');
+  if (rows.length) return '<b>1 — only here.</b> The original on ' +
+    rows.map(function (x) { return esc(x.place) + ' was not there on ' + day(x.at); }).join(', ');
+  return '1 known — only here, as far as Rushes knows (no original on record)';
+}
 function res(r) {
   if (!r.width) return '';
   const w = Math.max(r.width, r.height), h = Math.min(r.width, r.height);
@@ -379,6 +390,7 @@ function inspect(r) {
       (r.recorded ? '<div class="k">Recorded</div><div class="v">' + esc(recorded(r.recorded)) + ' <small>(the camera\'s clock)</small></div>' : '') +
       (r.camera ? '<div class="k">Camera</div><div class="v">' + esc(r.camera) + '</div>' : '') +
       (r.timecode || r.reel ? '<div class="k">Timecode</div><div class="v">' + esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · ')) + '</div>' : '') +
+      '<div class="k">Copies</div><div class="v">' + copiesText(r.copies) + '</div>' +
       (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its 1080p proxy (downloads and pulls use the original)</div>' : '') +
       (r.event ? '<div class="k">Shoot</div><div class="v">' + esc(r.event) + '</div>' : '') +
       (r.year  ? '<div class="k">Year</div><div class="v">' + esc(r.year) + '</div>' : '') +

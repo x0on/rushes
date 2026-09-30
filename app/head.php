@@ -144,6 +144,11 @@ window.helperNow = function (c) {
   }
   // Checking, when there is nothing to copy: older copies against their
   // originals (once), then every recorded file against its fingerprint.
+  if (c.phase === 'proving' && c.step === 'copies') return {busy: true, pct: c.of ? Math.floor(c.n / c.of * 100) : null,
+      title: 'Counting copies · is the original of each file still where it came from?',
+      short: 'counting copies · ' + num(c.n) + ' of ' + num(c.of),
+      facts: [[num(c.n) + ' / ' + num(c.of), 'files looked at'], [num(c.ok), 'original still there'],
+              [num(c.bad), 'original gone or changed'], ['names and sizes only', 'nothing is read or moved']]};
   if (c.phase === 'proving') {
     var older = c.step === 'older', p5 = c.of ? Math.floor(((c.n || 1) - 1) / c.of * 100) : null;
     return {busy: true, pct: p5, file: c.file,

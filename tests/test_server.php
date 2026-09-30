@@ -108,6 +108,14 @@ check($mxf['camera'] === 'Sony PXW-Z750' && $mxf['reel'] === 'A001' && $mxf['rec
       'an MXF gives its reel; a clock never set (1970) is left out, not shown as a date');
 $dji = media_probe($j("  Metadata:\n    creation_time   : 2025-06-01T19:40:00.000000Z\n    encoder         : DJI Mini 4 Pro\n  Duration: 00:00:30.00\n  Stream #0:0: Video: hevc (Main 10), yuv420p10le, 3840x2160, 29.97 fps"));
 check($dji['camera'] === 'DJI Mini 4 Pro' && media_probe($j("    encoder : Lavf58.76.100"))['camera'] === null, 'a drone names itself; a program that re-saved a file is not a camera');
+// Copies: the helper says whether each file's original is still where it came from.
+$copies = function (array $post) use ($root) { $_POST = $post; ob_start(); include "$root/app/db/copies.php"; return json_decode(ob_get_clean(), true); };
+$r = $copies(['copies' => "$root/archive/b4k.mov\toldserver\t1\n$root/archive/a.mov\toldserver\t0\n$root/archive/nowhere.mov\toldserver\t1", 'done' => '1']);
+$sum = json_decode(file_get_contents("$root/app/copies-summary.json"), true);
+check($r['counted'] === 2 && $r['not_in_search'] === 1 && $sum['twice'][0] === 1 && $sum['lost'][0] === 1 && $sum['places']['oldserver'] === ['there' => 1, 'looked' => 2],
+      'copies: a file whose original is still there is kept twice; one whose original went is only in the archive');
+check(str_contains(json_encode((function () use ($root) { ob_start(); include "$root/app/db/state.php"; return ob_get_clean(); })()), 'now exist only in the archive'),
+      'Overview warns when files lose their second copy');
 mkdir("$root/archive/shelf"); rename("$root/archive/b4k.mov", "$root/archive/shelf/b4k.mov");
 $_POST = ['moves' => "$root/archive/b4k.mov\t$root/archive/shelf/b4k.mov"];
 ob_start(); include "$root/app/db/moved.php"; ob_end_clean();

@@ -322,6 +322,17 @@ if (preg_match('/(\d+)%/', (string)@file_get_contents("$WEB/tmp-disk.txt"), $tm)
         'body' => 'That is /tmp on the archive machine, not the archive. Rushes no longer uses it, but the system does; if it fills, odd errors follow.',
         'act' => null];
 
+// How many copies each file has (the helper looks once a week; copies.php).
+// Worth a card only when files that had a second copy have lost it.
+$copies = json_decode((string)@file_get_contents("$WEB/copies-summary.json"), true) ?: null;
+if ($copies && $copies['lost'][0] > 0) {
+    $places = implode(', ', array_keys(array_filter($copies['places'] ?? [], fn($p) => $p['there'] < $p['looked'])));
+    $c[] = ['level' => 'warn', 'title' => number_format($copies['lost'][0]) . ' files now exist only in the archive',
+        'body' => 'Each one was also where it came from (' . ($places ?: 'its source') . '), and on the last look, '
+            . date('j M', $copies['at']) . ', it was not there any more or had changed. If those originals were removed on purpose, '
+            . 'the archive copy is now the only one: make sure a backup of the archive exists.', 'act' => null];
+}
+
 // nothing wrong is worth saying out loud
 if (!$c) $c[] = ['level' => 'good', 'title' => 'Everything is in order',
     'body' => 'Search is current, nothing is waiting, no job needs you.', 'act' => null];
@@ -341,7 +352,7 @@ if (is_readable("$WEB/ingest-history.tsv")) {
         $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
                  'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted',
                  'dropped' => 'dropped', 'analysed' => 'described',
-                 'proven' => 'checked against its originals', 'checked' => 'checked for damage'][$f[1]] ?? 'looked at';
+                 'proven' => 'checked against its originals', 'checked' => 'checked for damage', 'counted' => 'counted'][$f[1]] ?? 'looked at';
         $recent[] = ['when' => $f[0], 'what' => $what,
                      'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
                      'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
@@ -377,6 +388,7 @@ echo json_encode([
                     glob("$WEB/queue/*.job") ?: []))),
     'gpu_test' => is_readable("$WEB/gpu-test.txt") ? ['text' => (string)file_get_contents("$WEB/gpu-test.txt"), 'at' => filemtime("$WEB/gpu-test.txt")] : null,
     'conditions' => $c,
+    'copies'   => $copies,
     'recent'   => $recent,
     'sections' => $sections,
     'landed'   => $landed,

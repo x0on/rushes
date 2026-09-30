@@ -568,7 +568,7 @@ function draw() {
   });
 }
 const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
-  analysing:'Describing footage', tidying:'Tidying up', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned'};
+  analysing:'Describing footage', tidying:'Tidying up', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
 function home(s) {
   const n = s.now || {}, on = s.running;
   const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
@@ -592,6 +592,13 @@ function home(s) {
       sw(on && !s.check_paused, ['check-resume', 'check-pause'], 'Check copies',
         'When there is nothing to copy: older copies are read again beside their originals (once), then every file in the archive now and then, against its fingerprint. Reading only. Off pauses it; where it got to is kept.', !on || !s.rushes) +
       sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes) +
+    '</div>' +
+    // Support: said here, where the person at this Mac sees it, so nobody has
+    // to wonder whether someone can reach in. Off, and not built yet.
+    '<div class="box">' +
+      '<div class="row"><div class="t">Support access<small>Off. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
+        'When support sessions exist they will be off by default, turned on only here by you, time-limited, shown on screen while open, and closed with one button.</small></div>' +
+      '<button class="sw" disabled title="Not built yet: nobody can turn this on"></button></div>' +
     '</div>' +
     '<p class="muted" style="font-size:12.5px">Updates: Rushes Helper keeps its own code the same as your Rushes server\'s (' + esc(s.url) +
       ', never anywhere else), checking every few minutes and only between jobs. Nothing else can reach this Mac through it.</p>' +

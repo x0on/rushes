@@ -8,7 +8,7 @@ where it runs, and its license. Each belongs to its authors; Rushes claims none 
 
 | Part | What it does in Rushes | Where it runs | License | Where it comes from |
 |---|---|---|---|---|
-| Rushes | Copying footage with its own code (below, why), each copy verified byte for byte by BLAKE2 fingerprint; matching earlier copies to their originals, tidy-up, search, the pages | Archive machine and the helper | Open source | github.com/x0on/rushes — written with AI coding assistants (Claude by Anthropic, Codex by OpenAI) |
+| Rushes | Copying footage with its own code (below, why), each copy verified byte for byte by its XXH3-128 fingerprint (see xxHash below) and recorded in ASC MHL; recognising files already in the archive by a quick BLAKE2 fingerprint of their first and last megabyte (Python's standard library); matching earlier copies to their originals, counting copies, tidy-up, search, the pages | Archive machine and the helper | Open source | github.com/x0on/rushes — written with AI coding assistants (Claude by Anthropic, Codex by OpenAI) |
 
 ### Why Rushes copies with its own code, not rsync or rclone
 

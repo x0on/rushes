@@ -669,6 +669,19 @@ function drawTiles(d) {
     '<div class="big">' + tb(d.disk.free) + '</div>' +
     '<div class="sub">' + pct + '% used</div></div>');
 
+  // How many copies: the archive is one; the place each file came from, still
+  // holding it, is a second. Shown once the helper has looked (weekly).
+  const cp = d.copies;
+  if (cp) {
+    const all = cp.twice[1] + cp.lost[1] + cp.never[1], one = cp.lost[1] + cp.never[1];
+    t.push('<div class="tile' + (cp.lost[0] ? ' warn' : '') + '" title="' + esc('Only in the archive, by department: ' +
+        Object.entries(cp.depts || {}).map(function (e) { return e[0] + ' ' + tb(e[1]); }).join(', ')) + '">' +
+      '<div class="lab">Kept twice</div>' +
+      '<div class="big">' + (all ? Math.round(cp.twice[1] / all * 100) : 0) + '%</div>' +
+      '<div class="sub">' + tb(one) + ' only in the archive · looked ' +
+        new Date(cp.at * 1000).toLocaleDateString([], {day: 'numeric', month: 'short'}) + '</div></div>');
+  }
+
   // Everything past here is conditional. Someone with a tidy archive and nothing
   // to bring over sees two tiles and no buttons, which is the correct screen.
   (d.conditions || []).forEach(function (c, i) {

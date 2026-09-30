@@ -452,6 +452,39 @@ class ProofTests(unittest.TestCase):
         self.assertTrue(list((self.archive / '_rushes' / 'ascmhl-moved').rglob('*.mhl')))
         self.mhl_ok(self.archive / 'Shelf' / '2024 Parks')
 
+    def post(self, url, data=None, timeout=None):
+        from urllib.parse import parse_qs
+        self.posted = getattr(self, 'posted', []) + [(url, parse_qs(data.decode()) if data else {})]
+        return io.BytesIO(b'{}')
+
+    def test_copies_are_counted_where_each_file_came_from(self):
+        m = self.mod
+        for n in ('kept.mov', 'gone.mov'): (self.source / n).write_bytes(b'k' * 5)
+        (self.archive / 'old').mkdir()
+        m.ORIGIN.mkdir(parents=True)
+        (m.ORIGIN / '20200101-000000 old folder.tsv').write_text(''.join(
+            f'copied\t{self.source / n}\t{self.archive / "old" / n}\t5\t\n' for n in ('kept.mov', 'gone.mov')))
+        (self.source / 'gone.mov').unlink()                       # the old server was cleared of this one
+        m.SETTINGS = dict(m.SETTINGS, sources=[{'path': str(self.source), 'label': 'oldserver'}])
+        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO), \
+             patch('urllib.request.urlopen', side_effect=self.post), patch.object(m, 'new_fingerprint', return_value=(None, 'xxh128')), \
+             patch.object(m, '_older_todo', return_value={}):
+            m.check_some()
+        sent = [q for u, q in self.posted if u.endswith('/db/copies.php')]
+        self.assertEqual(sorted(sent[-1]['copies'][0].split('\n')),
+                         [f'{self.archive}/old/gone.mov\toldserver\t0', f'{self.archive}/old/kept.mov\toldserver\t1'])
+        self.assertEqual(sent[-1]['done'], ['1'])
+        # the server not connected: nothing is said about it, so no false "gone"
+        self.posted = []
+        m.SETTINGS = dict(m.SETTINGS, sources=[{'path': str(self.root / 'unplugged'), 'label': 'elsewhere'}])
+        pf = m.HOME / 'proof.json'; st = json.loads(pf.read_text()); st['copies'] = {}; pf.write_text(json.dumps(st))
+        (m.ORIGIN / '20200101-000000 old folder.tsv').write_text(f'copied\t{self.root}/unplugged/x.mov\t{self.archive}/old/x.mov\t5\t\n')
+        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO), \
+             patch('urllib.request.urlopen', side_effect=self.post), patch.object(m, 'new_fingerprint', return_value=(None, 'xxh128')), \
+             patch.object(m, '_older_todo', return_value={}):
+            m.check_some()
+        self.assertEqual([q.get('copies', [''])[0] for u, q in self.posted if u.endswith('/db/copies.php')], [''])
+
     def test_the_checker_proves_older_copies_then_finds_damage(self):
         self.setUp2(); m = self.mod
         good, bad = self.source / 'good.mov', self.source / 'bad.mov'
@@ -462,7 +495,8 @@ class ProofTests(unittest.TestCase):
         m.ORIGIN.mkdir(parents=True)
         (m.ORIGIN / '20200101-000000 old folder.tsv').write_text(''.join(
             f'copied\t{s}\t{self.archive / "old" / s.name}\t30\t\n' for s in (good, bad)))
-        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO):
+        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO), \
+             patch('urllib.request.urlopen', side_effect=self.post):
             while m.check_some(): pass
         known = m.mhl_read(str(self.archive / 'old'))
         self.assertEqual(sorted(known), ['good.mov'])
@@ -472,7 +506,8 @@ class ProofTests(unittest.TestCase):
         # a disk damages the good one: the next check finds it
         (self.archive / 'old' / 'good.mov').write_bytes(b'G' * 30)
         pf = m.HOME / 'proof.json'; st = json.loads(pf.read_text()); st['checked'] = {}; pf.write_text(json.dumps(st))
-        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO):
+        with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO), \
+             patch('urllib.request.urlopen', side_effect=self.post):
             while m.check_some(): pass
         self.assertIn('1 differ from their fingerprint (good.mov)', (m.STATUS / 'ingest-history.tsv').read_text())
 

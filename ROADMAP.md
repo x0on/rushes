@@ -153,7 +153,11 @@ licenses stay theirs; CREDITS.md says what came from where):
 3. **restic / Borg** — done: when there is nothing to copy, every recorded file
    is read again (each folder every 90 days, `proof.check_every_days`) and
    compared with its fingerprint; a Pause checking switch in Manage and the helper.
-4. **git-annex** — how many copies of each file exist, and a warning when only one does.
+4. **git-annex** — done: once a week the helper looks whether the original each
+   file came from is still there (names and sizes only; a source not connected
+   keeps its last answer). Overview shows how much is kept twice and warns when
+   files lose their second copy; each file says how many copies it has and where.
+   Backups are not counted yet: that needs to know where a backup lives.
 5. **ExifTool / MediaInfo** — done, with the FFmpeg already there: the camera's
    clock, timecode, reel and make and model go into the media ledger when the
    proxy is made; search finds "FX6" or "A001", and a file shows when it was
@@ -181,7 +185,7 @@ so nobody has to wonder whether someone can reach in.
   result where you are; a "Collect diagnostics" button will gather versions,
   test results and recent errors — no footage, no passwords — into a file the
   person reads before sending it anywhere.
-- **A support session is off by default.** Only the person at Rushes Helper can
+- **A support session is off by default.** Rushes Helper's window already says so, with the switch shown off and not yet built. Only the person at Rushes Helper can
   turn it on, it is time-limited, shown on screen while open, and closed by one
   button. (Over a private network such as Tailscale when the machine has it.)
 - **Fixes arrive as signed updates** that say what they change and wait for "Install".
