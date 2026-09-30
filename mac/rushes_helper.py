@@ -270,8 +270,10 @@ class Window:
         try:
             c = rushes(self.s["url"], "/db/helper.php?control")
             h["paused"], h["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
+            h["describe_paused"] = bool(c.get("describe_paused"))
             st = rushes(self.s["url"], "/db/state.php")
             h["now"] = st.get("copy") or {}
+            h["describing"] = ((st.get("helper") or {}).get("describe")) or {}
             h["rushes"] = True
         except Exception as e:
             h["rushes"] = False; h["rushes_why"] = str(getattr(e, "reason", e))
@@ -335,7 +337,7 @@ class Window:
         elif do == "service-on":
             self.run("Starting …", lambda: self.set(said="Running ✓ It carries on where it left off."
                                                     if start_service() else "Could not start it — see setup.log."))
-        elif do in ("pause", "resume", "reconnect-off", "reconnect-on", "nudge"):
+        elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "nudge"):
             self.run("Asking Rushes …", lambda: self.switch(do))
 
     def switch(self, do):
@@ -343,8 +345,10 @@ class Window:
         if r.get("error"):
             self.set(said="Did not happen: " + r["error"]); return
         self.set(said={
-            "pause": "Paused ✓ What is running stops at its next safe point; nothing new starts until Resume.",
-            "resume": "Resumed ✓ It carries on within a few seconds.",
+            "pause": "Copying paused ✓ It stops at its next safe point; nothing is lost. Describing is not affected.",
+            "resume": "Copying resumed ✓ It carries on within a few seconds.",
+            "describe-pause": "Describing paused ✓ It stops at its next safe point; files already described are kept. Copying is not affected.",
+            "describe-resume": "Describing resumed ✓ It carries on with the next file.",
             "reconnect-off": "Off ✓ It no longer connects dropped network drives by itself — no more “problem connecting” windows. Connect them in Finder; it carries on once they are back.",
             "reconnect-on": "On ✓ It connects dropped network drives again by itself, only when the server answers.",
             "nudge": "Asked ✓ It stops waiting and looks again now."}[do])
@@ -578,9 +582,14 @@ function home(s) {
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
     '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here.') +
-      sw(on && !s.paused, ['resume', 'pause'], 'Copy and describe', 'Off pauses the work at its next safe point; nothing is lost. Rushes → Manage has the same switch.', !on || !s.rushes) +
+      sw(on && !s.paused, ['resume', 'pause'], 'Copy footage', 'Off pauses copying at its next safe point; nothing is lost. Rushes → Manage has the same switch.', !on || !s.rushes) +
+      sw(on && !s.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage',
+        'The second lane, beside copying: this Mac\'s chip reads each shot and what is said. Off pauses it; files already described are kept.' +
+        (s.describing && s.describing.phase === 'analysing' ? ' Now: ' + esc(s.describing.label || '') + (s.describing.of ? ' · ' + esc(s.describing.n) + ' of ' + esc(s.describing.of) : '') : ''), !on || !s.rushes) +
       sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes) +
     '</div>' +
+    '<p class="muted" style="font-size:12.5px">Updates: Rushes Helper keeps its own code the same as your Rushes server\'s (' + esc(s.url) +
+      ', never anywhere else), checking every few minutes and only between jobs. Nothing else can reach this Mac through it.</p>' +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }
