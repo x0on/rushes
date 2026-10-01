@@ -22,6 +22,7 @@ echo 'echo new' > "$V/scripts/proxy.sh"; echo '<?php echo 1;' > "$V/deploy/db/x.
 run
 grep -q "^script	proxy.sh	" "$W/waiting.tsv" && grep -q "^page	db/x.php	" "$W/waiting.tsv" && grep -q "^helper	" "$W/waiting.tsv" \
   && ok "what is waiting is listed for the page, with fingerprints" || no "waiting list"
+grep -q "^helperfile	ingest.py	$(sha256sum "$V/ingest.py" | cut -d' ' -f1)$" "$W/waiting.tsv" && ok "the helper's fingerprints are listed for its updates" || no "helper fingerprints"
 [ ! -e "$W/db/x.php" ] && ok "a page dropped in deploy waits for approval" || no "page went live by itself"
 
 # installed exactly as approved; a page changed after approval is refused

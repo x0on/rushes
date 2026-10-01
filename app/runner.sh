@@ -172,9 +172,16 @@ survey() {
         printf 'page\t%s\t%s\t%s\n' "$rel" "$(sha256sum "$f" | cut -d' ' -f1)" "$(stat -c %Y "$f")" >> "$out"
     done
     printf 'helper\t%s\n' "$(sha256sum /share/VIDEO/_rushes/ingest.py 2>/dev/null | cut -c1-12)" >> "$out"
+    # the helper's own files, whole fingerprints: helpers ask for these to update
+    # themselves (helper.php?hash), so that question never reads VIDEO
+    for n in ingest.py transfer_state.py analyze.py; do
+        [ -f "/share/VIDEO/_rushes/$n" ] && printf 'helperfile\t%s\t%s\n' "$n" "$(sha256sum "/share/VIDEO/_rushes/$n" | cut -d' ' -f1)" >> "$out"
+    done
     mv "$out" /share/Web/waiting.tsv
 }
-if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ] || [ $(( $(date +%s) / 60 % 5 )) -eq 0 ]; }; then
+# Looked for: when asked (survey-now: a page is open and the list is over five
+# minutes old, or an install just finished), and otherwise once an hour.
+if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ] || [ $(( $(date +%s) / 60 % 60 )) -eq 0 ]; }; then
     rm -f /share/Web/survey-now
     v survey
 fi

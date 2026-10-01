@@ -19,9 +19,13 @@ require_once __DIR__ . '/auth.php';
 
 const HELPER_FILES = ['ingest.py', 'transfer_state.py', 'analyze.py'];
 function helper_src(string $f): string { return archive_dir() . '/_rushes/' . $f; }
+// As the runner last saw them (waiting.tsv): every helper asks this every five
+// minutes, and that must not read the VIDEO share. Only ?code, when a helper
+// really updates, reads the file itself.
 function helper_hashes(): array {
+    $w = waiting_read()['files'] ?? [];
     $h = [];
-    foreach (HELPER_FILES as $f) $h[$f] = is_readable(helper_src($f)) ? hash_file('sha256', helper_src($f)) : '';
+    foreach (HELPER_FILES as $f) $h[$f] = $w[$f] ?? '';
     return $h;
 }
 function out($x, string $type = 'application/json') {

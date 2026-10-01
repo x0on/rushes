@@ -472,10 +472,11 @@ function helper_control_save(array $c): bool {
 function waiting_read(): ?array {
     $f = web_dir() . '/waiting.tsv';
     if (!is_readable($f)) return null;
-    $out = ['items' => [], 'helper' => '', 'at' => filemtime($f)];
+    $out = ['items' => [], 'helper' => '', 'files' => [], 'at' => filemtime($f)];
     foreach (file($f, FILE_IGNORE_NEW_LINES) ?: [] as $l) {
         $p = explode("\t", $l);
         if ($p[0] === 'helper') $out['helper'] = $p[1] ?? '';
+        elseif ($p[0] === 'helperfile' && count($p) >= 3 && preg_match('/^[0-9a-f]{64}$/', $p[2])) $out['files'][$p[1]] = $p[2];
         elseif (in_array($p[0], ['script', 'page'], true) && count($p) >= 4 && preg_match('/^[0-9a-f]{64}$/', $p[2]))
             $out['items'][] = ['kind' => $p[0], 'name' => $p[1], 'hash' => $p[2], 'new' => false, 'changed' => (int)$p[3]];
     }

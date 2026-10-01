@@ -20,6 +20,10 @@ $WEB = web_dir();
 $now = time();
 $c = [];        // conditions
 $mtime = fn(string $f) => file_exists("$WEB/$f") ? filemtime("$WEB/$f") : 0;
+// A page is open: the runner may look for updates on VIDEO again (it does so
+// on its next minute) when its list is over five minutes old. Nobody looking:
+// once an hour.
+if (time() - $mtime('waiting.tsv') > 300) @touch("$WEB/survey-now");
 $ago = function (int $t) use ($now): string {
     if (!$t) return 'never';
     $s = $now - $t;
