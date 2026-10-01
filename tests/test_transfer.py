@@ -622,8 +622,9 @@ class StallTests(unittest.TestCase):
             if n[0] >= 3: raise StopIteration()
         with patch.object(m.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(b'')), \
              patch.object(m.threading.Thread, 'start'), patch.object(m, 'wait', side_effect=sleep), \
-             patch.object(m, 'update_self'), patch.object(m, 'remember_shares'), patch.object(m, 'control', return_value={}), \
+             patch.object(m, 'update_self'), patch.object(m, 'control', return_value={}), \
              patch.object(m, 'check_due', return_value=False), patch.object(m, '_push'), \
+             patch.object(m, 'server_of', side_effect=AssertionError('looked at the shares with nothing to do')), \
              patch.object(m, '_archive_here', side_effect=AssertionError('looked at the archive with nothing to do')), \
              patch.object(m, 'send_file'), patch('sys.stdout', new_callable=io.StringIO):
             with self.assertRaises(StopIteration): m.watch(str(self.archive))
@@ -636,6 +637,14 @@ class StallTests(unittest.TestCase):
         self.assertEqual(waits, [20, 60, 300, 900, 900])
         self.assertTrue(m.rushes_down())
 
+
+    def test_paused_or_stopped_no_share_is_remembered(self):
+        m = self.mod; m._shares_seen[0] = 0
+        with patch.object(m, 'server_of', side_effect=AssertionError('looked at a share while paused')):
+            with patch.object(m, 'control', return_value={'paused': True}): m.remember_shares()
+            m.HOME.mkdir(parents=True, exist_ok=True); m._stopped_file().write_text('0\nx\n')
+            with patch.object(m, 'control', return_value={}): m.remember_shares()
+        m._stopped_file().unlink()
 
     def test_network_shares_are_looked_at_rarely_and_never_for_cards(self):
         m = self.mod; base = Path(self.tmp.name) / 'vols'

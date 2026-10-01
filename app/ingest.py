@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 # Rushes — Media Management Software, by Alejandro Renteria.
 # Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
-"""ingest.py — copy in only what the archive does not already have.
+"""ingest.py — the helper: copies footage in, only what the archive does not
+already have, and proves each copy. Runs on a computer that sees both the
+source and the archive (a Mac, through Rushes Helper), or on the archive
+machine itself ("built in").
 
-Runs on the Mac, the only machine that can see both servers.
-
-    python ingest.py --source /Volumes/OldServer/Video          # preview only
-    python ingest.py --source /Volumes/OldServer/Video --apply  # copy the new ones
-    python ingest.py --undo                                     # roll the last run back
-    python ingest.py --selftest                                 # check the logic
+    python ingest.py --watch --url http://rushes        # the helper: does what Rushes asks
+    python ingest.py --source /Volumes/OldServer/Video  # preview one folder, copies nothing
+    python ingest.py --source … --apply --root ARCHIVE  # copy what is new, keeping the layout
+    python ingest.py --source CARD --into FOLDER --apply [--day YYYY-MM-DD]   # a card
+    python ingest.py --trace SOURCE --root ARCHIVE      # match earlier copies to originals
+    python ingest.py --tidy PLAN | --untidy RECORD      # the tidy-up, and its undo
+    python ingest.py --sections FOLDER…                 # list a folder's subfolders as sections
+    python ingest.py --undo                             # move the last run's copies aside
+    python ingest.py --selftest                         # check the logic
 
 How it avoids reading 40 TB to answer "do we already have this?":
 
@@ -16,8 +22,10 @@ How it avoids reading 40 TB to answer "do we already have this?":
      and serves it over HTTP. Nothing is read over the network to get it.
   2. A source file whose size appears nowhere in that manifest is new by
      definition — copied without hashing anything.
-  3. Only when sizes collide do we hash: first and last 4 MB, and the full file
-     only if those match. Hashes are cached, so a second run is nearly free.
+  3. Only when sizes collide do we hash: the first and last 1 MB (the whole
+     file with --paranoid). Hashes are cached, so a second run is nearly free.
+  4. Every copy is read back and compared with the original before it gets
+     its real name, and recorded in an ASC MHL file beside it.
 
 Same shape as everything else: preview, look, apply, log, undo.
 """
@@ -116,10 +124,9 @@ HEAD_TAIL = 1024 * 1024              # 1 MB from each end
 # exact byte size plus the first and last megabyte already matching, a false
 # match on real footage is not a thing that happens. Off unless asked for.
 PARANOID  = os.environ.get("PARANOID", "") not in ("", "0")
-# The Mac is the only machine that sees both servers, so the copying happens
-# here — but the admin page should still show it. The Mac writes status onto
-# the VIDEO share it already has mounted; the NAS runner copies that into the
-# web folder every minute. No new mounts, no new services.
+# _rushes on the archive: where the helper keeps its records (history,
+# sections, origin records, the list of folders with copy proofs). Its live
+# status is not written here: it goes to Rushes over the network (status()).
 STATUS  = Path(os.environ.get("STATUS_DIR", NAS_MOUNT + "/_rushes"))
 DONE    = HOME / "ingest-done.txt"
 LISTED  = HOME / "ingest-listed.txt"   # folders already split into subfolders
@@ -624,7 +631,8 @@ SHARES = HOME / "shares.json"
 _shares_seen = [0.0]
 
 def remember_shares():
-    if time.time() - _shares_seen[0] < 300:
+    # Paused, or stopped by itself: no share is looked at, not even this.
+    if time.time() - _shares_seen[0] < 300 or control().get("paused") or _stopped_file().exists():
         return
     _shares_seen[0] = time.time()
     try:
@@ -1568,8 +1576,8 @@ def look_forever(every=20):
     system waits on it); only this thread waits, and the reports carry on."""
     ok = lambda x: "\t" not in x and "\n" not in x
     while True:
-        if control().get("paused"):
-            # Paused is paused: no drive is looked at (a network share included).
+        if control().get("paused") or _stopped_file().exists():
+            # Paused, or stopped by itself: no drive is looked at (a network share included).
             # The last look stands; a card plugged in now shows after Resume.
             _looked[1] = time.time()
             time.sleep(every); continue
@@ -2029,7 +2037,6 @@ def watch(root, every=20):
     while True:
         update_self()                  # between steps only; restarts itself if it did
         learn_where()                  # and follows Rushes to a new address, if it has one
-        remember_shares()              # where each network share lives, to reconnect it if it drops
         checkpoints().flush()          # search updates still waiting, if any
         try:
             body = fetch_queue()
@@ -2063,9 +2070,10 @@ def watch(root, every=20):
                     move_to(u, f"it stopped answering at {NAS_URL}")
             wait(later); continue
 
-        # Paused from Manage: said once, and then nothing on any share is touched —
-        # no folder checked, nothing listed, nothing written — until Resume.
-        # Only Rushes is asked, over the network, whether Resume was pressed.
+        # Paused from Manage (Pause copying): said once, and then copying touches
+        # no share — no folder checked, nothing listed, nothing written, no drive
+        # looked at — until Resume. Only Rushes is asked, over the network,
+        # whether Resume was pressed. Describing has its own pause (describe_lane).
         c = control()
         if stopped():
             # Rule 4: a share stopped answering three times. Nothing is touched
@@ -2074,7 +2082,7 @@ def watch(root, every=20):
             wait(every); continue
         if c.get("paused"):
             if not paused:
-                print(f"\n{time.strftime('%H:%M:%S')}  paused from Manage — nothing touches the shares until Resume")
+                print(f"\n{time.strftime('%H:%M:%S')}  paused from Manage — copying touches no share until Resume")
                 status(phase="paused", source="", note="paused from Manage")
                 paused = True
             wait(every); continue
@@ -2178,6 +2186,9 @@ def watch(root, every=20):
             status(phase="waiting", source="", note="nothing queued")
             wait(every); continue
 
+        # Where each network share lives, to reconnect it if it drops: only now
+        # that there is work (rule 1), and at most every five minutes.
+        remember_shares()
         # Is the archive there, and allowed in? Asked within a time limit: a
         # share that does not answer is walked away from, not waited on.
         try:
@@ -2445,8 +2456,8 @@ def run_self(*args):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--job", default="", help=argparse.SUPPRESS)
-    ap.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # started by the Mac itself   # the saved transfer this belongs to
+    ap.add_argument("--job", default="", help=argparse.SUPPRESS)                 # the saved transfer this belongs to
+    ap.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # started by the Mac itself (only changes the wording)
     ap.add_argument("--source", help="folder to ingest from (mounted server, or a card)")
     ap.add_argument("--url", help="where Rushes is, e.g. http://192.168.1.20")
     ap.add_argument("--trace", metavar="SOURCE",
