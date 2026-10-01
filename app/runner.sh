@@ -24,6 +24,25 @@ mkdir -p "$Q"
 # holds it. Without this the page cannot tell a busy runner from a dead one —
 # which is exactly how a broken cron went unnoticed for forty minutes.
 date '+%s' > /share/Web/runner-alive.txt
+
+# One minute's work at a time. If last minute's run is still stuck (a disk that
+# stops answering holds a read for minutes), this one does nothing rather than
+# pile another stuck run on top of it. Kept in /tmp, which is memory, not disk.
+TICK=/tmp/.archive-runner-tick
+if ! mkdir "$TICK" 2>/dev/null; then
+    old=$(cat "$TICK/pid" 2>/dev/null)
+    if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then exit 0; fi
+    rm -rf "$TICK"; mkdir "$TICK" 2>/dev/null || exit 0      # its run ended without tidying up
+fi
+echo $$ > "$TICK/pid"
+trap 'rm -rf "$TICK"' EXIT INT TERM
+
+# Paused from Manage (Pause copying): paused is paused. Nothing is read from or
+# written to VIDEO by itself — no status mirrored, no page deployed, no proxies
+# started. Only what someone asks for in Manage still runs.
+PAUSED=0
+grep -q '"paused":true' /share/Web/helper-control.json 2>/dev/null && PAUSED=1
+
 df -P /share/VIDEO | tail -1 > /share/Web/disk.txt
 
 # /tmp on a QNAP is a 64 MB RAM disk shared with the system. Give it room (it
@@ -65,7 +84,7 @@ fi
 # runner ends anyway. Input from /dev/null so nothing waits on a terminal.
 proxy_alive() { pid=$(cat /share/Web/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
 NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
-if [ -n "$NEXT" ]; then
+if [ -n "$NEXT" ] && [ "$PAUSED" = 0 ]; then
     if ! proxy_alive; then
         rm -f /share/Web/proxy-next.txt
         PROXY_ONLY="$NEXT" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
@@ -77,9 +96,11 @@ fi
 # The Mac writes ingest progress onto the VIDEO share (the only place both
 # machines can reach). Mirror it into the web folder so the page can read it
 # without the Mac needing any extra mount or service.
-cp /share/VIDEO/_rushes/ingest-status.tsv   /share/Web/ 2>/dev/null
-cp /share/VIDEO/_rushes/ingest-sections.tsv /share/Web/ 2>/dev/null
-cp /share/VIDEO/_rushes/ingest-history.tsv  /share/Web/ 2>/dev/null
+if [ "$PAUSED" = 0 ]; then
+    cp /share/VIDEO/_rushes/ingest-status.tsv   /share/Web/ 2>/dev/null
+    cp /share/VIDEO/_rushes/ingest-sections.tsv /share/Web/ 2>/dev/null
+    cp /share/VIDEO/_rushes/ingest-history.tsv  /share/Web/ 2>/dev/null
+fi
 
 # ── deploying a page ────────────────────────────────────────────────────────
 # The web folder is not reachable from anywhere except the NAS itself, which
@@ -93,7 +114,7 @@ cp /share/VIDEO/_rushes/ingest-history.tsv  /share/Web/ 2>/dev/null
 # A db/ prefix is the one bit of nesting allowed, because that is where the
 # pages actually live.
 DROP=/share/VIDEO/_rushes/deploy
-if [ -d "$DROP" ]; then
+if [ "$PAUSED" = 0 ] && [ -d "$DROP" ]; then
     find "$DROP" -type f 2>/dev/null | while read -r f; do
         rel=${f#$DROP/}
         case "$rel" in
@@ -120,6 +141,7 @@ fi
 # longer triggers another full archive walk.
 
 # ponytail: mkdir is the portable atomic lock; busybox has no flock
+rm -rf "$TICK"; trap - EXIT INT TERM       # this minute's share work is done; long jobs have their own lock
 mkdir "$LOCKDIR" 2>/dev/null || exit 0
 trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT INT TERM
 
