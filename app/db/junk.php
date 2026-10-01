@@ -92,6 +92,9 @@ if (($_GET['write'] ?? '') !== '1') {
 
 // The cleanup job already reads this file and moves each line into the
 // holding folder. Reuse it rather than inventing a second way to move things.
+// Writing the list is the first half of "Move them out": signed in only.
+require_once __DIR__ . '/auth.php';
+if (!may_act()) { http_response_code(403); exit("Sign in first.\n"); }
 $out = web_dir() . '/cache-files.txt';
 $fh = fopen($out, 'w');
 $n = 0;

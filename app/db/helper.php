@@ -145,10 +145,10 @@ if ($act === 'pause' || $act === 'resume') {
     if (!$want) bail(400, 'Every script is already up to date.');
     $body = "ACTION=update-scripts\n";
     foreach ($want as $w) $body .= ($w['kind'] === 'page' ? 'PAGE=' : 'SCRIPT=') . "{$w['name']}:{$w['hash']}\n";
-    $q = '/share/Web/queue';
+    $q = web_dir() . '/queue';
     if (!is_dir($q)) @mkdir($q, 0777, true);
     if (@file_put_contents("$q/" . date('Ymd-His') . '-scripts.job', $body) === false)
-        bail(500, 'Could not queue it — is /share/Web/queue writable?');
+        bail(500, 'Could not queue it — is the queue folder in the web folder writable?');
     out(['queued' => array_column($want, 'name')]);
 } else {
     bail(400, 'unknown action');

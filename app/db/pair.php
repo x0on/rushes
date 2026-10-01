@@ -6,7 +6,6 @@
 // (RISKS.md #10; the doors check it with helper_gate() in config.php).
 //
 //   POST action=start          signed in (Setup): a one-time code, good for ten minutes
-//   POST action=forget         signed in (Setup): no helper paired; every helper is given work again
 //   POST code=<6 digits> host  Rushes Helper: the code Setup shows → this helper's ID
 //   GET                        a helper, with its ID: {"pairing": "none" | "this" | "other"}
 require_once __DIR__ . '/auth.php';
@@ -21,12 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 $act = (string)($_POST['action'] ?? '');
-if ($act === 'start' || $act === 'forget') {
+if ($act === 'start') {
     if (!may_act((string)($_POST['pass'] ?? ''))) said(403, ['error' => 'sign in first']);
-    if ($act === 'forget') {
-        @unlink(helper_id_file()); @unlink($C);
-        said(200, ['pairing' => 'none']);
-    }
     $code = sprintf('%06d', random_int(0, 999999));
     if (!php_keep($C, ['hash' => hash('sha256', $code), 'until' => time() + 600, 'tries' => 0]))
         said(500, ['error' => 'Could not save the code — is the web folder writable?']);

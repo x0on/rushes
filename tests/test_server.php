@@ -129,7 +129,7 @@ file_put_contents("$root/archive/_rushes/origin/20260102-000000 archive untidy.t
     "moved\t$H/Library/PARKS/Kite/A002.MXF\t$H/ARCHIVE/pa/Parks/Kite/A002.MXF\t5\tundo\n");
 @mkdir("$root/archive/Library/PARKS/Kite", 0777, true); file_put_contents("$root/archive/Library/PARKS/Kite/A001.MXF", 'x');
 $_POST = ['paths' => json_encode(['/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A001.MXF', 'Z:\ARCHIVE\pa\Parks\Kite\A001.MXF',
-                                  '/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A002.MXF', '/Users/me/Music/song.wav', 'A001.MXF'])];
+                                  '/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A002.MXF', '/Users/me/Music/song.wav', 'A001.MXF']), 'pass' => 'rushes'];   // signed in
 ob_start(); include "$root/app/db/relink.php"; $rl = json_decode(ob_get_clean(), true);
 check(($rl['map']['/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A001.MXF'] ?? '') === '/Volumes/VIDEO/Library/PARKS/Kite/A001.MXF'
       && ($rl['map']['Z:\ARCHIVE\pa\Parks\Kite\A001.MXF'] ?? '') === 'Z:\Library\PARKS\Kite\A001.MXF',
@@ -185,7 +185,7 @@ check(db_daily_copy()['state'] === 'copied' && (new SQLite3(web_dir() . '/db-cop
 check(db_daily_copy()['state'] === 'current', 'once a day, not every minute');
 // The password is kept in a .php file that prints nothing if downloaded; an old .adminpass is moved into it once.
 require_once web_dir() . "/db/auth.php";
-file_put_contents(web_dir() . '/.adminpass', 'oldword');
+@unlink(web_dir() . '/adminpass.php'); file_put_contents(web_dir() . '/.adminpass', 'oldword');   // an install from before
 check(stored_pass() === 'oldword' && !file_exists(web_dir() . '/.adminpass') && is_file(web_dir() . '/adminpass.php'),
       'an old password file is moved into one that cannot be downloaded');
 check(set_pass('new-word') && pass_ok('new-word') && !pass_ok('oldword') && !str_contains(file_get_contents(web_dir() . '/adminpass.php'), 'new-word'),

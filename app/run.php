@@ -8,7 +8,6 @@
 
 header('Content-Type: application/json');
 
-$QUEUE = '/share/Web/queue';
 
 $allowed = ['plan', 'apply', 'undo', 'reindex', 'cachescan', 'cacheclean', 'df',
             // the old date-based layout: only its undo is left (see organize.sh)
@@ -26,6 +25,7 @@ $query     = substr(preg_replace('/[^A-Za-z0-9 _.\/&(),+-]/', '', $_POST['query'
 // A signed-in admin session is enough; a password in the request also works,
 // so a script can still drive this without a browser.
 require_once __DIR__ . '/db/auth.php';
+$QUEUE = web_dir() . '/queue';
 if (!may_act($pass)) {
     http_response_code(403);
     echo json_encode(['error' => 'not signed in, and no password given']);
@@ -55,7 +55,7 @@ $body = "ACTION=$action\nKEEP_SIDE=$keep_side\nDEST=$dest\nSTILLS=$stills\nEXCLU
 
 if (@file_put_contents($file, $body) === false) {
     http_response_code(500);
-    echo json_encode(['error' => 'could not write job file — is /share/Web/queue writable (chmod 777)?']);
+    echo json_encode(['error' => 'could not write job file — is the queue folder in the web folder writable?']);
     exit;
 }
 

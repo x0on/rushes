@@ -20,6 +20,8 @@
 // beginning, and the kind of slashes, are kept exactly as they were.
 require_once __DIR__ . '/auth.php';
 header('Content-Type: application/json');
+// Reorganize is behind the Manage password, and so is this.
+if (!may_act((string)($_POST['pass'] ?? ''))) { http_response_code(403); echo '{"error":"sign in first"}'; exit; }
 @ini_set('memory_limit', '512M');       // ponytail: every move in memory; fine to hundreds of thousands
 
 // Every tidy-up and undo played forward, oldest first: any place a file has
