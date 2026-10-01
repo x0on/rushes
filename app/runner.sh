@@ -676,11 +676,18 @@ esac
 # it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
 # them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
 # room for a big file: ten minutes.
-DBC=$(head -1 /share/Web/db-copy.path 2>/dev/null); [ -n "$DBC" ] || DBC=/share/Web/db-copy.sqlite
+DBC=$(head -1 /share/Web/db-copy.path 2>/dev/null)
+case "$DBC" in /*/db-copy.sqlite) ;; *) DBC=/share/Web/db-copy.sqlite ;; esac
+# A function, not "sh -c" with the path written into it: the path comes from a
+# file PHP writes, and must never be read as shell code by this root script.
+dbcopy() {
+    mkdir -p /share/VIDEO/_rushes/db-copies \
+        && cp "$DBC" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" \
+        && mv -f "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite"
+}
 if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/db-copied ]; } && may_v; then
     DAY=$(date +%a); VL0=$VLIMIT; VLIMIT=600
-    if v sh -c "mkdir -p /share/VIDEO/_rushes/db-copies && cp '$DBC' /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part \
-            && mv -f /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite"; then
+    if v dbcopy; then
         touch /share/Web/db-copied
         log "$(date '+%Y-%m-%d %H:%M:%S')  database copied to _rushes/db-copies/rushes-$DAY.sqlite"
     fi

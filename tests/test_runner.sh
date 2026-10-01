@@ -54,6 +54,12 @@ echo db > "$W/db-copy.sqlite"; run
 echo again > "$V/db-copies/rushes-$(date +%a).sqlite"; run
 [ "$(cat "$V/db-copies/rushes-$(date +%a).sqlite")" = again ] && ok "and only once per new copy" || no "database copied again"
 
+# a database path that is shell code is never run (it is not even used)
+rm -f "$W/db-copied"; mkdir -p "$R/x'; touch $R/pwned; '"; echo db > "$R/x'; touch $R/pwned; '/db-copy.sqlite"
+echo "$R/x'; touch $R/pwned; '/db-copy.sqlite" > "$W/db-copy.path"; run
+[ ! -e "$R/pwned" ] && ok "a crafted database path is never run as a command" || no "shell injection through db-copy.path"
+rm -f "$W/db-copy.path"
+
 # the daily self-check: a private file the web server hands out is named
 echo x > "$W/rushes.sqlite"; rm -f "$W/exposed.txt"; run
 grep -qx rushes.sqlite "$W/exposed.txt" && ok "a database the web server hands out is named for Overview" || no "self-check"
