@@ -310,6 +310,11 @@ if (is_readable("$WEB/video-tripped.txt")) {
         'body' => $tWhy . ' — ' . $ago((int)$tAt) . '. Nothing is lost and nothing was half-done. Check the archive first '
             . '(Storage & Snapshots should say healthy), then press Try again.', 'act' => ['reset-breaker', 'Try again']];
 }
+if (is_readable("$WEB/db-damaged.txt"))
+    $c[] = ['level' => 'bad', 'title' => 'The database did not pass its daily check',
+        'body' => 'Checked ' . $ago((int)filemtime("$WEB/db-damaged.txt")) . '. It was not copied, so the good copies stay as they are: '
+            . 'one per weekday in _rushes/db-copies on VIDEO. Search can be rebuilt from the archive; pulls live only in the database. '
+            . 'Ask for help (Rushes Helper → Ask for help) before replacing anything.'];
 // A second helper asked for work and was refused (pairing, RISKS.md #10): named, so nobody wonders.
 foreach (helper_refused() as $r)
     $c[] = ['level' => 'warn', 'title' => 'A helper that is not the paired one asked for work',

@@ -40,6 +40,12 @@ rm -f "$W/waiting.tsv"; echo '{"paused":true}' > "$W/helper-control.json"; run
   && ok "search update: VIDEO parts only when VIDEO may be read" || no "search update read VIDEO while paused"
 rm -f "$W/helper-control.json"
 
+# RISKS.md #7: the day's database copy goes onto VIDEO, one per weekday, once
+echo db > "$W/db-copy.sqlite"; run
+[ "$(cat "$V/db-copies/rushes-$(date +%a).sqlite")" = db ] && [ -f "$W/db-copied" ] && ok "the database copy goes onto VIDEO, by weekday" || no "database copy"
+echo again > "$V/db-copies/rushes-$(date +%a).sqlite"; run
+[ "$(cat "$V/db-copies/rushes-$(date +%a).sqlite")" = again ] && ok "and only once per new copy" || no "database copied again"
+
 # a disk that stops answering: walked away from, counted, and after three the breaker trips
 rm -f "$V/ingest.py"; mkfifo "$V/ingest.py"
 for i in 1 2 3; do touch "$W/survey-now"; t0=$(date +%s); run; [ $(( $(date +%s) - t0 )) -lt 10 ] || no "a stuck read held the runner"; done

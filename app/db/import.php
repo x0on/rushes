@@ -16,5 +16,7 @@ try { $result['media'] = media_import(); } catch (Throwable $e) { $result['media
 // Folders being prepared: start the next proxies, or queue the next describing.
 require_once __DIR__ . '/prepare.php';
 if ($video) try { $result['prepare'] = prepare_advance(); } catch (Throwable $e) { $result['prepare'] = ['error' => $e->getMessage()]; }
+// Once a day: the database checked, and a good one copied (RISKS.md #7).
+try { $result['db_copy'] = db_daily_copy(); } catch (Throwable $e) { $result['db_copy'] = ['error' => $e->getMessage()]; }
 if (isset($result['error'])) http_response_code(503);
 echo json_encode($result);

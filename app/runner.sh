@@ -669,3 +669,18 @@ case "$SYNC" in
     ''|*'"state":"current"'*) ;;
     *) log "$(date '+%Y-%m-%d %H:%M:%S')  search update: $SYNC" ;;
 esac
+
+# RISKS.md #7: Rushes copies its database once a day (db-copy.sqlite, only when
+# it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
+# them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
+# room for a big file: ten minutes.
+DBC=/share/Web/db-copy.sqlite
+if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/db-copied ]; } && may_v; then
+    DAY=$(date +%a); VL0=$VLIMIT; VLIMIT=600
+    if v sh -c "mkdir -p /share/VIDEO/_rushes/db-copies && cp '$DBC' /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part \
+            && mv -f /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite"; then
+        touch /share/Web/db-copied
+        log "$(date '+%Y-%m-%d %H:%M:%S')  database copied to _rushes/db-copies/rushes-$DAY.sqlite"
+    fi
+    VLIMIT=$VL0
+fi

@@ -178,6 +178,11 @@ check($doc && count($mk) === 2 && (string)$mk[0]->in === '60' && (string)$mk[1]-
       && str_contains((string)$mk[0]->comment, 'On screen: KITE FEST 2024') && (string)$doc->xpath('//clip/rate/timebase')[0] === '30'
       && (string)$doc->xpath('//clip/logginginfo/description')[0] === 'Children fly kites & laugh',
       'a pull for Premiere carries a marker at each shot and line spoken, at its frame, and the description');
+// RISKS.md #7: once a day a checked copy of the database, made safely while it is in use.
+@unlink(web_dir() . '/db-copy.sqlite');
+check(db_daily_copy()['state'] === 'copied' && (new SQLite3(web_dir() . '/db-copy.sqlite'))->querySingle("SELECT COUNT(*) FROM files") >= 1,
+      'the database is checked and copied, whole');
+check(db_daily_copy()['state'] === 'current', 'once a day, not every minute');
 // What is waiting comes from the runner's list, never from reading VIDEO in a page request.
 file_put_contents(web_dir() . "/waiting.tsv", "script\tproxy.sh\t" . str_repeat('a', 64) . "\t1\npage\tdb/x.php\t" . str_repeat('b', 64) . "\t2\nhelper\tabc123def456\nhelperfile\tingest.py\t" . str_repeat('c', 64) . "\n");
 $sw = scripts_waiting();

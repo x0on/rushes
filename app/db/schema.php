@@ -18,6 +18,26 @@ require_once __DIR__ . '/config.php';
 // Where the database lives comes from settings.json, like every other path.
 define('DB_PATH', web_dir() . '/rushes.sqlite');
 
+// RISKS.md #7: a power cut can damage the database, and pulls live only in it.
+// Once a day it is checked, and only a good one is copied beside it
+// (db-copy.sqlite, with SQLite's own backup, safe while in use). The runner
+// then puts that copy on VIDEO, one per weekday: a week of copies, none deleted
+// by anything but the same weekday a week later. A damaged one is said on
+// Overview, once a day, and never copied over the good ones.
+function db_daily_copy(): array {
+    $w = web_dir(); $copy = "$w/db-copy.sqlite"; $bad = "$w/db-damaged.txt";
+    foreach ([$copy, $bad] as $f) if (is_file($f) && time() - filemtime($f) < 86400) return ['state' => 'current'];
+    if (db()->querySingle('PRAGMA quick_check') !== 'ok') {
+        @file_put_contents($bad, (string)time());
+        return ['state' => 'damaged'];
+    }
+    @unlink($bad); @unlink("$copy.new");
+    $to = new SQLite3("$copy.new");
+    $ok = db()->backup($to); $to->close();
+    if (!$ok || !@rename("$copy.new", $copy)) { @unlink("$copy.new"); return ['state' => 'not copied']; }
+    return ['state' => 'copied'];
+}
+
 function db(): SQLite3 {
     static $db = null;
     if ($db) return $db;
