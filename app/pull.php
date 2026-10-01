@@ -154,15 +154,24 @@ async function show() {
   document.querySelectorAll('.it [data-a]').forEach(function (b) {
     b.onclick = async function () {
       const rel = b.closest('.it').dataset.rel;
-      if (b.dataset.a === 'remove' && !confirm('Take ' + rel.split('/').pop() + ' out of this pull?\n\nThe file itself stays in the archive.')) return;
+      if (b.dataset.a === 'remove' && !sure(b, 'Out of this pull; the file itself stays in the archive.', 'rm:' + rel)) return;
       try { await post({ action: b.dataset.a === 'remove' ? 'remove' : 'move', p: SLUG, rel: rel, dir: b.dataset.a }); show(); }
-      catch (e) { alert(e.message); }
+      catch (e) { b.textContent = 'Did not happen: ' + e.message; }
     };
   });
-  $('rename').onclick = async function () {
-    const n = prompt('New name for this pull', p.name);
-    if (!n || n.trim() === p.name) return;
-    try { await post({ action: 'rename', p: SLUG, name: n }); show(); } catch (e) { alert(e.message); }
+  // Renamed in place: the name becomes a text box, Enter (or Save) keeps it.
+  $('rename').onclick = function () {
+    const b = this;
+    if (b.dataset.editing) {
+      const n = $('pNameBox').value.trim();
+      if (!n || n === p.name) { show(); return; }
+      post({ action: 'rename', p: SLUG, name: n }).then(show).catch(function (e) { b.textContent = 'Did not happen: ' + e.message; });
+      return;
+    }
+    b.dataset.editing = '1'; b.textContent = 'Save';
+    $('pName').innerHTML = '<input id="pNameBox" maxlength="80" style="font:inherit;width:100%">';
+    $('pNameBox').value = p.name; $('pNameBox').focus();
+    $('pNameBox').onkeydown = function (e) { if (e.key === 'Enter') b.onclick(); if (e.key === 'Escape') show(); };
   };
   // Adding from Search goes into this pull from now on.
   store.set('pull', JSON.stringify({ slug: p.slug, name: p.name }));

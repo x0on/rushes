@@ -65,6 +65,27 @@ $NAV = $NAV ?? '';
     });
     tick();
   };
+
+  // Asking twice, on the button itself, never in a pop-up: the first press turns
+  // the button into "Sure? …" and says beside it what will happen; a second
+  // press within six seconds does it (sure() returns true). The key keeps the
+  // question open while a page redraws the button.
+  var sureUntil = {};
+  window.sure = function (btn, what, key) {
+    key = key || btn.id || btn.textContent;
+    var note = btn.nextElementSibling && btn.nextElementSibling.classList.contains('sure-note') ? btn.nextElementSibling : null;
+    if ((sureUntil[key] || 0) > Date.now()) {
+      delete sureUntil[key]; if (note) note.remove(); return true;
+    }
+    sureUntil[key] = Date.now() + 6000;
+    var was = btn.textContent; btn.textContent = 'Sure? ' + was;
+    if (what && !note) { note = document.createElement('span'); note.className = 'note sure-note'; btn.after(note); }
+    if (note) note.textContent = ' ' + what;
+    setTimeout(function () {
+      if ((sureUntil[key] || 0) <= Date.now()) { if (btn.textContent === 'Sure? ' + was) btn.textContent = was; if (note) note.remove(); }
+    }, 6100);
+    return false;
+  };
 </script>
 
 <header class="topbar">

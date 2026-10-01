@@ -20,5 +20,10 @@ const waits=[];
   hidden=true; const c=calls; timers.shift()[1](); listeners[0](); await new Promise(r=>setImmediate(r));
   ok(calls===c && timers.length===0, 'hidden asks nothing');
   hidden=false; listeners[0](); await new Promise(r=>setImmediate(r)); ok(calls===c+1,'shown again: asks at once');
+  // sure(): the first press asks on the button, the second does it
+  const btn = { textContent: 'Move', nextElementSibling: null, after(n) { this.nextElementSibling = n; } };
+  document.createElement = () => ({ classList: { contains: (c) => c === 'sure-note' }, remove() { btn.nextElementSibling = null; } });
+  ok(sure(btn, 'what happens', 'k') === false && btn.textContent === 'Sure? Move' && btn.nextElementSibling.textContent === ' what happens', 'sure: first press asks, on the button');
+  ok(sure(btn, 'what happens', 'k') === true, 'sure: second press does it');
   console.log('every(): all checks pass');
 })();

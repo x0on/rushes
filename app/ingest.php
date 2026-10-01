@@ -329,8 +329,8 @@ $('start').onclick = async function () {
   if (!v || !rows.length) return;
   const lines = $('dest').innerHTML.split('<br>').map(function (x) {
     const t = document.createElement('textarea'); t.innerHTML = x; return '  ' + t.value; });
-  if (!confirm('Copy ' + v.name + ' (' + v.files.toLocaleString() + ' files, ' + tb(v.bytes) + ') into\n\n' +
-               lines.join('\n') + '\n\nOriginals stay on the card.')) return;
+  if (!sure(btn, v.name + ' (' + v.files.toLocaleString() + ' files, ' + tb(v.bytes) + ') into ' +
+               lines.map(function (l) { return l.trim(); }).join(', ') + '. Originals stay on the card.', 'ingest')) return;
   btn.disabled = true; btn.textContent = 'Queueing…';
   const done = [];
   try {

@@ -456,7 +456,7 @@ async function act(name, btn) {
     setTimeout(load, 3000); return;
   }
   if (name === '#transfers'){ show('transfers'); return; }
-  if (ASK[name] && !confirm(ASK[name])) return;
+  if (ASK[name] && !sure(btn, ASK[name], 'act:' + name)) return;
   const was = btn.textContent;
   btn.disabled = true; btn.textContent = 'asked…';
   try {
@@ -513,10 +513,8 @@ $('cBack').onclick = async function () {
 // Two calls behind one button: work out which files are rebuildable scratch,
 // then move them. They go to the holding folder, not the bin.
 async function moveCache(btn) {
-  if (!confirm('Move the cache files out of the archive?\n\n' +
-      'They go to the holding folder, not the bin, and the space only comes back ' +
-      'when you empty that folder. Editing software rebuilds these from the ' +
-      'originals, so nothing is lost.')) return;
+  if (!sure(btn, 'They go to the holding folder, not the bin; the space comes back when you empty that folder. ' +
+      'Editing software rebuilds them from the originals, so nothing is lost.', 'cache-out')) return;
   const was = btn.textContent;
   btn.disabled = true; btn.textContent = 'listing them…';
   try {
@@ -653,9 +651,8 @@ function drawMove(d) {
   $('todo').querySelectorAll('[data-s]').forEach(function (b) {
     b.onclick = async function (e) {
       e.stopPropagation();
-      if (!confirm('Break this folder into its subfolders, so you can do it in pieces?\n\n' +
-        'It gets measured, which takes a few minutes for something this size, ' +
-        'and copies nothing.')) return;
+      if (!sure(b, 'Break it into its subfolders, to do in pieces. Measuring takes a few minutes; nothing is copied.',
+                'split:' + b.dataset.s)) return;
       ticked.delete(b.dataset.s);      // a tick on a folder being split means nothing
       b.textContent = 'splitting…';
       await sendQueue([...ticked], b.dataset.s, b, 'split');
@@ -685,11 +682,9 @@ $('goCopy').onclick = async function () {
   const paths   = [...ticked];
   const dropped = secs.filter(function (x) { return x.state === 'queued' && !ticked.has(x.path); }).length;
   if (!paths.length && !dropped) return;
-  if (!confirm('Hand over ' + paths.length + ' folder(s)?' +
-      (dropped ? '\n\n' + dropped + ' that were queued are unticked, so they come off the list. ' +
-                 'Anything already copied stays copied.' : '') +
-      '\n\nThey run one after another, in this order. Every file is checked first — ' +
-      'anything already in the archive is skipped.')) return;
+  if (!sure($('goCopy'), paths.length + ' folder(s), one after another, in this order; anything already in the archive is skipped.' +
+      (dropped ? ' ' + dropped + ' that were queued are unticked, so they come off the list (anything already copied stays).' : ''),
+      'handover')) return;
   await sendQueue(paths, '', $('goCopy'), 'Copy the ticked ones');
 };
 

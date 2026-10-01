@@ -485,7 +485,7 @@ async function addToPull(path, btn) {
   if (inPull(path)) { location.href = '/pull.php?p=' + encodeURIComponent(PULL.slug); return; }
   const was = btn.textContent; btn.disabled = true; btn.textContent = 'Adding…';
   try { await pullPost({ action: 'add', p: PULL.slug, path: path }); await refreshPull(); btn.textContent = '✓ Pulled'; if (btn.id === 'iPull') btn.textContent = 'In the pull ✓'; }
-  catch (e) { btn.textContent = was; alert('Not added: ' + e.message); }
+  catch (e) { btn.textContent = 'Not added: ' + e.message; setTimeout(function () { btn.textContent = was; }, 4000); }
   btn.disabled = false;
 }
 $('out').addEventListener('click', function (e) {
@@ -513,7 +513,7 @@ $('pdCreate').onclick = async function () {
   store('myName', $('pdBy').value.trim());
   try { const j = await pullPost({ action: 'create', name: $('pdName').value, made_by: $('pdBy').value });
         $('pdName').value = ''; usePull({ slug: j.slug, name: j.name }); }
-  catch (e) { alert(e.message); }
+  catch (e) { $('pdCreate').textContent = 'Did not happen: ' + e.message; }
 };
 $('pbSwitch').onclick = function () { pendingPath = null; openPullDlg(); };
 async function drawPulls() {
