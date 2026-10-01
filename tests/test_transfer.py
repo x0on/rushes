@@ -1,6 +1,6 @@
 """Run with: python3 -m unittest discover -s tests -v. No NAS or network used."""
 import importlib.util
-import io
+import io, threading, time
 import json
 import os
 from pathlib import Path
@@ -260,7 +260,7 @@ class CopyTests(unittest.TestCase):
              patch.object(m.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(f'copy\t{self.source}\n'.encode())), \
              patch.object(m.threading.Thread, 'start'), patch.object(m.time, 'sleep', side_effect=sleep), \
              patch.object(m, 'wait', side_effect=sleep), patch.object(m, 'update_self'), \
-             patch.object(m, 'control', return_value={}), \
+             patch.object(m, 'control', return_value={}), patch.object(m, 'within', side_effect=lambda k, t, fn: fn()), \
              patch.object(m, 'free_bytes', return_value=10**15), patch.object(m, 'needs_trace', return_value=False), \
              patch.object(m, 'run_self', return_value=0) as run, patch('sys.stdout', new_callable=io.StringIO):
             with self.assertRaises(StopIteration): m.watch(str(self.archive))
@@ -557,7 +557,7 @@ class DescribeLaneTests(unittest.TestCase):
             n[0] += 1
             if n[0] >= sleeps: raise self.Stop()
         with patch.object(m, "describe_folder", side_effect=fake), patch.object(m, "control", return_value=control), \
-             patch.object(m.time, "sleep", side_effect=sleep), patch.object(m, "_push"), patch("sys.stdout", new_callable=io.StringIO):
+             patch.object(m.time, "sleep", side_effect=sleep), patch("sys.stdout", new_callable=io.StringIO):
             try: m.describe_lane()
             except self.Stop: pass
         return ran
@@ -565,10 +565,13 @@ class DescribeLaneTests(unittest.TestCase):
     def test_it_describes_the_queued_folder_once_and_says_so_in_its_own_status(self):
         m = self.mod
         m._describe_jobs[:] = [(str(self.archive), "123")]
-        self.assertEqual(self.run_lane({}, sleeps=3), [(str(self.archive), "123")])
+        pushed = []
+        with patch.object(m, "_push", side_effect=lambda text, lane="": pushed.append((lane, text))):
+            self.assertEqual(self.run_lane({}, sleeps=3), [(str(self.archive), "123")])
         self.assertIn(f"analyze {self.archive} 123", m.DONE.read_text())
-        self.assertIn("idle", (m.STATUS / "describe-status.tsv").read_text())      # its own status file
-        self.assertFalse((m.STATUS / "ingest-status.tsv").exists())                 # the copying lane's is untouched
+        self.assertTrue(pushed and all(lane == "describe" for lane, _ in pushed))      # its own lane
+        self.assertIn("idle", pushed[-1][1])
+        self.assertFalse((m.STATUS / "describe-status.tsv").exists())               # nothing on the share
 
     def test_its_pause_holds_it_and_says_so(self):
         m = self.mod
@@ -581,6 +584,73 @@ class DescribeLaneTests(unittest.TestCase):
         self.assertFalse((m.STATUS / "describe-status.tsv").exists())
         self.assertFalse((m.STATUS / "ingest-status.tsv").exists())
         self.assertIn("paused", pushed[0])
+
+
+class StallTests(unittest.TestCase):
+    """RISKS.md rules 1-4 in the helper: idle touches no share, a share that does
+    not answer is walked away from and then stopped, a dead Rushes is asked less."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_a_stuck_question_is_walked_away_from_and_not_asked_again_until_it_returns(self):
+        m = self.mod; gate = threading.Event(); calls = []
+        def stuck(): calls.append(1); gate.wait(); return "ok"
+        t0 = time.time()
+        with self.assertRaises(m.Stalled): m.within("x", 0.2, stuck)
+        self.assertLess(time.time() - t0, 2)
+        with self.assertRaises(m.Stalled): m.within("x", 0.2, stuck)
+        self.assertEqual(len(calls), 1)                       # never two at once
+        gate.set(); m._asking["x"].join(1)
+        self.assertEqual(m.within("x", 1, lambda: 7), 7)
+
+    def test_three_stalls_stop_it_until_try_again(self):
+        m = self.mod
+        with patch.object(m, 'control', return_value={'nudge': 5}), patch('sys.stdout', new_callable=io.StringIO):
+            for _ in range(3): m.stall("the archive share")
+            self.assertIn("stopped answering", m.stopped())
+        with patch.object(m, 'control', return_value={'nudge': 6}), patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(m.stopped(), "")                 # Try again now in Manage
+        self.assertFalse(m._stopped_file().exists())
+        with patch.object(m, 'control', return_value={'nudge': 6}), patch('sys.stdout', new_callable=io.StringIO):
+            for _ in range(3): m.stall("x")
+            m._stopped_file().unlink()                                # Try again in the Rushes Helper window
+            self.assertEqual(m.stopped(), ""); self.assertEqual(m._stalls[0], 0)
+
+    def test_idle_touches_no_share(self):
+        m = self.mod; n = [0]
+        def sleep(_):
+            n[0] += 1
+            if n[0] >= 3: raise StopIteration()
+        with patch.object(m.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(b'')), \
+             patch.object(m.threading.Thread, 'start'), patch.object(m, 'wait', side_effect=sleep), \
+             patch.object(m, 'update_self'), patch.object(m, 'remember_shares'), patch.object(m, 'control', return_value={}), \
+             patch.object(m, 'check_due', return_value=False), patch.object(m, '_push'), \
+             patch.object(m, '_archive_here', side_effect=AssertionError('looked at the archive with nothing to do')), \
+             patch.object(m, 'send_file'), patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(StopIteration): m.watch(str(self.archive))
+
+    def test_a_rushes_that_does_not_answer_is_asked_less_and_less(self):
+        m = self.mod; m._control[:] = [0.0, {}, 0]; waits = []
+        with patch.object(m.urllib.request, 'urlopen', side_effect=OSError('down')):
+            for _ in range(5):
+                t = time.time(); m.control(); waits.append(round(m._control[0] - t)); m._control[0] = 0
+        self.assertEqual(waits, [20, 60, 300, 900, 900])
+        self.assertTrue(m.rushes_down())
+
+
+    def test_network_shares_are_looked_at_rarely_and_never_for_cards(self):
+        m = self.mod; base = Path(self.tmp.name) / 'vols'
+        for v in ('CARD', 'SHARE'): (base / v / 'DCIM').mkdir(parents=True)
+        looks = []
+        real = m._look
+        def look(r, card=True): looks.append(r); return real(r, card)
+        m._netlook.clear()
+        with patch.dict(os.environ, {'VOLUMES_DIR': str(base)}), patch.object(m, '_look', side_effect=look), \
+             patch.object(m, '_network_mounts', return_value={str(base / 'SHARE')}):
+            first = {v['name']: v['card'] for v in m.volumes()}
+            m.volumes(); m.volumes()
+        self.assertEqual(first, {'CARD': True, 'SHARE': False})
+        self.assertEqual(looks.count(str(base / 'SHARE')), 1)       # once in ten minutes
+        self.assertEqual(looks.count(str(base / 'CARD')), 3)        # a card shows within 20 s
 
 
 class AddressTests(unittest.TestCase):

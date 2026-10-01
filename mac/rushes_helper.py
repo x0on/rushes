@@ -32,6 +32,9 @@ LABEL = "org.rushes.helper"
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
 FILES = ("ingest.py", "transfer_state.py")
+# The helper writes this when a share stopped answering three times (RISKS.md
+# rule 4): it then touches no share until Try again here removes it.
+STOPPED = os.path.join(HOME, "archive-pilot", "stopped.txt")
 TCC = os.path.join(HOME, "Library", "Application Support", "com.apple.TCC", "TCC.db")
 LAN_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
@@ -320,6 +323,11 @@ class Window:
         loaded, pid = service_running()
         h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": os.path.join(LOGS, "helper.log")}
         try:
+            with open(STOPPED) as f:
+                h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
+        except OSError:
+            pass
+        try:
             c = rushes(self.s["url"], "/db/helper.php?control")
             h["paused"], h["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
             h["describe_paused"] = bool(c.get("describe_paused"))
@@ -379,6 +387,11 @@ class Window:
             self.set(step="remove")
         elif do == "remove-yes":
             remove_service(); self.set(step="removed")
+        elif do == "try-again":
+            try: os.remove(STOPPED)
+            except OSError: pass
+            log("Try again: the helper may touch the shares again")
+            self.set(said="Asked ✓ It looks at the shares again within a minute. If one still does not answer, it stops again after three tries and says so here.")
         elif do == "back-home":
             self.set(step="home", said="")
         elif do == "done":
@@ -649,6 +662,7 @@ const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Wa
 function home(s) {
   const n = s.now || {}, on = s.running;
   const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
+    : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work.'
     : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
   const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and two of the switches are not available. The log below still shows its work.</p>'

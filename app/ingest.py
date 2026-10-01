@@ -173,11 +173,13 @@ def send_file(which):
 _last_push = {}                    # lane -> [when, phase]
 
 def _push(text, lane=""):
+    if rushes_down():
+        return      # Rushes is not answering: asking again here would not wait for the backoff
     try:
         body = urllib.parse.urlencode({"status": text, "lane": lane}).encode()
         urllib.request.urlopen(NAS_URL + "/db/status.php", data=body, timeout=5).read()
     except Exception:
-        pass        # the file on the share still gets there, within a minute
+        pass        # the next one says it
 
 
 def status(**kw):
@@ -187,18 +189,8 @@ def status(**kw):
     text = (f"at\t{time.strftime('%Y-%m-%d %H:%M:%S')}\nts\t{int(time.time())}\n"
             + "".join(f"{k}\t{v}\n" for k, v in kw.items()))
     lane = getattr(_lane, "name", "")          # each lane has its own live status
-    try:
-        # Paused is paused: nothing is written on the archive share. Rushes is
-        # told over the network (below), which is how the pages show it.
-        if str(kw.get("phase", "")) == "paused":
-            raise OSError("paused: the share is left alone")
-        STATUS.mkdir(parents=True, exist_ok=True)
-        with open(STATUS / ("describe-status.tsv" if lane == "describe" else "ingest-status.tsv"), "w") as f:
-            f.write(text)
-    except OSError:
-        pass        # the share may be unmounted; never let reporting stop a copy
-    # And straight to Rushes, so the pages show it live instead of when the
-    # archive next copies the file over. A change of phase is sent at once;
+    # Straight to Rushes, never onto the share: the runner used to copy a file
+    # off VIDEO every minute; that was a share touched for nothing. A change of phase is sent at once;
     # progress at most every two seconds, without ever holding the copy up.
     phase = str(kw.get("phase", ""))
     last = _last_push.setdefault(lane, [0.0, ""])
@@ -475,22 +467,63 @@ def volumes():
         user = os.environ.get("USER", "")
         roots = [os.path.join(b, n) for b in (f"/media/{user}", "/mnt", "/share/external")
                  if os.path.isdir(b) for n in sorted(os.listdir(b))]
-    out = []
+    out, net = [], _network_mounts()
+    stuck = ""
     for r in roots:
+        if r.rstrip("/") in net:
+            # A network share (the archive, a server to copy from): looked at
+            # every ten minutes, within ten seconds, never searched for cards.
+            # Looking at every share every 20 s is what kept a dying disk busy.
+            seen = _netlook.get(r)
+            if not seen or time.time() - seen[0] > 600:
+                try:
+                    seen = _netlook[r] = [time.time(), within("look " + r, 10, lambda r=r: _look(r, card=False))]
+                except Stalled:
+                    stuck = stuck or r                # said on the page; the last look stands meanwhile
+                except OSError:
+                    seen = _netlook[r] = [time.time(), None]
+            if seen and seen[1]:
+                out.append(seen[1])
+            continue
         _looking[0] = r                       # which drive it is on, in case one stops answering
         try:
-            if not os.path.isdir(r): continue
-            use = shutil.disk_usage(r)
-            top = sorted(d for d in os.listdir(r)
-                         if not d.startswith((".", "@", "$")) and os.path.isdir(os.path.join(r, d)))
+            v = _look(r)
         except OSError:
             continue                          # a drive going away mid-look
-        out.append({"path": r, "name": os.path.basename(r.rstrip("\\/")) or r,
-                    "total": use.total, "free": use.free,
-                    "card": bool(CARD_MARKS & set(top)),
-                    "archive": "_rushes" in top, "top": top[:200]})
+        if v: out.append(v)
     _looking[0] = ""
+    _net_stuck[0] = stuck
     return out
+
+
+_netlook = {}          # network share → [when it was last looked at, what was seen]
+_net_stuck = [""]      # a network share that did not answer the last look
+
+def _look(r, card=True):
+    if not os.path.isdir(r):
+        return None
+    use = shutil.disk_usage(r)
+    top = sorted(d for d in os.listdir(r)
+                 if not d.startswith((".", "@", "$")) and os.path.isdir(os.path.join(r, d)))
+    return {"path": r, "name": os.path.basename(r.rstrip("\\/")) or r,
+            "total": use.total, "free": use.free,
+            "card": card and bool(CARD_MARKS & set(top)),
+            "archive": "_rushes" in top, "top": top[:200]}
+
+
+def _network_mounts():
+    """Mount points that are network shares, from the list of mounts (which
+    does not ask the shares themselves anything)."""
+    try:
+        lines = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout.splitlines()
+    except Exception:
+        return set()
+    net = set()
+    for line in lines:
+        m = re.match(r".*? on (.*?) (?:\((\w+)|type ([\w.]+))", line)
+        if m and (m.group(2) or m.group(3)) in ("smbfs", "afpfs", "nfs", "nfs4", "webdav", "cifs", "smb3", "fuse.sshfs"):
+            net.add(m.group(1).rstrip("/"))
+    return net
 
 
 def visible(path):
@@ -1124,6 +1157,17 @@ def _older_todo():
     return dict(todo)
 
 
+def check_due():
+    """Is there checking to do? Answered from this computer's own notes, so a
+    helper with nothing to do never looks at the archive to find that out."""
+    if new_fingerprint()[1] != "xxh128":
+        return False
+    st = _proof_state(); o = st.get("older", {})
+    return ("todo" not in o or bool(o["todo"]) or time.time() - o.get("built", 0) > 7 * 86400
+            or time.time() - st.get("copies", {}).get("done", 0) > 7 * 86400
+            or bool(st.get("scrub")) or time.time() >= st.get("quiet_until", 0))
+
+
 def check_some(budget=300):
     """Some of the checking, for up to `budget` seconds. False: nothing to do."""
     if new_fingerprint()[1] != "xxh128":
@@ -1227,7 +1271,9 @@ def check_some(budget=300):
             except OSError: roots = []
             due = [r for r in dict.fromkeys(roots) if r and time.time() - last.get(r, 0) > days * 86400
                    and os.path.isdir(os.path.join(NAS_MOUNT, r, MHL))]
-            if not due: return False
+            if not due:
+                st["quiet_until"] = time.time() + 6 * 3600     # rule 1: not looked for again for six hours
+                _proof_save(st); return False
             cur = st["scrub"] = {"root": min(due, key=lambda r: last.get(r, 0)), "done": [], "missing": [], "tries": {}, "t0": time.time()}
         root = os.path.join(NAS_MOUNT, cur["root"])
         known = mhl_read(root)
@@ -1539,7 +1585,7 @@ def report_forever(every=20):
     which is also how Rushes knows this helper is alive. Its own thread, because
     a four-hour copy must not hide a card plugged in during it; the looking has
     a thread of its own too, so a drive that stops answering never silences it."""
-    failing = False        # said so once; do not repeat it every 20 seconds
+    failing = 0            # reports in a row that did not get there; said once
     late = False
     threading.Thread(target=look_forever, daemon=True).start()
     for _ in range(20):                    # the first look, before the first report (up to 10 s)
@@ -1553,7 +1599,7 @@ def report_forever(every=20):
                       "cards plugged in now may not show in Ingest until it does. Copies carry on.")
             late = bool(at) and time.time() - at > 120
             py, model, speech = analysis_tools()
-            stuck = _looking[0] if late or (not at and _looking[0]) else ""
+            stuck = _net_stuck[0] or (_looking[0] if late or (not at and _looking[0]) else "")
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
                                            "an": ("ready" if py else "missing") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
                                            "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
@@ -1561,15 +1607,15 @@ def report_forever(every=20):
             urllib.request.urlopen(NAS_URL + "/db/report.php", data=body, timeout=15).read()
             if failing:
                 print(f"{time.strftime('%H:%M:%S')}  telling Rushes what is plugged in again ✓")
-                failing = False
+                failing = 0
         except Exception as e:
             # Never stops a copy — but never silent either. Without these
             # reports Ingest and Setup cannot see any drive plugged in here.
             if not failing:
                 print(f"{time.strftime('%H:%M:%S')}  ! cannot tell Rushes what is plugged in ({e})")
                 print("    Copies carry on. Cards will not show up in Ingest until this clears.")
-                failing = True
-        time.sleep(every)
+            failing += 1
+        time.sleep(max(every, backoff(failing)) if failing else every)      # rule 4: asked less and less
 
 
 def sections(roots, fresh=False):
@@ -1650,19 +1696,109 @@ DENIED = ("macOS is not letting the helper open the archive. Turn on Rushes Help
 
 
 # ── what Manage asks of the helper: pause, "try again now", folders to skip ──
-_control = [0.0, {}]
+_control = [0.0, {}, 0]     # when to ask next, the last answer, failures in a row
+# Rule 4 (RISKS.md): asking again after a failure waits longer each time —
+# 20 s, 1 min, 5 min, then every 15 min. Asking a web page that is not there
+# costs nothing and harms nothing, so it never stops for good: a laptop that
+# leaves the office and comes back carries on by itself.
+BACKOFF = (20, 60, 300, 900)
+
+def backoff(n):
+    return BACKOFF[min(max(n, 1), len(BACKOFF)) - 1]
+
+def rushes_down():
+    return _control[2] >= 2
 
 def control():
     """Rushes' buttons for this helper, asked for at most every 5 seconds. If
     Rushes cannot be reached, the last answer stands: never stop over this."""
-    if time.time() - _control[0] >= 5:
-        _control[0] = time.time()
+    if time.time() >= _control[0]:
         try:
             with urllib.request.urlopen(NAS_URL + "/db/helper.php?control", timeout=5) as r:
                 _control[1] = json.loads(r.read().decode("utf-8", "replace")) or {}
+            _control[0], _control[2] = time.time() + 5, 0
         except Exception:
-            pass
+            _control[2] += 1
+            _control[0] = time.time() + backoff(_control[2])
     return _control[1]
+
+
+# ── a share that stops answering: walked away from, then stopped (RISKS.md) ──
+# A disk that is dying can hold any read of its share for minutes, or for good,
+# and a process waiting on it cannot even be killed. So the quick questions
+# ("is the archive there?") are asked in a thread of their own and walked away
+# from after a time limit (rule 2); a question still stuck is not asked again
+# until it comes back (rule 3); three in a row and the helper stops touching
+# the shares at all until a person presses Try again (rule 4), and says so (5).
+class Stalled(Exception):
+    pass
+
+_asking = {}                # what is being asked → its thread, while it has not come back
+_stalls = [0]
+
+def _stopped_file():
+    return HOME / "stopped.txt"
+
+def within(key, seconds, fn):
+    t = _asking.get(key)
+    if t and t.is_alive():
+        raise Stalled(key)                       # the last one never came back: not again
+    out = {}
+    def ask():
+        try: out["v"] = fn()
+        except BaseException as e: out["e"] = e
+    t = threading.Thread(target=ask, daemon=True); t.start(); t.join(seconds)
+    if t.is_alive():
+        _asking[key] = t
+        raise Stalled(key)
+    _asking.pop(key, None)
+    if "e" in out:
+        raise out["e"]
+    return out["v"]
+
+def stall(what):
+    _stalls[0] += 1
+    print(f"{time.strftime('%H:%M:%S')}  ! {what} did not answer within 30 s ({_stalls[0]} in a row) — walked away from it")
+    if _stalls[0] >= 3:
+        why = (f"{what} stopped answering at {time.strftime('%H:%M')} — the helper touches no share "
+               "until you press Try again (Rushes Helper, or Try again now in Manage)")
+        try:
+            HOME.mkdir(parents=True, exist_ok=True)
+            _stopped_file().write_text(f"{control().get('nudge', 0)}\n{why}\n")
+        except OSError:
+            pass
+        print(f"\n*** STOPPED: {why}")
+
+def unstalled():
+    _stalls[0] = 0
+
+def stopped():
+    """Why the helper stopped, or "" when it has not. Try again in the Rushes
+    Helper window removes the file; Try again now in Manage changes the nudge."""
+    try:
+        nudge, _, why = _stopped_file().read_text().partition("\n")
+    except OSError:
+        if _stalls[0] >= 3: _stalls[0] = 0      # Try again in the window: counted from nothing
+        return ""
+    if str(control().get("nudge", 0)) != nudge.strip():
+        try: _stopped_file().unlink()
+        except OSError: pass
+        _stalls[0] = 0
+        print(f"\n{time.strftime('%H:%M:%S')}  Try again pressed — carrying on")
+        return ""
+    return why.strip()
+
+def _archive_here():
+    """"ok", "gone" (not mounted) or "denied" (macOS keeps this program out)."""
+    if not os.path.isdir(STATUS):
+        return "gone"
+    try:
+        os.listdir(STATUS); open(STATUS / "ingest-sections.tsv", "rb").close()
+    except FileNotFoundError:
+        pass
+    except PermissionError:
+        return "denied"
+    return "ok"
 
 
 def wait(seconds):
@@ -1883,18 +2019,25 @@ def watch(root, every=20):
                 wait(every); continue
             body = ""
         except Exception as e:
-            print(f"  cannot reach the NAS ({e}) — trying again in {every}s")
             unreached += 1
+            later = max(every, backoff(unreached))
+            print(f"  cannot reach Rushes ({e}) — asking again in {later // 60} min" if later >= 60
+                  else f"  cannot reach Rushes ({e}) — asking again in {later}s")
             if unreached >= 3:         # a minute or so: not a blip. Is it somewhere else now?
                 u = rushes_elsewhere()
                 if u:
                     move_to(u, f"it stopped answering at {NAS_URL}")
-            wait(every); continue
+            wait(later); continue
 
         # Paused from Manage: said once, and then nothing on any share is touched —
         # no folder checked, nothing listed, nothing written — until Resume.
         # Only Rushes is asked, over the network, whether Resume was pressed.
         c = control()
+        if stopped():
+            # Rule 4: a share stopped answering three times. Nothing is touched
+            # until a person presses Try again (Rushes Helper, or Manage).
+            status(phase="blocked", source="", note=stopped())
+            wait(every); continue
         if c.get("paused"):
             if not paused:
                 print(f"\n{time.strftime('%H:%M:%S')}  paused from Manage — nothing touches the shares until Resume")
@@ -1970,7 +2113,10 @@ def watch(root, every=20):
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
         # A tidy-up works inside the archive, so a source going away does not stop it.
         copies = [p for v, p, _ in pending if v not in ("tidy", "untidy")]
-        gone = [p for p in copies if not os.path.isdir(p)]
+        try:
+            gone = within("sources", 30, lambda: [p for p in copies if not os.path.isdir(p)]) if copies else []
+        except Stalled:
+            stall("a source drive"); wait(every); continue
         if copies and len(gone) == len(copies):
             # Its own name: this used to reuse `root`, which is the ARCHIVE — so
             # once a source had gone missing, every copy after it was aimed at
@@ -1992,10 +2138,24 @@ def watch(root, every=20):
         elif blocked:
             blocked.back(); blocked = False
 
+        # Rule 1: nothing to do, nothing looked at. Checking copies has its own
+        # notion of "nothing due" (below) and looks at the archive only then.
+        if not pending and (c.get("check_paused") or not check_due()):
+            status(phase="waiting", source="", note="nothing queued")
+            wait(every); continue
+
+        # Is the archive there, and allowed in? Asked within a time limit: a
+        # share that does not answer is walked away from, not waited on.
+        try:
+            here = within("archive", 30, _archive_here)
+        except Stalled:
+            stall("the archive share"); wait(every); continue
+        unstalled()
+
         # The archive itself going away — VIDEO unmounted — stops everything,
         # this program's own steps included, since they are read from it.
         # Say so once, keep telling the page, and carry on when it is back.
-        if not os.path.isdir(STATUS):
+        if here == "gone":
             if not lost:
                 lost = Dropped(NAS_MOUNT)
                 print(f"\n*** STOPPED: cannot see the archive at {NAS_MOUNT}")
@@ -2004,20 +2164,18 @@ def watch(root, every=20):
             if not lost.try_again():
                 status(phase="blocked", source=NAS_MOUNT, note=lost.note())
                 wait(every); continue
+            lost.back(); lost = False; continue      # back: looked at again from the top
         if lost:
             lost.back(); lost = False
 
         # There, but not allowed in: macOS keeps a background program away from
         # network and removable drives until it is given Full Disk Access.
         # Nothing can be copied or checked like this, so nothing is tried.
-        try:
-            os.listdir(STATUS); open(STATUS / "ingest-sections.tsv", "rb").close()
+        if here == "ok":
             if denied:
                 print(f"\n{time.strftime('%H:%M:%S')}  allowed in now — carrying on")
             denied = False
-        except FileNotFoundError:
-            denied = False
-        except PermissionError:
+        else:
             if not denied:
                 print(f"\n*** STOPPED: {DENIED}")
                 print("    Nothing is copied until then. It notices within a minute once allowed.")
@@ -2147,11 +2305,16 @@ def describe_lane(every=20):
                 if said != "paused":
                     status(phase="paused", note="describing paused — Resume describing carries on"); said = "paused"
                 time.sleep(10); continue
+            if stopped():                     # a share stopped answering: nothing until Try again
+                time.sleep(every); continue
             with _io:
                 jobs = list(_describe_jobs)
                 done = set(DONE.read_text().splitlines()) if DONE.exists() else set()
-            todo = [(p, a) for p, a in jobs
-                    if f"analyze {p}{' ' + a if a else ''}" not in done and os.path.exists(p)]
+            todo = [(p, a) for p, a in jobs if f"analyze {p}{' ' + a if a else ''}" not in done]
+            try:
+                todo = within("describe", 30, lambda: [(p, a) for p, a in todo if os.path.exists(p)]) if todo else []
+            except Stalled:
+                stall("the archive share (describing)"); time.sleep(every); continue
             if not todo:
                 if said != "idle":
                     status(phase="idle", note="nothing to describe"); said = "idle"

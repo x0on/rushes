@@ -202,7 +202,9 @@ window.helperNow = function (c) {
                   : [[c.note || 'getting ready', '']]};
   }
   if (c.phase === 'paused') return {short: 'paused', title: 'Paused from Manage — nothing new starts until Resume'};
-  if (c.phase === 'blocked') return {bad: true, short: 'copying stopped · source gone', title: c.note || 'The helper cannot see the source'};
+  // no source: the helper stopped by itself after a share stopped answering (Try again now)
+  if (c.phase === 'blocked') return {bad: true, short: c.source ? 'copying stopped · source gone' : 'helper stopped · press Try again',
+      title: c.note || 'The helper cannot see the source'};
   if (c.phase === 'stopped') return {bad: true, short: 'copying paused · archive nearly full', title: c.note || ''};
   return null;
 };
