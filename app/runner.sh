@@ -1,15 +1,18 @@
 #!/bin/sh
 # runner.sh — executes jobs queued by the admin page. Runs as root from cron,
 # every minute. The web page never touches the filesystem itself: it drops a
-# job file, this picks it up. That separation is the whole security model.
+# job file, this picks it up. That separation is the security model, and it
+# holds only if nobody else can write to the Web share: this file runs as root,
+# and anyone who can replace it, or drop a job in queue/, can act as root.
+# Give write access to the Web share to the administrator only (INSTALL.md).
 #
 # Install:
 #   mkdir -p /share/Web/queue && chmod 777 /share/Web/queue
 #   echo "* * * * * sh /share/Web/runner.sh" >> /etc/config/crontab
 #   crontab /etc/config/crontab && /etc/init.d/crond.sh restart
 #
-# Recommended second line — the duplicate scan takes hours and should never run
-# during the working day. Sunday 02:00, when the index rebuild is also idle:
+# Optional second line — the duplicate scan takes hours and should never run
+# during the working day (Rushes does not add this itself). Sunday 02:00:
 #   0 2 * * 0 printf 'ACTION=scan\n' > /share/Web/queue/weekly.job
 
 # The off switch: a file called STOP in the web folder (File Station: Web →
@@ -99,8 +102,13 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
     pid=$(cat /share/Web/helper.pid 2>/dev/null)
     if [ -z "$PY" ]; then
         echo "no-python" > /share/Web/helper-builtin.txt
-    elif [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    elif [ -n "$pid" ] && grep -q ingest.py "/proc/$pid/cmdline" 2>/dev/null; then
+        # that number really is the helper (a number can be given to another program later)
         echo "running" > /share/Web/helper-builtin.txt
+    elif ! may_v; then
+        # Paused, or VIDEO stopped answering: the helper lives on VIDEO, so it
+        # is not started from there now. It starts again after Resume / Try again.
+        echo "waiting" > /share/Web/helper-builtin.txt
     else
         [ -f /share/Web/helper.log ] && [ "$(wc -c < /share/Web/helper.log)" -gt 5000000 ] && mv /share/Web/helper.log /share/Web/helper.log.old
         "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
@@ -120,7 +128,8 @@ fi
 # not found" every minute), and a job started from cron keeps running after the
 # runner ends anyway. Input from /dev/null so nothing waits on a terminal.
 proxy_alive() { pid=$(cat /share/Web/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
-NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
+NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+\200-\377-' | cut -c1-200)
+case "$NEXT" in *..*) NEXT="" ;; esac
 if [ -n "$NEXT" ] && may_v; then
     if ! proxy_alive; then
         rm -f /share/Web/proxy-next.txt
@@ -305,7 +314,10 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
     case "$STILLS" in 1) ;; *) STILLS=0 ;; esac
     # exclusions are plain relative folder names; strip anything else
     EXCLUDE=$(printf '%s' "$EXCLUDE" | tr -cd 'A-Za-z0-9 ,_./-')
-    QUERY=$(printf '%s' "$QUERY" | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
+    # A folder or clip inside VIDEO: letters (accented ones too: their UTF-8
+    # bytes are kept), digits and a few marks; never "..", which would climb out.
+    QUERY=$(printf '%s' "$QUERY" | tr -cd 'A-Za-z0-9 _./&(),+\200-\377-' | cut -c1-200)
+    case "$QUERY" in *..*) log "  refused a folder with .. in it"; QUERY=""; ACTION=refused ;; esac
     case "$DEST" in
         /share/VIDEO/*) case "$DEST" in *..*) DEST=/share/VIDEO/_duplicates ;; esac ;;
         *) DEST=/share/VIDEO/_duplicates ;;
@@ -329,15 +341,6 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             ;;
         undo)
             sh /share/Web/dedupe.sh --undo >> "$LOG" 2>&1
-            refresh_state
-            ;;
-        organize)
-            DEST_ROOT="$DEST" INCLUDE_STILLS="$STILLS" EXCLUDE="$EXCLUDE" \
-                sh /share/Web/organize.sh >> "$LOG" 2>&1
-            ;;
-        organize-apply)
-            DEST_ROOT="$DEST" INCLUDE_STILLS="$STILLS" EXCLUDE="$EXCLUDE" \
-                sh /share/Web/organize.sh --apply >> "$LOG" 2>&1
             refresh_state
             ;;
         organize-undo)
@@ -659,6 +662,8 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             echo "  VIDEO may be reached again — the next minute tries it" >> "$LOG"
             touch /share/Web/survey-now
             ;;
+        refused)
+            ;;                                   # said above, when it was checked
         *)
             echo "unknown action: $ACTION" >> "$LOG"
             ;;

@@ -11,9 +11,8 @@ header('Content-Type: application/json');
 $QUEUE = '/share/Web/queue';
 
 $allowed = ['plan', 'apply', 'undo', 'reindex', 'cachescan', 'cacheclean', 'df',
-            // 'organize-apply' is off: it sorts the whole archive by date, which is
-            // no longer the plan. The read-only proposal and the undo stay.
-            'organize', 'organize-undo', 'scan', 'manifest', 'holding',
+            // the old date-based layout: only its undo is left (see organize.sh)
+            'organize-undo', 'scan', 'manifest', 'holding',
             'cache-undo', 'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test', 'proxy-remake', 'reset-breaker'];
 
 $action    = $_POST['action']    ?? '';

@@ -88,6 +88,10 @@ grep -q "^VERDICT	SAFE" "$W/verify-result.tsv" && ok "the whole holding folder i
 printf 'ACTION=undo\n' > "$W/queue/d4.job"; run
 [ -f "$S/cards/clip.mov" ] && ok "duplicates can be put back" || no "duplicates undo"
 
+# a folder name that climbs out of VIDEO is refused before anything runs
+printf 'ACTION=proxy-plan\nQUERY=../Web\n' > "$W/queue/p1.job"; run
+grep -q "refused a folder with .. in it" "$W/job.log" && ! grep -q "unknown action: refused" "$W/job.log" && ok "a folder with .. in it is refused" || no ".. not refused"
+
 # a disk that stops answering: walked away from, counted, and after three the breaker trips
 rm -f "$V/ingest.py"; mkfifo "$V/ingest.py"
 for i in 1 2 3; do touch "$W/survey-now"; t0=$(date +%s); run; [ $(( $(date +%s) - t0 )) -lt 10 ] || no "a stuck read held the runner"; done
