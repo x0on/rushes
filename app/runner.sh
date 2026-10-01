@@ -152,7 +152,7 @@ DROP=/share/VIDEO/_rushes/deploy
 # root, so both wait for an admin's "Install it" in Manage, exactly as approved
 # (RISKS.md #14 — pages used to go live within a minute of being dropped).
 # What is waiting, with fingerprints, and the fingerprint of the helper's code,
-# is looked at here every five minutes, within the time limit, and kept in the
+# is looked at here when asked (below), within the time limit, and kept in the
 # web folder — so no page ever has to read VIDEO itself.
 page_ok() {      # only these, only one folder deep, only db/
     case "$1" in */*/*|.*|*/.*) return 1 ;; db/*|*/*) case "$1" in db/*) ;; *) return 1 ;; esac ;; esac
@@ -179,9 +179,11 @@ survey() {
     done
     mv "$out" /share/Web/waiting.tsv
 }
-# Looked for: when asked (survey-now: a page is open and the list is over five
-# minutes old, or an install just finished), and otherwise once an hour.
-if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ] || [ $(( $(date +%s) / 60 % 60 )) -eq 0 ]; }; then
+# New versions of Rushes' own files are looked for only when asked: Manage →
+# "Check for updates" (survey-now), right after an install, or when there is
+# no list yet. They only ever arrive because a person put them in _rushes, so
+# looking on a timer would read VIDEO for nothing.
+if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ]; }; then
     rm -f /share/Web/survey-now
     v survey
 fi

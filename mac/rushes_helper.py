@@ -749,7 +749,7 @@ function home(s) {
         'Help happens in the open, on GitHub, with what you choose to share.</small></div></div>' +
     '</div>' +
     '<p class="muted" style="font-size:12.5px">Updates: Rushes Helper keeps its own code the same as your Rushes server\'s (' + esc(s.url) +
-      ', never anywhere else), checking every few minutes and only between jobs. Nothing else can reach this Mac through it.</p>' +
+      ', never anywhere else), checking once an hour and only between jobs. Nothing else can reach this Mac through it.</p>' +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }

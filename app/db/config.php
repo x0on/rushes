@@ -467,7 +467,7 @@ function helper_control_save(array $c): bool {
 // share on their own: they wait in _rushes/scripts until the admin says yes,
 // and the runner installs exactly the files approved (checked by fingerprint).
 // What is waiting to be installed — updated scripts, and pages (RISKS.md #14) —
-// as the runner last saw it (waiting.tsv, every five minutes, within its time
+// as the runner last saw it (waiting.tsv, when someone pressed Check for updates, within its time
 // limit). A page request never reads the VIDEO share itself.
 function waiting_read(): ?array {
     $f = web_dir() . '/waiting.tsv';
@@ -483,7 +483,7 @@ function waiting_read(): ?array {
     return $out;
 }
 function scripts_waiting(): array {
-    // No list yet (the runner writes it within five minutes): nothing is shown
+    // No list yet (the runner writes it within a minute of starting): nothing is shown
     // as waiting, rather than this page reading the VIDEO share itself.
     return ($w = waiting_read()) !== null ? $w['items'] : [];
 }

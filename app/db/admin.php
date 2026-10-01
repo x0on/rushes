@@ -865,8 +865,18 @@ async function load() {
     const ago = r[2] ? Math.round((Date.now() / 1000 - r[2]) / 60) : null;
     return '<tr><td>' + esc(r[0]) + '</td><td class="muted">' + esc(r[1]) + '</td><td>' +
       (ago === null ? 'not yet' : ago < 1 ? 'just now' : ago < 120 ? ago + ' min ago' : Math.round(ago / 60) + ' h ago') + '</td><td>' +
-      (r[3] === 'ok' ? '<span class="ok">✓</span>' : '<span class="bad">' + esc(r[3]) + '</span>') + '</td></tr>';
+      (r[3] === 'ok' ? '<span class="ok">✓</span>' : r[3].startsWith('asked') ? '<span class="busy">' + esc(r[3]) + '</span>' : '<span class="bad">' + esc(r[3]) + '</span>') +
+      (r[4] ? ' <button class="btn quiet" data-rep="' + esc(r[4][0]) + '">' + esc(r[4][1]) + '</button>' : '') + '</td></tr>';
   }).join('');
+  $('repeatRows').querySelectorAll('[data-rep]').forEach(function (b) {
+    b.onclick = async function () {
+      b.disabled = true; b.textContent = 'Asking …';
+      try {
+        const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: b.dataset.rep }) })).json();
+        b.textContent = r.error ? 'Did not happen: ' + r.error : 'Asked ✓ The runner looks within a minute';
+      } catch (e) { b.textContent = 'The archive did not answer'; }
+    };
+  });
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {

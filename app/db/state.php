@@ -20,10 +20,6 @@ $WEB = web_dir();
 $now = time();
 $c = [];        // conditions
 $mtime = fn(string $f) => file_exists("$WEB/$f") ? filemtime("$WEB/$f") : 0;
-// A page is open: the runner may look for updates on VIDEO again (it does so
-// on its next minute) when its list is over five minutes old. Nobody looking:
-// once an hour.
-if (time() - $mtime('waiting.tsv') > 300) @touch("$WEB/survey-now");
 $ago = function (int $t) use ($now): string {
     if (!$t) return 'never';
     $s = $now - $t;
@@ -413,7 +409,8 @@ $repeats = [
     ['The runner on the archive machine', 'every minute; does nothing when there is nothing to do', $alive, $runner_ok ? 'ok' : 'bad'],
     ['Reaching the VIDEO share', 'every minute, never while paused; walked away from after 20 s, stops after three',
         $mtime('disk.txt'), is_readable("$WEB/video-tripped.txt") ? 'stopped — Try again above' : 'ok'],
-    ['Looking for updates', 'once an hour, or every five minutes while a page is open', $mtime('waiting.tsv'), 'ok'],
+    ['Looking for new versions of Rushes itself (in _rushes on VIDEO)', 'only when you press Check now, and once after an install',
+        $mtime('waiting.tsv'), is_file("$WEB/survey-now") ? 'asked — within a minute' : 'ok', ['check-updates', 'Check now']],
     ['Copy of the database', 'once a day, checked first; a week of copies in _rushes/db-copies',
         $mtime('db-copied'), is_readable("$WEB/db-damaged.txt") ? 'stopped — the check failed' : 'ok'],
     ['The helper' . (($hv['host'] ?? '') !== '' ? ' on ' . $hv['host'] : ''), 'says what is plugged in every 20 s (less when Rushes does not answer); stops by itself if a share stops answering',

@@ -26,6 +26,13 @@ grep -q "^script	proxy.sh	" "$W/waiting.tsv" && grep -q "^page	db/x.php	" "$W/wa
 grep -q "^helperfile	ingest.py	$(sha256sum "$V/ingest.py" | cut -d' ' -f1)$" "$W/waiting.tsv" && ok "the helper's fingerprints are listed for its updates" || no "helper fingerprints"
 [ ! -e "$W/db/x.php" ] && ok "a page dropped in deploy waits for approval" || no "page went live by itself"
 
+# new versions are looked for only when asked: a list already there is left alone
+echo 'echo newer' > "$V/scripts/proxy.sh"; before=$(cat "$W/waiting.tsv"); run
+[ "$(cat "$W/waiting.tsv")" = "$before" ] && ok "no looking for updates on a timer" || no "looked without being asked"
+touch "$W/survey-now"; run
+[ "$(cat "$W/waiting.tsv")" != "$before" ] && [ ! -e "$W/survey-now" ] && ok "Check for updates: looked at the next minute" || no "check for updates"
+echo 'echo new' > "$V/scripts/proxy.sh"; touch "$W/survey-now"; run
+
 # installed exactly as approved; a page changed after approval is refused
 h=$(sha256sum "$V/deploy/db/x.php" | cut -d' ' -f1)
 printf 'ACTION=update-scripts\nPAGE=db/x.php:%s\n' "$h" > "$W/queue/1.job"; run

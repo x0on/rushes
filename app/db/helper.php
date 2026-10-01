@@ -112,6 +112,8 @@ $act = (string)($_POST['action'] ?? '');
 $switch = in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge'], true);
 if (!may_act((string)($_POST['pass'] ?? '')) && !($switch && helper_pairing() !== 'other'))
     bail(403, $switch ? 'sign in first, or press it in the paired Rushes Helper' : 'sign in first');
+// Look for new versions of Rushes' own files in _rushes (the runner, next minute)
+if ($act === 'check-updates') { @touch(web_dir() . '/survey-now'); out(['ok' => true]); }
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';

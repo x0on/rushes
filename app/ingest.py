@@ -1934,7 +1934,10 @@ def update_self():
     never during a copy; after an update it restarts itself in place, so a
     change to the archive's copy reaches every computer without anyone
     touching it. A half-downloaded or broken file is never put in place."""
-    if time.time() - _checked[0] < 300 or _describing.is_set():
+    # Once an hour: a new version only exists after someone installs one in
+    # Rushes (Manage → Check for updates → Install it), so asking more often
+    # gains nothing. The question reads Rushes' own list, not the disks.
+    if time.time() - _checked[0] < 3600 or _describing.is_set():
         return                        # a restart would cut a folder being described in half: later
     _checked[0] = time.time()
     try:

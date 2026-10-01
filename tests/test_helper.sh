@@ -41,4 +41,7 @@ call POST '{}' '{"action":"skip","path":"/src/A","pass":"rushes"}' >/dev/null
 check '[ "$(cat "$ROOT/app/ingest-queue.tsv")" = "$(printf "copy\t/src/B")" ]' 'Skip takes the folder out of the queue'
 check 'call ITEMS | grep -q "\"/src/A\":\"removed\"" && ! call ITEMS | grep -q "\"/src/B\":\"removed\""' 'and out of the transfer, leaving the rest'
 check 'call GET "{\"control\":\"\"}" | grep -q "\"skip\":\[\"/src/A\"\]"' 'a copy already running on it is told to stop'
+check 'call POST "{}" "{\"action\":\"check-updates\"}" | grep -q "sign in" && [ ! -e "$ROOT/app/survey-now" ]' 'Check for updates needs sign-in'
+call POST '{}' '{"action":"check-updates","pass":"rushes"}' >/dev/null
+check '[ -e "$ROOT/app/survey-now" ]' 'Check for updates asks the runner to look'
 echo "Helper tests complete."
