@@ -66,6 +66,28 @@ grep -qx rushes.sqlite "$W/exposed.txt" && ok "a database the web server hands o
 n=$(grep -c "rushes.sqlite" "$R/asked"); run
 [ "$(grep -c "rushes.sqlite" "$R/asked")" = "$n" ] && ok "and asked once a day, not every minute" || no "self-check every minute"
 
+# the holding-folder tools: cache clean-up, duplicates, and the "safe to delete?" check
+for x in dedupe verify; do sed -e "s#/share/#$R/share/#g" "$HERE/app/$x.sh" > "$W/$x.sh"; done
+S=$R/share/VIDEO; mkdir -p "$S/proj" "$S/@Recycle" "$S/_duplicates/_media-cache" "$S/cards"
+echo c > "$S/proj/a.pek"; echo c > "$S/@Recycle/b.pek"; echo c > "$S/_duplicates/_media-cache/c.pek"
+printf '%s\n' "$S/proj/a.pek" "$S/@Recycle/b.pek" "$S/_duplicates/_media-cache/c.pek" > "$W/cache-files.txt"
+printf 'ACTION=cacheclean\n' > "$W/queue/c1.job"; run
+[ -f "$S/_duplicates/_media-cache/proj/a.pek" ] && [ -f "$S/@Recycle/b.pek" ] && [ ! -e "$S/_duplicates/_media-cache/_duplicates" ] \
+  && ok "cache clean-up never takes from the recycle bin or the holding folder" || no "cache clean-up"
+printf 'ACTION=cache-undo\n' > "$W/queue/c2.job"; run
+[ -f "$S/proj/a.pek" ] && [ ! -e "$S/_duplicates/_media-cache/proj/a.pek" ] && ok "cache clean-up can be undone" || no "cache undo"
+echo same > "$S/proj/clip.mov"; echo same > "$S/cards/clip.mov"
+printf -- '---- Size 5 B (5 bytes) - 2 files\n"/storage/proj/clip.mov"\n"/storage/cards/clip.mov"\n' > "$W/results_duplicates.txt"
+touch -d '1 minute ago' "$W/results_duplicates.txt" 2>/dev/null || touch -t 200001010000 "$W/results_duplicates.txt"
+printf 'ACTION=plan\n' > "$W/queue/d1.job"; run
+printf 'ACTION=apply\n' > "$W/queue/d2.job"; run
+grep -q "moving the plan from the last dry run" "$W/job.log" && [ -f "$S/_duplicates/cards/clip.mov" ] && [ -f "$S/proj/clip.mov" ] \
+  && ok "duplicates: apply moves the plan that was shown" || no "duplicates apply"
+printf 'ACTION=verify\n' > "$W/queue/d3.job"; run
+grep -q "^VERDICT	SAFE" "$W/verify-result.tsv" && ok "the whole holding folder is checked: safe to empty" || no "verify folder mode: $(head -3 "$W/verify-result.tsv" | tr '\n' ' ')"
+printf 'ACTION=undo\n' > "$W/queue/d4.job"; run
+[ -f "$S/cards/clip.mov" ] && ok "duplicates can be put back" || no "duplicates undo"
+
 # a disk that stops answering: walked away from, counted, and after three the breaker trips
 rm -f "$V/ingest.py"; mkfifo "$V/ingest.py"
 for i in 1 2 3; do touch "$W/survey-now"; t0=$(date +%s); run; [ $(( $(date +%s) - t0 )) -lt 10 ] || no "a stuck read held the runner"; done

@@ -3,8 +3,10 @@
 # preserving their original structure so anything can be put back.
 #
 #   sh dedupe.sh                    dry run: builds the plan, moves nothing
-#   sh dedupe.sh --apply            performs the moves, writes an undo log
-#   sh dedupe.sh --undo             puts everything back from the undo log
+#   sh dedupe.sh --apply            moves what the last dry run planned (the plan
+#                                   you saw), or plans again if the scan or the
+#                                   settings changed since; adds to the undo log
+#   sh dedupe.sh --undo             puts back every file still in the holding folder
 #
 # Settings (environment variables, so the admin page can set them):
 #   KEEP_SIDE=project   project tree wins over card dumps   (default)
@@ -43,9 +45,9 @@ MODE=${1:-dry}
 if [ "$MODE" = "--undo" ]; then
     [ -f "$LOG" ] || { echo "no log at $LOG — nothing to undo"; exit 1; }
     back=0
-    while IFS="$TAB" read -r src dst; do
-        case "$src" in *-SKIP|*-MISSING|*-EXISTS|*MISMATCH*|MV-FAILED) continue ;; esac
-        [ -f "$dst" ] || continue
+    while IFS="$TAB" read -r src dst _rest; do
+        case "$src" in \#*|*-MISSING|*-EXISTS|*MISMATCH*|MV-FAILED) continue ;; esac
+        [ -f "$dst" ] && [ ! -e "$src" ] || continue
         mkdir -p "$(dirname "$src")"
         mv -n "$dst" "$src" && back=$((back + 1))
     done < "$LOG"
@@ -56,6 +58,17 @@ fi
 [ -f "$RESULTS" ] || { echo "results file not found: $RESULTS"; exit 1; }
 echo "keep side: $KEEP_SIDE    destination: $DEST"
 
+# ---------- apply what was reviewed ----------
+# The plan shown in the dry run is the one moved, as long as it was made from
+# this scan and with these settings. Otherwise it is planned again here.
+REUSE=0
+if [ "$MODE" = "--apply" ] && [ -f "$PLAN" ] && [ "$PLAN" -nt "$RESULTS" ] \
+   && grep -q "\"keep_side\":\"$KEEP_SIDE\",\"dest\":\"$DEST\"" "$PLAN.meta" 2>/dev/null; then
+    REUSE=1
+    echo "moving the plan from the last dry run ($(wc -l < "$PLAN") files)"
+fi
+
+if [ "$REUSE" = 0 ]; then
 # ---------- KEEP_SIDE=oldest needs modification times ----------
 # Only collected in this mode: it stats every duplicate on disk, which takes a
 # few minutes across ~118,000 files. Every other mode decides from the path
@@ -117,7 +130,7 @@ function flush(   i, best) {
     sub("^/storage/", "/share/VIDEO/", p)
     # image-sequence frame: leave the whole group alone
     # busybox awk has no {n,} intervals, so the counts are spelled out.
-    # A frame number is 4+ digits starting with 0 (0001, 00006) or 5+ digits;
+    # A frame number is 3+ digits starting with 0 (001, 0006) or 5+ digits;
     # that distinguishes it from a year, which is 4 digits starting 1 or 2.
     if (p ~ /[._-]0[0-9][0-9][0-9]*\.(png|PNG|jpg|JPG|jpeg|JPEG|tif|TIF|tiff|TIFF|tga|TGA|dpx|DPX|exr|EXR)$/ ||
         p ~ /[._-][0-9][0-9][0-9][0-9][0-9][0-9]*\.(png|PNG|jpg|JPG|jpeg|JPEG|tif|TIF|tiff|TIFF|tga|TGA|dpx|DPX|exr|EXR)$/) {
@@ -135,6 +148,7 @@ END {
 
 printf '{"keep_side":"%s","dest":"%s","built":"%s"}\n' \
     "$KEEP_SIDE" "$DEST" "$(date '+%Y-%m-%dT%H:%M:%S')" > "$PLAN.meta"
+fi
 
 echo "plan: $PLAN"
 awk -F"$TAB" '{n++; b += $1} END {
@@ -151,7 +165,9 @@ if [ "$MODE" != "--apply" ]; then
 fi
 
 # ---------- apply ----------
-: > "$LOG"
+# The log is added to, never emptied: every move stays undoable and checkable
+# (verify.sh) until the file leaves the holding folder.
+echo "# apply $(date '+%Y-%m-%d %H:%M:%S') keep_side=$KEEP_SIDE" >> "$LOG"
 moved=0; skipped=0
 total=$(wc -l < "$PLAN")
 echo "moving $total files..." 
@@ -174,7 +190,7 @@ while IFS="$TAB" read -r bytes src keep; do
     mkdir -p "$(dirname "$dst")"
     # ponytail: mv within one volume is a rename — instant, no copy, no space needed
     if mv -n "$src" "$dst"; then
-        printf '%s\t%s\n' "$src" "$dst" >> "$LOG"
+        printf '%s\t%s\t%s\t%s\n' "$src" "$dst" "$keep" "$bytes" >> "$LOG"
         moved=$((moved + 1))
     else
         printf 'MV-FAILED\t%s\n' "$src" >> "$LOG"; skipped=$((skipped + 1))

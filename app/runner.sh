@@ -350,17 +350,24 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             ;;
         cachescan)
             echo "scanning for Premiere cache files..." >> "$LOG"
-            find -L /share/VIDEO/ \( -iname '*.pek' -o -iname '*.cfa' -o -iname '*.ims' \) -type f > /share/Web/cache-files.txt 2>/dev/null
+            # not inside the holding folder (already moved) or the recycle bin
+            find -L /share/VIDEO/ \( -iname '*.pek' -o -iname '*.cfa' -o -iname '*.ims' \) -type f 2>/dev/null \
+                | grep -v -e '/@Recycle/' -e '^/share/VIDEO/_duplicates/' > /share/Web/cache-files.txt
             echo "$(wc -l < /share/Web/cache-files.txt) cache files" >> "$LOG"
-            awk '{print}' /share/Web/cache-files.txt | xargs -r du -ch 2>/dev/null | tail -1 >> "$LOG"
+            while IFS= read -r f; do stat -c %s "$f" 2>/dev/null; done < /share/Web/cache-files.txt \
+                | awk '{b += $1} END {printf "%.1f GB\n", b / 1073741824}' >> "$LOG"
             ;;
         cacheclean)
             echo "moving cache files to /share/VIDEO/_duplicates/_media-cache ..." >> "$LOG"
             n=0
-            # ponytail: same shape as dedupe-moves.tsv, so one undo path fits both
-            : > /share/Web/cache-moves.tsv
+            # cache-moves.tsv grows (never emptied here), so "cache-undo" can put
+            # back everything still in the holding folder, from every clean-up
             while IFS= read -r f; do
                 [ -f "$f" ] || continue
+                # Never from the recycle bin (that would undelete it) or from the
+                # holding folder itself, whichever list this came from.
+                case "$f" in /share/VIDEO/*) ;; *) continue ;; esac
+                case "$f" in */@Recycle/*|/share/VIDEO/_duplicates/*|*/../*) continue ;; esac
                 rel=${f#/share/VIDEO/}
                 d="/share/VIDEO/_duplicates/_media-cache/$rel"
                 if mkdir -p "$(dirname "$d")" && mv -n "$f" "$d"; then
@@ -369,6 +376,17 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 fi
             done < /share/Web/cache-files.txt
             echo "moved $n cache files" >> "$LOG"
+            refresh_state
+            ;;
+        cache-undo)
+            # Every cache file still in the holding folder goes back where it was.
+            echo "putting cache files back from the holding folder ..." >> "$LOG"
+            n=0
+            [ -f /share/Web/cache-moves.tsv ] && while IFS="$(printf '\t')" read -r src dst; do
+                [ -f "$dst" ] && [ ! -e "$src" ] || continue
+                mkdir -p "$(dirname "$src")" && mv -n "$dst" "$src" && n=$((n + 1))
+            done < /share/Web/cache-moves.tsv
+            echo "put back $n cache files" >> "$LOG"
             refresh_state
             ;;
         verify)

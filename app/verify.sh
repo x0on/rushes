@@ -57,7 +57,9 @@ IGNORED=0
 # ignored it. A filter you cannot see is a filter you cannot trust.
 scan_folder() {
     find "$1" -type f > $T/verify.all 2>/dev/null
-    awk '
+    # the two output files are passed in (-v): inside the single-quoted program
+    # a "$T/…" would be the literal text, not the scratch folder
+    awk -v L="$T/verify.list" -v I="$T/verify.ignored" '
     {
         r = ""
         if (/\.(pek|PEK|cfa|CFA|ims|IMS)$/ || index($0, "/_media-cache/"))
@@ -69,8 +71,8 @@ scan_folder() {
         else if (/\/\.DS_Store$/)          r = "macOS folder settings"
         else if (/\/Thumbs\.db$/)          r = "Windows thumbnail cache"
         else if (/\/\._[^\/]*$/)           r = "macOS resource fork"
-        if (r == "") print $0 > "$T/verify.list"
-        else         print r "\t" $0 > "$T/verify.ignored"
+        if (r == "") print $0 > L
+        else         print r "\t" $0 > I
     }' $T/verify.all
     touch $T/verify.list $T/verify.ignored
     IGNORED=$(wc -l < $T/verify.ignored)
@@ -85,13 +87,16 @@ fi
 # ---- the lookup tables, built once ----------------------------------------
 # dst -> src   (where each moved file came from)
 # src -> kept  (which copy was kept in its place)
+# The moves log carries the kept copy and the size on each line (columns 3 and
+# 4) since moves stopped being forgotten at every apply; older lines without
+# them fall back to the plan.
 awk -F"$TAB" -v mode="$MODE" -v q="$QUERY" '
 NR == FNR { keep[$2] = $3; bytes[$2] = $1; next }
 {
     src = $1; dst = $2
-    if (src ~ /^(SRC-MISSING|SIZE-MISMATCH|KEEPER-MISSING|DEST-EXISTS|MV-FAILED)$/) next
+    if (src ~ /^#/ || src ~ /^(SRC-MISSING|SIZE-MISMATCH|KEEPER-MISSING|DEST-EXISTS|MV-FAILED)$/) next
     if (mode == "match" && q != "" && !index(src, q) && !index(dst, q)) next
-    print dst "\t" src "\t" keep[src] "\t" bytes[src]
+    print dst "\t" src "\t" ($3 != "" ? $3 : keep[src]) "\t" ($4 != "" ? $4 : bytes[src])
 }' "$PLAN" "$MOVES" > $T/verify.map
 
 if [ "$MODE" = folder ]; then

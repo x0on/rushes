@@ -186,6 +186,7 @@ if (isset($_POST['_newpass'])) {
         </div>
         <div class="btns" style="margin-top:12px">
           <button class="btn" id="cMove" disabled>Move them out</button>
+          <button class="btn quiet" id="cBack" title="Every cache file still in the holding folder goes back where it was">Put them back</button>
           <span class="note">They go to the holding folder, not the bin. Editing software rebuilds
             them from the originals, so nothing is lost; the space comes back when you empty that folder.</span>
         </div>
@@ -496,6 +497,20 @@ async function loadCache() {
   }
 }
 $('cMove').onclick = function () { moveCache(this); };
+// Undo for "Move them out": asked twice on the button itself, then a job.
+$('cBack').onclick = async function () {
+  const b = this;
+  if (!b.dataset.sure) {
+    b.dataset.sure = '1'; b.textContent = 'Sure? Put every cache file back';
+    setTimeout(function () { delete b.dataset.sure; b.textContent = 'Put them back'; }, 5000); return;
+  }
+  delete b.dataset.sure; b.disabled = true; b.textContent = 'asked…';
+  try {
+    const j = await (await fetch('../run.php', { method: 'POST', body: new URLSearchParams({ action: 'cache-undo' }) })).json();
+    if (j.error) { oops(j.error); } else { b.textContent = 'Asked ✓ The runner puts them back within a minute (Activity shows it)'; }
+  } catch (e) { oops('could not do that: ' + e.message); }
+  setTimeout(function () { b.disabled = false; b.textContent = 'Put them back'; load(); }, 4000);
+};
 
 // Two calls behind one button: work out which files are rebuildable scratch,
 // then move them. They go to the holding folder, not the bin.
