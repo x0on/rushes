@@ -37,6 +37,8 @@ case "$(ask pair.php POST '' "['code' => '$c', 'host' => 'Other']")" in *"No cod
 case "$(ask helper.php GET "$id" '[]')" in "copy	/x "*" 200") ok "the paired helper is given work" ;; *) no "paired helper refused" ;; esac
 case "$(ask helper.php GET 'f00' '[]')" in *"not the paired helper"*403) ok "another helper is refused" ;; *) no "other helper given work" ;; esac
 case "$(ask report.php POST '' "['host' => 'Second Mac', 'volumes' => '']")" in *403) ok "and its word is not taken" ;; *) no "other helper's report taken" ;; esac
+case "$(ask helper.php POST 'f00' "['action' => 'pause']")" in *"paired Rushes Helper"*403) ok "another computer cannot pause the paired helper" ;; *) no "pause from anywhere" ;; esac
+case "$(ask helper.php POST "$id" "['action' => 'pause']")" in *'"paused":true'*200) ok "the paired helper's own window can" ;; *) no "paired window cannot pause" ;; esac
 grep -q "Second Mac" "$R/web/helper-refused.tsv" && ok "a refused helper is named for the page" || no "refused helper not named"
 
 c=$(code); for i in 1 2 3 4; do ask pair.php POST '' "['code' => '1', 'host' => 'x']" >/dev/null; done

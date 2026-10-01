@@ -103,11 +103,15 @@ SH, 'text/plain; charset=utf-8');
 
 // ── the buttons ─────────────────────────────────────────────────────────────
 // Pause, resume, reconnecting and "look again" only start or stop the helper's
-// own work — nothing is moved or deleted — so its own window on the Mac may
-// press them without a password, like Manage. Everything else needs sign-in.
+// own work — nothing is moved or deleted. Someone signed in (Manage) may press
+// them, and so may the paired helper's own window on the Mac, which has no
+// password but sends the helper's ID (pair.php). Not paired yet: there is no
+// ID to check, so the window may press them, as before pairing existed.
+// Everything else needs sign-in.
 $act = (string)($_POST['action'] ?? '');
-if (!in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge'], true)
-    && !may_act((string)($_POST['pass'] ?? ''))) bail(403, 'sign in first');
+$switch = in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge'], true);
+if (!may_act((string)($_POST['pass'] ?? '')) && !($switch && helper_pairing() !== 'other'))
+    bail(403, $switch ? 'sign in first, or press it in the paired Rushes Helper' : 'sign in first');
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';
