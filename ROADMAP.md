@@ -234,6 +234,27 @@ Limits, for later: checking reads over the network from the helper's computer
 no record covers gets a record in its own folder, since the records do not keep
 which folder it was copied as once a tidy-up has moved it.
 
+## What makes it a product for filmmakers (decided 2026-10-01)
+
+First, the hardening (RISKS.md: the six rules, the deploy folder, pairing). Then,
+for version 1, in this order of importance:
+
+1. **A simple install, and updates you can trust.** One installer that checks the
+   machine and sets everything up, no Terminal; signed updates that say what
+   changed, and a way back. Documentation people can help themselves with.
+2. **No lock-in.** Everything Rushes knows — descriptions, records, rights,
+   ratings, copy proofs — exportable in open formats (CSV, JSON, XMP, ASC MHL).
+   Your data is yours, and leaves with you.
+3. **Round trip with every editor:** Premiere, DaVinci Resolve and Final Cut Pro
+   (FCPXML) — pulls, markers and relinking for all three (OpenTimelineIO).
+4. **Card offload you can trust:** a clear "verified — safe to format this card",
+   and copying to two places at once.
+
+Later versions: camera card structures and RAW as one clip; watching in search
+(proxies, filmstrips, jump to the moment); rights and releases; selects,
+ratings and notes; teams, roles and safe remote access; long-term storage
+tiers (LTO, cloud cold storage).
+
 ## Order
 
 1. **Finish the loop on a real archive.** The copy completes, then tidy-up,
