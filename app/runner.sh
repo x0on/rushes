@@ -12,6 +12,12 @@
 # during the working day. Sunday 02:00, when the index rebuild is also idle:
 #   0 2 * * 0 printf 'ACTION=scan\n' > /share/Web/queue/weekly.job
 
+# The off switch: a file called STOP in the web folder (File Station: Web →
+# create a folder or file named STOP) and the runner does nothing at all, every
+# minute, until it is removed. For a disk rebuild, or anything else where the
+# archive machine must be left alone. Checked before anything else is touched.
+[ -e /share/Web/STOP ] && exit 0
+
 Q=/share/Web/queue
 LOG=/share/Web/job.log
 log() { printf '%s\n' "$*" >> "$LOG"; }     # one line into the job log
