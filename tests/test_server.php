@@ -169,4 +169,13 @@ check($doc && count($mk) === 2 && (string)$mk[0]->in === '60' && (string)$mk[1]-
       && str_contains((string)$mk[0]->comment, 'On screen: KITE FEST 2024') && (string)$doc->xpath('//clip/rate/timebase')[0] === '30'
       && (string)$doc->xpath('//clip/logginginfo/description')[0] === 'Children fly kites & laugh',
       'a pull for Premiere carries a marker at each shot and line spoken, at its frame, and the description');
+// What is waiting comes from the runner's list, never from reading VIDEO in a page request.
+file_put_contents(web_dir() . "/waiting.tsv", "script\tproxy.sh\t" . str_repeat('a', 64) . "\t1\npage\tdb/x.php\t" . str_repeat('b', 64) . "\t2\nhelper\tabc123def456\n");
+$sw = scripts_waiting();
+check(count($sw) === 2 && $sw[1]['kind'] === 'page' && waiting_read()['helper'] === 'abc123def456',
+      'updates waiting (scripts and pages) and the helper version are read from the runner\'s list');
+// The helper sends its history and section list; Rushes keeps only well-formed lines.
+$_POST = ['file' => 'history', 'body' => "2026-10-01 10:00\tcopied\t/x\t1\t2\t3\t\nnot a history line\n"];
+ob_start(); include web_dir() . "/db/status.php"; $r = json_decode(ob_get_clean(), true);
+check($r['lines'] === 1 && str_starts_with(file_get_contents(web_dir() . "/ingest-history.tsv"), '2026-10-01 10:00'), 'the helper\'s history arrives over the network, junk left out');
 echo "Server tests complete. Fixture: $root\n";

@@ -298,6 +298,14 @@ if ($transferOpen && !$hvNow['fresh'] && !($mac && !$mac_stale)) {
             . ($hvNow['at'] ? ' Last heard from ' . $ago($hvNow['at']) . '.' : ''),
         'act' => null];
 }
+// The breaker (runner.sh): VIDEO stopped answering three times in a row, so
+// nothing reaches it by itself any more until someone says try again.
+if (is_readable("$WEB/video-tripped.txt")) {
+    [$tAt, $tWhy] = array_pad(explode("\t", trim((string)file_get_contents("$WEB/video-tripped.txt")), 2), 2, '');
+    $c[] = ['level' => 'bad', 'title' => 'Rushes stopped reaching the VIDEO share by itself',
+        'body' => $tWhy . ' — ' . $ago((int)$tAt) . '. Nothing is lost and nothing was half-done. Check the archive first '
+            . '(Storage & Snapshots should say healthy), then press Try again.', 'act' => ['reset-breaker', 'Try again']];
+}
 // Updated scripts wait for a yes: they run with full rights on this machine.
 // Once you said yes, it says what happens next instead of asking again.
 if ($sw = scripts_waiting()) {
@@ -313,8 +321,8 @@ if ($sw = scripts_waiting()) {
         // the last time it was asked and said no, and why
         $tail = @file_get_contents("$WEB/job.log", false, null, max(0, (int)@filesize("$WEB/job.log") - 4000)) ?: '';
         $why = preg_match_all('/^  refused .*$/m', $tail, $m) ? ' Last try: ' . trim(end($m[0])) . '.' : '';
-        $c[] = ['level' => 'warn', 'title' => count($sw) . ' updated script' . (count($sw) > 1 ? 's are' : ' is') . ' waiting to be installed',
-            'body' => $names . '. They run with full rights on this machine, so they are only installed when you say so.' . $why,
+        $c[] = ['level' => 'warn', 'title' => count($sw) . ' update' . (count($sw) > 1 ? 's are' : ' is') . ' waiting to be installed',
+            'body' => $names . '. Scripts run with full rights on this machine and pages on its web server, so nothing is installed until you say so.' . $why,
             'act' => ['scripts', 'Install ' . (count($sw) > 1 ? 'them' : 'it')]];
     }
 }
@@ -458,7 +466,7 @@ echo json_encode([
             'drive_stuck' => $hv['stuck'],
             'how'     => $hv['how'], 'ver' => $hv['ver'],
             // the version on the archive; a helper with another one updates itself
-            'current' => substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),
+            'current' => ($w = waiting_read()) !== null ? $w['helper'] : substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),
             'paused'  => (bool)$ctl['paused'],
             'no_reconnect' => !empty($ctl['no_reconnect']),
             'describe_paused' => !empty($ctl['describe_paused']),

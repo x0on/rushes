@@ -31,7 +31,7 @@ a NAS that does not respond, a second run on top of the first.
 
 | # | Risk | Decided | Status |
 |---|---|---|---|
-| 5 | A disk stalls and Rushes' own repeating jobs pile up on it. | The six rules above. Runner: STOP switch, no overlapping minutes, nothing on VIDEO while paused (done, not installed); time limits and circuit breaker (to do). | In progress |
+| 5 | A disk stalls and Rushes' own repeating jobs pile up on it. | The six rules above. Runner: STOP switch, no overlapping minutes, nothing on VIDEO while paused, every touch of VIDEO time-limited (walked away from, not waited for), a breaker after three stalls with Try again in Manage, no more copying status files off VIDEO every minute (the helper sends them). Tests: tests/test_runner.sh. Pages and helper: to do. | Runner done, not installed |
 | 6 | A QTS update removes the runner from the schedule or changes PHP. | Overview already says "not picking up jobs"; add the steps to restore it; check after every update. | To do |
 | 7 | The database is damaged (power cut). Search rebuilds from disk; **pulls exist only in the database**. | A daily copy of the database in `_rushes`; a check at start. | To do |
 | 8 | One Mac is the only helper; its local state and **the signing key** live only there. | Keep the helper's state on the archive; the signing key stays on the Mac for now (decided 2026-10-01): losing it only means granting Full Disk Access and Local Network again; a private copy (USB stick, own iCloud) later. | Key: on the Mac only |
@@ -50,7 +50,7 @@ a NAS that does not respond, a second run on top of the first.
 
 | # | Risk | Decided | Status |
 |---|---|---|---|
-| 14 | **The deploy folder**: anyone who can write to VIDEO can publish a page on the NAS's web server within a minute. | Pages need the same "Install it — Sure?" approval as scripts. | First, with the hardening |
+| 14 | **The deploy folder**: anyone who can write to VIDEO can publish a page on the NAS's web server within a minute. | Pages need the same "Install it — Sure?" approval as scripts: the runner lists what waits (with fingerprints) and installs only exactly what was approved. | Done, not installed |
 | 15 | Default admin password; plain http; anyone on the network can open Manage. | A real password required; pages served to the local network only. | To do |
 
 ## People and age

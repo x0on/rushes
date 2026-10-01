@@ -132,7 +132,7 @@ if ($act === 'pause' || $act === 'resume') {
     $want = scripts_waiting();
     if (!$want) bail(400, 'Every script is already up to date.');
     $body = "ACTION=update-scripts\n";
-    foreach ($want as $w) $body .= "SCRIPT={$w['name']}:{$w['hash']}\n";
+    foreach ($want as $w) $body .= ($w['kind'] === 'page' ? 'PAGE=' : 'SCRIPT=') . "{$w['name']}:{$w['hash']}\n";
     $q = '/share/Web/queue';
     if (!is_dir($q)) @mkdir($q, 0777, true);
     if (@file_put_contents("$q/" . date('Ymd-His') . '-scripts.job', $body) === false)

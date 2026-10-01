@@ -49,7 +49,38 @@ trap 'rm -rf "$TICK"' EXIT INT TERM
 PAUSED=0
 grep -q '"paused":true' /share/Web/helper-control.json 2>/dev/null && PAUSED=1
 
-df -P /share/VIDEO | tail -1 > /share/Web/disk.txt
+# ── reaching VIDEO: with a time limit, and a breaker ────────────────────────
+# Every step that reads or writes the VIDEO share goes through v(). It starts
+# the step and waits at most VLIMIT seconds. A step that has not finished by
+# then is walked away from — not waited for: a process stuck on a dying disk
+# often cannot even be stopped — and counted. Three in a row and the breaker
+# trips: nothing touches VIDEO by itself until a person presses Try again in
+# Manage (which removes video-tripped.txt). A minute with no stall resets the count.
+VLIMIT=${VLIMIT:-20}
+VSTALL=/share/Web/video-stalls.txt
+VTRIP=/share/Web/video-tripped.txt
+VOK=1; [ -f "$VTRIP" ] && VOK=0
+v() {
+    "$@" & vp=$!
+    vi=0
+    while kill -0 "$vp" 2>/dev/null && [ "$vi" -lt "$VLIMIT" ]; do sleep 1; vi=$((vi + 1)); done
+    if kill -0 "$vp" 2>/dev/null; then
+        kill "$vp" 2>/dev/null
+        vn=$(( $(cat "$VSTALL" 2>/dev/null || echo 0) + 1 )); echo "$vn" > "$VSTALL"
+        echo "$(date '+%Y-%m-%d %H:%M:%S')  VIDEO did not answer within ${VLIMIT}s ($1 $2) — $vn in a row" >> "$LOG"
+        if [ "$vn" -ge 3 ] && [ ! -f "$VTRIP" ]; then
+            printf '%s\t%s\n' "$(date +%s)" "VIDEO did not answer $vn times in a row (last: $1 $2)" > "$VTRIP"
+            echo "$(date '+%Y-%m-%d %H:%M:%S')  STOPPED touching VIDEO until Try again is pressed in Manage" >> "$LOG"
+        fi
+        VOK=0; VSTALLED=1; return 124
+    fi
+    wait "$vp"
+}
+VSTALLED=0
+# Whether this minute may reach VIDEO by itself: not paused, not tripped, not stuck.
+may_v() { [ "$PAUSED" = 0 ] && [ "$VOK" = 1 ]; }
+
+may_v && v sh -c 'df -P /share/VIDEO | tail -1 > /share/Web/disk.txt'
 
 # /tmp on a QNAP is a 64 MB RAM disk shared with the system. Give it room (it
 # only uses memory for what is actually in it), and say how full it is.
@@ -90,7 +121,7 @@ fi
 # runner ends anyway. Input from /dev/null so nothing waits on a terminal.
 proxy_alive() { pid=$(cat /share/Web/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
 NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+-' | cut -c1-200)
-if [ -n "$NEXT" ] && [ "$PAUSED" = 0 ]; then
+if [ -n "$NEXT" ] && may_v; then
     if ! proxy_alive; then
         rm -f /share/Web/proxy-next.txt
         PROXY_ONLY="$NEXT" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
@@ -99,14 +130,9 @@ if [ -n "$NEXT" ] && [ "$PAUSED" = 0 ]; then
     fi
 fi
 
-# The Mac writes ingest progress onto the VIDEO share (the only place both
-# machines can reach). Mirror it into the web folder so the page can read it
-# without the Mac needing any extra mount or service.
-if [ "$PAUSED" = 0 ]; then
-    cp /share/VIDEO/_rushes/ingest-status.tsv   /share/Web/ 2>/dev/null
-    cp /share/VIDEO/_rushes/ingest-sections.tsv /share/Web/ 2>/dev/null
-    cp /share/VIDEO/_rushes/ingest-history.tsv  /share/Web/ 2>/dev/null
-fi
+# (The helper's status, history and section list used to be copied off the
+# VIDEO share here every minute. The helper sends them to Rushes itself now
+# — db/status.php — so an idle minute reads nothing from the archive.)
 
 # ── deploying a page ────────────────────────────────────────────────────────
 # The web folder is not reachable from anywhere except the NAS itself, which
@@ -120,33 +146,44 @@ fi
 # A db/ prefix is the one bit of nesting allowed, because that is where the
 # pages actually live.
 DROP=/share/VIDEO/_rushes/deploy
-if [ "$PAUSED" = 0 ] && [ -d "$DROP" ]; then
-    find "$DROP" -type f 2>/dev/null | while read -r f; do
-        rel=${f#$DROP/}
-        case "$rel" in
-            */*/*)      log "  refused $rel (too deep)";        rm -f "$f"; continue ;;
-            db/*|*/*)   case "$rel" in db/*) ;; *) log "  refused $rel (unknown folder)"; rm -f "$f"; continue ;; esac ;;
-        esac
-        case "$rel" in
-            *.php|*.html|*.js|*.css|*.json|db/*.php) ;;
-            favicon.ico|apple-touch-icon.png) ;;     # the tab icon Safari asks the web root for
-            *) log "  refused $rel (not a page)"; rm -f "$f"; continue ;;
-        esac
-        mkdir -p "/share/Web/$(dirname "$rel")"
-        if cp "$f" "/share/Web/$rel"; then
-            chmod 644 "/share/Web/$rel"
-            log "  deployed $rel ($(wc -c < "$f") bytes)"
-            rm -f "$f"
-        else
-            log "  could not deploy $rel"
-        fi
+# ── what is waiting to be installed ─────────────────────────────────────────
+# Updated scripts (_rushes/scripts) and pages (_rushes/deploy) are never put in
+# place by themselves: a page runs on this machine's web server and a script as
+# root, so both wait for an admin's "Install it" in Manage, exactly as approved
+# (RISKS.md #14 — pages used to go live within a minute of being dropped).
+# What is waiting, with fingerprints, and the fingerprint of the helper's code,
+# is looked at here every five minutes, within the time limit, and kept in the
+# web folder — so no page ever has to read VIDEO itself.
+page_ok() {      # only these, only one folder deep, only db/
+    case "$1" in */*/*|.*|*/.*) return 1 ;; db/*|*/*) case "$1" in db/*) ;; *) return 1 ;; esac ;; esac
+    case "$1" in *.php|*.html|*.js|*.css|*.json|favicon.ico|apple-touch-icon.png) return 0 ;; esac
+    return 1
+}
+survey() {
+    out=/share/Web/waiting.tsv.new; : > "$out"
+    for f in /share/VIDEO/_rushes/scripts/*.sh; do
+        [ -f "$f" ] || continue; n=${f##*/}
+        case "$n" in *[!a-z0-9.-]*|.*) continue ;; esac
+        h=$(sha256sum "$f" | cut -d' ' -f1); have=$(sha256sum "/share/Web/$n" 2>/dev/null | cut -d' ' -f1)
+        [ "$h" != "$have" ] && printf 'script\t%s\t%s\t%s\n' "$n" "$h" "$(stat -c %Y "$f")" >> "$out"
     done
+    [ -d "$DROP" ] && find "$DROP" -type f 2>/dev/null | while read -r f; do
+        rel=${f#$DROP/}; page_ok "$rel" || continue
+        printf 'page\t%s\t%s\t%s\n' "$rel" "$(sha256sum "$f" | cut -d' ' -f1)" "$(stat -c %Y "$f")" >> "$out"
+    done
+    printf 'helper\t%s\n' "$(sha256sum /share/VIDEO/_rushes/ingest.py 2>/dev/null | cut -c1-12)" >> "$out"
+    mv "$out" /share/Web/waiting.tsv
+}
+if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ] || [ $(( $(date +%s) / 60 % 5 )) -eq 0 ]; }; then
+    rm -f /share/Web/survey-now
+    v survey
 fi
 
 # Transfers add files incrementally through landed.php. A finished folder no
 # longer triggers another full archive walk.
 
 # ponytail: mkdir is the portable atomic lock; busybox has no flock
+[ "$VSTALLED" = 0 ] && [ -f "$VSTALL" ] && rm -f "$VSTALL"     # a whole minute without a stall: the count starts again
 rm -rf "$TICK"; trap - EXIT INT TERM       # this minute's share work is done; long jobs have their own lock
 mkdir "$LOCKDIR" 2>/dev/null || exit 0
 trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT INT TERM
@@ -251,6 +288,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
     EXCLUDE=$(field EXCLUDE "$job")
     QUERY=$(field QUERY "$job")
     SCRIPTS=$(grep '^SCRIPT=' "$job" 2>/dev/null | cut -d= -f2-)
+    PAGES=$(grep '^PAGE=' "$job" 2>/dev/null | cut -d= -f2-)
     rm -f "$job"
 
     # ---- validate everything; never trust the queue file ----
@@ -561,19 +599,38 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
         update-scripts)
             # Only what the admin approved in Manage: each name with the
             # fingerprint it had then. A file changed since is refused.
+            # Copied first (within the time limit), then the COPY is checked, so
+            # what is installed is exactly what was approved, even if the file
+            # on the share changes meanwhile.
             for s in $SCRIPTS; do
                 name=${s%%:*}; want=${s#*:}
                 case "$name" in *[!a-z0-9.-]*|.*|*/*|"") echo "  refused $name (not a script name)" >> "$LOG"; continue ;; esac
                 case "$name" in *.sh) ;; *) echo "  refused $name (not a .sh)" >> "$LOG"; continue ;; esac
-                src="/share/VIDEO/_rushes/scripts/$name"
-                have=$(sha256sum "$src" 2>/dev/null | cut -d' ' -f1)
-                if [ -z "$have" ] || [ "$have" != "$want" ]; then
-                    echo "  refused $name: it changed after it was approved (or cannot be read)" >> "$LOG"; continue
+                tmp="/share/Web/.$name.new"
+                if ! v cp "/share/VIDEO/_rushes/scripts/$name" "$tmp" || [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
+                    rm -f "$tmp"; echo "  refused $name: it changed after it was approved (or could not be read)" >> "$LOG"; continue
                 fi
-                # beside, then renamed: a script that is running keeps its old copy
-                cp "$src" "/share/Web/.$name.new" && chmod 755 "/share/Web/.$name.new" && mv "/share/Web/.$name.new" "/share/Web/$name" \
-                    && echo "  installed $name" >> "$LOG" || echo "  could not install $name" >> "$LOG"
+                # renamed into place: a script that is running keeps its old copy
+                chmod 755 "$tmp" && mv "$tmp" "/share/Web/$name" && echo "  installed $name" >> "$LOG" || echo "  could not install $name" >> "$LOG"
             done
+            for s in $PAGES; do
+                rel=${s%%:*}; want=${s#*:}
+                page_ok "$rel" || { echo "  refused page $rel (not a page Rushes has)" >> "$LOG"; continue; }
+                mkdir -p "/share/Web/$(dirname "$rel")"
+                tmp="/share/Web/$rel.new"
+                if ! v cp "$DROP/$rel" "$tmp" || [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
+                    rm -f "$tmp"; echo "  refused page $rel: it changed after it was approved (or could not be read)" >> "$LOG"; continue
+                fi
+                chmod 644 "$tmp" && mv "$tmp" "/share/Web/$rel" && echo "  installed page $rel" >> "$LOG" \
+                    && v rm -f "$DROP/$rel" || echo "  could not install page $rel" >> "$LOG"
+            done
+            touch /share/Web/survey-now          # what is still waiting, looked at again next minute
+            ;;
+        reset-breaker)
+            # Try again (Manage): VIDEO may be reached by itself again.
+            rm -f "$VTRIP" "$VSTALL"
+            echo "  VIDEO may be reached again — the next minute tries it" >> "$LOG"
+            touch /share/Web/survey-now
             ;;
         *)
             echo "unknown action: $ACTION" >> "$LOG"

@@ -155,6 +155,19 @@ def history(kind, source, files, byts, secs, note=""):
             f.write(f"{time.strftime('%Y-%m-%d %H:%M')}\t{event}\t{int(secs)}\t{note}\n")
     except OSError:
         pass
+    send_file("history")
+
+
+def send_file(which):
+    """Rushes keeps its own copy of the history and the section list: sent whole,
+    whenever they change (and once at start), so nothing on the archive machine
+    has to read them off the share. A send that fails is made up by the next."""
+    try:
+        body = (STATUS / f"ingest-{which}.tsv").read_text(errors="replace")
+        data = urllib.parse.urlencode({"file": which, "body": body}).encode()
+        urllib.request.urlopen(NAS_URL + "/db/status.php", data=data, timeout=15).read()
+    except Exception:
+        pass
 
 
 _last_push = {}                    # lane -> [when, phase]
@@ -1604,6 +1617,7 @@ def sections(roots, fresh=False):
         for path in sorted(rows):
             n, b = rows[path]
             f.write(f"section\t{path}\t{n}\t{b}\t{'done' if path in done else 'todo'}\n")
+    send_file("sections")
 
     todo = [(p, *rows[p]) for p in sorted(rows) if p not in done]
     print(f"\n{added} folders listed, {len(rows)} in the list now "
@@ -1843,6 +1857,8 @@ def watch(root, every=20):
     blocked = False        # said the source was gone; do not say it again
     threading.Thread(target=report_forever, daemon=True).start()
     threading.Thread(target=describe_lane, daemon=True).start()      # the second lane
+    if not control().get("paused"):                                  # Rushes' copies, brought up to date once
+        send_file("history"); send_file("sections")
     if sys.platform == "darwin":
         print("The Mac is kept awake while a copy runs (the screen can still sleep).\n")
     paused = False         # said it was paused; once

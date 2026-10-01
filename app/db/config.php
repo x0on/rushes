@@ -466,13 +466,30 @@ function helper_control_save(array $c): bool {
 // Scripts run as root on this machine, so they are never published from the
 // share on their own: they wait in _rushes/scripts until the admin says yes,
 // and the runner installs exactly the files approved (checked by fingerprint).
+// What is waiting to be installed — updated scripts, and pages (RISKS.md #14) —
+// as the runner last saw it (waiting.tsv, every five minutes, within its time
+// limit). A page request never reads the VIDEO share itself.
+function waiting_read(): ?array {
+    $f = web_dir() . '/waiting.tsv';
+    if (!is_readable($f)) return null;
+    $out = ['items' => [], 'helper' => '', 'at' => filemtime($f)];
+    foreach (file($f, FILE_IGNORE_NEW_LINES) ?: [] as $l) {
+        $p = explode("\t", $l);
+        if ($p[0] === 'helper') $out['helper'] = $p[1] ?? '';
+        elseif (in_array($p[0], ['script', 'page'], true) && count($p) >= 4 && preg_match('/^[0-9a-f]{64}$/', $p[2]))
+            $out['items'][] = ['kind' => $p[0], 'name' => $p[1], 'hash' => $p[2], 'new' => false, 'changed' => (int)$p[3]];
+    }
+    return $out;
+}
 function scripts_waiting(): array {
+    if (($w = waiting_read()) !== null) return $w['items'];
+    // ponytail: an older runner keeps no list; then the scripts folder is read here, as before
     $out = [];
     foreach (glob(archive_dir() . '/_rushes/scripts/*.sh') ?: [] as $f) {
         $n = basename($f);
         if (!preg_match('/^[a-z][a-z0-9-]*\.sh$/', $n)) continue;
         $new = hash_file('sha256', $f); $old = @hash_file('sha256', web_dir() . "/$n") ?: '';
-        if ($new !== $old) $out[] = ['name' => $n, 'hash' => $new, 'new' => $old === '', 'changed' => filemtime($f)];
+        if ($new !== $old) $out[] = ['kind' => 'script', 'name' => $n, 'hash' => $new, 'new' => $old === '', 'changed' => filemtime($f)];
     }
     return $out;
 }

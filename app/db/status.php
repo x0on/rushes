@@ -11,6 +11,21 @@
 require_once __DIR__ . '/config.php';
 header('Content-Type: application/json');
 
+// Its history and its list of sections, whole, whenever they change (they used
+// to be copied off the VIDEO share by the runner every minute, which is a read
+// of the archive every minute for ever). Small files; replaced, never merged.
+// ponytail: no password yet; pairing (RISKS.md #10) will make this the paired helper only.
+$which = (string)($_POST['file'] ?? '');
+if ($which !== '') {
+    $body = (string)($_POST['body'] ?? '');
+    $want = ['history' => '/^\d{4}-\d\d-\d\d \d\d:\d\d\t/', 'sections' => '/^section\t/'][$which] ?? null;
+    if (!$want || strlen($body) > 8000000) { http_response_code(400); echo '{"error":"not a file Rushes keeps"}'; exit; }
+    $lines = array_filter(explode("\n", $body), fn($l) => $l !== '' && preg_match($want, $l));
+    $f = web_dir() . "/ingest-$which.tsv";
+    $ok = @file_put_contents("$f.new", $lines ? implode("\n", $lines) . "\n" : '') !== false && @rename("$f.new", $f);
+    echo json_encode(['ok' => $ok, 'lines' => count($lines)]); return;
+}
+
 $raw = (string)($_POST['status'] ?? '');
 if ($raw === '' || strlen($raw) > 8000) { http_response_code(400); echo '{"error":"no status"}'; exit; }
 
