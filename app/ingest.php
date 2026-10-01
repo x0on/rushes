@@ -422,7 +422,7 @@ function paintJobs() {
 }
 
 function load() {
-  fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); })
+  return fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); })
     .then(function (s) {
       if (s.error) return;
       S = s;
@@ -430,5 +430,5 @@ function load() {
       paintSource(); paintJobs();
     }).catch(function () { $('free').textContent = 'the archive did not answer'; });
 }
-paintSource(); load(); setInterval(load, 5000);
+paintSource(); every(load, 5000);
 </script>

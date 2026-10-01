@@ -15,6 +15,7 @@ $NAV = $NAV ?? '';
   .tab-i { display: inline-flex; align-items: center; gap: 7px }
   .tab-i svg { width: 15px; height: 15px; flex: none }
   .topbar .pulse { padding-right: 14px; border-right: 1px solid var(--line-soft) }
+  .topbar .slow { font-size: 12px; color: var(--warn, #b26a00) }
 </style>
 <?php $iv = substr(md5(favicon_href()), 0, 8); ?>
 <link rel="icon" type="image/png" sizes="64x64" href="/icon.php?v=<?= $iv ?>">
@@ -23,6 +24,47 @@ $NAV = $NAV ?? '';
   // Theme before first paint, so a dark page never flashes white on the way in.
   try { var t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; }
   catch (e) {}
+
+  // Pages ask the archive only while someone is looking, and ask less when it
+  // is slow (RISKS.md rule 6). every(fn, ms) replaces setInterval: one ask at a
+  // time, none while the tab is hidden, and after a slow or failed answer the
+  // wait doubles up to a minute, back to normal on the first quick one.
+  // ponytail: one shared count of bad answers for the whole page; if the
+  // archive is slow for one question it is slow for all of them.
+  var bad = 0, f0 = window.fetch;
+  window.fetch = function (u, o) {
+    var t = Date.now();
+    // A question nobody gets an answer to in 20 s is given up, not left hanging.
+    if ((!o || !o.method || o.method === 'GET') && !(o && o.signal) && window.AbortSignal && AbortSignal.timeout)
+      o = Object.assign({}, o, { signal: AbortSignal.timeout(20000) });
+    return f0.call(window, u, o).then(function (r) {
+      if (r.status >= 500 || Date.now() - t > 4000) bad++;
+      return r;
+    }, function (e) { bad++; throw e; });
+  };
+  var slowest = {};
+  window.every = function (fn, ms) {
+    var wait = ms, timer = null, busy = false, id = Math.random();
+    function tick() {
+      timer = null;
+      if (busy || document.hidden) return;   // a hidden tab asks nothing; it starts again when shown
+      busy = true;
+      var b = bad;
+      Promise.resolve().then(fn).catch(function () { bad++; }).then(function () {
+        busy = false;
+        wait = bad > b ? Math.min(wait * 2, 60000) : ms;
+        slowest[id] = wait > ms ? wait : 0;
+        var w = Math.max.apply(null, Object.keys(slowest).map(function (k) { return slowest[k]; }));
+        var el = document.getElementById('hSlow');
+        if (el) { el.hidden = !w; el.textContent = 'the archive is slow, asking every ' + Math.round(w / 1000) + ' s'; }
+        timer = setTimeout(tick, wait);
+      });
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && !timer && !busy) tick();
+    });
+    tick();
+  };
 </script>
 
 <header class="topbar">
@@ -38,6 +80,7 @@ $NAV = $NAV ?? '';
   <span class="pulse" id="hPulse" title="what is moving right now">
     <span class="dot" id="hDot"></span><span id="hWhat">checking&hellip;</span>
   </span>
+  <span class="slow" id="hSlow" hidden></span>
 
   <a class="tab tab-i" href="/db/admin.php" style="margin-left:12px"
      <?= $NAV === 'admin' ? 'aria-current="page"' : '' ?>><?= icon('lock', 1.8) ?>Manage</a>
@@ -65,7 +108,7 @@ $NAV = $NAV ?? '';
   // as well as showing a colour, because a coloured dot on its own tells some
   // people nothing at all.
   function paint() {
-    fetch('/db/state.php?t=' + Date.now())
+    return fetch('/db/state.php?t=' + Date.now())
       .then(function (r) { return r.json(); })
       .then(function (s) {
         if (s.error) { $('hDot').className = 'dot off'; $('hWhat').textContent = 'needs setting up'; return; }
@@ -90,7 +133,7 @@ $NAV = $NAV ?? '';
       })
       .catch(function () { $('hDot').className = 'dot off'; $('hWhat').textContent = 'no answer'; });
   }
-  paint(); setInterval(paint, 5000);
+  every(paint, 5000);
 })();
 
 // What the helper is doing, in words and numbers, from state.php's "copy".

@@ -646,10 +646,13 @@ done
 # Reconcile newer inventories even when nobody has the browser open. A failed
 # attempt retains the old catalog and is retried by the next scheduled run.
 # Set RUSHES_URL when the web application is served from a different address.
+# Paused, or VIDEO not answering: only what lives on Web is brought in
+# (video=0); the descriptions and proxy checks wait for VIDEO.
+IMP=import.php; may_v || IMP='import.php?video=0'
 if command -v curl >/dev/null 2>&1; then
-    SYNC=$(curl --silent --show-error --fail --max-time 3600 "${RUSHES_URL:-http://127.0.0.1}/db/import.php" 2>&1)
+    SYNC=$(curl --silent --show-error --fail --max-time 3600 "${RUSHES_URL:-http://127.0.0.1}/db/$IMP" 2>&1)
 elif command -v wget >/dev/null 2>&1; then
-    SYNC=$(wget -q -O - "${RUSHES_URL:-http://127.0.0.1}/db/import.php" 2>&1)
+    SYNC=$(wget -q -O - "${RUSHES_URL:-http://127.0.0.1}/db/$IMP" 2>&1)
 else
     SYNC="Search update needs curl or wget on the archive host"
 fi

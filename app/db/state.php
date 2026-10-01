@@ -466,7 +466,7 @@ echo json_encode([
             'drive_stuck' => $hv['stuck'],
             'how'     => $hv['how'], 'ver' => $hv['ver'],
             // the version on the archive; a helper with another one updates itself
-            'current' => ($w = waiting_read()) !== null ? $w['helper'] : substr((string)@hash_file('sha256', archive_dir() . '/_rushes/ingest.py'), 0, 12),
+            'current' => (waiting_read() ?? ['helper' => ''])['helper'],
             'paused'  => (bool)$ctl['paused'],
             'no_reconnect' => !empty($ctl['no_reconnect']),
             'describe_paused' => !empty($ctl['describe_paused']),

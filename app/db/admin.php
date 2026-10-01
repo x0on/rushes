@@ -1290,8 +1290,8 @@ function drawPrepare(rows, a) {
     x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };
   });
 }
-loadAnalysis(); setInterval(loadAnalysis, 10000);
+every(loadAnalysis, 10000);
 
 show((location.hash || '#overview').slice(1));
-load(); setInterval(load, 4000);
+every(load, 4000);
 </script>

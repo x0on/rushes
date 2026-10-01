@@ -482,14 +482,7 @@ function waiting_read(): ?array {
     return $out;
 }
 function scripts_waiting(): array {
-    if (($w = waiting_read()) !== null) return $w['items'];
-    // ponytail: an older runner keeps no list; then the scripts folder is read here, as before
-    $out = [];
-    foreach (glob(archive_dir() . '/_rushes/scripts/*.sh') ?: [] as $f) {
-        $n = basename($f);
-        if (!preg_match('/^[a-z][a-z0-9-]*\.sh$/', $n)) continue;
-        $new = hash_file('sha256', $f); $old = @hash_file('sha256', web_dir() . "/$n") ?: '';
-        if ($new !== $old) $out[] = ['kind' => 'script', 'name' => $n, 'hash' => $new, 'new' => $old === '', 'changed' => filemtime($f)];
-    }
-    return $out;
+    // No list yet (the runner writes it within five minutes): nothing is shown
+    // as waiting, rather than this page reading the VIDEO share itself.
+    return ($w = waiting_read()) !== null ? $w['items'] : [];
 }

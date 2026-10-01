@@ -82,6 +82,7 @@ touch("$root/archive/_rushes/analysis/ab/$fp.json", time() - 100);
 @mkdir("$root/archive/_rushes/analysis/cd", 0777, true);
 file_put_contents("$root/archive/_rushes/analysis/cd/" . str_repeat('cd', 12) . ".json",
     json_encode(['fingerprint' => str_repeat('cd', 12), 'file' => "$root/archive/x.mov", 'shots' => []]));
+touch(web_dir() . '/describe-status.tsv');                  // the helper says it is describing
 check(analysis_import()['described_files'] === 2, 'descriptions in _rushes/analysis are imported into search');
 $m = analysis_search('central park');
 check($m['count'] === 1 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['what'] === 'An aerial view of a water park',
@@ -89,6 +90,8 @@ check($m['count'] === 1 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['wh
 check(analysis_search('parque bienvenidos')['rows'][0]['kind'] === 'speech', 'spoken words find the moment they were said');
 check(analysis_search('parks recreation')['count'] === 1 && analysis_search('nothing here')['count'] === 0, 'themes are searchable; nothing invented');
 check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
+touch(web_dir() . '/describe-status.tsv', time() - 3600);    // describing ended an hour ago
+check((analysis_import()['state'] ?? '') === 'quiet', 'idle: the descriptions folder on VIDEO is not looked through');
 require_once "$root/app/db/prepare.php";
 file_put_contents("$root/archive/b4k.mov", 'four'); landed("$root/archive/b4k.mov", 4);
 file_put_contents("$root/app/proxy-made.tsv",
@@ -145,6 +148,9 @@ foreach (['a.MOV' => 100, 'b.mxf' => 200, 'notes.txt' => 5] as $n => $size) {
 }
 file_put_contents("$root/archive/PARKS0.mov", 'not in the folder'); landed("$root/archive/PARKS0.mov", 17);
 file_put_contents("$root/archive/PROXIES/PARKS/day1/a.mp4", 'proxy');
+$guess = prepare_plan('PARKS', false, false);
+check($guess['videos'] === 2 && $guess['have'] === 0 && !is_file(web_dir() . '/prepare-plan.json'),
+      'a page asking gets a first guess from search alone: no proxy looked up on VIDEO, nothing kept');
 $plan = prepare_plan('PARKS', true);
 check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 300 && $plan['to_read'] === 200,
       'a folder is planned at once from the catalogue: its videos, the ones with a proxy, what is left to read');
@@ -152,6 +158,9 @@ file_put_contents("$root/app/proxy-speed.tsv", "100000000\t10\tvideo chip\n30000
 check(abs(proxy_rate() - 20000000) < 1, 'the speed is measured from the proxies really made (bytes per second)');
 file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n");
 $f = proxy_failures('PARKS');
+check(prepare_plan('PARKS', false, false)['failures'] === [] && count(prepare_plan('PARKS', true)['failures']) === 1
+      && count(prepare_plan('PARKS', false, false)['failures']) === 1,
+      'failures are looked up with the plan by the runner; a page gets what it found');
 check(count($f) === 1 && $f[0]['file'] === 'day1/b.mxf' && $f[0]['why'] === 'moov atom not found',
       "a folder's failures say which file and why, and leave out ones made since and other folders");
 // A pull for Premiere carries what describing found: a marker per shot and line spoken, at the right frame.

@@ -75,23 +75,29 @@ function media_import(): array {
 // What a folder holds, from the search catalogue: instant, no job to wait for.
 // When its turn comes, proxy.sh reads the folder itself again, so footage that
 // arrived since still gets its proxy. Kept 10 minutes, so the list stays quick.
-function prepare_plan(string $rel, bool $fresh = false): array {
+// Whether a proxy exists is looked up on the VIDEO share, so only the runner
+// ($look, once a minute, when VIDEO answers) and a person's own click do that.
+// A page asking every few seconds gets the last answer, however old, or a
+// first guess from search alone (have = 0) until the runner has looked.
+function prepare_plan(string $rel, bool $fresh = false, bool $look = true): array {
     $f = web_dir() . '/prepare-plan.json';
     $cache = json_decode((string)@file_get_contents($f), true) ?: [];
-    if (!$fresh && isset($cache[$rel]) && time() - $cache[$rel]['at'] < 600) return $cache[$rel];
+    if (isset($cache[$rel]) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600))) return $cache[$rel];
     require_once __DIR__ . '/schema.php';
     $root = rtrim(archive_dir(), '/'); $px = "$root/PROXIES";
     // a range, not LIKE, so the path index answers it
     $st = db()->prepare('SELECT path, bytes FROM files WHERE path >= ? AND path < ?');
     $st->bindValue(1, "$root/$rel/"); $st->bindValue(2, "$root/$rel" . '0');     // '0' sorts right after '/'
     $r = $st->execute();
-    $p = ['videos' => 0, 'have' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time()];
+    $p = ['videos' => 0, 'have' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => []];
     while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) {
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
         $p['videos']++; $p['bytes'] += (int)$x[1];
-        if (is_file(preg_replace('/\.[^.\/]*$/', '.mp4', $px . substr($x[0], strlen($root))))) $p['have']++;
+        if ($look && is_file(preg_replace('/\.[^.\/]*$/', '.mp4', $px . substr($x[0], strlen($root))))) $p['have']++;
         else $p['to_read'] += (int)$x[1];
     }
+    if (!$look) return $p;
+    $p['failures'] = array_slice(proxy_failures($rel), 0, 100);
     $cache[$rel] = $p;
     @file_put_contents("$f.new", json_encode($cache)) && @rename("$f.new", $f);
     return $p;
@@ -214,7 +220,7 @@ function describing_now(): array {
 
 // Where each prepared folder stands, step by step. The one source of truth for
 // both the page and prepare_advance, so they can never disagree.
-function prepare_table(): array {
+function prepare_table(bool $look = false): array {
     $h = rtrim(helper_archive(), '/');
     $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now(); $rate = proxy_rate();
     $queue = array_map('rtrim', @file(web_dir() . '/ingest-queue.tsv') ?: []);
@@ -248,14 +254,14 @@ function prepare_table(): array {
         else
             $ds = ['step' => in_array($px['step'], ['done', 'again'], true) ? 'next' : 'waiting'];
         // time left for its proxies, from the speed measured here
-        $plan = prepare_plan($rel); $left = null;
+        $plan = prepare_plan($rel, false, $look); $left = null;
         if ($rate > 0 && !in_array($px['step'], ['done'], true)) {
             $bytes = $plan['to_read'];
             if ($px['step'] === 'making' && $px['total'] > 0) $bytes = $plan['bytes'] * (1 - $px['done'] / $px['total']);
             $left = (int)round($bytes / $rate);
         }
         $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => $plan, 'left' => $left,
-                   'failures' => array_slice(proxy_failures($rel), 0, 100), 'proxies' => $px, 'describe' => $ds];
+                   'failures' => $plan['failures'] ?? [], 'proxies' => $px, 'describe' => $ds];
     }
     return $rows;
 }
@@ -267,7 +273,7 @@ function prepare_advance(): array {
     $building = !empty(proxy_now()['running']);
     $Q = web_dir() . '/ingest-queue.tsv';
     $lines = array_values(array_filter(array_map('rtrim', @file($Q) ?: []), fn($l) => $l !== ''));
-    foreach (prepare_table() as $r) {
+    foreach (prepare_table(true) as $r) {
         $p = $r['proxies']['step'];
         if (in_array($p, ['waiting', 'again'], true) && !$building && $next === '') $next = $r['folder'];
         if (in_array($p, ['done', 'again'], true) && $r['describe']['step'] === 'next' && $h !== '') {

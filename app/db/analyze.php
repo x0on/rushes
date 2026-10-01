@@ -139,7 +139,8 @@ foreach (array_reverse(@file(web_dir() . '/ingest-history.tsv') ?: []) as $l) {
 require_once __DIR__ . '/analysis.php';
 analysis_init(); $db = db();
 $one = fn(string $sql) => (int)($db->querySingle($sql) ?? 0);
-$stats = ['files' => count(glob("$root/_rushes/analysis/*/*.json") ?: []),
+// counted in search, not on the VIDEO share: this answers a page every ten seconds
+$stats = ['files' => $one("SELECT COUNT(DISTINCT fp) FROM moments"),
           'shots' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'shot'"),
           'speech' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'speech'"),
           'failed' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'failed'")];

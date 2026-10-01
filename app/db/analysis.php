@@ -32,6 +32,12 @@ function as_here(string $p): string {
 function analysis_import(): array {
     analysis_init(); $db = db();
     $since = (int)meta_get('analysis_at', '0'); $newest = $since; $n = 0;
+    // Idle is free: the descriptions folder is only looked through while the
+    // helper is describing (it says so every minute) and ten minutes after,
+    // plus once a day in case one came in another way.
+    $said = (int)@filemtime(web_dir() . '/describe-status.tsv');
+    if (time() - $said > 600 && time() - (int)meta_get('analysis_looked', '0') < 86400) return ['added' => 0, 'state' => 'quiet'];
+    meta_set('analysis_looked', (string)time());
     $ins = $db->prepare('INSERT INTO moments (fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,
         shot_size,people,ages,light,part_of_day,mood,language,model,hay) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $del = $db->prepare('DELETE FROM moments WHERE fp = ?');
