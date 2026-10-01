@@ -21,6 +21,7 @@ transfer_select(['/src/Parks'], ['/src/Parks'=>[4,400]]);
 $_SERVER['REQUEST_METHOD'] = 'GET';
 ob_start(); include "$root/app/db/state.php"; $s = json_decode(ob_get_clean(), true);
 check(is_array($s), 'state.php answers with JSON');
+check(count($s['repeats'] ?? []) === 5 && $s['repeats'][0][0] === 'The runner on the archive machine', 'Overview lists what runs by itself (rule 5)');
 check($s['copy']['phase'] === 'copying' && $s['copy']['rate'] === 100 && $s['copy']['file'] === 'A001.MXF', 'live helper detail comes through');
 check($s['transfer'] && $s['transfer']['folders'] === 1, 'the saved transfer comes through beside it');
 check(!array_filter($s['recent'], fn($r) => $r['files'] === 0 && $r['what'] === 'brought over'), 'empty retries stay out of Activity');

@@ -399,7 +399,21 @@ function tb(int $b): string {
          : number_format($b / 1048576) . ' MB');
 }
 
+// What runs by itself (RISKS.md rule 5): each repeating thing, how often, when it
+// last did its work, and whether it stopped. Read from files on Web only.
+$hv = helper_volumes();
+$repeats = [
+    ['The runner on the archive machine', 'every minute; does nothing when there is nothing to do', $alive, $runner_ok ? 'ok' : 'bad'],
+    ['Reaching the VIDEO share', 'every minute, never while paused; walked away from after 20 s, stops after three',
+        $mtime('disk.txt'), is_readable("$WEB/video-tripped.txt") ? 'stopped — Try again above' : 'ok'],
+    ['Looking for updates', 'once an hour, or every five minutes while a page is open', $mtime('waiting.tsv'), 'ok'],
+    ['Copy of the database', 'once a day, checked first; a week of copies in _rushes/db-copies',
+        $mtime('db-copied'), is_readable("$WEB/db-damaged.txt") ? 'stopped — the check failed' : 'ok'],
+    ['The helper' . (($hv['host'] ?? '') !== '' ? ' on ' . $hv['host'] : ''), 'says what is plugged in every 20 s (less when Rushes does not answer); stops by itself if a share stops answering',
+        (int)($hv['at'] ?? 0), ($mac['phase'] ?? '') === 'blocked' && ($mac['source'] ?? '') === '' ? 'stopped — Try again now' : 'ok'],
+];
 echo json_encode([
+    'repeats'  => $repeats,
     'transfer' => $transfer,
     'search' => ['state' => $pendingSearch ? ($sync === 'retrying' ? 'retrying' : 'updating') : 'current', 'updated' => $searchAt],
     'archive'  => ['files' => $files, 'bytes' => $bytes,

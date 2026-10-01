@@ -127,6 +127,10 @@ if (isset($_POST['_newpass'])) {
 
       <section id="transferSummary" class="transfer-summary" aria-label="Transfer job" hidden></section>
       <div id="cards"></div>
+      <!-- RISKS.md rule 5: what repeats by itself is never invisible -->
+      <details id="repeats" style="margin:14px 0"><summary>What runs by itself</summary>
+        <table class="prep" style="margin-top:8px"><thead><tr><th>What</th><th>How often</th><th>Last</th><th></th></tr></thead><tbody id="repeatRows"></tbody></table>
+      </details>
 
       <!-- ══ transfers ══ -->
       <section id="pane-transfers" hidden>
@@ -392,6 +396,7 @@ function show(which) {
   // Overview shows the tiles and the cards; a section shows its own thing.
   $('tiles').hidden = (which !== 'overview');
   $('cards').hidden = (which !== 'overview');
+  $('repeats').hidden = (which !== 'overview');
   $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
   if (which === 'cache') loadCache();
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
@@ -855,6 +860,13 @@ async function load() {
   drawDescribeTools(d.helper);
   drawProxies(d.proxies);
   drawProxyTest(d);
+
+  $('repeatRows').innerHTML = (d.repeats || []).map(function (r) {
+    const ago = r[2] ? Math.round((Date.now() / 1000 - r[2]) / 60) : null;
+    return '<tr><td>' + esc(r[0]) + '</td><td class="muted">' + esc(r[1]) + '</td><td>' +
+      (ago === null ? 'not yet' : ago < 1 ? 'just now' : ago < 120 ? ago + ' min ago' : Math.round(ago / 60) + ' h ago') + '</td><td>' +
+      (r[3] === 'ok' ? '<span class="ok">✓</span>' : '<span class="bad">' + esc(r[3]) + '</span>') + '</td></tr>';
+  }).join('');
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {
