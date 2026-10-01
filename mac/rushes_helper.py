@@ -176,6 +176,7 @@ def install_service(url):
 
 
 def start_service():
+    launchctl("enable", f"gui/{UID}/{LABEL}")           # undoes stop_service's "disable"
     launchctl("bootout", f"gui/{UID}/{LABEL}")          # the old one, whatever it was
     for _ in range(5):
         r = launchctl("bootstrap", f"gui/{UID}", PLIST)
@@ -187,7 +188,10 @@ def start_service():
 
 
 def stop_service():
-    """Stops it and keeps it stopped, also after a restart, until started again here."""
+    """Stops it and keeps it stopped, also after a restart, until started again here.
+    bootout alone only stops it now: the plist says RunAtLoad, so macOS would start
+    it again at the next login. "disable" is what makes macOS leave it alone."""
+    launchctl("disable", f"gui/{UID}/{LABEL}")
     r = launchctl("bootout", f"gui/{UID}/{LABEL}")
     return r.returncode == 0 or not service_running()[0]
 
@@ -318,11 +322,12 @@ def diagnostics(url):
 # ── the window ──────────────────────────────────────────────────────────────
 class Window:
     """Everything the page shows, and what its buttons do. The page asks for
-    this state every second and draws it; slow work runs in a thread and moves
+    this state every 1.5 seconds and draws it; slow work runs in a thread and moves
     the state on, so the window never freezes and never goes away mid-way."""
 
     def __init__(self):
         self.lock = threading.Lock()
+        self.quit = threading.Event()                    # before any thread that watches it
         self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
                   "done": [], "waiting": False, "lan_asked": False}
         if self.s["url"] and service_points_here() and has_full_disk_access():
@@ -330,7 +335,6 @@ class Window:
         elif service_points_here() and self.s["url"]:
             self.s["step"] = "fda"                       # came back to finish the last switch
             self._watch_access()
-        self.quit = threading.Event()
 
     def set(self, **kw):
         with self.lock:
@@ -710,7 +714,7 @@ function home(s) {
     : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work.'
     : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
-  const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and two of the switches are not available. The log below still shows its work.</p>'
+  const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and four of the switches are not available. The log below still shows its work.</p>'
     : n.phase ? '<p><b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(n.source.split('/').pop()) : '') + '</p>' +
         (n.note ? '<p class="muted">' + esc(n.note) + '</p>' : '') + (n.file ? '<p class="muted">now: ' + esc(n.file.split('/').pop()) + '</p>' : '')
     : '<p class="muted">Nothing to do right now.</p>';
@@ -718,6 +722,8 @@ function home(s) {
     '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? off[1] : off[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
   return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div>' + now + '</div>' +
+    // what went wrong, said where it happened (a wrong pairing code, a switch Rushes refused, …)
+    (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
     (s.rushes && s.pairing && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
       (s.pairing === 'other' ? '<b>Rushes is paired with another helper</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
