@@ -693,6 +693,15 @@ class PairingTests(unittest.TestCase):
         self.assertEqual(out.getvalue().count('paired with another helper'), 1)
 
 
+class BadRecordTests(unittest.TestCase):
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+    def test_a_damaged_chain_file_is_said_not_crashed_on(self):
+        m = self.mod; d = Path(self.tmp.name) / 'rec' / 'ascmhl'; d.mkdir(parents=True)
+        (d / 'ascmhl_chain.xml').write_text('<not closed')
+        with self.assertRaises(ValueError):      # what callers catch, like any other bad record
+            m.mhl_write(str(d.parent), [(str(d.parent / 'a.mov'), 1, 'ab', 'original', '')], 'x')
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

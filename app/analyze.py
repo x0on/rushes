@@ -6,21 +6,29 @@
     analyze.py FOLDER_OR_FILE --store /Volumes/VIDEO/_rushes/analysis [--url RUSHES]
 
 For every video, photo or audio file under the folder:
-  1. cut it into shots (PySceneDetect), and sample two frames of each shot;
+  1. cut it into shots (PySceneDetect), and take two stills of each shot (one
+     of a very short shot), never in its first second or last half second;
   2. ask the vision model what each shot shows: a sentence, text on screen,
      shot size, people, age bands, setting, light, mood, themes, tags;
   3. write down what is said in it (Whisper), in the language it was said;
-  4. keep one small picture per shot, for the search results.
+  4. keep one picture per shot (the first still the model saw, 768 px wide),
+     for the search results.
 
 Everything is written to one JSON file per media file, in --store, named by the
 file's content fingerprint (not its path), so it survives the file being moved
 or renamed by a tidy-up. The search index is rebuilt from these files; they are
 the record, the database is only a view of them.
 
-Which models run is a setting (--model, --whisper), never code: the question
-and the answer fields are fixed, and every result says which model and which
-question produced it. Resumable: a file already described with the same model
-and question is skipped.
+Which models run is a setting (--model, --whisper; Rushes passes its settings
+analysis.model and analysis.whisper, and the defaults below are used only when
+those are not set): the question and the answer fields are fixed, and every
+result says which model and which question produced it. Resumable: a file
+already described with the same vision model and question is skipped (a
+change of speech model alone does not describe it again).
+
+Network: the theme list is read from Rushes (--url). A model given by name
+(as the defaults are) is downloaded from Hugging Face by the MLX libraries the
+first time, if it is not already on this computer; no footage is sent.
 
 Progress goes to stdout as lines starting "@@ " followed by JSON, which the
 helper turns into the live status in Rushes. Everything else is plain log.
@@ -340,6 +348,9 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
     duration, has_audio, has_video, clock = (0.0, False, True, "") if ext in IMAGE else probe(src)
     if proxy:                               # the camera clock is in the original
         clock = probe(path)[3] or clock
+    if ext not in IMAGE and ext not in AUDIO and not has_video and not has_audio:
+        # ffprobe could not read it at all: not described, so it is tried again next time
+        raise RuntimeError("could not be read (ffprobe found no picture and no sound)")
     thumbs = store / fp[:2] / fp
     thumbs.mkdir(parents=True, exist_ok=True)
     rec = {"version": VERSION, "fingerprint": fp, "file": str(path), "seen_at": [str(path)],

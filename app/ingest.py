@@ -235,82 +235,6 @@ MEDIA = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d",
          ".wav", ".aif", ".aiff", ".jpg", ".jpeg", ".png", ".tif", ".tiff",
          ".psd", ".ai", ".prproj", ".aep"}
 
-CARD_JUNK = {"CLIPS", "PRIVATE", "XDROOT", "AVCHD", "BDMV", "DCIM", "MEDIA",
-             "CONTENTS", "CLPR", "SUB", "MISC", "CANON", "GENERAL"}
-MONTHS = {m: f"{i+1:02d}" for i, m in enumerate(
-    ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"])}
-
-
-# ───────────────────────── where a file should land ─────────────────────────
-
-def date_from(name, parts):
-    """(date, source) using the same precedence as organize.sh on the NAS."""
-    import re
-    m = re.search(r"_(\d{6})[A-Z0-9]{0,2}_CANON", name)
-    if m:
-        yy, mm, dd = m.group(1)[:2], m.group(1)[2:4], m.group(1)[4:]
-        if 1 <= int(mm) <= 12 and 1 <= int(dd) <= 31:
-            return f"20{yy}-{mm}-{dd}", "filename"
-    m = re.search(r"(19|20)\d{6}", name)
-    if m:
-        d = m.group(0)
-        if 1 <= int(d[4:6]) <= 12 and 1 <= int(d[6:]) <= 31:
-            return f"{d[:4]}-{d[4:6]}-{d[6:]}", "filename"
-    joined = "/".join(parts)
-    m = re.search(r"(19|20)\d{2}[-_.][01]\d[-_.][0-3]\d", joined)
-    if m:
-        return m.group(0).replace("_", "-").replace(".", "-"), "path"
-    year = month = ""
-    for c in parts:
-        m = re.search(r"(19|20)\d{2}", c)
-        if m and not year:
-            year = m.group(0)
-        u = c.upper()[:3]
-        if not month and u in MONTHS and not c[:1].isdigit():
-            month = MONTHS[u]
-        m = re.match(r"^\d{3}_([A-Z]{3})$", c)
-        if m and not month:
-            month = MONTHS.get(m.group(1), "")
-    if year and month:
-        return f"{year}-{month}-01", "year+month"
-    if year:
-        return f"{year}-00-00", "year"
-    return "", ""
-
-
-def event_from(parts):
-    import re
-    for c in reversed(parts[:-1]):
-        u = c.upper()
-        if u.rstrip("0123456789") in CARD_JUNK: continue
-        if re.match(r"^(CAM|CAMERA)[ _-]?\w*$", u): continue
-        if re.match(r"^(19|20)\d{2}$", c) or re.match(r"^\d{1,3}$", c): continue
-        if c.startswith(("Copied_", "_", ".")): continue
-        slug = re.sub(r"[^a-z0-9]+", "-", c.lower()).strip("-")[:48].strip("-")
-        if slug: return slug
-    return "misc"
-
-
-def dest_for(src, root=None):
-    """Absolute destination path under the archive root."""
-    import re
-    root = root or ARCHIVE
-    p = Path(src)
-    parts = list(p.parts[1:])
-    date, how = date_from(p.name, parts)
-    ev = event_from(parts)
-    cam = ""
-    if len(parts) >= 2 and re.match(r"^(CAM|CAMERA)[ _-]?\w*$|^CLIPS?\d*$",
-                                    parts[-2].upper()):
-        cam = parts[-2] + "/"
-    if not date:       return f"{root}/_unsorted/{ev}/{cam}{p.name}", "low"
-    year = date[:4]
-    if how == "year":  return f"{root}/{year}/{year}_{ev}/{cam}{p.name}", "medium"
-    if how == "year+month":
-        return f"{root}/{year}/{date[:7]}_{ev}/{cam}{p.name}", "medium"
-    return f"{root}/{year}/{date}_{ev}/{cam}{p.name}", "high"
-
-
 # ───────────────────────── is it already on the NAS? ────────────────────────
 
 def load_manifest(refresh=False):
@@ -1031,7 +955,10 @@ def mhl_write(root, files, comment, process="in-place"):
     chain = os.path.join(d, "ascmhl_chain.xml")
     links = []
     if os.path.exists(chain):     # never rewritten from a chain it could not read: that would lose links
-        for e in ET.parse(chain).getroot():
+        try: chain_root = ET.parse(chain).getroot()
+        except ET.ParseError as why:          # said to the caller like any other bad record, never a crash after a copy
+            raise ValueError(f"cannot read {chain}: {why}")
+        for e in chain_root:
             links.append((int(e.get("sequencenr")), e.findtext(MHL_CHAIN_NS + "path"), e.findtext(MHL_CHAIN_NS + "c4")))
     seq = max([n for n, _, _ in links] + [int(f[:4]) for f in os.listdir(d) if f[:4].isdigit()] + [0]) + 1
     name = f"{seq:04d}_{os.path.basename(root.rstrip(os.sep))}_{time.strftime('%Y-%m-%d_%H%M%SZ', time.gmtime())}.mhl"
@@ -1124,7 +1051,7 @@ def mhl_follow(pairs, o, why):
             if any(f not in (NOTE, ".DS_Store") for f in fn):
                 left = True; break
         if left: continue
-        to = os.path.join(NAS_MOUNT, "_rushes", "ascmhl-moved", os.path.relpath(r, NAS_MOUNT), time.strftime("%Y%m%d-%H%M%S"))
+        to = os.path.join(str(STATUS), "ascmhl-moved", os.path.relpath(r, NAS_MOUNT), time.strftime("%Y%m%d-%H%M%S"))
         try:
             os.makedirs(os.path.dirname(to), exist_ok=True)
             os.rename(os.path.join(r, MHL), to)
@@ -1555,17 +1482,6 @@ def untidy(name):
     status(phase="done", source=f"undo {name}", copied=len(back), of=len(rows))
 
 
-def tell_search(paths):
-    """Make what landed searchable. Queued on this computer first and sent in
-    batches; only what Rushes accepts leaves the queue, so a dropped network
-    or a restart loses nothing — the watcher keeps retrying."""
-    cp = checkpoints()
-    for p in paths:
-        if "\t" in p or "\n" in p: continue
-        try: cp.landed(p, os.path.getsize(p))
-        except OSError: pass
-    cp.flush(force=True)
-
 _looked = [[], 0.0]        # the latest look at what is plugged in here, and when
 _looking = [""]            # the drive being looked at right now
 
@@ -1983,7 +1899,7 @@ def update_self():
         return
     print(f"\n{time.strftime('%H:%M:%S')}  a new version of the helper is on the archive — updated, restarting …")
     sys.stdout.flush()
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    os.execv(sys.executable, [sys.executable, "-u"] + [a for a in sys.argv if a != "-u"])
 
 # Stop before the archive is full, not after. A copy that dies at 100% leaves
 # the NAS with no room to write anything at all — including its own logs and
@@ -2272,8 +2188,7 @@ def watch(root, every=20):
                 # a forged or stale request. Refuse once, record it, move on.
                 print(f"  ! refused {path}: not a drive or card on this machine")
                 history("refused", into.split("\t")[0], 0, 0, 0, f"{path} is not a mounted drive here")
-                with open(DONE, "a") as f:
-                    f.write(into.split("\t")[0] + "\n")
+                _mark_done(into.split("\t")[0])          # one writer at a time (the describing lane writes here too)
                 did = True; break
             if verb in ("copy", "ingest"):
                 free = free_bytes()
@@ -2355,7 +2270,9 @@ def describe_lane(every=20):
             with _io:
                 jobs = list(_describe_jobs)
                 done = set(DONE.read_text().splitlines()) if DONE.exists() else set()
-            todo = [(p, a) for p, a in jobs if f"analyze {p}{' ' + a if a else ''}" not in done]
+            # A folder skipped from Manage is left alone, not started and stopped again every few seconds.
+            skip = set(control().get("skip", []))
+            todo = [(p, a) for p, a in jobs if f"analyze {p}{' ' + a if a else ''}" not in done and p not in skip]
             try:
                 todo = within("describe", 30, lambda: [(p, a) for p, a in todo if os.path.exists(p)]) if todo else []
             except Stalled:
@@ -2807,43 +2724,20 @@ def undo():
     roll = Path(ARCHIVE) / "_rollback"
     for line in open(LOG):
         f = line.rstrip("\n").split("\t")
-        if len(f) != 2 or f[0] in ("EXISTS", "FAILED"): continue
+        if len(f) != 2 or f[0] in ("EXISTS", "FAILED"): continue      # EXISTS: logs from older versions
         dest = Path(f[1])
         if not dest.exists(): continue
+        try: rel = dest.relative_to(ARCHIVE)
+        except ValueError:                   # a card copied outside ARCHIVE: left where it is, and said
+            print(f"  left in place (not under {ARCHIVE}): {dest}"); continue
         # ponytail: move aside rather than delete — same rule as everywhere else
-        target = roll / dest.relative_to(ARCHIVE)
+        target = roll / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         dest.rename(target); back += 1
     print(f"moved {back} copied files to {roll}")
 
 
 def selftest():
-    d, how = date_from("A030C456_240318AB_CANON.MXF", ["x"])
-    assert (d, how) == ("2024-03-18", "filename"), (d, how)
-    d, _ = date_from("DJI_20260221180408_0085_D.MP4", ["x"])
-    assert d == "2026-02-21", d
-    d, how = date_from("clip.mov", ["Volumes", "Old", "2026-05-08_prayer-day", "clip.mov"])
-    assert (d, how) == ("2026-05-08", "path"), (d, how)
-    d, how = date_from("clip.mov", ["Old", "2022", "003_MAR", "MISO", "clip.mov"])
-    assert (d, how) == ("2022-03-01", "year+month"), (d, how)
-    d, how = date_from("clip.mov", ["Old", "2025", "stuff", "clip.mov"])
-    assert (d, how) == ("2025-00-00", "year"), (d, how)
-    assert date_from("clip.mov", ["Old", "stuff"])[0] == ""
-
-    assert event_from(["Old", "2022", "MISO CONCERT 2022", "CAM 2", "a.mxf"]) \
-        == "miso-concert-2022"
-    assert event_from(["CLIPS001", "CAM 1", "a.mxf"]) == "misc"
-    # a real folder name still wins over card junk further down
-    assert event_from(["OldServer", "CLIPS001", "a.mxf"]) == "oldserver"
-
-    dest, conf = dest_for("/Volumes/Old/PARKS/MISO BROLL/CAM 2/A030C456_240318AB_CANON.MXF",
-                          "/Volumes/VIDEO/ARCHIVE")
-    assert dest == ("/Volumes/VIDEO/ARCHIVE/2024/2024-03-18_miso-broll/"
-                    "CAM 2/A030C456_240318AB_CANON.MXF"), dest
-    assert conf == "high"
-    dest, conf = dest_for("/Volumes/Old/random/thing.mov", "/R")
-    assert dest.startswith("/R/_unsorted/") and conf == "low", dest
-
     # a size that exists nowhere on the NAS must never touch the disk
     calls = []
     global digest
