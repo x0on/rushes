@@ -7,6 +7,7 @@
 // state what is true on disk: the old place empty, the new place holding a
 // file, both inside the archive. A forged list changes nothing.
 require_once __DIR__ . '/schema.php';
+helper_gate();                          // only the paired helper's word is taken (pair.php)
 header('Content-Type: application/json');
 
 $raw = (string)($_POST['moves'] ?? '');

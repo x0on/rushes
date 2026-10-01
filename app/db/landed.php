@@ -7,6 +7,7 @@
 // anything that is not really there: each path must sit inside the archive,
 // on disk, at exactly the size the helper says. A forged list adds nothing.
 require_once __DIR__ . '/schema.php';
+helper_gate();                          // only the paired helper's word is taken (pair.php)
 header('Content-Type: application/json');
 
 $raw = (string)($_POST['files'] ?? '');

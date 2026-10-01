@@ -653,6 +653,37 @@ class StallTests(unittest.TestCase):
         self.assertEqual(looks.count(str(base / 'CARD')), 3)        # a card shows within 20 s
 
 
+class PairingTests(unittest.TestCase):
+    """RISKS.md #10, the helper's side: the queue comes from the paired door."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_the_queue_is_asked_at_the_paired_door_and_an_older_rushes_still_works(self):
+        m = self.mod; asked = []
+        def urlopen(url, *a, **k):
+            asked.append(url)
+            if url.endswith('?queue'): raise m.urllib.error.HTTPError(url, 400, 'nothing asked', {}, None)
+            return io.BytesIO(b'copy\t/x\n')
+        with patch.object(m.urllib.request, 'urlopen', side_effect=urlopen):
+            self.assertEqual(m.fetch_queue(), 'copy\t/x\n')
+        self.assertEqual([u.split('/')[-1] for u in asked], ['helper.php?queue', 'ingest-queue.tsv'])
+
+    def test_a_helper_rushes_refuses_touches_nothing_and_asks_less(self):
+        m = self.mod; waits = []
+        def wait(s):
+            waits.append(s)
+            if len(waits) >= 3: raise StopIteration()
+        def urlopen(url, *a, **k):
+            raise m.urllib.error.HTTPError(url, 403, 'not the paired helper', {}, None)
+        with patch.object(m.urllib.request, 'urlopen', side_effect=urlopen), patch.object(m.threading.Thread, 'start'), \
+             patch.object(m, 'wait', side_effect=wait), patch.object(m, 'update_self'), patch.object(m, 'remember_shares'), \
+             patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch.object(m, 'send_file'), \
+             patch.object(m, '_archive_here', side_effect=AssertionError('touched the archive while refused')), \
+             patch('sys.stdout', new_callable=io.StringIO) as out:
+            with self.assertRaises(StopIteration): m.watch(str(self.archive))
+        self.assertEqual(waits, [20, 60, 300])
+        self.assertEqual(out.getvalue().count('paired with another helper'), 1)
+
+
 class AddressTests(unittest.TestCase):
     """The helper follows Rushes to a new address, and its saved progress goes with it."""
     def setUp(self):

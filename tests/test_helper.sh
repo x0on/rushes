@@ -1,7 +1,7 @@
 #!/bin/sh
 # The helper's buttons and its install script, on a fixture — never the real archive.
 #   PHPBIN=php sh tests/test_helper.sh      (any PHP 8 command line)
-set -e
+set -e; [ -n "${DEBUG:-}" ] && set -x
 PHPBIN=${PHPBIN:-php}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=${RUSHES_TEST_TMP:-/tmp}/rushes-helper-$$
@@ -27,8 +27,9 @@ check 'call GET "{\"app\":\"\"}" | grep -q "PK-fake"' 'the app is served from th
 check 'call GET "{\"remove\":\"\"}" | grep -q "launchctl bootout"' 'remove script takes it off again'
 check 'call GET "{\"where\":\"\"}" | grep -q "\"url\":\"http://nas.test\""' 'helpers can ask where Rushes is'
 want=$(sha256sum "$ROOT/archive/_rushes/ingest.py" | cut -d" " -f1)
-check 'call GET "{\"hash\":\"\"}" | grep -q "$want"' 'the helper can compare itself with the archive copy'
-check 'call POST "{}" "{\"action\":\"pause\"}" | grep -q "sign in"' 'buttons need the admin password or a session'
+printf 'helperfile\tingest.py\t%s\n' "$want" > "$ROOT/app/waiting.tsv"     # as the runner lists it
+check 'call GET "{\"hash\":\"\"}" | grep -q "$want"' 'the helper can compare itself with the archive copy (from the runner list, not VIDEO)'
+check 'call POST "{}" "{\"action\":\"scripts\"}" | grep -q "sign in"' 'installing needs the admin password or a session (Pause and the like do not: the helper window presses them)'
 call POST '{}' '{"action":"pause","pass":"rushes"}' >/dev/null
 check 'call GET "{\"control\":\"\"}" | grep -q "\"paused\":true"' 'Pause is saved for the helper to read'
 call POST '{}' '{"action":"resume","pass":"rushes"}' >/dev/null

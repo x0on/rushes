@@ -9,6 +9,7 @@
 // file, in exactly one shape. A forged list gains nothing: the helper re-checks
 // every path against its own drives before it copies a byte.
 require_once __DIR__ . '/config.php';
+helper_gate();                          // only the paired helper's word is taken (pair.php)
 header('Content-Type: application/json');
 
 $raw = (string)($_POST['volumes'] ?? '');

@@ -487,3 +487,58 @@ function scripts_waiting(): array {
     // as waiting, rather than this page reading the VIDEO share itself.
     return ($w = waiting_read()) !== null ? $w['items'] : [];
 }
+
+// ── pairing (RISKS.md #10) ───────────────────────────────────────────────────
+// One helper is paired with Rushes, and only it is given work: two helpers
+// copying the same queue would copy over each other. Setup shows a one-time
+// code; Rushes Helper sends it once and gets an ID back, which it then sends
+// with every request (X-Rushes-Helper). Kept in a .php file that prints
+// nothing: the web folder is served, and this must not be downloadable.
+// Not paired yet: every helper is given work, as before, and Setup says so.
+function helper_id_file(): string { return web_dir() . '/helper-id.php'; }
+
+function helper_paired(): array {
+    $p = is_readable(helper_id_file()) ? @include helper_id_file() : [];
+    return is_array($p) && !empty($p['id']) ? $p : [];
+}
+
+function php_keep(string $f, array $a): bool {
+    $ok = @file_put_contents("$f.new", "<?php return " . var_export($a, true) . ";\n") !== false && @rename("$f.new", $f);
+    if ($ok) { @chmod($f, 0600); if (function_exists('opcache_invalidate')) @opcache_invalidate($f, true); }
+    return $ok;
+}
+
+// 'none' (not paired), 'this' (the paired helper asking) or 'other'
+function helper_pairing(): string {
+    $p = helper_paired();
+    if (!$p) return 'none';
+    // the helper built into the archive machine asks from the machine itself
+    if (helper_mode() === 'built_in' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) return 'this';
+    return hash_equals((string)$p['id'], (string)($_SERVER['HTTP_X_RUSHES_HELPER'] ?? '')) ? 'this' : 'other';
+}
+
+// At the top of every door that gives a helper work or takes its word: any
+// helper but the paired one is refused, and named on the page.
+function helper_gate(): void {
+    if (helper_pairing() !== 'other') return;
+    $f = web_dir() . '/helper-refused.tsv';
+    $l = array_slice(@file($f, FILE_IGNORE_NEW_LINES) ?: [], -19);
+    $l[] = time() . "\t" . ($_SERVER['REMOTE_ADDR'] ?? '') . "\t" . substr(preg_replace('/[\t\r\n]/', ' ', (string)($_POST['host'] ?? '')), 0, 80);
+    @file_put_contents("$f.new", implode("\n", $l) . "\n") !== false && @rename("$f.new", $f);
+    http_response_code(403); header('Content-Type: application/json');
+    echo json_encode(['error' => 'not the paired helper',
+        'why' => 'Rushes is paired with another helper. To use this one instead, get a code in Rushes → Setup → Pair a helper, and enter it in Rushes Helper.']);
+    exit;
+}
+
+// Helpers refused lately (the last hour): where from, and the computer's name when it said
+function helper_refused(): array {
+    $out = [];
+    foreach (@file(web_dir() . '/helper-refused.tsv', FILE_IGNORE_NEW_LINES) ?: [] as $x) {
+        [$t, $ip, $host] = array_pad(explode("\t", $x), 3, '');
+        if (time() - (int)$t > 3600) continue;
+        $k = $host !== '' ? $host : $ip;
+        $out[$k] = ['ip' => $ip, 'host' => $host, 'at' => (int)$t];
+    }
+    return array_values($out);
+}

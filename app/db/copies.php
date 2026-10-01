@@ -13,6 +13,7 @@
 // ponytail: no password, like landed.php — the helper has none. What it can
 // change is only this count; nothing is moved or deleted because of it.
 require_once __DIR__ . '/schema.php';
+helper_gate();                          // only the paired helper's word is taken (pair.php)
 header('Content-Type: application/json');
 
 $raw = (string)($_POST['copies'] ?? '');

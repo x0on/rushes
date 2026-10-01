@@ -38,7 +38,7 @@ a NAS that does not respond, a second run on top of the first.
 | 7 | The database is damaged (power cut). Search rebuilds from disk; **pulls exist only in the database**. | A daily copy of the database in `_rushes`; a check at start. | To do |
 | 8 | One Mac is the only helper; its local state and **the signing key** live only there. | Keep the helper's state on the archive; the signing key stays on the Mac for now (decided 2026-10-01): losing it only means granting Full Disk Access and Local Network again; a private copy (USB stick, own iCloud) later. | Key: on the Mac only |
 | 9 | A macOS update or IT security software blocks the helper. | The helper says "blocked" plainly; the app goes through IT's approval once. | Partly done |
-| 10 | Two helpers at once (a second Mac, or two copies on one) copy over each other. | **Pairing**: Setup shows a one-time code, the helper and Rushes exchange an ID, only the paired helper gets work, others are refused and named on the page. Every helper door checks the ID. The one-per-Mac lock stays. | To do |
+| 10 | Two helpers at once (a second Mac, or two copies on one) copy over each other. | **Pairing**: Setup shows a one-time code, the helper and Rushes exchange an ID, only the paired helper gets work, others are refused and named on the page. Every helper door checks the ID. The one-per-Mac lock stays. Built: Setup → Pair a helper (a six-digit code, ten minutes, once, five wrong tries cancel it); Rushes Helper's window takes the code; the ID is kept in a .php file that prints nothing if fetched; the queue, report, status, transfer, landed, moved and copies doors refuse any other helper and Overview names it; a refused helper touches nothing and asks less and less. Not paired yet = every helper given work, as before, and Setup says so. Tests: tests/test_pair.sh, PairingTests. | Done, not installed |
 | 11 | Python packages or models change and describing breaks after an update. | Pin exact versions in the installer; keep model files locally. | With the installer |
 
 ## Could mislead people
@@ -53,7 +53,7 @@ a NAS that does not respond, a second run on top of the first.
 | # | Risk | Decided | Status |
 |---|---|---|---|
 | 14 | **The deploy folder**: anyone who can write to VIDEO can publish a page on the NAS's web server within a minute. | Pages need the same "Install it — Sure?" approval as scripts: the runner lists what waits (with fingerprints) and installs only exactly what was approved. | Done, not installed |
-| 15 | Default admin password; plain http; anyone on the network can open Manage. | A real password required; pages served to the local network only. | To do |
+| 15 | Default admin password; plain http; anyone on the network can open Manage. The password file (.adminpass) sits in the served web folder, so its hash may be downloadable. | A real password required; pages served to the local network only; the password kept the way the helper ID is (a .php file that prints nothing). | To do |
 
 ## People and age
 

@@ -7,6 +7,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $job = transfer_current();
     echo json_encode($job, JSON_UNESCAPED_SLASHES); exit;
 }
+helper_gate();                          // only the paired helper's word is taken (pair.php)
 // The helper can report only an existing selection, never create a job or
 // instruct file operations. Like landed.php, this is a local-network endpoint.
 $j = (string)($_POST['job'] ?? ''); $p = (string)($_POST['source'] ?? '');

@@ -42,6 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         out(file_get_contents(helper_src($f)), 'text/x-python; charset=utf-8');
     }
     if (isset($_GET['hash']))    out(helper_hashes());
+    // The work: only for the paired helper (pair.php), once there is one.
+    if (isset($_GET['queue'])) { helper_gate(); out((string)@file_get_contents(web_dir() . '/ingest-queue.tsv'), 'text/plain; charset=utf-8'); }
     if (isset($_GET['control'])) out(helper_control());
     if (isset($_GET['builtin'])) out(helper_mode() === 'built_in' ? 'yes' : 'no', 'text/plain');
     // Where helpers should find Rushes: the address in Setup, and this machine's

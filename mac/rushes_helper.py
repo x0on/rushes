@@ -15,6 +15,7 @@ on this computer only, behind a random key. Everything it does is written to
 import http.server
 import json
 import os
+import platform
 import plistlib
 import re
 import subprocess
@@ -22,6 +23,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 
 APP = os.environ.get("RUSHES_APP") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -35,6 +37,8 @@ FILES = ("ingest.py", "transfer_state.py")
 # The helper writes this when a share stopped answering three times (RISKS.md
 # rule 4): it then touches no share until Try again here removes it.
 STOPPED = os.path.join(HOME, "archive-pilot", "stopped.txt")
+# Pairing (RISKS.md #10): the ID Rushes gave this Mac, sent with every request.
+HELPER_ID = os.path.join(HOME, "archive-pilot", "helper-id")
 TCC = os.path.join(HOME, "Library", "Application Support", "com.apple.TCC", "TCC.db")
 LAN_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
@@ -188,6 +192,13 @@ def stop_service():
     return r.returncode == 0 or not service_running()[0]
 
 
+def computer_name():
+    try:
+        return subprocess.run(["scutil", "--get", "ComputerName"], capture_output=True, text=True, timeout=5).stdout.strip() or platform.node()
+    except Exception:
+        return platform.node()
+
+
 def restart_service():
     launchctl("kickstart", "-k", f"gui/{UID}/{LABEL}")
 
@@ -222,10 +233,23 @@ def remove_service():
 
 
 # ── Rushes: what the helper is doing, and its switches ──────────────────────
+def helper_id():
+    try:
+        with open(HELPER_ID) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def rushes(url, path, data=None):
     body = urllib.parse.urlencode(data).encode() if data is not None else None
-    with urllib.request.urlopen(url.rstrip("/") + path, data=body, timeout=6) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+    req = urllib.request.Request(url.rstrip("/") + path, data=body, headers={"X-Rushes-Helper": helper_id()})
+    try:
+        with urllib.request.urlopen(req, timeout=6) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:              # Rushes' own words, when it gives them
+        try: raise RuntimeError(json.loads(e.read().decode("utf-8", "replace"))["error"]) from None
+        except (ValueError, KeyError): raise e from None
 
 
 def log_tail(n=12):
@@ -335,6 +359,8 @@ class Window:
             st = rushes(self.s["url"], "/db/state.php")
             h["now"] = st.get("copy") or {}
             h["describing"] = ((st.get("helper") or {}).get("describe")) or {}
+            try: h["pairing"] = rushes(self.s["url"], "/db/pair.php").get("pairing", "")
+            except Exception: h["pairing"] = ""          # a Rushes from before pairing
             h["rushes"] = True
         except Exception as e:
             h["rushes"] = False; h["rushes_why"] = str(getattr(e, "reason", e))
@@ -392,6 +418,9 @@ class Window:
             except OSError: pass
             log("Try again: the helper may touch the shares again")
             self.set(said="Asked ✓ It looks at the shares again within a minute. If one still does not answer, it stops again after three tries and says so here.")
+        elif do == "pair":
+            code = "".join(ch for ch in str(a.get("code", "")) if ch.isdigit())
+            self.run("Pairing with Rushes …", lambda: self.pair(code))
         elif do == "back-home":
             self.set(step="home", said="")
         elif do == "done":
@@ -410,6 +439,19 @@ class Window:
                                                     if start_service() else "Could not start it — see setup.log."))
         elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "check-pause", "check-resume", "nudge"):
             self.run("Asking Rushes …", lambda: self.switch(do))
+
+    def pair(self, code):
+        """The code Rushes → Setup shows, for this Mac's ID. The background
+        helper restarts to send it; the one paired before is refused from now."""
+        r = rushes(self.s["url"], "/db/pair.php", {"code": code, "host": computer_name()})
+        os.makedirs(os.path.dirname(HELPER_ID), exist_ok=True)
+        with open(HELPER_ID + ".new", "w") as f:
+            f.write(r["id"] + "\n")
+        os.chmod(HELPER_ID + ".new", 0o600); os.replace(HELPER_ID + ".new", HELPER_ID)
+        log("paired with Rushes")
+        if service_running()[0]:
+            restart_service()
+        self.set(said="Paired ✓ Rushes gives work to this Mac only. Any other helper is refused, and Rushes names it.")
 
     def ask_help(self):
         """Help is asked for in the open: a new GitHub issue for Rushes, filled in
@@ -538,7 +580,7 @@ th,td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid va
 <script>
 const K = location.pathname;       // the page's own key, needed for every question
 const STEPS = [['welcome','Welcome'],['address','Where Rushes is'],['install','Installing'],['fda','Full Disk Access'],['all-set','All set']];
-let S = {}, typed = null, sent = '', credits = null;
+let S = {}, typed = null, sent = '', credits = null, paircode = '';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function act(d, extra) {
@@ -646,7 +688,10 @@ function draw() {
   if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left"><button data-credits="1">What it is made of</button> ')
     : '<span class="left"><button data-credits="1">What it is made of</button></span>' + f);
   const keep = $('url') && document.activeElement === $('url');
+  const keepCode = $('paircode') && document.activeElement === $('paircode');
   $('body').innerHTML = b; $('foot').innerHTML = f;
+  if ($('paircode')) { $('paircode').oninput = e => paircode = e.target.value; if (keepCode) $('paircode').focus();
+    $('paircode').onkeydown = e => { if (e.key === 'Enter') act('pair', {code: $('paircode').value}); }; }
   if ($('url')) { $('url').oninput = e => typed = e.target.value; if (keep) { $('url').focus(); } $('url').onkeydown = e => { if (e.key === 'Enter') act('address', {url: $('url').value}); }; }
   document.querySelectorAll('[data-credits]').forEach(x => x.onclick = async () => {
     try { credits = await (await fetch(K + 'credits')).text(); } catch (e) { credits = 'Could not read the list.'; }
@@ -654,7 +699,7 @@ function draw() {
   });
   document.querySelectorAll('[data-do]').forEach(x => x.onclick = () => {
     const d = x.dataset.do; x.disabled = true;
-    act(d, d === 'address' ? {url: $('url').value} : null);
+    act(d, d === 'address' ? {url: $('url').value} : d === 'pair' ? {code: $('paircode').value} : null);
   });
 }
 const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
@@ -674,6 +719,13 @@ function home(s) {
   return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div>' + now + '</div>' +
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
+    (s.rushes && s.pairing && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
+      (s.pairing === 'other' ? '<b>Rushes is paired with another helper</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
+        : '<b>Not paired yet</b><small>Rushes gives work to any helper on the network until one is paired; two at once would copy over each other. To pair this one, ') +
+      'open Rushes → Setup → Pair a helper and type the six numbers here. The helper paired before is refused from then on.</small></div></div>' +
+      '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
+      btn('Pair', 'pair', true, !!s.busy) + '</div></div>'
+      : s.pairing === 'this' ? '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — it gives work to this Mac only.</p>' : '') +
     '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here.') +
       sw(on && !s.paused, ['resume', 'pause'], 'Copy footage', 'Off pauses copying at its next safe point; nothing is lost. Rushes → Manage has the same switch.', !on || !s.rushes) +

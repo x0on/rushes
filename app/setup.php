@@ -342,6 +342,39 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
               Drives are missing from the lists above until it is.</div>
           <?php endif; ?>
 
+          <?php if ($hmode === 'external'): $pp = helper_paired(); ?>
+            <!-- Pairing (RISKS.md #10): only one helper is given work. -->
+            <div class="seen <?= $pp ? 'ok' : 'bad' ?>" style="margin-top:8px">
+              <?= $pp ? '✓ Paired with ' . $e($pp['host'] ?: 'a helper') . ' since ' . $e(date('j M Y', (int)$pp['at'])) . ' — only it is given work.'
+                      : 'No helper is paired: any helper on the network is given work, and two at once would copy over each other.' ?>
+              <?php foreach (helper_refused() as $r): ?>
+                <br>Refused: <?= $e($r['host'] ?: $r['ip']) ?> asked for work <?= $e(ago_words($r['at'])) ?> — it is not the paired helper.
+              <?php endforeach; ?>
+            </div>
+            <p style="margin:8px 0"><button type="button" class="btn" id="pairBtn">Pair a helper</button> <span id="pairSaid"></span></p>
+            <script>
+            (function () {
+              var b = document.getElementById('pairBtn'), said = document.getElementById('pairSaid');
+              var paired = <?= $pp ? 'true' : 'false' ?>;
+              b.onclick = async function () {
+                // Pairing another Mac takes work away from the one paired now: asked twice.
+                if (paired && !b.dataset.sure) {
+                  b.dataset.sure = '1'; b.textContent = 'Sure? The Mac paired now gets no more work';
+                  setTimeout(function () { delete b.dataset.sure; b.textContent = 'Pair a helper'; }, 6000); return;
+                }
+                delete b.dataset.sure; b.disabled = true; b.textContent = 'Asking …';
+                try {
+                  var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start'})})).json();
+                  if (r.error) throw new Error(r.error);
+                  said.innerHTML = 'Type <b style="font-size:20px;letter-spacing:3px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
+                    '</b> in Rushes Helper on the Mac (its window, under Not paired) within ten minutes. It works once.';
+                } catch (e) { said.textContent = 'Could not make a code: ' + e.message; }
+                b.disabled = false; b.textContent = 'Pair a helper';
+              };
+            })();
+            </script>
+          <?php endif; ?>
+
           <?php $win = helper_windows(); $url = rtrim((string)(settings()['archive']['url'] ?? ''), '/'); ?>
           <?php if ($hmode !== 'external'): $bi = trim((string)@file_get_contents(web_dir() . '/helper-builtin.txt')); ?>
             <!-- Built in: the runner starts it and starts it again. Nothing to open. -->

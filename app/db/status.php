@@ -9,6 +9,7 @@
 // small file of plain key/value lines that pages only display; nothing acts
 // on it.
 require_once __DIR__ . '/config.php';
+helper_gate();                          // only the paired helper's word is taken (pair.php)
 header('Content-Type: application/json');
 
 // Its history and its list of sections, whole, whenever they change (they used

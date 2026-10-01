@@ -34,6 +34,17 @@ except ImportError:
     sys.exit("transfer_state.py is missing. It must sit beside ingest.py in _rushes.")
 
 HOME      = Path.home() / "archive-pilot"
+# Pairing (RISKS.md #10): the ID Rushes gave this helper when it was paired
+# (Rushes Helper writes it here), sent with every request. Rushes gives work
+# only to the paired helper, so two helpers never copy over each other.
+try:
+    HELPER_ID = (HOME / "helper-id").read_text().strip()
+except OSError:
+    HELPER_ID = ""
+if HELPER_ID:
+    _opener = urllib.request.build_opener()
+    _opener.addheaders.append(("X-Rushes-Helper", HELPER_ID))
+    urllib.request.install_opener(_opener)
 MANIFEST  = HOME / "nas-manifest.tsv"
 CACHE     = HOME / "hash-cache.json"
 PLAN      = HOME / "ingest-plan.tsv"
@@ -1320,8 +1331,8 @@ def check_some(budget=300):
         _HEARTBEAT = lambda: None
 
 
-def _fetch(url):
-    with urllib.request.urlopen(url, timeout=30) as r:
+def _fetch(url, timeout=30):
+    with urllib.request.urlopen(url, timeout=timeout) as r:
         return r.read().decode("utf-8", "replace")
 
 
@@ -1421,7 +1432,7 @@ def tidy(plan_id):
     _mark_done(f"tidy {plan_id}")               # asked once: a refusal is not retried every 20 s
     try:
         body = _fetch(f"{NAS_URL}/tidy-{plan_id}.tsv")
-        queue = _fetch(QUEUE_URL)
+        queue = fetch_queue(30)
     except Exception as e:
         print(f"Cannot read the tidy-up plan from Rushes ({e}). Nothing moved — approve it again.")
         history("refused", f"tidy {plan_id}", 0, 0, 0, "could not read the plan")
@@ -1687,7 +1698,16 @@ def sections(roots, fresh=False):
 # Each section runs as its own process on purpose: a section that dies takes
 # itself down and the watcher carries on with the next one.
 
-QUEUE_URL = NAS_URL + "/ingest-queue.tsv"
+QUEUE_URL = NAS_URL + "/db/helper.php?queue"
+
+def fetch_queue(timeout=15):
+    """The work, from Rushes. Only the paired helper is given it (403 otherwise)."""
+    try:
+        return _fetch(QUEUE_URL, timeout)
+    except urllib.error.HTTPError as e:
+        if e.code != 400:
+            raise
+    return _fetch(NAS_URL + "/ingest-queue.tsv", timeout)      # a Rushes older than pairing
 DENIED = ("macOS is not letting the helper open the archive. Turn on Rushes Helper in Full Disk Access: "
           "open Rushes Helper from Applications and it walks you through it."
           if os.environ.get("RUSHES_APP") else
@@ -2002,16 +2022,27 @@ def watch(root, every=20):
     lost = False           # said the archive was gone; do not say it again
     jobless = False        # said the saved transfer could not be read; once
     unreached = 0          # tries in a row Rushes did not answer
+    refused = 0            # tries in a row Rushes said this is not the paired helper
     while True:
         update_self()                  # between steps only; restarts itself if it did
         learn_where()                  # and follows Rushes to a new address, if it has one
         remember_shares()              # where each network share lives, to reconnect it if it drops
         checkpoints().flush()          # search updates still waiting, if any
         try:
-            with urllib.request.urlopen(QUEUE_URL, timeout=15) as r:
-                body = r.read().decode("utf-8", "replace")
+            body = fetch_queue()
             unreached = 0
+            if refused:
+                print(f"{time.strftime('%H:%M:%S')}  Rushes gives this helper work again ✓")
+                refused = 0
         except urllib.error.HTTPError as e:
+            if e.code == 403:
+                # Paired with another helper: this one is given nothing, and
+                # touches nothing. Asked less and less, like a Rushes that is down.
+                refused += 1
+                if refused == 1:
+                    print(f"\n*** NOT GIVEN WORK: Rushes is paired with another helper.")
+                    print("    To use this Mac instead: Rushes → Setup → Pair a helper, and enter the code in Rushes Helper.")
+                wait(max(every, backoff(refused))); continue
             # 404 means the file is not there, which is what an empty queue
             # looks like before anything has ever been ticked. Not an error.
             if e.code != 404:

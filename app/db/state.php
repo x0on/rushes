@@ -310,6 +310,11 @@ if (is_readable("$WEB/video-tripped.txt")) {
         'body' => $tWhy . ' — ' . $ago((int)$tAt) . '. Nothing is lost and nothing was half-done. Check the archive first '
             . '(Storage & Snapshots should say healthy), then press Try again.', 'act' => ['reset-breaker', 'Try again']];
 }
+// A second helper asked for work and was refused (pairing, RISKS.md #10): named, so nobody wonders.
+foreach (helper_refused() as $r)
+    $c[] = ['level' => 'warn', 'title' => 'A helper that is not the paired one asked for work',
+        'body' => ($r['host'] !== '' ? $r['host'] . ' (' . $r['ip'] . ')' : $r['ip']) . ' — ' . $ago($r['at'])
+            . '. It was given nothing. If that Mac should be the helper now: Setup → Pair a helper.'];
 // Updated scripts wait for a yes: they run with full rights on this machine.
 // Once you said yes, it says what happens next instead of asking again.
 if ($sw = scripts_waiting()) {
