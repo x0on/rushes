@@ -218,7 +218,7 @@ while IFS="$TAB" read -r src out; do
 done < "$PLAN.all"
 rm -f "$PLAN.all"
 
-echo "encoder: $([ "$HW" = 1 ] && echo 'hardware (QuickSync)' || echo "software (libx264), because $HW_WHY")   ${HEIGHT}p @ $BITRATE"
+echo "encoder: $([ "$HW" = 1 ] && echo 'hardware (QuickSync)' || echo "software (libx264), because $HW_WHY")   ${HEIGHT}p @ $([ "${SOFTWARE:-0}" = 1 ] && echo 'software, quality 23' || echo "$BITRATE")"
 echo "processor: ${CPU:-unknown} · ffmpeg: ${FFMPEG:-none}"
 echo "proxies already built: $have"
 echo "proxies to build:      $missing"
@@ -248,7 +248,8 @@ if [ "$MODE" != "--build" ]; then
 fi
 
 # ---------- build ----------
-# Room first: a proxy is about 4% of its original. Checked before starting, so a
+# Room first: a proxy is about 4% of its original; 5% plus 2 GB is asked for, to
+# be safe. Checked before starting, so a
 # full archive is said once, plainly, instead of failing file after file.
 mkdir -p "$PROXY_ROOT"
 chown "$(stat -c %u:%g "$SHARE")" "$PROXY_ROOT" 2>/dev/null   # PROXIES belongs to whoever owns the share
@@ -299,7 +300,7 @@ while IFS="$TAB" read -r src out; do
         case "$how" in "video chip") chip=$((chip + 1)) ;; software) soft=$((soft + 1)) ;; *) mixed=$((mixed + 1)) ;; esac
         # What the original is (4K or HD, frame rate, codec, length) and what the
         # camera wrote inside it (its clock, timecode, reel, make and model),
-        # read once here, where the file is: the proxy is always 720p, the original is not.
+        # read once here, where the file is: the proxy is smaller than the original.
         probe=$($FFMPEG -hide_banner -nostdin -i "$src" 2>&1 \
             | grep -E 'Duration:|Video:|creation_time|modification_date|timecode|reel_name|model|make|product_name|company_name|encoder' \
             | head -24 | tr '\t\n' '  ')

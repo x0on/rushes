@@ -5,9 +5,8 @@
 // not by folder and not by filename. A row says what a file is, how big, and
 // where it lives; the panel beside it describes whichever one you picked.
 //
-// There are no thumbnails yet, because there are no proxies yet. The layout
-// leaves room for them rather than pretending: when proxies exist the list
-// becomes a grid and nothing else has to move.
+// Files show no thumbnails yet; described moments show the still the model
+// looked at (thumb.php). Playing proxies here is on the roadmap.
 $NAV = 'search';
 require __DIR__ . '/config.php';
 ?><!doctype html>
@@ -336,9 +335,7 @@ function draw() {
 }
 
 // The panel beside the results: what this file is, and the two things you
-// actually want to do with it. Revealing only works when the browser is on a
-// machine that has the archive mounted, so copying the path comes first because
-// it always works.
+// actually want to do with it: put it in a pull, or copy its path.
 // What the original is, however small its proxy: 4K, HD, 720p or SD.
 // "2024-05-03 14:22:10" as the camera wrote it -> "3 May 2024, 2:22 pm · afternoon".
 // Never converted between time zones: cameras disagree about which one they mean.
@@ -391,24 +388,17 @@ function inspect(r) {
       (r.camera ? '<div class="k">Camera</div><div class="v">' + esc(r.camera) + '</div>' : '') +
       (r.timecode || r.reel ? '<div class="k">Timecode</div><div class="v">' + esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · ')) + '</div>' : '') +
       '<div class="k">Copies</div><div class="v">' + copiesText(r.copies) + '</div>' +
-      (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its 720p proxy (downloads and pulls use the original)</div>' : '') +
+      (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its proxy (downloads and pulls use the original)</div>' : '') +
       (r.event ? '<div class="k">Shoot</div><div class="v">' + esc(r.event) + '</div>' : '') +
       (r.year  ? '<div class="k">Year</div><div class="v">' + esc(r.year) + '</div>' : '') +
       '<div class="k">Where it lives</div><div class="v">' + esc(short(r.path)) + '</div>' +
       '<div class="btns" style="margin-top:14px">' +
         '<button class="btn" id="iPull">' + (inPull(r.path) ? 'In the pull ✓' : 'Add to pull') + '</button>' +
         '<button class="btn quiet" id="iCopy">Copy path</button>' +
-        '<button class="btn quiet" id="iOpen">Reveal</button>' +
       '</div>' +
-      '<p class="note" style="margin:10px 0 0">Reveal only works on a machine ' +
-        'that has the archive mounted.</p>' +
     '</div>';
   $('iCopy').onclick = function () { copyText(local, $('iCopy')); };
   $('iPull').onclick = function () { addToPull(r.path, $('iPull')); };
-  $('iOpen').onclick = function () {
-    location.href = 'rushes://' + r.path.replace(ARCHIVE + '/', '')
-      .split('/').map(encodeURIComponent).join('/');
-  };
 }
 
 // A short memory of what you looked for, kept in this browser only.

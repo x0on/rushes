@@ -154,9 +154,6 @@ function mark(string $class = 'mk'): string {
          . '<path fill="currentColor" fill-rule="evenodd" d="M83.5 292.9C65.9 283.5 43.4 271.6 33.5 266.4C14.1 256.2 8.9 252.0 7.1 245.4C6.4 242.7 6.0 212.6 6.0 151.2C6.0 54.9 5.9 57.0 10.8 52.6C15.4 48.5 19.8 49.2 48.1 58.3C62.6 63.0 83.3 69.6 94.0 73.0C104.7 76.4 114.8 79.9 116.5 80.7C121.6 83.3 125.9 88.2 128.0 93.7C130.0 98.9 130.0 101.6 130.0 199.3C130.0 265.2 129.6 300.8 129.0 303.2C127.7 307.9 124.7 310.0 119.5 310.0C116.2 310.0 109.7 306.9 83.5 292.9ZM207.0 258.0C207.0 213.0 207.1 210.0 208.8 210.0C213.5 210.0 218.1 214.3 253.7 251.9C268.4 267.5 283.3 283.1 286.6 286.6C290.0 290.2 293.3 294.4 294.0 296.0C295.6 300.0 294.5 303.8 291.4 305.0C289.9 305.6 271.8 306.0 247.9 306.0L207.0 306.0L207.0 258.0ZM161.2 273.2L142.0 263.5L142.0 177.0C142.0 95.4 141.9 90.3 140.1 86.5C137.5 80.6 133.3 76.2 128.1 73.6C124.0 71.5 101.7 64.0 64.3 52.0L51.0 47.7L51.0 42.3C51.0 32.2 55.1 27.5 63.9 27.5C69.2 27.6 172.2 61.4 180.5 65.8C186.1 68.8 191.4 75.2 193.0 80.8C193.6 83.2 194.0 117.4 194.0 180.3L194.0 276.2L190.6 279.6C185.4 284.8 183.3 284.3 161.2 273.2ZM217.0 195.4C215.1 195.2 212.1 194.7 210.3 194.5L207.1 193.9L206.8 134.7L206.5 75.5L204.1 71.0C201.1 65.1 196.5 60.3 191.5 57.8C189.3 56.6 167.5 49.1 143.0 41.0L98.5 26.4L98.5 19.7C98.5 13.6 98.8 12.8 101.6 9.9C106.8 4.7 109.6 4.9 136.6 12.5C149.7 16.2 165.7 20.7 172.0 22.5C178.3 24.4 195.7 29.3 210.5 33.5C225.3 37.7 244.2 43.1 252.5 45.5C260.8 47.9 268.9 50.2 270.5 50.6C272.1 51.0 277.1 53.1 281.5 55.3C293.1 61.1 303.6 71.8 309.1 83.4C317.6 101.7 318.2 119.3 310.9 137.7C301.0 162.6 274.2 185.2 246.0 192.4C236.5 194.8 223.6 196.1 217.0 195.4Z"/></svg>';
 }
 
-// The tab icon: the app-icon variation of the logo — the black rounded
-// square with the mark cut out — traced from the supplied artwork and inlined
-// so no image file has to be deployed or fetched.
 // The app icon, black with the white mark, as PNG: Safari ignores an SVG
 // icon and falls back to one of its own. 64 px for the tab, 180 px for a
 // phone's home screen.
@@ -314,8 +311,6 @@ function helper_command(): string {
         : 'python3 "' . $at . '/_rushes/ingest.py"' . $tail;
 }
 
-// A command on one line, with a Copy button beside it. Never wrapped: a
-// command broken across two lines is how a stray space gets pasted into it.
 // This machine by name (http://nas.local), which keeps working on a local
 // network when its number changes. Empty when the machine has no usable name.
 function name_url(): string {
@@ -333,6 +328,8 @@ function here_url(): string {
     return ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . "://$host";
 }
 
+// A command on one line, with a Copy button beside it. Never wrapped: a
+// command broken across two lines is how a stray space gets pasted into it.
 function cmd_block(string $cmd): string {
     $e = htmlspecialchars($cmd);
     return '<div class="cmd"><code>' . $e . '</code>'

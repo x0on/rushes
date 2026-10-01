@@ -92,6 +92,11 @@ printf 'ACTION=undo\n' > "$W/queue/d4.job"; run
 printf 'ACTION=proxy-plan\nQUERY=../Web\n' > "$W/queue/p1.job"; run
 grep -q "refused a folder with .. in it" "$W/job.log" && ! grep -q "unknown action: refused" "$W/job.log" && ok "a folder with .. in it is refused" || no ".. not refused"
 
+# a job lock left by a run that was killed does not block jobs for ever
+mkdir -p "$R/tmp/.archive-runner.lock"; echo 999999 > "$R/tmp/.archive-runner.lock/pid"
+printf 'ACTION=df\n' > "$W/queue/l1.job"; run
+[ ! -e "$W/queue/l1.job" ] && grep -q "took over the job lock" "$W/job.log" && ok "a stale job lock is taken over" || no "stale job lock blocked jobs"
+
 # a disk that stops answering: walked away from, counted, and after three the breaker trips
 rm -f "$V/ingest.py"; mkfifo "$V/ingest.py"
 for i in 1 2 3; do touch "$W/survey-now"; t0=$(date +%s); run; [ $(( $(date +%s) - t0 )) -lt 10 ] || no "a stuck read held the runner"; done

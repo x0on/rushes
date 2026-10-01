@@ -2,15 +2,19 @@
 // helper.php — everything about the helper that is not copying.
 //
 //   GET  ?code=ingest.py | transfer_state.py | analyze.py   the helper's own files, from _rushes
-//   GET  ?hash                                  what the current files are (for updates)
+//   GET  ?hash                                  what the current files are (for updates; the runner's list, never VIDEO)
+//   GET  ?queue                                 the work: ingest-queue.tsv, for the paired helper only (pair.php)
 //   GET  ?app                                   Rushes Helper for Mac, as a zip (from _rushes)
 //   GET  ?install / ?remove                     a Mac, from Terminal: fetch the app and open it, or take it off
 //   GET  ?where                                 the addresses Rushes can be reached at (helpers follow a change)
 //   GET  ?control                               pause, "try again now", folders to skip
 //   GET  ?builtin                               "yes" when this machine should run it (for runner.sh)
-//   POST action=pause|resume|nudge|reconnect-off|reconnect-on|check-pause|check-resume   the helper's switches (Manage, or its own window)
+//   POST action=pause|resume|describe-pause|describe-resume|check-pause|check-resume|
+//               reconnect-off|reconnect-on|nudge     the helper's switches: signed in (Manage), or the
+//                                                    paired helper's own window (any window while unpaired)
 //   POST action=skip path                        skip a folder (signed in)
-//   POST action=scripts                         install the updated .sh scripts (signed in)
+//   POST action=scripts                         install the updates waiting: scripts and pages (signed in)
+//   POST action=check-updates                   look for updates in _rushes, next minute (signed in)
 //
 // ponytail: the GETs need no password, like report.php — the helper has none.
 // They hand out only what is already on the share for anyone who can mount it,

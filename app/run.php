@@ -1,7 +1,8 @@
 <?php
-// run.php — the admin page's only way to ask for work. It writes a job file
-// and nothing else: no exec(), no file moves, no deletes. runner.sh (root, via
-// cron) is what actually does anything, and it re-validates every field.
+// run.php — Manage asks the runner for a job here. It writes a job file and
+// nothing else: no exec(), no file moves, no deletes. runner.sh (root, via
+// cron) is what actually does anything, and it checks every field again.
+// (analyze.php and helper.php also write job files, for proxies and updates.)
 //
 // ponytail: shared password in a file, LAN-only. Fine while this lives on the
 // office network; put it behind real auth before it is ever reachable outside.
@@ -20,7 +21,8 @@ $keep_side = $_POST['keep_side'] ?? 'project';
 $dest      = $_POST['dest']      ?? '/share/VIDEO/_duplicates';
 $stills    = ($_POST['stills'] ?? '0') === '1' ? '1' : '0';
 $exclude   = preg_replace('/[^A-Za-z0-9 ,_.\/-]/', '', $_POST['exclude'] ?? '');
-$query     = substr(preg_replace('/[^A-Za-z0-9 _.\/&(),+-]/', '', $_POST['query'] ?? ''), 0, 200);
+// letters of any language (Fútbol, Año), digits, and a few marks; the runner checks again
+$query     = implode('', array_slice(preg_split('//u', preg_replace('/[^\p{L}\p{N} _.\/&(),+-]/u', '', (string)($_POST['query'] ?? '')), -1, PREG_SPLIT_NO_EMPTY), 0, 200));
 
 // A signed-in admin session is enough; a password in the request also works,
 // so a script can still drive this without a browser.

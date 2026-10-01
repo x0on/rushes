@@ -15,7 +15,6 @@ header('Content-Type: application/json');
 // Its history and its list of sections, whole, whenever they change (they used
 // to be copied off the VIDEO share by the runner every minute, which is a read
 // of the archive every minute for ever). Small files; replaced, never merged.
-// ponytail: no password yet; pairing (RISKS.md #10) will make this the paired helper only.
 $which = (string)($_POST['file'] ?? '');
 if ($which !== '') {
     $body = (string)($_POST['body'] ?? '');

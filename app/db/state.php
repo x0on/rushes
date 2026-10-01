@@ -346,7 +346,7 @@ if ($sw = scripts_waiting()) {
 // The QNAP's scratch space (/tmp) is small and shared with the system.
 if (preg_match('/(\d+)%/', (string)@file_get_contents("$WEB/tmp-disk.txt"), $tm) && (int)$tm[1] >= 80)
     $c[] = ['level' => 'warn', 'title' => 'The system scratch space is ' . $tm[1] . '% full',
-        'body' => 'That is /tmp on the archive machine, not the archive. Rushes no longer uses it, but the system does; if it fills, odd errors follow.',
+        'body' => 'That is /tmp on the archive machine, not the archive. Rushes does not keep anything there, but the system does; if it fills, odd errors follow.',
         'act' => null];
 
 // How many copies each file has (the helper looks once a week; copies.php).

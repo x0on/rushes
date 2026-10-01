@@ -54,7 +54,10 @@ if ($fmt === 'zip') {
     if ($total > 1073741824 || count($items) > 1000)
         stop('Too big to download as a zip (' . round($total / 1073741824, 1) . ' GB). Use the Premiere file or the list of paths — they point at the originals instead of copying them.');
     if (!class_exists('ZipArchive')) stop('This server cannot make zip files. Use the list of paths instead.');
-    $tmp = tempnam(sys_get_temp_dir(), 'pull');
+    // Made in the web folder, not /tmp: on a NAS /tmp is a small memory disk, and
+    // a zip can be a gigabyte. The name starts with a dot and .htaccess keeps it
+    // from being fetched while it is being made; it is deleted once sent.
+    $tmp = tempnam(web_dir(), '.pull-');
     $z = new ZipArchive(); $z->open($tmp, ZipArchive::OVERWRITE);
     $used = [];
     foreach ($items as $it) {

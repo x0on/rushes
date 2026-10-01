@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         out(['ok' => $_POST['action'], 'folder' => $rel]);
     }
     if (($_POST['action'] ?? '') === 'prepare' || ($_POST['action'] ?? '') === 'forget') {
-        if ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[A-Za-z0-9 _./&(),+-]+$#', $rel))
+        if ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[\p{L}\p{N} _./&(),+-]+$#u', $rel))
             bail(400, 'Pick a folder inside the archive (letters, numbers, spaces and . _ - & ( ) , + only).');
         $list = prepare_list();
         if ($_POST['action'] === 'forget') { unset($list[$rel]); }

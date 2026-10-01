@@ -79,7 +79,7 @@ function analysis_import(): array {
     return ['described_files' => $n];
 }
 
-// Moments matching every word, shots before speech, newest description first.
+// Moments matching every word: shots before speech, then by file and time.
 // ponytail: LIKE over one text column — fine to a few hundred thousand rows;
 // switch to SQLite FTS5 if searches pass ~300 ms.
 function analysis_search(string $q, int $limit = 60): array {

@@ -139,21 +139,11 @@ if [ -n "$NEXT" ] && may_v; then
     fi
 fi
 
-# (The helper's status, history and section list used to be copied off the
-# VIDEO share here every minute. The helper sends them to Rushes itself now
-# — db/status.php — so an idle minute reads nothing from the archive.)
-
-# ── deploying a page ────────────────────────────────────────────────────────
-# The web folder is not reachable from anywhere except the NAS itself, which
-# meant every fix to a page travelled: download, File Station, upload, refresh.
-# This gives it a front door. Anything dropped into _rushes/deploy on the VIDEO
-# share lands in the web folder within the minute, and is then removed, so the
-# drop folder is always either empty or a change waiting to happen.
-#
-# Only these extensions, and only files, never folders: this folder is writable
-# by anyone who can write to the share, and it publishes onto the web server.
-# A db/ prefix is the one bit of nesting allowed, because that is where the
-# pages actually live.
+# ── pages dropped into _rushes/deploy ───────────────────────────────────────
+# The one way a new page reaches the web folder from the archive share. Only
+# these extensions, only files, and only one folder deep (db/): this folder is
+# writable by anyone who can write to the share, so nothing in it is put in
+# place without an admin's approval (below).
 DROP=/share/VIDEO/_rushes/deploy
 # ── what is waiting to be installed ─────────────────────────────────────────
 # Updated scripts (_rushes/scripts) and pages (_rushes/deploy) are never put in
@@ -197,14 +187,22 @@ if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ]; }
     v survey
 fi
 
-# Transfers add files incrementally through landed.php. A finished folder no
-# longer triggers another full archive walk.
 
-# ponytail: mkdir is the portable atomic lock; busybox has no flock
 [ "$VSTALLED" = 0 ] && [ -f "$VSTALL" ] && rm -f "$VSTALL"     # a whole minute without a stall: the count starts again
 rm -rf "$TICK"; trap - EXIT INT TERM       # this minute's share work is done; long jobs have their own lock
-mkdir "$LOCKDIR" 2>/dev/null || exit 0
-trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT INT TERM
+# One job runner at a time. ponytail: mkdir is the portable atomic lock (busybox
+# has no flock). The number inside lets a lock left by a run that was killed be
+# taken over, instead of blocking every job until the machine restarts.
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+    old=$(cat "$LOCKDIR/pid" 2>/dev/null)
+    if [ -n "$old" ]; then kill -0 "$old" 2>/dev/null && exit 0
+    elif [ -n "$(find "$LOCKDIR" -maxdepth 0 -mmin -2 2>/dev/null)" ]; then exit 0     # just made, number not written yet
+    fi
+    rm -rf "$LOCKDIR"; mkdir "$LOCKDIR" 2>/dev/null || exit 0
+    log "$(date '+%Y-%m-%d %H:%M:%S')  took over the job lock from a run that had stopped"
+fi
+echo $$ > "$LOCKDIR/pid"
+trap 'rm -rf "$LOCKDIR"' EXIT INT TERM
 
 # keep the log from growing forever
 [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ] && tail -c 500000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

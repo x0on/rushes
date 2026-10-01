@@ -20,7 +20,6 @@ $deptFolder = [];
 foreach ($depts as $d) $deptFolder[$d] = dept_folder($d);
 $S      = settings();
 $aname  = $S['archive']['label'] ?? 'Archive';
-$helper = $S['helper'] ?? [];
 ?><!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -291,9 +290,10 @@ function paintSource() {
     $('src').hidden = true;
     const where = HELPER.external ? 'the ' + HELPER.label : 'this machine';
     $('srcName').textContent = h.at ? 'The helper stopped' : 'The helper is not running';
+    // Built in: the archive machine starts it by itself; on a Mac it is Rushes Helper.
     $('srcMeta').innerHTML = 'Cards plugged into ' + esc(where) + ' show up here once it is. ' +
-      'On ' + esc(where) + ', open a terminal and run:' +
-      (HELPER.command ? cmdHTML(HELPER.command) : '');
+      (HELPER.external ? 'Open Rushes Helper on ' + esc(where) + ' and check “Run in the background” is on (Setup → 04 Helper has the details).'
+                       : 'The archive machine starts it again by itself within a minute; if it does not, see Setup → 04 Helper.');
     paintDays(); return canStart();
   }
   if (!list.length) {

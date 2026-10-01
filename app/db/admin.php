@@ -215,7 +215,7 @@ if (isset($_POST['_newpass'])) {
         </details>
       </section>
 
-      <!-- ══ jobs and tools ══ -->
+      <!-- ══ describe ══ -->
       <section id="pane-describe" hidden>
         <!-- One job per folder, two steps in a fixed order, on two machines. -->
         <div class="panel" style="margin-top:8px">
@@ -223,7 +223,7 @@ if (isset($_POST['_newpass'])) {
           <div style="padding:14px">
             <div class="steps2">
               <div><b>1 · Proxies</b> <span class="note">on the archive machine</span>
-                <p>A small, light copy of each video (720p, H.264) that plays in any browser and reads much faster
+                <p>A small, light copy of each video (H.264, at the setting below) that plays in any browser and reads much faster
                   than the camera original. Describing finds the cuts and hears the sound in it, and takes its still
                   pictures from the original, at full quality. Kept in their own folder, <code>PROXIES</code>, with the same paths as the
                   originals, so nothing mixes with the footage. Made at low priority; a file that arrived in the last
@@ -406,7 +406,7 @@ document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
   b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
 $('sideMore').onclick = function () { show('activity'); };
-// The fixed buttons in Duplicates and Structure use the same path as everything
+// The fixed buttons in Duplicates use the same path as everything
 // else: confirm, ask, watch it happen in the side column.
 document.querySelectorAll('#pane-duplicates [data-t]')
   .forEach(function (b) { b.onclick = function () { act(b.dataset.t, b); }; });
@@ -772,7 +772,7 @@ function drawNow(d) {
 }
 
 // ── the helper and its buttons ─────────────────────────────────────────────
-// Every button asks once more on the button itself ("Sure?"), then says what
+// Each button asks once more on the button itself ("Sure?"), then says what
 // happened. The answer is read back from the helper, never assumed.
 let armed = { what: '', until: 0 }, said = { text: '', until: 0 };
 function drawHelper(d) {
@@ -957,7 +957,7 @@ async function load() {
   const tq = d.queued || [];
   $('toolState').innerHTML =
     (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running) + '</b>' +
-        (d.progress ? ' · ' + d.progress.pct + '%' : '') + ' — each step shows in the raw log (Overview)</p>' : '') +
+        (d.progress ? ' · ' + d.progress.pct + '%' : '') + ' — each step shows in the raw log (Activity)</p>' : '') +
     (tq.length ? '<p><span class="spin"></span>Asked: <b>' + tq.map(function (x) { return esc(TOOL[x] || x); }).join(', ') +
         '</b> — the archive machine starts it at its next turn, within a minute</p>' : '') +
     (d.gpu_test ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px">' +
@@ -1039,7 +1039,7 @@ $('ptPick').onchange = async function () {
     const r = await (await fetch('analyze.php?' + new URLSearchParams({ file: f.name, size: f.size }))).json();
     const rel = (r.files || [])[0];
     if (!rel) { said.textContent = '“' + f.name + '” is not in the archive (or search has not seen it yet). Pick a clip from the VIDEO share.'; return; }
-    if (/[^A-Za-z0-9 _.\/&(),+-]/.test(rel)) { said.textContent = 'Its name or folder has a character the archive machine\'s jobs cannot take (' + rel + '). Pick another clip.'; return; }
+    if (/[^\p{L}\p{N} _.\/&(),+-]/u.test(rel)) { said.textContent = 'Its name or folder has a character the archive machine\'s jobs cannot take (' + rel + '). Pick another clip.'; return; }
     const j = await (await fetch('../run.php', { method: 'POST', body: new URLSearchParams({ action: 'proxy-test', query: rel }) })).json();
     said.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓ Testing with ' + rel + ' — the stills appear below in a few minutes.';
   } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
@@ -1048,11 +1048,10 @@ $('ptPick').onchange = async function () {
 
 // ── describing footage ─────────────────────────────────────────────────────
 // Asks, and says what happened; the helper does the work and the live box shows it.
-let anArmed = 0;
 function tcode(v) { v = Math.floor(v || 0); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); }
 function drawProxies(p) {
   const el = $('pxState');
-  if (!p) { el.textContent = 'Not planned yet. Press Plan to see how many videos need one.'; return; }
+  if (!p) { el.textContent = 'Nothing planned yet. Add a folder to the list above; Jobs and tools → Plan proxies counts the whole archive.'; return; }
   const n = function (x) { return (+x || 0).toLocaleString(); };
   const size = function (gb) { gb = +gb || 0; return gb >= 1000 ? (gb / 1024).toFixed(1) + ' TB' : gb + ' GB'; };
   const when = p.ago == null ? '' : ' <span class="note">(' + (p.ago < 90 ? 'just now' : Math.round(p.ago / 60) + ' min ago') + ')</span>';
@@ -1079,18 +1078,17 @@ function drawProxies(p) {
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
     : p.state === 'building'
       ? '<span class="warnline" style="display:block">The proxy build stopped without finishing (the machine restarted?) at ' +
-        n(p.done) + ' of ' + n(p.total) + '. Press Make proxies to carry on; finished ones are kept.</span>'
+        n(p.done) + ' of ' + n(p.total) + '. Start now (in the list above) carries on; finished ones are kept.</span>'
     : p.state === 'stopped'
-      ? 'Stopped from Manage at ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made. Make proxies carries on from there.'
+      ? 'Stopped from Manage at ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made. Start now (in the list above) carries on from there.'
     : p.state === 'done'
-      ? '✓ Finished · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed' + (+p.later ? ' · ' + n(p.later) + ' were still arriving: press Make proxies again later for those' : '')
+      ? '✓ Finished · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed' + (+p.later ? ' · ' + n(p.later) + ' were still arriving: they are made by themselves on a run two hours later' : '')
     : esc(p.state || '');
 }
-// Proxy buttons: the same runner jobs, for the folder typed above (or all of it).
+// Stop proxies: a runner job, asked twice on the button.
 document.querySelectorAll('[data-px]').forEach(function (b) {
   b.onclick = async function () {
     const what = b.dataset.px, folder = what === 'proxy-stop' ? '' : $('prepPath').value.trim().replace(/\/+$/, '');
-    if (what === 'proxy-plan' && !folder) { $('prepSaid').textContent = 'Choose a folder first — Plan looks at one folder.'; return; }
     if (what === 'proxy-stop' && !b.dataset.sure) {
       const w = b.textContent; b.dataset.sure = '1'; b.textContent = 'Sure? Stop';
       setTimeout(function () { if (b.dataset.sure) { delete b.dataset.sure; b.textContent = w; } }, 5000);

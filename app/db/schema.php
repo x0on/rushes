@@ -85,55 +85,6 @@ function db_init(): void {
     $db->exec('CREATE INDEX IF NOT EXISTS i_files_dept  ON files (dept)');
     $db->exec('CREATE INDEX IF NOT EXISTS i_files_bytes ON files (bytes)');
 
-    // ── one row per job, whatever the job is ──────────────────────────────
-    // This is the thing the old design lacked: dedupe, ingest, proxy and
-    // reorganise each invented their own progress, history and undo. One
-    // table means one panel, one history, one place to look.
-    $db->exec("
-    CREATE TABLE IF NOT EXISTS jobs (
-        id        INTEGER PRIMARY KEY,
-        action    TEXT NOT NULL,       -- reindex | dedupe | ingest | proxy | ...
-        target    TEXT,                -- what it was pointed at
-        state     TEXT NOT NULL,       -- queued | running | done | failed | cancelled
-        started   INTEGER,
-        finished  INTEGER,
-        done_n    INTEGER DEFAULT 0,   -- for progress
-        total_n   INTEGER DEFAULT 0,
-        bytes     INTEGER DEFAULT 0,
-        note      TEXT,                -- the one-line human result
-        log       TEXT                 -- the detail, if any
-    )");
-    $db->exec('CREATE INDEX IF NOT EXISTS i_jobs_state ON jobs (state, id DESC)');
-
-    // ── what a job did to a file, so anything can be undone ───────────────
-    $db->exec("
-    CREATE TABLE IF NOT EXISTS moves (
-        id        INTEGER PRIMARY KEY,
-        job_id    INTEGER NOT NULL,
-        src       TEXT NOT NULL,
-        dst       TEXT,
-        bytes     INTEGER,
-        kept      TEXT,                -- for dedupe: which copy survived
-        undone    INTEGER DEFAULT 0
-    )");
-    $db->exec('CREATE INDEX IF NOT EXISTS i_moves_job ON moves (job_id)');
-    $db->exec('CREATE INDEX IF NOT EXISTS i_moves_src ON moves (src)');
-
-    // ── what the model saw, when that exists ──────────────────────────────
-    $db->exec("
-    CREATE TABLE IF NOT EXISTS shots (
-        id         INTEGER PRIMARY KEY,
-        file_id    INTEGER NOT NULL,
-        start_s    REAL,
-        end_s      REAL,
-        text       TEXT,               -- the description
-        on_screen  TEXT,               -- text visible in frame
-        model      TEXT,
-        prompt     TEXT,               -- hash of the prompt used
-        made_at    INTEGER
-    )");
-    $db->exec('CREATE INDEX IF NOT EXISTS i_shots_file ON shots (file_id)');
-
     // ── the media ledger: what each original is, and what has been made from it ──
     // Keyed by the file's row, which keeps its id when a tidy-up moves the file
     // (moved.php), so this follows the file wherever it goes. The proxy itself

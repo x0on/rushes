@@ -1,5 +1,7 @@
 <?php
-// setup.php — the only page that writes settings.json.
+// setup.php — where this installation's settings are chosen (settings.json).
+// Reorganize writes the department list into the same file, and Ingest may add
+// a department to it when that is allowed.
 //
 // Everything here is "where things are on this installation". Nothing here
 // decides anything about media: that is rules.json, the same everywhere.

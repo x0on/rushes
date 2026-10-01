@@ -3,7 +3,7 @@
 //
 //   junk.php            show it
 //   junk.php?write=1    write the list the cleanup job consumes
-//   junk.php?json=1     the same numbers for the Cache section in Admin
+//   junk.php?json=1     the same numbers for Manage → Cache
 //
 // Editing apps scatter caches through the archive: Premiere writes .pek and
 // .cfa, Capture One writes whole CaptureOne/Cache/Proxies/Settings trees.
