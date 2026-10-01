@@ -310,6 +310,13 @@ if (is_readable("$WEB/video-tripped.txt")) {
         'body' => $tWhy . ' — ' . $ago((int)$tAt) . '. Nothing is lost and nothing was half-done. Check the archive first '
             . '(Storage & Snapshots should say healthy), then press Try again.', 'act' => ['reset-breaker', 'Try again']];
 }
+// Private files the web server still hands out (the runner asks it once a day).
+$exposed = array_filter(array_map('trim', @file("$WEB/exposed.txt") ?: []));
+if ($exposed)
+    $c[] = ['level' => 'bad', 'title' => 'Anyone on your network can download ' . implode(', ', $exposed),
+        'body' => 'This machine\'s web server ignores the .htaccess file that forbids it. '
+            . (array_intersect($exposed, ['rushes.sqlite', 'db-copy.sqlite']) ? 'The database is the whole catalogue: every path, description and pull. ' : '')
+            . 'Turn on .htaccess in the web server\'s settings, or move the database out of the Web folder: INSTALL.md → Keeping the database private.'];
 if (is_readable("$WEB/db-damaged.txt"))
     $c[] = ['level' => 'bad', 'title' => 'The database did not pass its daily check',
         'body' => 'Checked ' . $ago((int)filemtime("$WEB/db-damaged.txt")) . '. It was not copied, so the good copies stay as they are: '

@@ -15,8 +15,12 @@
 
 require_once __DIR__ . '/config.php';
 
-// Where the database lives comes from settings.json, like every other path.
-define('DB_PATH', web_dir() . '/rushes.sqlite');
+// Where the database lives comes from settings.json, like every other path:
+// archive.database, or rushes.sqlite in the web folder. The web folder is
+// served, so .htaccess there tells the web server never to hand it out; if
+// the web server ignores that (Overview says so), set archive.database to a
+// folder it does not serve (INSTALL.md → Keeping the database private).
+define('DB_PATH', s_path('archive.database', web_dir() . '/rushes.sqlite'));
 
 // RISKS.md #7: a power cut can damage the database, and pulls live only in it.
 // Once a day it is checked, and only a good one is copied beside it
@@ -25,7 +29,10 @@ define('DB_PATH', web_dir() . '/rushes.sqlite');
 // by anything but the same weekday a week later. A damaged one is said on
 // Overview, once a day, and never copied over the good ones.
 function db_daily_copy(): array {
-    $w = web_dir(); $copy = "$w/db-copy.sqlite"; $bad = "$w/db-damaged.txt";
+    // the copy sits beside the database (never in a served folder it is not in
+    // already); db-copy.path tells the runner where, so it can put it on VIDEO
+    $w = web_dir(); $copy = dirname(DB_PATH) . '/db-copy.sqlite'; $bad = "$w/db-damaged.txt";
+    @file_put_contents("$w/db-copy.path", "$copy\n");
     foreach ([$copy, $bad] as $f) if (is_file($f) && time() - filemtime($f) < 86400) return ['state' => 'current'];
     if (db()->querySingle('PRAGMA quick_check') !== 'ok') {
         @file_put_contents($bad, (string)time());

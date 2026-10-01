@@ -15,7 +15,10 @@
 
 require_once __DIR__ . '/config.php';
 
-function pass_file(): string { return web_dir() . '/.adminpass'; }
+// Kept as a .php file: if someone asks the web server for it, it runs and
+// prints nothing, so the password can never be downloaded — whatever the web
+// server's settings. (It used to be .adminpass, a plain file; moved once.)
+function pass_file(): string { return web_dir() . '/adminpass.php'; }
 
 // The default is the app's own name, lowercased. Written on first run so the
 // door is never simply open, and remembered as "still the default" so the page
@@ -25,13 +28,13 @@ function default_pass(): string {
 }
 
 function stored_pass(): string {
-    $f = pass_file();
-    if (!is_readable($f) || trim((string)file_get_contents($f)) === '') {
-        @file_put_contents($f, default_pass());
-        @chmod($f, 0600);
-        return default_pass();
-    }
-    return trim((string)file_get_contents($f));
+    $p = is_readable(pass_file()) ? @include pass_file() : null;
+    if (is_array($p) && ($p['pass'] ?? '') !== '') return $p['pass'];
+    $old = web_dir() . '/.adminpass';
+    $v = is_readable($old) ? trim((string)file_get_contents($old)) : '';
+    if ($v === '') $v = default_pass();
+    if (php_keep(pass_file(), ['pass' => $v])) @unlink($old);
+    return $v;
 }
 
 function pass_is_default(): bool {
@@ -52,9 +55,7 @@ function pass_ok(string $given): bool {
 function set_pass(string $new): bool {
     $new = trim($new);
     if (strlen($new) < 4) return false;
-    $ok = @file_put_contents(pass_file(), password_hash($new, PASSWORD_DEFAULT)) !== false;
-    if ($ok) @chmod(pass_file(), 0600);
-    return $ok;
+    return php_keep(pass_file(), ['pass' => password_hash($new, PASSWORD_DEFAULT)]);
 }
 
 function session_begin(): void {

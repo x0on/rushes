@@ -10,7 +10,8 @@ W=$R/share/Web; V=$R/share/VIDEO/_rushes
 # a pretend curl: notes which address the runner asked, answers "current"
 mkdir -p "$R/bin"; cat > "$R/bin/curl" <<EOF
 #!/bin/sh
-for a; do u=\$a; done; echo "\$u" >> "$R/asked"; echo '{"state":"current"}'
+for a; do u=\$a; done; echo "\$u" >> "$R/asked"
+case "\$u" in *.sqlite) echo 200 ;; *) echo '{"state":"current"}' ;; esac
 EOF
 chmod +x "$R/bin/curl"
 run() { PATH="$R/bin:$PATH" VLIMIT=2 busybox sh "$R/runner.sh" >/dev/null 2>&1; }
@@ -45,6 +46,12 @@ echo db > "$W/db-copy.sqlite"; run
 [ "$(cat "$V/db-copies/rushes-$(date +%a).sqlite")" = db ] && [ -f "$W/db-copied" ] && ok "the database copy goes onto VIDEO, by weekday" || no "database copy"
 echo again > "$V/db-copies/rushes-$(date +%a).sqlite"; run
 [ "$(cat "$V/db-copies/rushes-$(date +%a).sqlite")" = again ] && ok "and only once per new copy" || no "database copied again"
+
+# the daily self-check: a private file the web server hands out is named
+echo x > "$W/rushes.sqlite"; rm -f "$W/exposed.txt"; run
+grep -qx rushes.sqlite "$W/exposed.txt" && ok "a database the web server hands out is named for Overview" || no "self-check"
+n=$(grep -c "rushes.sqlite" "$R/asked"); run
+[ "$(grep -c "rushes.sqlite" "$R/asked")" = "$n" ] && ok "and asked once a day, not every minute" || no "self-check every minute"
 
 # a disk that stops answering: walked away from, counted, and after three the breaker trips
 rm -f "$V/ingest.py"; mkfifo "$V/ingest.py"

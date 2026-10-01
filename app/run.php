@@ -9,7 +9,6 @@
 header('Content-Type: application/json');
 
 $QUEUE = '/share/Web/queue';
-$PASSFILE = '/share/Web/.adminpass';   // create with: echo -n 'yourpassword' > /share/Web/.adminpass
 
 $allowed = ['plan', 'apply', 'undo', 'reindex', 'cachescan', 'cacheclean', 'df',
             // 'organize-apply' is off: it sorts the whole archive by date, which is

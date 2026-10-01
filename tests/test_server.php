@@ -183,6 +183,13 @@ check($doc && count($mk) === 2 && (string)$mk[0]->in === '60' && (string)$mk[1]-
 check(db_daily_copy()['state'] === 'copied' && (new SQLite3(web_dir() . '/db-copy.sqlite'))->querySingle("SELECT COUNT(*) FROM files") >= 1,
       'the database is checked and copied, whole');
 check(db_daily_copy()['state'] === 'current', 'once a day, not every minute');
+// The password is kept in a .php file that prints nothing if downloaded; an old .adminpass is moved into it once.
+require_once web_dir() . "/db/auth.php";
+file_put_contents(web_dir() . '/.adminpass', 'oldword');
+check(stored_pass() === 'oldword' && !file_exists(web_dir() . '/.adminpass') && is_file(web_dir() . '/adminpass.php'),
+      'an old password file is moved into one that cannot be downloaded');
+check(set_pass('new-word') && pass_ok('new-word') && !pass_ok('oldword') && !str_contains(file_get_contents(web_dir() . '/adminpass.php'), 'new-word'),
+      'a changed password is kept only as a hash');
 // What is waiting comes from the runner's list, never from reading VIDEO in a page request.
 file_put_contents(web_dir() . "/waiting.tsv", "script\tproxy.sh\t" . str_repeat('a', 64) . "\t1\npage\tdb/x.php\t" . str_repeat('b', 64) . "\t2\nhelper\tabc123def456\nhelperfile\tingest.py\t" . str_repeat('c', 64) . "\n");
 $sw = scripts_waiting();

@@ -674,7 +674,7 @@ esac
 # it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
 # them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
 # room for a big file: ten minutes.
-DBC=/share/Web/db-copy.sqlite
+DBC=$(head -1 /share/Web/db-copy.path 2>/dev/null); [ -n "$DBC" ] || DBC=/share/Web/db-copy.sqlite
 if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/db-copied ]; } && may_v; then
     DAY=$(date +%a); VL0=$VLIMIT; VLIMIT=600
     if v sh -c "mkdir -p /share/VIDEO/_rushes/db-copies && cp '$DBC' /share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part \
@@ -683,4 +683,19 @@ if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/d
         log "$(date '+%Y-%m-%d %H:%M:%S')  database copied to _rushes/db-copies/rushes-$DAY.sqlite"
     fi
     VLIMIT=$VL0
+fi
+
+# Can anything private be downloaded? (HOW-IT-WORKS.md → Security.) Once a
+# day, this machine's own web server is asked for the files .htaccess forbids.
+# Any it hands out are listed in exposed.txt, and Overview says so in red.
+if [ ! -f /share/Web/exposed.txt ] || [ -n "$(find /share/Web/exposed.txt -mmin +1440 2>/dev/null)" ]; then
+    : > /share/Web/exposed.txt.new
+    if command -v curl >/dev/null 2>&1; then
+        for f in rushes.sqlite db-copy.sqlite .adminpass ingest-queue.tsv; do
+            [ -f "/share/Web/$f" ] || continue
+            code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "${RUSHES_URL:-http://127.0.0.1}/$f" 2>/dev/null)
+            [ "$code" = 200 ] && echo "$f" >> /share/Web/exposed.txt.new
+        done
+    fi
+    mv -f /share/Web/exposed.txt.new /share/Web/exposed.txt
 fi

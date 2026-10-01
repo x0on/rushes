@@ -1,0 +1,14 @@
+# Files Rushes keeps in this folder that must never be handed to a browser
+# (HOW-IT-WORKS.md → Security). The pages read them on the server; nobody
+# needs to download them. This only works if the web server reads .htaccess
+# files, so the runner asks this machine's own web server for them once a day
+# and Overview says so if any can still be downloaded.
+<FilesMatch "^(\.adminpass|rushes\.sqlite.*|db-copy\.sqlite.*|ingest-queue\.tsv|helper-refused\.tsv)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
