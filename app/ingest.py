@@ -175,6 +175,10 @@ def status(**kw):
             + "".join(f"{k}\t{v}\n" for k, v in kw.items()))
     lane = getattr(_lane, "name", "")          # each lane has its own live status
     try:
+        # Paused is paused: nothing is written on the archive share. Rushes is
+        # told over the network (below), which is how the pages show it.
+        if str(kw.get("phase", "")) == "paused":
+            raise OSError("paused: the share is left alone")
         STATUS.mkdir(parents=True, exist_ok=True)
         with open(STATUS / ("describe-status.tsv" if lane == "describe" else "ingest-status.tsv"), "w") as f:
             f.write(text)
@@ -1494,6 +1498,11 @@ def look_forever(every=20):
     system waits on it); only this thread waits, and the reports carry on."""
     ok = lambda x: "\t" not in x and "\n" not in x
     while True:
+        if control().get("paused"):
+            # Paused is paused: no drive is looked at (a network share included).
+            # The last look stands; a card plugged in now shows after Resume.
+            _looked[1] = time.time()
+            time.sleep(every); continue
         try:
             lines = []
             for v in volumes():
@@ -1864,6 +1873,17 @@ def watch(root, every=20):
                 u = rushes_elsewhere()
                 if u:
                     move_to(u, f"it stopped answering at {NAS_URL}")
+            wait(every); continue
+
+        # Paused from Manage: said once, and then nothing on any share is touched —
+        # no folder checked, nothing listed, nothing written — until Resume.
+        # Only Rushes is asked, over the network, whether Resume was pressed.
+        c = control()
+        if c.get("paused"):
+            if not paused:
+                print(f"\n{time.strftime('%H:%M:%S')}  paused from Manage — nothing touches the shares until Resume")
+                status(phase="paused", source="", note="paused from Manage")
+                paused = True
             wait(every); continue
 
         want = []

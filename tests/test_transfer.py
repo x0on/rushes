@@ -573,8 +573,14 @@ class DescribeLaneTests(unittest.TestCase):
     def test_its_pause_holds_it_and_says_so(self):
         m = self.mod
         m._describe_jobs[:] = [(str(self.archive), "")]
+        pushed = []
+        with patch.object(m, "_push", side_effect=lambda text, lane="": pushed.append(text)):
+            m.status(phase="paused", note="describing paused")
         self.assertEqual(self.run_lane({"describe_paused": True}), [])
-        self.assertIn("paused", (m.STATUS / "describe-status.tsv").read_text())
+        # Paused is paused: nothing written on the archive share; Rushes is told over the network
+        self.assertFalse((m.STATUS / "describe-status.tsv").exists())
+        self.assertFalse((m.STATUS / "ingest-status.tsv").exists())
+        self.assertIn("paused", pushed[0])
 
 
 class AddressTests(unittest.TestCase):
