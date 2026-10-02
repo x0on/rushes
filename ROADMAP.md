@@ -41,6 +41,8 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 - Faces (see [Decided](#decided-and-why)).
 - The describing tools in an installer (today they are set up by hand on the Mac).
 - Rushes Helper for Windows.
+- Live support for organisations with a commercial license (see
+  [Decided](#decided-and-why)).
 
 ## Known problems
 
@@ -73,8 +75,8 @@ happens in HOW-IT-WORKS.
 - Which copy of a duplicate to keep (project, card dump, shortest path,
   oldest) has no control in Manage: it is always the project copy.
 - Settings that nothing reads yet: `organise.shape`, `holding.*`,
-  `helper.poll_seconds`, and parts of `rules.json` (`structure`, `duplicates`,
-  two conditions). The list of video types for proxies is written in two places
+  `helper.poll_seconds`, and parts of `rules.json` (`structure`, most of
+  `duplicates`, two conditions). The list of video types for proxies is written in two places
   instead of coming from `rules.json`.
 
 **Doing the work**
@@ -133,6 +135,7 @@ What could go wrong, what was decided, and where it stands.
 | The vision model invents things and someone trusts them | Label descriptions as machine-made; show how sure it was | Partly done |
 | Footage and descriptions are public records, or show people who did not agree | Ask whoever looks after records before sharing descriptions widely | For each installation |
 | Default password, plain http, anyone on the network can open Manage | A real password; local network only; private files checked daily | Partly done |
+| Live support becomes a way into someone's computer | Paid license only; off and not installed by default; the person at the computer opens each session, sees it the whole time, ends it with one button; every session logged | To build |
 | Only one person knows how it fits together | HOW-IT-WORKS, INSTALL, DEVELOPING | Done |
 | The archive machine ages out of security updates | Plan its replacement; keep the archive portable (the packages below) | To plan |
 
@@ -186,11 +189,14 @@ One Rushes, packaged three ways:
 
 ## Decided, and why
 
-- **Help is in the open, and nobody connects in.** Help is a GitHub issue with
-  a diagnostics file the person reads first. Rushes has no remote access. A
-  live-support add-on for organisations that support their own clients may come
-  later. It would be outside Rushes: off unless the person at the computer turns
-  it on, shown on screen while open, ended with one button, and logged.
+- **Help is in the open; live support is paid, and never unasked.** For
+  everyone, help is a GitHub issue with a diagnostics file the person reads
+  first, and the free version has no remote access at all. Organisations with a
+  commercial license get live support: the Rushes team can connect to fix a
+  problem, but only through Rushes Helper, only when the person at the computer
+  opens a session, shown on screen the whole time, ended with one button, and
+  logged. It is off, and not even installed, unless the organisation turns it
+  on. Rushes never reports home, so nothing about it is used to check licenses.
 - **Copy proof lives beside the footage,** in ASC MHL, the film industry's
   format, so other tools can check it. Records are never deleted, only moved
   along with the footage.
