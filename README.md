@@ -18,8 +18,8 @@ never leaves them.
   counts, and is recorded in the film industry's copy-proof format (ASC MHL).
   Nothing is copied twice.
 - **Finds it again.** You can search by file name, camera, reel, what the
-  picture shows, the words on screen, and what was said. The descriptions and
-  transcripts are made on your own computer.
+  picture shows, the words on screen, and what was said, and play the moment
+  you found. The descriptions and transcripts are made on your own computer.
 - **Hands it to the edit.** You collect clips into a *pull* and download it for
   Premiere, Final Cut or DaVinci Resolve, with markers, or as a list of paths,
   or the files themselves.

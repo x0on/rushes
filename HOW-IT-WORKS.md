@@ -1490,6 +1490,8 @@ job validation), `db/config.php` (the same-site check at the top,
 
 **Inside your network, between your machines** (plain http):
 
+- **Rushes and the browsers that open it:** the pages, stills, proxies being
+  played, and downloads (pulls, exports).
 - **The helper and Rushes:**
   - work, switches, its heartbeat (see the table above), status, history, files
     copied, moves and copy counts;
