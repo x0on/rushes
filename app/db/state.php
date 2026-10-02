@@ -109,7 +109,13 @@ if (!$transferOpen && ($mac['phase'] ?? '') === 'blocked') {
         'act' => null, 'help' => 'Is the watcher still running on the Mac?'];
 }
 
-if (!$runner_ok) {
+$stopped = file_exists("$WEB/STOP");
+if ($stopped) {
+    $c[] = ['level' => 'warn', 'title' => 'The runner is stopped',
+        'body' => 'Nothing runs on the server by itself, and nothing asked for here runs, until you press Start '
+                  . '(What runs by itself, below). Rushes\' pages and search still answer.',
+        'act' => null, 'help' => null];
+} elseif (!$runner_ok) {
     $c[] = ['level' => 'bad', 'title' => 'The NAS is not picking up jobs',
         'body' => 'Nothing queued here will run. The scheduled task that does the work has been silent for '
                   . ($alive ? round(($now - $alive) / 60) . ' minutes' : 'as long as this page can tell') . '.',
@@ -433,7 +439,9 @@ function tb(int $b): string {
 // last did its work, and whether it stopped. Read from files on Web only.
 $hv = helper_volumes();
 $repeats = [
-    ['The runner on the archive machine', 'every minute; does nothing when there is nothing to do', $alive, $runner_ok ? 'ok' : 'bad'],
+    ['The runner on the archive machine', 'every minute; does nothing when there is nothing to do', $alive,
+        $stopped ? 'stopped — nothing runs until Start' : ($runner_ok ? 'ok' : 'bad'),
+        $stopped ? ['start-runner', 'Start'] : ['stop-runner', 'Stop']],
     ['Reaching the VIDEO share', 'every minute, never while paused; walked away from after 20 s, stops after three',
         $mtime('disk.txt'), is_readable("$WEB/video-tripped.txt") ? 'stopped — Try again above' : 'ok'],
     ['Looking for new versions of Rushes itself (in _rushes on VIDEO)', 'only when you press Check now, and once after an install',
@@ -450,7 +458,7 @@ echo json_encode([
     'archive'  => ['files' => $files, 'bytes' => $bytes,
                    'imported' => $imported, 'imported_ago' => $ago($searchAt)],
     'disk'     => $disk,
-    'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive)],
+    'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive), 'stopped' => $stopped],
     'running'  => $running, 'progress' => $progress,
     // asked from Manage, waiting for the runner's next turn
     'queued'   => array_values(array_filter(array_map(fn($j) => preg_match('/^ACTION=(.+)$/m', (string)@file_get_contents($j), $m) ? trim($m[1]) : '',

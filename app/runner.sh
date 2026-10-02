@@ -15,8 +15,8 @@
 # during the working day (Rushes does not add this itself). Sunday 02:00:
 #   0 2 * * 0 printf 'ACTION=scan\n' > /share/Web/queue/weekly.job
 
-# The off switch: a file called STOP in the web folder (File Station: Web →
-# create a folder or file named STOP) and the runner does nothing at all, every
+# The off switch: a file called STOP in the web folder (Manage → What runs by
+# itself → Stop, or File Station: Web → create a folder or file named STOP) and the runner does nothing at all, every
 # minute, until it is removed. For a disk rebuild, or anything else where the
 # archive machine must be left alone. Checked before anything else is touched.
 # Where things are. The web folder is the one this script lives in when it

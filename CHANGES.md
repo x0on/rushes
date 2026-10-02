@@ -17,6 +17,8 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   archive.
 - **Deliverables in Search:** everything in Output folders, as its own section.
 - Duplicates never moves anything in Projects or the stock library.
+- **Stop the runner from Manage:** What runs by itself → **Stop** / **Start**
+  on the runner's line, the same as putting `STOP` in the web folder.
 
 ## 0.9.3 — October 2026
 

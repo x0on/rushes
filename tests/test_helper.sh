@@ -48,6 +48,9 @@ check 'call GET "{\"control\":\"\"}" | grep -q "\"skip\":\[\"/src/A\"\]"' 'a cop
 check 'call POST "{}" "{\"action\":\"check-updates\"}" | grep -q "sign in" && [ ! -e "$ROOT/app/survey-now" ]' 'Check for updates needs sign-in'
 call POST '{}' '{"action":"check-updates","pass":"rushes"}' >/dev/null
 check '[ -e "$ROOT/app/survey-now" ]' 'Check for updates asks the runner to look'
+check 'call POST "{}" "{\"action\":\"stop-runner\"}" | grep -q "sign in" && [ ! -e "$ROOT/app/STOP" ]' 'Stopping the runner needs sign-in'
+check 'call POST "{}" "{\"action\":\"stop-runner\",\"pass\":\"rushes\"}" | grep -q "\"stopped\":true" && [ -e "$ROOT/app/STOP" ]' 'Stop writes the same STOP file File Station would'
+check 'call POST "{}" "{\"action\":\"start-runner\",\"pass\":\"rushes\"}" | grep -q "\"stopped\":false" && [ ! -e "$ROOT/app/STOP" ]' 'and Start removes it'
 # Ingest: the server checks the date again, whatever the page let through
 printf 'at\t%s\nvol\t/Volumes/CARD\tCARD\t1\t1\t1\t0\t1\t1\n' "$(date +%s)" > "$ROOT/app/helper-volumes.tsv"
 S2=$(sed 's/"departments":\[\]/"departments":[{"name":"News","folder":"NEWS"}]/' "$ROOT/app/settings.json"); echo "$S2" > "$ROOT/app/settings.json"

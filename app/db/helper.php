@@ -157,6 +157,17 @@ if (!may_act((string)($_POST['pass'] ?? '')) && !($switch && helper_pairing() !=
     bail(403, $switch ? 'sign in first, or press it in the paired Rushes Helper' : 'sign in first');
 // Look for new versions of Rushes' own files in _rushes (the runner, next minute)
 if ($act === 'check-updates') { @touch(web_dir() . '/survey-now'); out(['ok' => true]); }
+// The off switch for the runner: the same STOP file File Station makes, for a
+// disk rebuild or anything else where the server must be left alone. Signed in
+// only. The pages keep answering; what the runner is in the middle of finishes.
+if ($act === 'stop-runner' || $act === 'start-runner') {
+    $f = web_dir() . '/STOP';
+    $ok = $act === 'stop-runner' ? @file_put_contents($f, 'stopped from Manage ' . date('c') . "\n") !== false
+                                 : (!file_exists($f) || @unlink($f));
+    if (!$ok) bail(500, $act === 'stop-runner' ? 'Could not write STOP — is the web folder writable?'
+                                               : 'Could not remove STOP: it was made in File Station, so remove it there (Web → STOP).');
+    out(['ok' => true, 'stopped' => file_exists($f)]);
+}
 $c = helper_control();
 if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';

@@ -1007,7 +1007,11 @@ async function load() {
       b.disabled = true; b.textContent = 'Asking …';
       try {
         const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: b.dataset.rep }) })).json();
-        b.textContent = r.error ? 'Did not happen: ' + r.error : 'Asked ✓ The runner looks within a minute';
+        b.textContent = r.error ? 'Did not happen: ' + r.error
+          : r.stopped === true ? 'Stopped ✓ Nothing runs on the server until Start'
+          : r.stopped === false ? 'Started ✓ The runner checks in within a minute'
+          : 'Asked ✓ The runner looks within a minute';
+        if (r.stopped !== undefined) setTimeout(load, 2500);
       } catch (e) { b.textContent = 'The archive did not answer'; }
     };
   });
@@ -1044,7 +1048,7 @@ async function load() {
       : '') + (evs.length ? evs.slice(0, 12).join('') : '<div class="empty">Nothing yet.</div>');
   $('sideNow').textContent = d.runner && d.runner.ok
     ? 'Picking up jobs · checked ' + (d.runner.ago || 'just now')
-    : 'Not picking up jobs';
+    : d.runner && d.runner.stopped ? 'Stopped: nothing runs until Start' : 'Not picking up jobs';
   const lg = $('log'), stuck = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 30;
   lg.textContent = d.log || 'nothing logged yet';
   if (stuck) lg.scrollTop = lg.scrollHeight;
