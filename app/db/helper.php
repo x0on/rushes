@@ -100,7 +100,7 @@ NEW="$TMP/x/Rushes Helper.app"
 if ! codesign --verify "$NEW" 2>/dev/null; then
     echo "✗ Not installed: the app's signature does not check out (changed after it was signed)."; rm -rf "$TMP"; exit 1
 fi
-( cd "$TMP" && codesign -d --extract-certificates=cert "$NEW" 2>/dev/null )
+( cd "$TMP" && codesign -d --extract-certificates=cert "$NEW" 2>/dev/null ) || true
 if [ "$(shasum -a 256 "$TMP/cert0" 2>/dev/null | cut -d' ' -f1)" != "$CERT" ]; then
     echo "✗ Not installed: the app is signed, but not by the Rushes author's certificate."; rm -rf "$TMP"; exit 1
 fi

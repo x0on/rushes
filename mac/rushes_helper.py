@@ -19,6 +19,7 @@ import os
 import platform
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -160,9 +161,11 @@ def fetch_files(url):
     with urllib.request.urlopen(f"{url}/db/helper.php?code=release.sig", timeout=20) as r:
         sig = r.read().decode("utf-8", "replace")
     try:
-        release.check(got, sig)
+        mine = open(os.path.join(DIR, "release.sig")).read() if os.path.exists(os.path.join(DIR, "release.sig")) else ""
+        release.check(got, sig, not_before=release.made_of(mine))
     except ValueError as e:
         raise RuntimeError(f"the helper's code on Rushes is not a signed release ({e}); nothing was installed.")
+    got["release.sig"] = sig.encode()
     for f, data in got.items():
         with open(os.path.join(DIR, f + ".new"), "wb") as fh:
             fh.write(data)
@@ -844,6 +847,13 @@ def serve(port, key):
 
 # ── run by macOS: the helper itself ─────────────────────────────────────────
 def service(args):
+    # The helper checks its own updates with the release.py beside it. One
+    # installed before signed releases has none: it gets the one inside this
+    # app (which macOS checks is signed), never one downloaded.
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(DIR, "ingest.py")) and not os.path.exists(os.path.join(DIR, "release.py")):
+        try: shutil.copy(os.path.join(here, "release.py"), os.path.join(DIR, "release.py"))
+        except OSError: pass
     missing = [f for f in FILES if not os.path.exists(os.path.join(DIR, f))]
     if missing:
         url = args[args.index("--url") + 1] if "--url" in args else saved_url()
@@ -859,7 +869,8 @@ def service(args):
             wait = (60, 300)[n] if n < 2 else 900
             try: open(os.path.join(DIR, ".fetch-tries"), "w").write(str(n + 1))
             except OSError: pass
-            print(f"the helper's files are missing and Rushes cannot be reached ({e}) — trying again in {wait // 60} min")
+            why = str(e) if "signed release" in str(e) else f"the helper's files are missing and Rushes cannot be reached ({e})"
+            print(f"{why} — trying again in {wait // 60} min")
             time.sleep(wait)
             return 1
         try: os.remove(os.path.join(DIR, ".fetch-tries"))

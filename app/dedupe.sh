@@ -84,8 +84,10 @@ awk -F"$TAB" -v ks="$KEEP_SIDE" '{
     else if ($2 == "project") { if (ks != "card") next; w = "the shelf, loses to card dumps" }
     else w = $2
     printf "  %5d  %s  (%s)\n", $1, $3, w }' "$RULES"
-grep -q "${TAB}card${TAB}" "$RULES" || [ "$KEEP_SIDE" != project ] || \
-    echo "  (no card-dump folders are set in Setup → 05, so nothing makes the project copy win)"
+case "$KEEP_SIDE" in project|card)
+    grep -q "${TAB}card${TAB}" "$RULES" || \
+        echo "  (no card-dump folders are set in Setup → 05: neither the shelf's copy nor a card dump is preferred)" ;;
+esac
 # ---------- KEEP_SIDE=oldest needs modification times ----------
 # Only collected in this mode: it stats every duplicate on disk, which takes a
 # few minutes across ~118,000 files. Every other mode decides from the path

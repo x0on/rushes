@@ -61,6 +61,8 @@ happens in HOW-IT-WORKS.
   Rushes. They hold paths and progress, not passwords.
 - Anyone who can write to the web share can change the runner (root). This is
   covered in INSTALL.md, but not enforced.
+- The Terminal install command comes from the Rushes server over plain http, so
+  its own check of the app can be changed on the way.
 - The Rushes Helper app does not update itself. Its signing certificate is the
   author's own, not one Apple issued, so macOS asks once before opening it.
 - The pairing ID is a plain-text secret in the web folder, protected only by

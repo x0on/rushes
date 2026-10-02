@@ -175,23 +175,33 @@ is the folder the archive machine's web server serves.
 - `shares.json`: where network shares live;
 - `helper-id`: the pairing ID;
 - `stopped.txt`: present when it stopped by itself;
-- `helper.lock`: one helper per computer.
+- `helper.lock`: one helper per computer;
+- `describe-tries.json`: folders describing will try again, and when;
+- `tidy-<id>-late.txt`: moves a stopped tidy-up gave up on, checked when it
+  carries on.
 
 **On a Mac**, Rushes Helper also uses:
 
 - `~/Applications/Rushes Helper.app`;
-- `~/Library/Application Support/Rushes`: the helper's code and the Rushes
+- `~/Library/Application Support/Rushes`: the helper's code (with its
+  `release.sig`) and the Rushes
   address;
 - `~/Library/Logs/Rushes`: `helper.log` and `setup.log`;
 - `~/Library/LaunchAgents/org.rushes.helper.plist`: the background service.
 
 The runner and its scripts find the web folder as the folder `runner.sh` is
-in (when it holds `settings.json`), and the archive from `archive-path.txt`, one
-line Rushes writes there whenever settings are saved, and every minute if it is
-missing. The runner checks that line again before using it: an absolute path
-of plain letters, digits, dots, dashes and underscores (no spaces), at least
-two folders deep, not a system folder, and a folder that exists. Otherwise it
-uses the QNAP's places, `/share/Web` and `/share/VIDEO`.
+in (when it holds `settings.json` and its path has no spaces), and the archive
+from `archive-path.txt`, one line Rushes writes there whenever settings are
+saved, and every minute if it is missing. The runner, which acts on that folder
+with full rights, checks the line again before using it:
+
+- plain letters, digits, dots, dashes and underscores, no spaces and no `..`;
+- under a place where data volumes live: `/share/…` (QNAP), `/volume1/…`
+  (Synology), `/srv/…`, `/mnt/…`, `/media/…` or `/data/…`;
+- not a hidden folder, not a QNAP system folder, not the web folder;
+- a folder that exists.
+
+Otherwise it uses the QNAP's places, `/share/Web` and `/share/VIDEO`.
 
 **In the code:**
 
@@ -1234,8 +1244,8 @@ or when it has no list yet.
 **The helper's own code** (`ingest.py`, `transfer_state.py`, `analyze.py`,
 `release.py`) does not wait for a person, because it is **signed** instead:
 
-- A release is the four files plus `release.sig`: their fingerprints, signed
-  with the Rushes release key (Ed25519). That key stays on its owner's computer;
+- A release is the four files plus `release.sig`: their fingerprints and when
+  it was signed, signed with the Rushes release key (Ed25519). That key stays on its owner's computer;
   `release.py` holds its public half. A release is signed with
   `python3 release.py sign <folder> <key file>` (DEVELOPING.md).
 - Put the four files and `release.sig` in `_rushes`, and press **Check now** so
@@ -1245,17 +1255,23 @@ or when it has no list yet.
   checks it against the fingerprint and that it is valid Python, then fetches
   `release.sig` and checks, with the `release.py` it already has (never the
   one downloaded), that the whole set as it will be is exactly the signed
-  release. Only then does it replace its files and restart. Otherwise it says
-  "not a signed release" and carries on with the version it has.
+  release, and not older than the release it has now (it keeps that release's
+  `release.sig`). Only then does it replace its files and restart. Otherwise it
+  says "not a signed release" (or "an older release") and carries on with the
+  version it has.
 - It only ever asks your Rushes server, never the internet. The download is
   plain http, but a change made on the way, on the Rushes server or on the
-  share, without the key, is refused.
-- A helper older than signed releases takes the first signed release without
-  checking it (it has no `release.py` yet); every update after that is checked.
+  share, without the key, is refused, and so is putting back an older release.
+- A helper without `release.py` beside it takes no update: it says to install
+  the new Rushes Helper. That app puts its own `release.py` beside a helper
+  installed before signed releases, when it starts it. (A helper older than
+  that check, with no check at all, takes one more update unchecked: the one
+  that brings the check.)
 - **The built-in helper** runs with full rights, so the runner starts it only
   from a signed release: it copies the files from `_rushes` into the web
   folder, checks the copy with the `release.py` installed there (an approved
-  script, like `runner.sh`), and runs that copy. If the check fails, it does
+  script, like `runner.sh`), not older than the copy it ran before, and runs
+  that copy. If the check fails, it does
   not start, and Setup and the job log say why.
 - When Rushes Helper is first set up, it downloads the same files and checks
   them the same way, with the `release.py` inside the app.
@@ -1269,6 +1285,11 @@ updated by Rushes. A new version is downloaded from Setup and opened.
   certificate (its fingerprint is written in `db/helper.php`). Only then does it
   delete the old app, put the new one in its place, save the Rushes address, and
   open it. It does not stop the helper already running.
+- That check catches an app swapped on the share. It cannot catch a change to
+  the command itself: the command comes from your Rushes server over plain
+  http, like the pages, so whoever controls that server or your network could
+  change it. On a network you do not trust, download the app from Setup in the
+  browser instead: macOS checks its signature when it opens.
 - An app signed with the same certificate keeps its Full Disk Access and Local
   Network permissions.
 
@@ -1396,7 +1417,7 @@ its switches. What it reports is checked:
   unencrypted.
 - Rushes does not check that the address a browser used is one of its own: a
   website that makes its own name point at your Rushes (DNS rebinding) is not
-  stopped by the same-site check below.
+  stopped by the same-site check above.
 - Anyone who can write to the web share can change the runner, which runs with
   full rights. Give write access to the web share to the administrator only
   (INSTALL.md).

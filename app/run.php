@@ -15,6 +15,9 @@ $allowed = ['plan', 'apply', 'undo', 'reindex', 'cacheclean', 'df',
             'organize-undo', 'scan', 'manifest', 'holding',
             'cache-undo', 'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test', 'proxy-remake', 'reset-breaker'];
 
+// First: settings, and the check that this came from Rushes itself (config.php).
+require_once __DIR__ . '/db/auth.php';
+
 $action    = $_POST['action']    ?? '';
 $pass      = $_POST['pass']      ?? '';
 $keep_side = $_POST['keep_side'] ?? 'project';
@@ -26,7 +29,6 @@ $query     = implode('', array_slice(preg_split('//u', preg_replace('/[^\p{L}\p{
 
 // A signed-in admin session is enough; a password in the request also works,
 // so a script can still drive this without a browser.
-require_once __DIR__ . '/db/auth.php';
 $QUEUE = web_dir() . '/queue';
 if (!may_act($pass)) {
     http_response_code(403);

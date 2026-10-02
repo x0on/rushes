@@ -7,11 +7,13 @@ machine runs with full rights. So a new version is accepted only when it
 carries a signature (release.sig, beside the files in _rushes) made with the
 Rushes release key, which never leaves its owner's computer. Whoever controls
 the network, the Rushes server or the archive share, without that key, cannot
-change what runs.
+change what runs, nor put back an older release: a helper takes only a release
+made at the same time as its own, or later.
 
 release.sig is plain text, readable by anyone:
 
     rushes-release 1
+    made <when it was signed, in seconds since 1970>
     <sha256> analyze.py
     <sha256> ingest.py
     <sha256> release.py
@@ -20,7 +22,8 @@ release.sig is plain text, readable by anyone:
 
     python3 release.py keygen <keyfile>         a new key (prints its public half)
     python3 release.py sign <folder> <keyfile>  sign the files in <folder>
-    python3 release.py verify <folder>          exit 0 only if <folder> is signed
+    python3 release.py verify <folder> [<old>]  exit 0 only if <folder> is signed (and, given the
+                                                folder it replaces, not older than that)
     python3 release.py --selftest
 
 Ed25519 is written out here (RFC 8032), because the Python on a NAS or inside
@@ -30,6 +33,7 @@ which is all it needs to be.
 import hashlib
 import os
 import sys
+import time
 
 # The Rushes release key, public half. Its private half is kept by the author.
 # A fork that signs its own releases puts its own public key here.
@@ -128,19 +132,24 @@ def verify(pub, msg, sig):
 
 
 # ── releases ────────────────────────────────────────────────────────────────
-def body(hashes):
-    """The signed part: one line per file, in name order."""
-    return ("rushes-release 1\n" + "".join(f"{hashes[n]} {n}\n" for n in sorted(hashes))).encode()
+def body(hashes, made):
+    """The signed part: when, then one line per file, in name order."""
+    return (f"rushes-release 1\nmade {int(made)}\n" + "".join(f"{hashes[n]} {n}\n" for n in sorted(hashes))).encode()
 
 
 def read_sig(text, public=None):
-    """-> {name: sha256} from a release.sig whose signature is good, or raises
-    ValueError saying why not."""
+    """-> ({name: sha256}, made) from a release.sig whose signature is good, or
+    raises ValueError saying why not."""
     lines = text.strip("\n").split("\n")
-    if not lines or lines[0] != "rushes-release 1" or not lines[-1].startswith("sig "):
+    if len(lines) < 3 or lines[0] != "rushes-release 1" or not lines[1].startswith("made ") \
+            or not lines[-1].startswith("sig "):
+        raise ValueError("release.sig is not in the expected form")
+    try:
+        made = int(lines[1][5:])
+    except ValueError:
         raise ValueError("release.sig is not in the expected form")
     hashes = {}
-    for l in lines[1:-1]:
+    for l in lines[2:-1]:
         h, _, n = l.partition(" ")
         if len(h) != 64 or n not in FILES or n in hashes:
             raise ValueError(f"release.sig lists something unexpected: {l[:80]}")
@@ -150,15 +159,25 @@ def read_sig(text, public=None):
         pub = bytes.fromhex(public or PUBLIC)
     except ValueError:
         raise ValueError("release.sig, or the release key, is not readable")
-    if not verify(pub, body(hashes), sig):
+    if not verify(pub, body(hashes, made), sig):
         raise ValueError("release.sig is not signed with the Rushes release key")
-    return hashes
+    return hashes, made
 
 
-def check(files, sig_text, public=None):
+def made_of(text, public=None):
+    """When a good release.sig was made; 0 if it is missing or not good."""
+    try:
+        return read_sig(text, public)[1]
+    except ValueError:
+        return 0
+
+
+def check(files, sig_text, public=None, not_before=0):
     """files: {name: bytes}. Raises ValueError unless each one is exactly what
-    a good release.sig lists."""
-    hashes = read_sig(sig_text, public)
+    a good release.sig lists, and the release is not older than not_before."""
+    hashes, made = read_sig(sig_text, public)
+    if made < not_before:
+        raise ValueError("it is an older release than the one already here")
     for n, data in files.items():
         if hashes.get(n) != hashlib.sha256(data).hexdigest():
             raise ValueError(f"{n} is not the signed version")
@@ -185,7 +204,8 @@ def main(argv):
         if set(files) != set(FILES):
             print(f"missing in {argv[1]}: {', '.join(sorted(set(FILES) - set(files)))}"); return 1
         hashes = {n: hashlib.sha256(d).hexdigest() for n, d in files.items()}
-        text = body(hashes).decode() + "sig " + sign(seed, body(hashes)).hex() + "\n"
+        made = int(time.time())
+        text = body(hashes, made).decode() + "sig " + sign(seed, body(hashes, made)).hex() + "\n"
         read_sig(text, public_key(seed).hex())
         with open(os.path.join(argv[1], "release.sig"), "w") as f:
             f.write(text)
@@ -193,10 +213,14 @@ def main(argv):
         if public_key(seed).hex() != PUBLIC:
             print("  note: this key is not the one in release.py; helpers will refuse it")
         return 0
-    if argv[:1] == ["verify"] and len(argv) == 2:
+    if argv[:1] == ["verify"] and len(argv) in (2, 3):
         try:
             files = _files_in(argv[1])
-            hashes = check(files, open(os.path.join(argv[1], "release.sig")).read())
+            old = 0
+            if len(argv) == 3:
+                try: old = made_of(open(os.path.join(argv[2], "release.sig")).read())
+                except OSError: pass
+            hashes = check(files, open(os.path.join(argv[1], "release.sig")).read(), not_before=old)
             if set(hashes) != set(files):
                 raise ValueError("release.sig and the files beside it do not match")
         except (OSError, ValueError) as e:
@@ -219,11 +243,16 @@ def selftest():
     # a release: good, a file changed, a line added, another key
     files = {n: n.encode() * 3 for n in FILES}
     hashes = {n: hashlib.sha256(d).hexdigest() for n, d in files.items()}
-    text = body(hashes).decode() + "sig " + sign(s1, body(hashes)).hex() + "\n"
+    text = body(hashes, 1000).decode() + "sig " + sign(s1, body(hashes, 1000)).hex() + "\n"
     pub = public_key(s1).hex()
-    assert check(files, text, pub) == hashes
+    assert check(files, text, pub) == hashes and made_of(text, pub) == 1000
+    try:
+        check(files, text, pub, not_before=1001); raise AssertionError("accepted an older release")
+    except ValueError:
+        pass
+    assert made_of(text.replace("made 1000", "made 2000"), pub) == 0           # the date is signed too
     for bad_files, bad_text, key in [(dict(files, **{"ingest.py": b"evil"}), text, pub),
-                                     (files, text.replace("rushes-release 1\n", "rushes-release 1\n" + "0" * 64 + " ingest.py\n"), pub),
+                                     (files, text.replace("made 1000\n", "made 1000\n" + "0" * 64 + " ingest.py\n"), pub),
                                      (files, text, public_key(s2).hex())]:
         try:
             check(bad_files, bad_text, key); raise AssertionError("accepted a bad release")

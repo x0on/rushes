@@ -257,7 +257,10 @@ function dedupe_rules_write(): ?array {
     $d = settings()['duplicates'] ?? [];
     foreach ($d['never_keep'] ?? [] as $f) if (($f = $clean($f)) !== '') $lines[] = (int)$w['never_keep'] . "\tcontains\t/$f/";
     foreach ($d['card_dumps'] ?? [] as $f) if (($f = $clean($f)) !== '') $lines[] = (int)$w['other_side'] . "\tcard\t/$f/";
-    if (shelf_name() !== '') $lines[] = (int)$w['other_side'] . "\tproject\t/" . shelf_name() . '/';
+    // The shelf loses only where card dumps are set, and card dumps were chosen to win:
+    // with no card-dump folders, neither side is preferred, whichever was chosen.
+    if (shelf_name() !== '' && ($d['card_dumps'] ?? []) !== [])
+        $lines[] = (int)$w['other_side'] . "\tproject\t/" . shelf_name() . '/';
     $file = web_dir() . '/dedupe-rules.tsv';
     $body = implode("\n", $lines) . "\n";
     if (@file_get_contents($file) === $body) return $lines;

@@ -56,6 +56,13 @@ check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"dat
       'Ingest: a date in the future is refused by the server too'
 check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"date\":\"2024-05-01\",\"event\":\"x\"}" queue.php | grep -q "\"queued\"\|ok\|into"' \
       'Ingest: a real date goes through'
+# Manage's job buttons (run.php): a job file, and for duplicates the rules it follows
+check 'call POST "{}" "{\"action\":\"plan\",\"pass\":\"rushes\",\"keep_side\":\"card\"}" run.php | grep -q "\"queued\":\"plan\"" && grep -q "KEEP_SIDE=card" "$ROOT"/app/queue/*.job && grep -q "contains	/@Recycle/" "$ROOT/app/dedupe-rules.tsv"' \
+      'a job button writes its job, and duplicates get their rules'
+check 'call POST "{}" "{\"action\":\"plan\"}" run.php | grep -q "not signed in"' 'job buttons need the password or a session'
+check 'call POST "{}" "{\"action\":\"plan\",\"pass\":\"rushes\",\"dest\":\"/etc\"}" run.php >/dev/null; grep -h "^DEST=" "$ROOT"/app/queue/*.job | grep -qv "^DEST=/etc"' \
+      'a holding folder outside the archive is replaced by the archive'"'"'s own'
+
 # another website cannot make a browser press Rushes' buttons; Rushes' own pages can
 check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "another website"' \
       'a button pressed from another website is refused, even with the password'

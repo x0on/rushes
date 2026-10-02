@@ -8,4 +8,4 @@ __pycache__/
 # signing keys never belong in the repo
 *.pem
 *.p12
-tests/.archive-*
+

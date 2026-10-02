@@ -25,11 +25,15 @@
 # an absolute path of plain characters, at least two folders deep, never a
 # system folder, and a folder that exists. Anything else: the QNAP's.
 WEB=/share/Web
-d=$(dirname "$0"); case "$d" in /*) [ -f "$d/settings.json" ] && WEB=$d ;; esac
+d=$(dirname "$0")
+case "$d" in *[!A-Za-z0-9._/-]*) ;; /?*) [ -f "$d/settings.json" ] && WEB=$d ;; esac
 ARCH=$(head -1 "$WEB/archive-path.txt" 2>/dev/null)
 case "$ARCH" in
-    *[!A-Za-z0-9._/-]*|*..*|/etc*|/usr*|/bin*|/sbin*|/lib*|/proc*|/sys*|/dev*|/root*|/boot*|/var/lib*|/tmp*) ARCH= ;;
-    /?*/?*) [ -d "$ARCH" ] || ARCH= ;;
+    # only where data volumes live (QNAP /share, Synology /volume1, Linux
+    # /srv /mnt /media /data), never a hidden folder, a QNAP system folder, or
+    # the web folder
+    *[!A-Za-z0-9._/-]*|*..*|*/.*|/mnt/HDA_ROOT*|/share/CACHEDEV*_DATA/.*|"$WEB"|"$WEB"/*) ARCH= ;;
+    /share/?*|/volume[0-9]*/?*|/srv/?*|/mnt/?*|/media/?*|/data/?*) [ -d "$ARCH" ] || ARCH= ;;
     *) ARCH= ;;
 esac
 [ -n "$ARCH" ] || ARCH=/share/VIDEO
@@ -60,7 +64,8 @@ if ! mkdir "$TICK" 2>/dev/null; then
     rm -rf "$TICK"; mkdir "$TICK" 2>/dev/null || exit 0      # its run ended without tidying up
 fi
 echo $$ > "$TICK/pid"
-trap 'rm -rf "$TICK"' EXIT INT TERM
+trap 'rm -rf "$TICK"' EXIT
+trap 'exit 130' INT TERM          # stopped: leave (the EXIT trap tidies up), never carry on
 
 # Paused from Manage (Pause copying): paused is paused. Nothing is read from or
 # written to VIDEO by itself — no status mirrored, no page deployed, no proxies
@@ -142,7 +147,7 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
             echo "$(date '+%Y-%m-%d %H:%M:%S')  built-in helper not started: release.py is not installed (Manage → What runs by itself → Check now, then Install it)" >> "$LOG"
         elif ! v copyhelper; then
             echo "waiting" > $WEB/helper-builtin.txt
-        elif ! "$PY" $WEB/release.py verify "$HC.new" >> "$LOG" 2>&1; then
+        elif ! "$PY" $WEB/release.py verify "$HC.new" "$HC" >> "$LOG" 2>&1; then
             echo "unsigned" > $WEB/helper-builtin.txt
             echo "$(date '+%Y-%m-%d %H:%M:%S')  built-in helper not started: the code in _rushes is not a signed release" >> "$LOG"
         else
@@ -330,8 +335,9 @@ upkeep() {
     fi
 }
 upkeep_once() {
-    if takelock "$MAINT" "the upkeep lock"; then upkeep; rm -rf "$MAINT"; fi
-    # A whole minute without a stall, upkeep included: the count starts again.
+    takelock "$MAINT" "the upkeep lock" || return 0     # an earlier minute's upkeep is still at it
+    upkeep; rm -rf "$MAINT"
+    # A whole minute without a stall, its upkeep included: the count starts again.
     [ "$VSTALLED" = 0 ] && [ -f "$VSTALL" ] && rm -f "$VSTALL"
     return 0
 }
@@ -341,7 +347,8 @@ upkeep_once() {
 if ! takelock "$LOCKDIR" "the job lock"; then
     upkeep_once; exit 0
 fi
-trap 'rm -rf "$LOCKDIR"; [ "$(cat "$MAINT/pid" 2>/dev/null)" = "$$" ] && rm -rf "$MAINT"' EXIT INT TERM
+trap 'rm -rf "$LOCKDIR"; [ "$(cat "$MAINT/pid" 2>/dev/null)" = "$$" ] && rm -rf "$MAINT"' EXIT
+trap 'exit 130' INT TERM
 
 # keep the log from growing forever
 [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ] && tail -c 500000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

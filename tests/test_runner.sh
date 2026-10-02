@@ -134,15 +134,16 @@ run
 # where the archive is comes from Setup (archive-path.txt), checked: a system
 # folder, or one that does not exist, falls back to the QNAP's
 rm -f "$V/ingest.py"; echo 'print(1)' > "$V/ingest.py"           # a plain file again (the stalls above made it a pipe)
-A2=$(mktemp -d "$HERE/tests/.archive-XXXXXX"); mkdir -p "$A2/_rushes"; echo 'print(2)' > "$A2/_rushes/ingest.py"
+A2=$R/share/OTHER; mkdir -p "$A2/_rushes"; echo 'print(2)' > "$A2/_rushes/ingest.py"
 echo "$A2" > "$W/archive-path.txt"; touch "$W/survey-now"; run
 grep -q "^helperfile	ingest.py	$(sha256sum "$A2/_rushes/ingest.py" | cut -d' ' -f1)$" "$W/waiting.tsv" \
   && ok "the archive's place comes from Setup: the runner looks there" || no "archive-path.txt not followed"
-for bad in /etc "$A2/../x" "/nowhere/at/all" "$A2 x"; do
+mkdir -p "$R/share/.hidden/_rushes" "$W/sub"; echo 'print(3)' > "$R/share/.hidden/_rushes/ingest.py"
+for bad in /etc "$A2/../x" "/nowhere/at/all" "$A2 x" "$R/share/.hidden" "$W" "$W/sub" /tmp; do
     echo "$bad" > "$W/archive-path.txt"; touch "$W/survey-now"; run
     grep -q "^helperfile	ingest.py	$(sha256sum "$V/ingest.py" | cut -d' ' -f1)$" "$W/waiting.tsv" || no "a bad archive path was followed: $bad"
 done
-ok "a system folder, .., a missing folder or a space in the path: the QNAP's place instead"
+ok "a system folder, .., a hidden or missing folder, the web folder, a space: the QNAP's place instead"
 rm -rf "$A2" "$W/archive-path.txt"
 
 # a new file list less than half the last one is a share that answered partly: the last list stays

@@ -487,19 +487,27 @@ class SignedUpdateTests(unittest.TestCase):
         for n, d in old.items(): (here / n).write_bytes(d)
         new = dict(old, **{'ingest.py': b'print(2)\n'})
         hashes = {n: hashlib.sha256(d).hexdigest() for n, d in new.items()}
-        good = rel.body(hashes).decode() + 'sig ' + rel.sign(seed, rel.body(hashes)).hex() + '\n'
-        bad = rel.body(hashes).decode() + 'sig ' + rel.sign(bytes(32), rel.body(hashes)).hex() + '\n'
+        good = rel.body(hashes, 2000).decode() + 'sig ' + rel.sign(seed, rel.body(hashes, 2000)).hex() + '\n'
+        bad = rel.body(hashes, 2000).decode() + 'sig ' + rel.sign(bytes(32), rel.body(hashes, 2000)).hex() + '\n'
+        older = rel.body(hashes, 1000).decode() + 'sig ' + rel.sign(seed, rel.body(hashes, 1000)).hex() + '\n'
+        h_old = {n: hashlib.sha256(d).hexdigest() for n, d in old.items()}
+        (here / 'release.sig').write_text(rel.body(h_old, 1500).decode() + 'sig ' + rel.sign(seed, rel.body(h_old, 1500)).hex() + '\n')
         m.HERE_DIR = str(here)
         with patch.object(m.urllib.request, 'urlopen', side_effect=self._serve(new, bad)), \
              patch.object(m.os, 'execv') as execv, patch('sys.stdout', new_callable=io.StringIO) as out:
             m._checked[0] = 0; m.update_self()
         self.assertEqual((here / 'ingest.py').read_bytes(), b'print(1)\n')        # signed with another key: not taken
         self.assertIn('not a signed release', out.getvalue()); execv.assert_not_called()
+        with patch.object(m.urllib.request, 'urlopen', side_effect=self._serve(new, older)), \
+             patch.object(m.os, 'execv') as execv, patch('sys.stdout', new_callable=io.StringIO) as out:
+            m._checked[0] = 0; m.update_self()
+        self.assertIn('older release', out.getvalue()); execv.assert_not_called()    # signed, but older: not taken
         with patch.object(m.urllib.request, 'urlopen', side_effect=self._serve(new, good)), \
              patch.object(m.os, 'execv') as execv, patch('sys.stdout', new_callable=io.StringIO):
             m._checked[0] = 0; m.update_self()
         self.assertEqual((here / 'ingest.py').read_bytes(), b'print(2)\n')        # signed: taken, and restarted
         execv.assert_called_once()
+        self.assertEqual((here / 'release.sig').read_text(), good)                 # remembered: no going back
 
 
 class ProofTests(unittest.TestCase):

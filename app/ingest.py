@@ -354,18 +354,19 @@ def read_back(path):
     has just written (F_NOCACHE, as far as macOS allows), so a bad write to the
     archive's disk cannot hide behind a good copy in memory."""
     h, _ = new_fingerprint()
-    with open(path, "rb") as f:
-        if sys.platform == "darwin":
-            try:
-                import fcntl
-                fcntl.fcntl(f, 48, 1)                       # F_NOCACHE
-            except (ImportError, OSError):
-                pass
-        try:
+    fed(path)                                    # before the open: an open can hang too
+    try:
+        with open(path, "rb") as f:
+            if sys.platform == "darwin":
+                try:
+                    import fcntl
+                    fcntl.fcntl(f, 48, 1)                       # F_NOCACHE
+                except (ImportError, OSError):
+                    pass
             for chunk in iter(lambda: f.read(8 << 20), b""):
                 h.update(chunk); fed(path); _HEARTBEAT()
-        finally:
-            fed()
+    finally:
+        fed()
     return h.hexdigest()
 
 
@@ -377,8 +378,8 @@ def digest(path, full=False):
     if key in _cache: return _cache[key]
     h = hashlib.blake2b(digest_size=16)
     try:
+        fed(path)                                # before the open: an open can hang too
         with open(path, "rb") as f:
-            fed(path)
             if full or st.st_size <= HEAD_TAIL * 2:
                 for chunk in iter(lambda: f.read(8 << 20), b""):
                     h.update(chunk); fed(path); _HEARTBEAT()
@@ -1466,6 +1467,10 @@ def tidy(plan_id):
     status(phase="tidying", source=plan_id, copied=0, of=len(work))
     moved, examples, mb = [], {}, 0
     why_stopped = ""
+    # Moves given up on last time (the archive did not answer): each may have
+    # finished after all. Kept on this computer until the tidy-up is done.
+    late_f = HOME / f"tidy-{plan_id}-late.txt"
+    late = set(late_f.read_text().splitlines()) if late_f.exists() else set()
     for i, (old, new, src, size) in enumerate(work, 1):
         # Pause, Try again pending, or a share that stops answering: stop at
         # this file, keep everything moved so far (recorded, search told), and
@@ -1475,6 +1480,12 @@ def tidy(plan_id):
             why_stopped = "paused"; break
         if any(inside(src, b) for b in busy):
             o.add("skipped", old, new, size, "its folder is still being copied — the next tidy-up takes it")
+        elif not os.path.isfile(old) and os.path.isfile(new) and os.path.getsize(new) == size and src in late:
+            # A move that the archive finished after it was given up on (the
+            # last tidy-up stopped there): it did happen, so it is recorded now.
+            o.add("moved", old, new, size, src)
+            move_proxy(old, new, o)
+            moved.append((old, new)); mb += size
         elif not os.path.isfile(old):
             o.add("skipped", old, new, size, "not there any more")
         elif os.path.lexists(new):
@@ -1491,6 +1502,8 @@ def tidy(plan_id):
                     examples[d] = (old, new); d = os.path.dirname(d)
             except Stalled:
                 stall("the archive share, moving " + os.path.basename(old))
+                with open(late_f, "a") as lf:
+                    lf.write(src + "\n")
                 o.add("skipped", old, new, size, "the archive did not answer within 30 s — tried again when the tidy-up carries on")
                 why_stopped = "the archive share did not answer"; break
             except OSError as e:
@@ -1508,6 +1521,8 @@ def tidy(plan_id):
     print(f"  every move: _rushes/origin/{o.path.name}")
     if moved:
         tell_moved(moved)
+    if not why_stopped:
+        late_f.unlink(missing_ok=True)
     if why_stopped:
         _unmark_done(f"tidy {plan_id}")
         print(f"  stopped part-way ({why_stopped}) — the rest is moved when work resumes")
@@ -2000,18 +2015,24 @@ def update_self():
             after = {f: got.get(f) or Path(here, f).read_bytes()
                      for f in HELPER_FILES if f in got or os.path.isfile(os.path.join(here, f))}
             try:
-                release.check(after, sig)
+                mine = Path(here, "release.sig").read_text() if Path(here, "release.sig").exists() else ""
+                release.check(after, sig, not_before=release.made_of(mine))
             except ValueError as e:
                 print(f"\n{time.strftime('%H:%M:%S')}  ! a new version of the helper is on the archive, but it is not "
                       f"a signed release ({e}) — not installed; this version carries on")
                 return
         else:
-            print("  (this version predates signed releases: the update brings the check with it)")
+            print(f"\n{time.strftime('%H:%M:%S')}  ! a new version of the helper is on the archive, but this helper "
+                  "cannot check signatures (no release.py beside it) — not installed. Install the new Rushes "
+                  "Helper (Setup → 04), which brings the check.")
+            return
         for f, data in got.items():
             with open(os.path.join(here, f + ".new"), "wb") as fh:
                 fh.write(data)
         for f in got:
             os.replace(os.path.join(here, f + ".new"), os.path.join(here, f))
+        with open(os.path.join(here, "release.sig"), "w") as fh:     # what release this is now (no going back)
+            fh.write(sig)
     except Exception as e:
         print(f"  ! could not update the helper ({e}) — carrying on with this version")
         return
