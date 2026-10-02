@@ -71,4 +71,6 @@ foreach (array_merge($d['never_keep'] ?? [], $d['card_dumps'] ?? []) as $n)
 foreach ($rows as &$r) $r['kind'] = $r['name'] === shelf_name() ? 'shelf' : $kind_of($r['name']);
 // when that look was made: the plan's own note says (the file's date changes when it is copied)
 $built = (string)(json_decode((string)@file_get_contents("$plan.meta"), true)['built'] ?? '');
-dup_said(200, ['built' => $built !== '' ? str_replace('T', ' ', substr($built, 0, 16)) : ($at ? date('Y-m-d H:i', $at) : ''), 'shelf' => shelf_name(), 'folders' => $rows]);
+// That plan already carried out (moved, with Move the copies aside): the numbers are what moved, not what would.
+$done = is_file(web_dir() . '/dedupe-moves.tsv') && (int)@filemtime(web_dir() . '/dedupe-moves.tsv') >= $at && $at > 0;
+dup_said(200, ['done' => $done, 'built' => $built !== '' ? str_replace('T', ' ', substr($built, 0, 16)) : ($at ? date('Y-m-d H:i', $at) : ''), 'shelf' => shelf_name(), 'folders' => $rows]);

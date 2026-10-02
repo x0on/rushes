@@ -9,6 +9,8 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   the folders holding the most copies, with how many would move and stay, and
   each is Normal, Stopover or Whole cards with one press. Setup no longer asks
   for folder names.
+- The panel says when that look was already carried out (the numbers are
+  then what moved, not what would), and fits a phone: names above the buttons.
 
 ## 0.10.1 — October 2026
 

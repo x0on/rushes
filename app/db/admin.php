@@ -556,15 +556,21 @@ async function loadWhere() {
   let r;
   try { r = await (await fetch('dupfolders.php?t=' + Date.now())).json(); } catch (e) { $('dwRows').innerHTML = '<div class="empty">Could not ask the archive.</div>'; return; }
   if (r.error) { $('dwRows').innerHTML = '<div class="empty">' + esc(r.error) + '</div>'; return; }
-  $('dwBuilt').textContent = r.built ? 'from the look on ' + r.built : '';
+  $('dwBuilt').textContent = r.built ? (r.done ? 'from the tidy-up of ' + r.built + ': already moved' : 'from the look on ' + r.built) : '';
+  const head = r.done ? '<p class="note" style="margin:0;padding:10px 14px;border-top:1px solid var(--line)"><b>That tidy-up is done:</b> ' +
+    'these copies were already moved to the holding folder. They show here so you can see where duplicates come from. ' +
+    'Press 2 · Look for duplicates to see whether any are left.</p>' : '';
   if (!r.folders.length) { $('dwRows').innerHTML = '<div class="empty">Nothing yet: press 2 · Look for duplicates, and the folders with copies show here.</div>'; return; }
   const KINDS = [['normal', 'Normal'], ['stopover', 'Stopover'], ['cards', 'Whole cards']];
-  $('dwRows').innerHTML = r.folders.map(function (f) {
+  $('dwRows').innerHTML = head + r.folders.map(function (f) {
     const n = function (k, one, many) { return k.toLocaleString() + (k === 1 ? one : many); };
-    const what = (f.move ? n(f.move, ' copy', ' copies') + ' would move from here' + (f.bytes >= 1048576 ? ' (' + tb(f.bytes) + ')' : '') : 'nothing would move from here') +
-      ' · ' + n(f.stay || 0, ' copy stays', ' stay') + ' here';
-    return '<div class="row" style="display:flex;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)">' +
-      '<div style="flex:1;min-width:0"><b>' + esc(f.name) + '</b><div class="note">' + esc(what) + '</div></div>' +
+    const what = r.done
+      ? (f.move ? n(f.move, ' copy was', ' copies were') + ' moved out of here' + (f.bytes >= 1048576 ? ' (' + tb(f.bytes) + ')' : '') : 'nothing was moved from here') +
+        ' · ' + n(f.stay || 0, ' copy', ' copies') + ' kept here'
+      : (f.move ? n(f.move, ' copy', ' copies') + ' would move from here' + (f.bytes >= 1048576 ? ' (' + tb(f.bytes) + ')' : '') : 'nothing would move from here') +
+        ' · ' + n(f.stay || 0, ' copy stays', ' stay') + ' here';
+    return '<div class="row" style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)">' +
+      '<div style="flex:1 1 240px;min-width:0"><b>' + esc(f.name) + '</b><div class="note">' + esc(what) + '</div></div>' +
       (f.kind === 'shelf' ? '<span class="note">your shelf (Reorganize)</span>' :
         '<div class="seg" role="group" aria-label="What ' + esc(f.name) + ' is">' + KINDS.map(function (k) {
           return '<button type="button" class="btn quiet' + (f.kind === k[0] ? ' on' : '') + '" aria-pressed="' + (f.kind === k[0]) +
