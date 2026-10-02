@@ -153,7 +153,10 @@ In this order of importance:
      it uses (stock, downloads, graphics, voiceover) into Deliveries. It never
      touches a project Premiere has open. When the project is closed, it is
      pointed at the server's copies, and a copy of the project file goes into
-     the archive. It says what it did, every time.
+     the archive. It says what it did, every time, and keeps a log the editor
+     can read in it (and Rushes shows the same, per project): every file
+     brought in, every project pointed at the server, every project resting or
+     moved aside, and anything it could not do.
    - **The project file decides what is kept**, not the folder: only files the
      project uses are taken in. Previews, renders and caches are left; so is
      anything else in the folder. Missing files are said at once.
@@ -166,6 +169,8 @@ In this order of importance:
      archive is complete, and Search shows it so. After longer (90, a setting)
      its workspace folder is moved to the holding folder, said in Rushes and in
      the editor's Watcher, with **Bring it back**. Nothing is deleted.
+   - Like every Rushes program, it uses little: it only watches and copies, so
+     it runs beside Premiere or Resolve on any computer that runs them.
    - Rushes makes each project's folder (New project: department and shoot), in
      the same shape as the archive. Windows editors when Rushes Watcher exists
      for Windows.

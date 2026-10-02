@@ -37,6 +37,23 @@ The models download the first time they are used, unless they are already on
 the Mac. Point Rushes at them in `settings.json` (`analysis.python`,
 `analysis.model`, `analysis.whisper`).
 
+### Minimum, at a glance
+
+The archive machine and the helper's Mac do light work, except describing,
+which runs two AI models on the Mac and needs real memory. These are the
+minimums the parts are built for; describing is the one to plan for.
+
+| Machine | Minimum | Better | Why |
+|---|---|---|---|
+| Archive machine | PHP 8 with SQLite, 4 GB memory | 8 GB; an Intel chip with a video engine, for proxies | The catalogue is a SQLite file; proxies use the video chip if there is one, the processor otherwise (slower). |
+| Archive storage | room for the footage, plus about 5% of it for proxies | a second machine for a backup | Copying stops by itself below 5 TB free (a setting). |
+| The helper's Mac (copying only) | macOS 11, any Mac; about 100 MB for Rushes Helper | wired gigabit network | Copying is limited by the network and the disks, not the Mac. |
+| The helper's Mac (describing) | an Apple chip (M1 or later), **16 GB** memory, 20 GB free disk | **32 GB** if the same Mac also edits | The vision model takes about 6 GB of memory while it works (5.4 GB on disk) and Whisper about 2 GB more. With less memory it does not run. |
+| An editor's computer (Rushes Watcher, when it exists) | anything that runs the editing software | — | It only watches and copies; it uses almost nothing. |
+
+Describing runs one file at a time, at low priority, and has its own Pause, so
+a Mac that also edits can pause it during a busy day.
+
 ## First install
 
 1. **Copy the pages.** Put everything in `app/` into the web folder of the
