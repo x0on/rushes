@@ -61,5 +61,16 @@ through a VPN. Putting it directly on the internet is not supported yet.
 
 ## License
 
-Not chosen yet. Until a license is published in this repository, the code can
-be read but not reused.
+Rushes is **source-available**: anyone can read all of its code, and check it
+against [HOW-IT-WORKS.md](HOW-IT-WORKS.md). It is not "open source" in the
+strict sense, because large organisations pay.
+
+The license being prepared (the Rushes Community License, by Alejandro
+Renteria) will make it:
+
+- **free** for individuals, and for organisations with less than US $10 million
+  a year in revenue, including for commercial work;
+- **paid** for organisations above that, through a commercial license.
+
+Until that license is published in this repository, the code can be read but not
+reused.

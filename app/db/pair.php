@@ -1,6 +1,6 @@
 <?php
 // Rushes — Media Management Software, by Alejandro Renteria.
-// Open source: https://github.com/x0on/rushes
+// Source available: https://github.com/x0on/rushes
 //
 // pair.php — one helper is paired with Rushes, and only it is given work
 // (HOW-IT-WORKS.md → Pairing; the doors check it with helper_gate() in config.php).

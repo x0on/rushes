@@ -202,9 +202,47 @@ function icon(string $name, float $w = 1.7): string {
 // Two lists, from the two machines that can copy. Every path a person chooses
 // comes from one of these, so it is right for the machine that will use it.
 
-// The shelves inside the archive that departments live on.
+// The folder inside the archive that departments live on, chosen in
+// Reorganize → 00. No default: a guessed name would file footage somewhere
+// nobody chose. Until it is chosen, Ingest and the tidy-up refuse.
+function shelf_name(): string {
+    return trim(str_replace(['/', '\\', "\0"], '', (string)(settings()['organise']['shelves'] ?? '')));
+}
 function shelf_dir(): string {
-    return archive_dir() . '/' . trim(settings()['organise']['shelves'] ?? 'Library', '/');
+    return archive_dir() . '/' . (shelf_name() !== '' ? shelf_name() : '.no-shelf-chosen');
+}
+// The folders at the top of the archive that could be the shelf: not Rushes'
+// own (_rushes, _duplicates), not ARCHIVE (copies land there) or PROXIES.
+function shelf_choices(): array {
+    $out = [];
+    foreach (@scandir(archive_dir()) ?: [] as $f)
+        if (!preg_match('/^[._@#$]/', $f) && !in_array($f, ['ARCHIVE', 'PROXIES'], true) && is_dir(archive_dir() . "/$f")) $out[] = $f;
+    sort($out);
+    return $out;
+}
+
+// Which copy of a duplicate is kept: the rules dedupe.sh scores copies by,
+// written as plain lines it can read (weight, kind, text) when a plan is asked
+// for. The kinds: contains (a piece of the path), matches (an awk pattern),
+// card (a card-dump folder, loses when the project copy is kept), project (the
+// shelf, loses when card dumps are kept). Written only when they change, so a
+// plan you saw is still the one moved. Returns the lines, or null if it could
+// not write them.
+function dedupe_rules_write(): ?array {
+    $r = rules()['duplicates']['never_keep'] ?? [];
+    $w = $r['settings_weight'] ?? ['never_keep' => 500, 'other_side' => 450];
+    $clean = fn($s) => trim(preg_replace('/[\t\r\n\/\\\\]+/', ' ', (string)$s));
+    $lines = [];
+    foreach ($r['rules'] ?? [] as $x)
+        $lines[] = (int)$x['weight'] . "\t" . (isset($x['matches']) ? "matches\t" . $x['matches'] : "contains\t" . $x['contains']);
+    $d = settings()['duplicates'] ?? [];
+    foreach ($d['never_keep'] ?? [] as $f) if (($f = $clean($f)) !== '') $lines[] = (int)$w['never_keep'] . "\tcontains\t/$f/";
+    foreach ($d['card_dumps'] ?? [] as $f) if (($f = $clean($f)) !== '') $lines[] = (int)$w['other_side'] . "\tcard\t/$f/";
+    if (shelf_name() !== '') $lines[] = (int)$w['other_side'] . "\tproject\t/" . shelf_name() . '/';
+    $file = web_dir() . '/dedupe-rules.tsv';
+    $body = implode("\n", $lines) . "\n";
+    if (@file_get_contents($file) === $body) return $lines;
+    return (@file_put_contents("$file.new", $body) !== false && @rename("$file.new", $file)) ? $lines : null;
 }
 
 // What the helper reported. 'fresh' is false once it has been quiet for a

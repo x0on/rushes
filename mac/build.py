@@ -1,5 +1,5 @@
 # Rushes — Media Management Software, by Alejandro Renteria.
-# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
+# Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """Builds Rushes Helper.app and its zip, from Linux.
 
   python3 mac/build.py   ->  mac/out/Rushes Helper.zip  (put it on the archive as _rushes/Rushes Helper.zip)
@@ -116,7 +116,7 @@ with open(os.path.join(C, "Info.plist"), "wb") as f:
         # Without this line macOS refuses local-network connections without asking ("No route to host").
         "NSLocalNetworkUsageDescription": "Rushes Helper talks to Rushes on your network: it asks what to copy "
                                           "and reports what it is doing.",
-        "NSHumanReadableCopyright": "Rushes Media Management Software · by Alejandro Renteria · open source, github.com/x0on/rushes",
+        "NSHumanReadableCopyright": "Rushes Media Management Software · by Alejandro Renteria · source available, github.com/x0on/rushes",
     }, f)
 
 # ── sign and pack ───────────────────────────────────────────────────────────

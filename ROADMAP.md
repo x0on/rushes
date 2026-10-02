@@ -70,10 +70,8 @@ happens in HOW-IT-WORKS.
 - `runner.sh` and its scripts use fixed paths (`/share/Web`, `/share/VIDEO`) and
   some QNAP tools. The duplicate scan uses a fixed container and volume, and has
   no button.
-- `dedupe.sh` has a few folder names from the first installation written into
-  its rules; they belong in `rules.json`. Which copy to keep (project, card
-  dump, shortest path, oldest) has no control in Manage: it is always the
-  project copy.
+- Which copy of a duplicate to keep (project, card dump, shortest path,
+  oldest) has no control in Manage: it is always the project copy.
 - Settings that nothing reads yet: `organise.shape`, `holding.*`,
   `helper.poll_seconds`, and parts of `rules.json` (`structure`, `duplicates`,
   two conditions). The list of video types for proxies is written in two places

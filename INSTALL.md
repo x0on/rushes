@@ -72,8 +72,11 @@ the Mac. Point Rushes at them in `settings.json` (`analysis.python`,
    - **03** Where footage comes from: servers or drives you will copy from.
    - **04** Helper: *Built in* (Python on the archive machine) or *External*
      (a Mac). For a Mac, choose where the Mac sees the archive.
-7. **Reorganize** (Manage → Reorganize): what your top folders are, and the list
-   of departments, clients or projects.
+   - **05** Duplicates: your own folders whose copies are never kept, and where
+     whole cards were once copied. Can wait until you use Duplicates.
+7. **Reorganize** (Manage → Reorganize): what your top folders are, which folder
+   in the archive they live in, and the list of departments, clients or
+   projects. Ingest waits until this is done.
 8. **Rushes Helper on the Mac.**
    - Setup → 04 → **Download Rushes Helper**. Open it, and give it the Rushes
      address.

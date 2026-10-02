@@ -122,7 +122,8 @@ is the folder the archive machine's web server serves.
   - `manifest.tsv` and `index.txt` (every file in the archive);
   - `copies-summary.json`;
   - the proxy files (`proxy-*.txt`, `proxy-*.tsv`, `proxy.log`, `proxy-test/`);
-  - the duplicate files (`results_duplicates.txt`, `dedupe-*.tsv`,
+  - the duplicate files (`results_duplicates.txt`, `dedupe-*.tsv` including
+    `dedupe-rules.tsv`,
     `verify-result.tsv`, `cache-moves.tsv`);
   - `video-stalls.txt` and `video-tripped.txt` (the breaker);
   - `exposed.txt` (the daily private-file check);
@@ -210,7 +211,8 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | `archive.database` | puts the catalogue outside the web folder |
 | `sources` | servers and drives to copy from, with a name for each |
 | `helper.mode`, `helper.label` | built in or external, and the helper computer's name |
-| `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | where the shelf is, the departments and their folders, what they are called, and whether Ingest may add one |
+| `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | the folder in the archive the departments live in (the shelf), the departments and their folders, what they are called, and whether Ingest may add one. All set in Reorganize. The shelf has no default: until it is chosen, Ingest and the tidy-up wait. |
+| `duplicates.never_keep`, `duplicates.card_dumps` | this archive's own folders whose copies are never kept, and where whole cards were once copied (Setup → 05). What is true for every archive is in `rules.json → duplicates.never_keep`. |
 | `organise.shape` | saved by Setup; nothing uses it yet |
 | `limits.disk_stop_free`, `limits.disk_warn_free` | stop copying below this free space (5 TB), and warn below this (8 TB). They override `rules.json`. |
 | `rules.json → conditions` | when Overview warns: runner silent 3 min, a copy stalled 15 min, more than 100 cache files, more than 1 GB in the holding folder |
@@ -336,8 +338,8 @@ beside the rest.
    shows where each day will go. Then follow it in "Moving now". When it has
    landed, "Find it" opens Search on it. **Queue another source** starts over.
 
-If no departments have been set up yet, Ingest says so and points to
-Reorganize. Anyone who can open Rushes can ingest a card, without a password.
+If no departments have been set up yet, or the folder they live in has not
+been chosen, Ingest says so and points to Reorganize. Anyone who can open Rushes can ingest a card, without a password.
 A new department can be added here too, if Reorganize allows it.
 
 `queue.php` checks the request again: it accepts only a card the helper really
@@ -711,7 +713,8 @@ failed.
 **Manage → Reorganize** holds the plan the archive follows:
 
 - what your top folders are called (departments, clients, projects, or your own
-  word);
+  word), and which folder at the top of the archive they live in (the shelf),
+  picked from the folders that are there;
 - the list of them, each linked to the folder it already has. Writing the plan
   renames nothing and breaks no Premiere project.
 
@@ -768,20 +771,26 @@ can be put back.
    - The runner's comments show how to schedule it weekly.
 2. **Look for duplicates** (Manage → Duplicates) works out which copy to keep,
    and shows the plan. It moves nothing.
-   - The project copy wins over card dumps. The script can also keep card
-     dumps, the shortest path or the oldest file, but Manage has no control for
-     that yet.
-   - "Project" and "card dump" are recognised by folder names written into
-     `dedupe.sh` ([known problem](ROADMAP.md#known-problems)).
-   - Some copies always lose: `Copied_…` folders, Premiere's Media Cache,
-     doubled extensions in capitals (`.MXF.MXF`, `.MOV.MOV`, `.MP4.MP4`), and
-     one more folder name from the first installation.
+   - Each copy gets a weight from the rules, and the lightest copy is kept.
+     The rules are written for the script when you press the button
+     (`dedupe-rules.tsv`), and the plan lists them first:
+     - for every archive, from `rules.json`: the recycle bin (1000), `Copied_…`
+       folders (400), Premiere's Media Cache (300), doubled extensions in
+       capitals such as `.MXF.MXF` (200);
+     - for this archive, from Setup → 05: folders whose copies are never kept
+       (500), and card-dump folders (450).
+   - The project copy (on the shelf) wins over a card dump. If no card-dump
+     folders are set, neither side is preferred, and the plan says so. Between
+     equal weights, the shorter path wins. The script can also keep card dumps,
+     the shortest path or the oldest file, but Manage has no control for that
+     yet.
    - Copies in the recycle bin are never kept and never moved.
    - Numbered image-sequence frames are never moved, even when identical,
      because removing one breaks the sequence.
 3. **Move the copies aside** moves exactly the plan you were shown, as long as
    it was made from the same scan and with the same choice. Otherwise it plans
    again first.
+   - If the rules changed since the plan was made, it plans again too.
    - Before moving each file, it checks the file still exists at the size the
      scan saw, and that the copy being kept is there.
    - Every move is written to a log that is added to, never emptied.
@@ -797,7 +806,8 @@ Rushes never empties the holding folder. Emptying it is your step, after the
 check says SAFE.
 
 **In the code:** `runner.sh` (the `scan`, `plan`, `apply`, `undo` and `verify`
-jobs), `dedupe.sh`, `verify.sh`.
+jobs), `dedupe.sh`, `verify.sh`, `run.php` and `db/config.php`
+(`dedupe_rules_write()`), `setup.php` (05).
 
 ### Editing caches
 
@@ -922,6 +932,9 @@ Each section saves with **Save settings**.
     to paste (`curl … ?install | sh`) and its remove command. For Windows, a
     Command Prompt line.
   - for built in: a warning if the archive machine has no Python.
+- **05 Duplicates: which copy is kept:** this archive's own folders whose
+  copies are never kept, and its card-dump folders, one name per line (see
+  [Duplicates](#duplicates)).
 
 Opening Setup lists the shares on the archive machine.
 

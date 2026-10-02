@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Rushes — Media Management Software, by Alejandro Renteria.
-# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
+# Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """analyze.py — describe footage so it can be found by what it shows and says.
 
     analyze.py FOLDER_OR_FILE --store /Volumes/VIDEO/_rushes/analysis [--url RUSHES]
@@ -64,7 +64,7 @@ Keys:
   description     one factual sentence describing what is visible
   text_on_screen  array of the exact text you can read in the frame (titles, lower thirds,
                   signs, banners, jerseys, dates), copied verbatim, each once. One entry
-                  per line, read left to right as a whole: a sign reading "I ❤ RIVERTON" is
+                  per line, read left to right as a whole: a sign reading "I ❤ MY TOWN" is
                   one entry, never split into its words or symbols. [] if none.
   shot_size       one of: {sizes} — extreme-wide: a landscape or a whole
                   building or park from far away; wide: a whole place, or a group; full: a

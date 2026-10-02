@@ -1,5 +1,5 @@
 # Rushes — Media Management Software, by Alejandro Renteria.
-# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
+# Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """Local durable checkpoints and a retryable search outbox; no mounted drive needed."""
 import json
 import sqlite3

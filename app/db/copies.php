@@ -1,6 +1,6 @@
 <?php
 // Rushes — Media Management Software, by Alejandro Renteria.
-// Open source: https://github.com/x0on/rushes
+// Source available: https://github.com/x0on/rushes
 //
 // copies.php — how many copies of each file exist, as git-annex counts them.
 // The archive is one. The helper looks, once a week, whether the original each

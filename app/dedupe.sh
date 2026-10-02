@@ -21,8 +21,14 @@
 # frames — they are duplicates by content and load-bearing by function, and
 # removing one puts a hole in the sequence that only shows up at render time.
 #
-# Always loses, whatever KEEP_SIDE says:
-#   DESK FOLDER (desk folder), Copied_*, Media Cache, name.MXF.MXF
+# Copies that are never the one kept, whatever KEEP_SIDE says, come from
+# RULES (dedupe-rules.tsv), which Rushes writes when a plan is asked for:
+# rules.json → duplicates.never_keep for what is true everywhere (the recycle
+# bin, Copied_ folders, Media Cache, doubled extensions), and settings.json →
+# duplicates for this archive's own folders (Setup → 05). One line each:
+#   weight <TAB> contains|matches|card|project <TAB> text
+# 'card' lines lose when the project copy is kept, 'project' lines (the shelf)
+# when card dumps are kept. The highest total loses; nothing here names a folder.
 # Never touched: @Recycle — moving files OUT of it would undelete them.
 #
 # Safety: a file moves only if it still exists, its size matches the scan, and
@@ -36,6 +42,7 @@ DEST=${DEST:-$SHARE/_duplicates}
 PLAN=${PLAN:-/share/Web/dedupe-plan.tsv}
 LOG=${LOG:-/share/Web/dedupe-moves.tsv}
 MTIMES=${MTIMES:-/share/Web/dedupe-mtimes.txt}
+RULES=${RULES:-/share/Web/dedupe-rules.tsv}
 KEEP_SIDE=${KEEP_SIDE:-project}
 TAB=$(printf '\t')
 
@@ -62,13 +69,22 @@ echo "keep side: $KEEP_SIDE    destination: $DEST"
 # The plan shown in the dry run is the one moved, as long as it was made from
 # this scan and with these settings. Otherwise it is planned again here.
 REUSE=0
-if [ "$MODE" = "--apply" ] && [ -f "$PLAN" ] && [ "$PLAN" -nt "$RESULTS" ] \
+if [ "$MODE" = "--apply" ] && [ -f "$PLAN" ] && [ "$PLAN" -nt "$RESULTS" ] && [ "$PLAN" -nt "$RULES" ] \
    && grep -q "\"keep_side\":\"$KEEP_SIDE\",\"dest\":\"$DEST\"" "$PLAN.meta" 2>/dev/null; then
     REUSE=1
     echo "moving the plan from the last dry run ($(wc -l < "$PLAN") files)"
 fi
 
 if [ "$REUSE" = 0 ]; then
+[ -f "$RULES" ] || { echo "no rules at $RULES — press Look for duplicates in Manage, which writes them"; exit 1; }
+echo "which copy is never kept (from rules.json and Setup):"
+awk -F"$TAB" -v ks="$KEEP_SIDE" '{
+    if ($2 == "card")    { if (ks != "project") next; w = "card dump, loses to the project copy" }
+    else if ($2 == "project") { if (ks != "card") next; w = "the shelf, loses to card dumps" }
+    else w = $2
+    printf "  %5d  %s  (%s)\n", $1, $3, w }' "$RULES"
+grep -q "${TAB}card${TAB}" "$RULES" || [ "$KEEP_SIDE" != project ] || \
+    echo "  (no card-dump folders are set in Setup → 05, so nothing makes the project copy win)"
 # ---------- KEEP_SIDE=oldest needs modification times ----------
 # Only collected in this mode: it stats every duplicate on disk, which takes a
 # few minutes across ~118,000 files. Every other mode decides from the path
@@ -84,8 +100,15 @@ if [ "$KEEP_SIDE" = "oldest" ]; then
 fi
 
 # ---------- build the plan ----------
-awk -v OFS="$TAB" -v keep_side="$KEEP_SIDE" -v mtimes="$MTIMES" '
+awk -v OFS="$TAB" -v keep_side="$KEEP_SIDE" -v mtimes="$MTIMES" -v rules="$RULES" '
 BEGIN {
+    while ((getline line < rules) > 0) {
+        if (split(line, f, "\t") < 3) continue
+        if (f[2] == "card"    && keep_side != "project") continue
+        if (f[2] == "project" && keep_side != "card")    continue
+        nr++; rw[nr] = f[1] + 0; rk[nr] = f[2]; rt[nr] = f[3]
+    }
+    close(rules)
     if (keep_side == "oldest") {
         while ((getline line < mtimes) > 0) {
             i = index(line, "|")
@@ -95,15 +118,10 @@ BEGIN {
     }
 }
 # Penalties apply in every mode: these copies should never be the survivor.
-function penalty(p,   s) {
+function penalty(p,   s, i) {
     s = 0
-    if (p ~ /\/@Recycle\//)                      s += 1000
-    if (p ~ /\/DESK FOLDER\//)                s += 500
-    if (keep_side == "project" && p ~ /\/CARD DUMPS\//) s += 450
-    if (keep_side == "card"    && p ~ /\/Library\//)    s += 450
-    if (p ~ /\/Copied_/)                         s += 400
-    if (p ~ /\/Media Cache\//)                   s += 300
-    if (p ~ /\.(MXF|MOV|MP4)\.(MXF|MOV|MP4)$/)   s += 200
+    for (i = 1; i <= nr; i++)
+        if ((rk[i] == "matches") ? (p ~ rt[i]) : (index(p, rt[i]) > 0)) s += rw[i]
     return s
 }
 function score(p) {

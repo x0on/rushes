@@ -9,6 +9,13 @@
     "as_seen_from_helper": "/Volumes/VIDEO"
   },
   "sources": [],
+  "organise": {
+    "shelves": ""
+  },
+  "duplicates": {
+    "never_keep": [],
+    "card_dumps": []
+  },
   "helper": {
     "mode": "built_in",
     "label": "workstation",

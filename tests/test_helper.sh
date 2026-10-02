@@ -13,7 +13,7 @@ printf '#!/bin/sh\necho new\n' > "$ROOT/archive/_rushes/scripts/runner.sh"
 printf '#!/bin/sh\necho old\n' > "$ROOT/app/runner.sh"
 cat > "$ROOT/app/settings.json" <<J
 {"name":"Rushes","archive":{"web":"$ROOT/app","local":"$ROOT/archive","as_seen_from_helper":"/Volumes/VIDEO","url":"http://nas.test"},
- "helper":{"mode":"external","label":"workstation"},"organise":{"departments":[]}}
+ "helper":{"mode":"external","label":"workstation"},"organise":{"departments":[],"shelves":"Library"}}
 J
 call() { $PHPBIN "$HERE/helper_call.php" "$ROOT/app" "$@" 2>&1; }
 check() { if eval "$1"; then echo "PASS $2"; else echo "FAIL $2"; exit 1; fi; }

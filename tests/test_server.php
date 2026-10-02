@@ -7,7 +7,7 @@ foreach (glob(__DIR__ . '/../app/db/*.php') as $f) copy($f, "$root/app/db/" . ba
 copy(__DIR__ . '/../app/rules.json', "$root/app/rules.json");
 file_put_contents("$root/app/settings.json", json_encode(['archive'=>[
     'web'=>"$root/app", 'local'=>"$root/archive", 'as_seen_from_helper'=>"$root/archive"],
-    'helper'=>['mode'=>'built_in'], 'organise'=>['departments'=>[]]]));
+    'helper'=>['mode'=>'built_in'], 'organise'=>['departments'=>[], 'shelves'=>'Library']]));
 require "$root/app/db/transfers.php";
 require "$root/app/db/sync.php";
 db_init();
@@ -204,4 +204,18 @@ check(waiting_read()['files'] === ['ingest.py' => str_repeat('c', 64)], "the hel
 $_POST = ['file' => 'history', 'body' => "2026-10-01 10:00\tcopied\t/x\t1\t2\t3\t\nnot a history line\n"];
 ob_start(); include web_dir() . "/db/status.php"; $r = json_decode(ob_get_clean(), true);
 check($r['lines'] === 1 && str_starts_with(file_get_contents(web_dir() . "/ingest-history.tsv"), '2026-10-01 10:00'), 'the helper\'s history arrives over the network, junk left out');
+// Which copy of a duplicate is kept: rules.json for every archive, Setup → 05
+// for this one, the shelf for the project side. Nothing in dedupe.sh names a folder.
+$s = settings(); $s['duplicates'] = ['never_keep' => ['Desk/Old'], 'card_dumps' => ['CARD DUMPS']]; save_settings($s); settings(true);
+$lines = dedupe_rules_write(); $f = web_dir() . '/dedupe-rules.tsv';
+check($lines !== null && in_array("1000\tcontains\t/@Recycle/", $lines, true) && in_array("500\tcontains\t/Desk Old/", $lines, true)
+      && in_array("450\tcard\t/CARD DUMPS/", $lines, true) && in_array("450\tproject\t/Library/", $lines, true)
+      && in_array("200\tmatches\t\\.(MXF|MOV|MP4)\\.(MXF|MOV|MP4)$", $lines, true) && file_get_contents($f) === implode("\n", $lines) . "\n",
+      'duplicates: the rules come from rules.json, Setup and the shelf, as plain lines for dedupe.sh');
+touch($f, 1000000000); clearstatcache(); dedupe_rules_write(); clearstatcache();
+check(filemtime($f) === 1000000000, 'duplicates: rules that did not change are not rewritten, so the plan you saw is the one moved');
+$s['organise']['shelves'] = ''; save_settings($s); settings(true);
+check(shelf_name() === '' && !in_array("450\tproject\t/Library/", dedupe_rules_write(), true) && !is_dir(shelf_dir()),
+      'no shelf chosen: no folder is guessed');
+$s['organise']['shelves'] = 'Library'; save_settings($s); settings(true);
 echo "Server tests complete. Fixture: $root\n";

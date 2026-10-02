@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Rushes — Media Management Software, by Alejandro Renteria.
-# Open source: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
+# Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
 """ingest.py — the helper: copies footage in, only what the archive does not
 already have, and proves each copy. Runs on a computer that sees both the
 source and the archive (a Mac, through Rushes Helper), or on the archive
@@ -1272,7 +1272,9 @@ def _fetch(url, timeout=30):
 
 
 def _shelf():
-    return os.path.join(NAS_MOUNT, (setting("organise.shelves") or "Library").strip("/\\"))
+    """The shelf chosen in Reorganize, or None: there is no default to guess."""
+    name = (setting("organise.shelves") or "").strip("/\\")
+    return os.path.join(NAS_MOUNT, name) if name else None
 
 
 def _mark_done(key):
@@ -1365,6 +1367,9 @@ def tidy(plan_id):
     shelf = _shelf()
     area = ARCHIVE.rstrip("/\\") + os.sep
     _mark_done(f"tidy {plan_id}")               # asked once: a refusal is not retried every 20 s
+    if not shelf:
+        print("No shelf is chosen in Reorganize, so a tidy-up has nowhere to go. Nothing moved.")
+        return
     try:
         body = _fetch(f"{NAS_URL}/tidy-{plan_id}.tsv")
         queue = fetch_queue(30)
@@ -1470,7 +1475,7 @@ def untidy(name):
                 o.add("failed", new, old, size, str(e))
     mhl_follow(back, o, f"undo of {name}")
     # Empty folders the tidy-up made on the shelf go; the department folders stay.
-    shelf = _shelf()
+    shelf = _shelf() or "\0"                    # no shelf chosen: nothing below can start with it
     for dept in {os.path.join(shelf, n[len(shelf) + 1:].split(os.sep)[0]) for n, _ in back if n.startswith(shelf + os.sep)}:
         clear_out([n for n, _ in back if n.startswith(dept + os.sep)], dept, o)
     o.close()

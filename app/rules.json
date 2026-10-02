@@ -212,7 +212,22 @@
     ],
     "compare": "size, then first and last megabyte on a size collision",
     "head_tail_bytes": 1048576,
-    "full_read_available": true
+    "full_read_available": true,
+    "never_keep": {
+      "_": [
+        "When the same file is in several places, one copy is kept and the others are moved",
+        "aside. These copies are never the one kept, whatever else is chosen: a higher",
+        "number weighs more. 'contains' is a piece of the path; 'matches' is a pattern",
+        "(awk). Folders that only one archive has go in its settings.json, set in Setup."
+      ],
+      "rules": [
+        {"contains": "/@Recycle/",    "weight": 1000, "why": "the recycle bin: deleted on purpose"},
+        {"contains": "/Copied_",      "weight": 400,  "why": "a copy someone made of a folder"},
+        {"contains": "/Media Cache/", "weight": 300,  "why": "Premiere's cache, rebuilt on demand"},
+        {"matches": "\\.(MXF|MOV|MP4)\\.(MXF|MOV|MP4)$", "weight": 200, "why": "a file saved twice with its extension doubled"}
+      ],
+      "settings_weight": {"never_keep": 500, "other_side": 450}
+    }
   },
   "conditions": {
     "_": [

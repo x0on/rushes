@@ -24,10 +24,13 @@ if (($_POST['_kind'] ?? '') === '1') {
         $one  = trim((string)($_POST['kind_one'] ?? ''));
         $many = trim((string)($_POST['kind_many'] ?? '')) ?: ($one === '' ? '' : $one . 's');
     }
+    $shelfPick = (string)($_POST['shelves'] ?? '');
     if ($one === '' || preg_match('#[<>/\\]#', $one . $many)) $bad[] = 'Type the word you use — one and many, e.g. Show / Shows.';
+    elseif (!in_array($shelfPick, shelf_choices(), true)) $bad[] = 'Pick the folder they live in, from the list.';
     else {
         $s = settings();
         $s['organise']['kind'] = ['one' => $one, 'many' => $many];
+        $s['organise']['shelves'] = $shelfPick;
         $s['organise']['add_at_ingest'] = ($_POST['open'] ?? '') === '1';
         if (save_settings($s)) { header('Location: /structure.php?saved=kind'); exit; }
         $bad[] = 'Could not write settings.json — is the web folder writable?';
@@ -193,6 +196,16 @@ $opts = function (string $cur) use ($folders, $e) {
         <label class="f"><span>Many</span><input type="text" name="kind_many" value="<?= $custom ? $e($MANY) : '' ?>" placeholder="Shows"></label>
       </div>
 
+      <p style="margin:18px 0 8px;color:var(--fg);font-size:13px"><b>Which folder in <?= $e(settings()['archive']['label'] ?? 'the archive') ?> they live in</b></p>
+      <label class="f"><select name="shelves">
+        <?php if (shelf_name() === ''): ?><option value="">— pick one (Ingest and the tidy-up wait for this)</option><?php endif; ?>
+        <?php foreach (shelf_choices() as $f): ?>
+          <option value="<?= $e($f) ?>" <?= $f === shelf_name() ? 'selected' : '' ?>><?= $e($f) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <small>The shelf: every <?= $e($one) ?> has its own folder inside it, and every shoot is filed there.
+        Make the folder in the archive first if it is not in the list.</small></label>
+
       <p style="margin:18px 0 8px;color:var(--fg);font-size:13px"><b>Who can add a new <?= $e($one) ?>?</b></p>
       <div class="pick">
         <label class="opt"><input type="radio" name="open" value="0" <?= !shelf_open() ? 'checked' : '' ?>>
@@ -205,7 +218,7 @@ $opts = function (string $cur) use ($folders, $e) {
                  &ldquo;add a new one&rdquo;; the no-catch-all rule still applies.</small></label>
       </div>
       <input type="hidden" name="_kind" value="1">
-      <div class="btns" style="margin-top:14px"><button class="btn quiet" type="submit">Save these two</button></div>
+      <div class="btns" style="margin-top:14px"><button class="btn quiet" type="submit">Save these three</button></div>
     </form>
     <script>
       document.querySelectorAll('[name=kind]').forEach(function (r) {
@@ -213,7 +226,7 @@ $opts = function (string $cur) use ($folders, $e) {
     </script>
 
     <?php if ($said === 'kind'): ?>
-      <div class="banner ok"><div class="txt">Saved. Rushes now says &ldquo;<?= $e($MANY) ?>&rdquo;, and <?= shelf_open() ? 'anyone can add one at Ingest' : 'only the admin adds them, here' ?>.</div></div>
+      <div class="banner ok"><div class="txt">Saved. Rushes now says &ldquo;<?= $e($MANY) ?>&rdquo;, they live in <?= $e(shelf_name()) ?>, and <?= shelf_open() ? 'anyone can add one at Ingest' : 'only the admin adds them, here' ?>.</div></div>
     <?php elseif ($said === 'ok'): ?>
       <div class="banner ok"><div class="txt">Saved. Ingest offers exactly this list from now on. Nothing on disk was moved.</div></div>
     <?php elseif ($bad): ?>

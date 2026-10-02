@@ -15,7 +15,9 @@ require __DIR__ . '/db/config.php';
 // The departments come from the plan in Structure — never from whatever
 // folders happen to be on disk, which is years of history, typos and all.
 $shelf = shelf_dir();
-$depts = array_column(departments(), 'name');
+// No shelf chosen yet (Reorganize → 00): nowhere to put a shoot, so the
+// set-up card below shows instead of the form.
+$depts = shelf_name() === '' ? [] : array_column(departments(), 'name');
 $deptFolder = [];
 foreach ($depts as $d) $deptFolder[$d] = dept_folder($d);
 $S      = settings();
@@ -101,7 +103,8 @@ $aname  = $S['archive']['label'] ?? 'Archive';
   <div class="card" style="max-width:620px">
     <h2><span>First /</span> Set up how the archive is organised</h2>
     <p class="note" style="margin:0 0 14px;font-size:13.5px">Before the first shoot comes in, Rushes needs
-      your list of <?= htmlspecialchars(strtolower(shelf_word(true))) ?> &mdash; the shelves every shoot goes on. It takes a couple of minutes,
+      your list of <?= htmlspecialchars(strtolower(shelf_word(true))) ?> &mdash; the shelves every shoot goes on &mdash;
+      and which folder in the archive they live in<?= shelf_name() === '' && departments() ? ' (the list is there; the folder is not chosen yet)' : '' ?>. It takes a couple of minutes,
       moves nothing, and only has to be done once.</p>
     <a class="btn" href="/structure.php">Set up the structure</a>
     <p class="note" style="margin:12px 0 0">This needs the admin password.</p>

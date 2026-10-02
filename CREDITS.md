@@ -1,7 +1,7 @@
 # What Rushes is made of
 
-Rushes Media Management Software was created by Alejandro Renteria and is open
-source: https://github.com/x0on/rushes.
+Rushes Media Management Software was created by Alejandro Renteria. Its code is
+public (source-available): https://github.com/x0on/rushes.
 
 It is built on the work of many other open-source projects. Each one is listed
 below with what it does in Rushes, where it runs and its license. They remain
@@ -11,7 +11,7 @@ the work of their authors, and Rushes claims none of them as its own.
 
 | Part | What it does in Rushes | Where it runs | License | Where it comes from |
 |---|---|---|---|---|
-| Rushes | Copying footage with its own code (below, why), each copy verified byte for byte by its XXH3-128 fingerprint (see xxHash below) and recorded in ASC MHL; recognising files already in the archive by a quick BLAKE2 fingerprint of their first and last megabyte (Python's standard library); matching earlier copies to their originals, counting copies, tidy-up, search, the pages | Archive machine and the helper | Open source | github.com/x0on/rushes — written with AI coding assistants (Claude by Anthropic, Codex by OpenAI) |
+| Rushes | Copying footage with its own code (below, why), each copy verified byte for byte by its XXH3-128 fingerprint (see xxHash below) and recorded in ASC MHL; recognising files already in the archive by a quick BLAKE2 fingerprint of their first and last megabyte (Python's standard library); matching earlier copies to their originals, counting copies, tidy-up, search, the pages | Archive machine and the helper | Source-available (Rushes Community License, in preparation) | github.com/x0on/rushes — written with AI coding assistants (Claude by Anthropic, Codex by OpenAI) |
 
 ### Why Rushes copies with its own code, not rsync or rclone
 

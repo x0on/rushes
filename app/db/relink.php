@@ -1,6 +1,6 @@
 <?php
 // Rushes — Media Management Software, by Alejandro Renteria.
-// Open source: https://github.com/x0on/rushes
+// Source available: https://github.com/x0on/rushes
 //
 // relink.php — a Premiere project, pointed at where its footage is now.
 //

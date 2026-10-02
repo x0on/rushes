@@ -68,7 +68,7 @@ n=$(grep -c "rushes.sqlite" "$R/asked"); run
 
 # the holding-folder tools: cache clean-up, duplicates, and the "safe to delete?" check
 for x in dedupe verify; do sed -e "s#/share/#$R/share/#g" "$HERE/app/$x.sh" > "$W/$x.sh"; done
-S=$R/share/VIDEO; mkdir -p "$S/proj" "$S/@Recycle" "$S/_duplicates/_media-cache" "$S/cards"
+S=$R/share/VIDEO; mkdir -p "$S/proj" "$S/@Recycle" "$S/_duplicates/_media-cache" "$S/c"
 echo c > "$S/proj/a.pek"; echo c > "$S/@Recycle/b.pek"; echo c > "$S/_duplicates/_media-cache/c.pek"
 printf '%s\n' "$S/proj/a.pek" "$S/@Recycle/b.pek" "$S/_duplicates/_media-cache/c.pek" > "$W/cache-files.txt"
 printf 'ACTION=cacheclean\n' > "$W/queue/c1.job"; run
@@ -76,17 +76,21 @@ printf 'ACTION=cacheclean\n' > "$W/queue/c1.job"; run
   && ok "cache clean-up never takes from the recycle bin or the holding folder" || no "cache clean-up"
 printf 'ACTION=cache-undo\n' > "$W/queue/c2.job"; run
 [ -f "$S/proj/a.pek" ] && [ ! -e "$S/_duplicates/_media-cache/proj/a.pek" ] && ok "cache clean-up can be undone" || no "cache undo"
-echo same > "$S/proj/clip.mov"; echo same > "$S/cards/clip.mov"
-printf -- '---- Size 5 B (5 bytes) - 2 files\n"/storage/proj/clip.mov"\n"/storage/cards/clip.mov"\n' > "$W/results_duplicates.txt"
+echo same > "$S/proj/clip.mov"; echo same > "$S/c/clip.mov"
+printf -- '---- Size 5 B (5 bytes) - 2 files\n"/storage/proj/clip.mov"\n"/storage/c/clip.mov"\n' > "$W/results_duplicates.txt"
 touch -d '1 minute ago' "$W/results_duplicates.txt" 2>/dev/null || touch -t 200001010000 "$W/results_duplicates.txt"
+printf 'ACTION=plan\n' > "$W/queue/d0.job"; run
+grep -q "no rules at" "$W/job.log" && [ ! -s "$W/dedupe-plan.tsv" ] && ok "duplicates: no plan without the rules Rushes writes" || no "planned without rules"
+printf '1000\tcontains\t/@Recycle/\n450\tcard\t/c/\n' > "$W/dedupe-rules.tsv"; touch -d '2 minutes ago' "$W/dedupe-rules.tsv" 2>/dev/null
 printf 'ACTION=plan\n' > "$W/queue/d1.job"; run
+grep -q "/c/clip.mov	.*/proj/clip.mov" "$W/dedupe-plan.tsv" && ok "duplicates: a card-dump folder from the rules loses to the project copy, though its path is shorter" || no "card rule: $(cat "$W/dedupe-plan.tsv")"
 printf 'ACTION=apply\n' > "$W/queue/d2.job"; run
-grep -q "moving the plan from the last dry run" "$W/job.log" && [ -f "$S/_duplicates/cards/clip.mov" ] && [ -f "$S/proj/clip.mov" ] \
+grep -q "moving the plan from the last dry run" "$W/job.log" && [ -f "$S/_duplicates/c/clip.mov" ] && [ -f "$S/proj/clip.mov" ] \
   && ok "duplicates: apply moves the plan that was shown" || no "duplicates apply"
 printf 'ACTION=verify\n' > "$W/queue/d3.job"; run
 grep -q "^VERDICT	SAFE" "$W/verify-result.tsv" && ok "the whole holding folder is checked: safe to empty" || no "verify folder mode: $(head -3 "$W/verify-result.tsv" | tr '\n' ' ')"
 printf 'ACTION=undo\n' > "$W/queue/d4.job"; run
-[ -f "$S/cards/clip.mov" ] && ok "duplicates can be put back" || no "duplicates undo"
+[ -f "$S/c/clip.mov" ] && ok "duplicates can be put back" || no "duplicates undo"
 
 # a folder name that climbs out of VIDEO is refused before anything runs
 printf 'ACTION=proxy-plan\nQUERY=../Web\n' > "$W/queue/p1.job"; run

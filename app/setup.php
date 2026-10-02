@@ -79,6 +79,20 @@ if (($_POST['_save'] ?? '') === '1') {
                         . 'in_place: each drive keeps its files and Rushes indexes them where they are.';
     $s['organise']['shape'] = ($_POST['shape'] ?? '') === 'in_place' ? 'in_place' : 'one_place';
 
+    // Duplicates: this archive's own folders, one name per line. A name is a
+    // folder anywhere in a path, so no slashes; Rushes adds them itself.
+    $names = function (string $field) use (&$bad) {
+        $out = [];
+        foreach (preg_split('/\R/', (string)($_POST[$field] ?? '')) as $n) {
+            $n = trim(preg_replace('/\s+/', ' ', $n));
+            if ($n === '') continue;
+            if (preg_match('#[/\\\\]#', $n) || mb_strlen($n) > 100) { $bad[] = "“{$n}” is not a folder name: no slashes, at most 100 letters."; continue; }
+            if (!in_array($n, $out, true)) $out[] = $n;
+        }
+        return $out;
+    };
+    $s['duplicates'] = ['never_keep' => $names('d_never'), 'card_dumps' => $names('d_cards')];
+
     if ($bad) {
         $said = implode(' ', $bad);
     } else {
@@ -507,6 +521,24 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             r.onchange = function () {
               document.getElementById('hExt').hidden = r.value !== 'external' || !r.checked; }; });
         </script>
+      </div>
+
+      <!-- ══ 05 duplicates ══ -->
+      <?php $dup = $s['duplicates'] ?? []; ?>
+      <div class="grp">
+        <h2><span>05 /</span> Duplicates: which copy is kept</h2>
+        <p>When the same file is in several places, Manage → Duplicates keeps one copy and moves the
+           others to the holding folder. Some copies are never the one kept, in any archive: the
+           recycle bin, <code>Copied_</code> folders, Premiere's Media Cache, files saved with a
+           doubled extension (those are in <code>rules.json</code>). Here you add this archive's
+           own folders. One folder name per line; it counts wherever it appears in a path.</p>
+        <label class="f"><span>Folders whose copies are never kept</span>
+          <textarea name="d_never" rows="3" placeholder="e.g. someone's desk folder"><?= $e(implode("\n", $dup['never_keep'] ?? [])) ?></textarea></label>
+        <label class="f"><span>Card-dump folders</span>
+          <textarea name="d_cards" rows="3" placeholder="e.g. CARD DUMPS"><?= $e(implode("\n", $dup['card_dumps'] ?? [])) ?></textarea>
+          <small>Where whole cards were once copied as they were. The copy on your shelf
+            (<?= shelf_name() !== '' ? '<b>' . $e(shelf_name()) . '</b>' : 'chosen in Reorganize' ?>) wins over these.
+            Leave it empty and neither side is preferred.</small></label>
       </div>
 
       <input type="hidden" name="_save" value="1">
