@@ -1753,16 +1753,13 @@ def deliver(rel):
     # Where things go: each editor's computer has its folder in Projects on the
     # shelf, a folder per project in it (the project file, dated, one per close;
     # Media: the files it uses; Output: what was exported). The shared stock
-    # library: once, in its own folder of the archive.
+    # library: once, in Projects/Stock Library, beside the editors' folders.
     shelf = _shelf()
     if not shelf:
         return refuse("no shelf is chosen in Reorganize, so Projects has nowhere to be")
     pname = b["project"].split("/")[1]
     proj = os.path.join(shelf, "Projects", b["folder"], pname)
-    lp = [x for x in (setting("library.folder") or "Stock Library").replace("\\", "/").split("/") if x]
-    if not lp or any(_plain(x, 255) != x or x == ".." for x in lp):
-        return refuse("the stock library's folder in Setup is not a plain folder name")
-    lib = os.path.join(NAS_MOUNT, *lp)
+    lib = os.path.join(shelf, "Projects", "Stock Library")
 
     need = sum(x["size"] for x in b["files"])
     free = free_bytes()

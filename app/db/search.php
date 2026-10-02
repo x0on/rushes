@@ -48,11 +48,11 @@ if (($_GET['in'] ?? '') === 'deliverables' && shelf_name() !== '') {
     $esc = fn($s) => str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $s);
     array_push($args, $esc(rtrim(archive_dir(), '/') . '/' . shelf_name() . '/Projects/') . '%', '%/Output/%');
 }
-// The shared stock library (HOW-IT-WORKS.md → Projects in and out): its own
-// folder of the archive, wherever Setup says it is, so a section of its own.
+// The shared stock library (HOW-IT-WORKS.md → Projects in and out): Projects/Stock Library
+// on the shelf, beside the editors' folders; a section of its own.
 if (preg_match('#^library(?:/(music|stock|sfx))?$#', (string)($_GET['in'] ?? ''), $m)) {
     $sub = ['music' => 'Music/', 'stock' => 'Stock footage/', 'sfx' => 'Sound effects/'][$m[1] ?? ''] ?? '';
-    $pre = rtrim(archive_dir(), '/') . '/' . trim((string)(settings()['library']['folder'] ?? 'Stock Library'), '/') . "/$sub";
+    $pre = rtrim(archive_dir(), '/') . '/' . shelf_name() . "/Projects/Stock Library/$sub";
     $where[] = "path LIKE ? ESCAPE '\\'"; $args[] = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $pre) . '%';
 }
 

@@ -10,6 +10,8 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 - **Setup 06, plain:** a Download Rushes Watcher button (or a link to send),
   name and pair, and every editor's computer in a list, with when it was last
   heard from and its last saved project.
+- **The stock library lives in Projects** (`Projects/Stock Library`), beside the
+  editors' folders, shared and stored once; nothing to set up.
 
 ## 0.10.0 — October 2026
 

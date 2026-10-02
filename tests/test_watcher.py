@@ -153,8 +153,8 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(self.rushes.reported["shoot"], "Shelf/PARKS/2026/Kite")
         self.assertTrue((self.prproj.parent / "Output").is_dir())          # made for the exports
         self.helper_runs()
-        self.assertEqual((self.arch / "Stock Library/Music/Song & Co.wav").read_bytes(), b"la" * 100)
-        self.assertTrue((self.arch / "Stock Library/Stock footage/drone.mov").exists())
+        self.assertEqual((self.arch / "Shelf/Projects/Stock Library/Music/Song & Co.wav").read_bytes(), b"la" * 100)
+        self.assertTrue((self.arch / "Shelf/Projects/Stock Library/Stock footage/drone.mov").exists())
         self.assertEqual((self.proj / "Media/title.png").read_bytes(), b"t" * 30)
         self.assertEqual(self.rushes.inbox, {})                             # placed and recorded: the inbox copy went
 
@@ -166,7 +166,7 @@ class EndToEnd(unittest.TestCase):
         kept = list(self.proj.glob("Kite *.prproj"))
         self.assertEqual(len(kept), 1)
         xml = gzip.decompress(kept[0].read_bytes()).decode()
-        self.assertIn(f">{self.arch}/Stock Library/Music/Song &amp; Co.wav<", xml)
+        self.assertIn(f">{self.arch}/Shelf/Projects/Stock Library/Music/Song &amp; Co.wav<", xml)
         self.assertIn(f">{self.proj}/Media/title.png<", xml)
         self.assertIn(f">{self.arch}/Shelf/PARKS/2026/Kite/A001.mov<", xml)   # archive footage, as it was
         self.assertIn(str(self.ed / "gone.png"), xml)                        # what it cannot find, as it was
@@ -199,11 +199,11 @@ class EndToEnd(unittest.TestCase):
     def test_the_helper_stores_once_checks_and_refuses(self):
         self.put("b1", [("song.wav", b"la" * 50, "music")]); self.helper_runs()
         self.put("b2", [("song copy.wav", b"la" * 50, "music")]); self.helper_runs()          # the same music again
-        self.assertEqual(sorted(p.name for p in (self.arch / "Stock Library/Music").iterdir() if p.is_file()), ["song.wav"])
-        self.assertEqual(self.rushes.where["/Users/ed/song copy.wav"]["rel"], "Stock Library/Music/song.wav")
+        self.assertEqual(sorted(p.name for p in (self.arch / "Shelf/Projects/Stock Library/Music").iterdir() if p.is_file()), ["song.wav"])
+        self.assertEqual(self.rushes.where["/Users/ed/song copy.wav"]["rel"], "Shelf/Projects/Stock Library/Music/song.wav")
         self.put("b3", [("hit.wav", b"boom", "sfx")]); self.rushes.inbox["b3"]["files"]["hit.wav"] = b"bang"   # changed on the way
         self.helper_runs()
-        self.assertFalse((self.arch / "Stock Library/Sound effects/hit.wav").exists())
+        self.assertFalse((self.arch / "Shelf/Projects/Stock Library/Sound effects/hit.wav").exists())
         self.assertIn("b3", self.rushes.inbox)                                              # not taken: the batch stays
         self.put("b4", [("x.wav", b"x", "music")], end=False); self.helper_runs()          # not complete: refused whole
         self.assertIn(f"refused\tdeliver {self.key}/b4", (self.h.STATUS / "ingest-history.tsv").read_text())

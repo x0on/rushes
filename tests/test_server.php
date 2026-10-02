@@ -230,10 +230,10 @@ $s['organise']['shelves'] = ''; save_settings($s); settings(true);
 check(shelf_name() === '' && !in_array("450\tproject\t/Library/", dedupe_rules_write(), true) && !is_dir(shelf_dir()),
       'no shelf chosen: no folder is guessed');
 $s['organise']['shelves'] = 'Library'; save_settings($s); settings(true);
-// The stock library is a section of Search: its own folder, wherever Setup puts it, browsed without words.
+// The stock library is a section of Search: Projects/Stock Library on the shelf, browsed without words.
 $arch = archive_dir();
-@mkdir("$arch/Stock Library/Music", 0777, true); @mkdir("$arch/Shoots/Library talk", 0777, true);
-file_put_contents("$arch/Stock Library/Music/song.wav", 'la'); landed("$arch/Stock Library/Music/song.wav", 2);
+@mkdir("$arch/Library/Projects/Stock Library/Music", 0777, true); @mkdir("$arch/Shoots/Library talk", 0777, true);
+file_put_contents("$arch/Library/Projects/Stock Library/Music/song.wav", 'la'); landed("$arch/Library/Projects/Stock Library/Music/song.wav", 2);
 file_put_contents("$arch/Shoots/Library talk/talk.mov", 'tk'); landed("$arch/Shoots/Library talk/talk.mov", 2);
 $find = function (array $get) { $_GET = $get; ob_start(); include web_dir() . "/db/search.php"; return json_decode(ob_get_clean(), true); };
 $r = $find(['in' => 'library']); $r2 = $find(['in' => 'library/sfx']); $r3 = $find(['q' => 'song', 'in' => 'library/music']);

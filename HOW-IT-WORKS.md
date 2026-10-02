@@ -769,17 +769,20 @@ Rushes, on the shelf, beside the departments, named by the name and the start of
 its key, so two "Maria"s never share one:
 
 ```
-<shelf>/Projects/Maria (a1b2)/
-  Kite Festival/                            one folder per project (the project file's name)
-    Kite Festival 2026-10-02 1530.prproj    a dated copy at each close, pointing at the archive
-    Media/                                  the files the project uses, from outside the archive
-    Output/                                 what was exported into Output: the deliverables
+<shelf>/Projects/
+  Maria (a1b2)/                               one folder per editor's computer
+    Kite Festival/                            one folder per project (the project file's name)
+      Kite Festival 2026-10-02 1530.prproj    a dated copy at each close, pointing at the archive
+      Media/                                  the files the project uses, from outside the archive
+      Output/                                 what was exported into Output: the deliverables
+  Stock Library/                              music, stock footage, sound effects: shared, stored once
+    Music/  Stock footage/  Sound effects/
 ```
 
 Nobody chooses a share, and editors need no share they can write to: the
 archive stays read-only for people, and only Rushes writes it. `Projects` cannot
-be a department's name, and Duplicates never moves anything in it (nor in the
-stock library): archived projects point at those files.
+be a department's name, and Duplicates never moves anything in it: archived
+projects point at those files.
 
 **Rushes Watcher** runs on each editor's computer. It follows the rules every
 Rushes program does:
@@ -842,7 +845,7 @@ from the inbox, checks it again against its fingerprint, and puts it in place
 [the careful way](#how-a-file-is-copied):
 
 - **Music, stock footage, sound effects** go into the stock library,
-  `<library folder>/Music`, `/Stock footage`, `/Sound effects`, stored once:
+  `Projects/Stock Library/Music`, `/Stock footage`, `/Sound effects`, stored once:
   `_rushes/library.tsv` lists every fingerprint, and the same file again,
   under any name, for any project, points at the copy already there.
 - **Things made for the project** go into `Projects/<computer>/<project>/Media/`;

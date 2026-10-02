@@ -261,9 +261,8 @@ function dedupe_rules_write(): ?array {
     // with no card-dump folders, neither side is preferred, whichever was chosen.
     if (shelf_name() !== '' && ($d['card_dumps'] ?? []) !== [])
         $lines[] = (int)$w['other_side'] . "\tproject\t/" . shelf_name() . '/';
-    // Editors' projects and the stock library are never moved: archived projects point at them.
+    // Editors' projects and the stock library (in Projects) are never moved: archived projects point at them.
     if (shelf_name() !== '') $lines[] = "0\tkeep\t/" . shelf_name() . '/Projects/';
-    $lines[] = "0\tkeep\t/" . trim($clean(settings()['library']['folder'] ?? 'Stock Library')) . '/';
     $file = web_dir() . '/dedupe-rules.tsv';
     $body = implode("\n", $lines) . "\n";
     if (@file_get_contents($file) === $body) return $lines;

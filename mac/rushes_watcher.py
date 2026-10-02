@@ -519,8 +519,8 @@ def selftest():
            '<FilePath>/Users/ed/Adobe Premiere Pro Video Previews/p.mov</FilePath></Media></PremiereData>')
     assert files_named(xml) == ["/Users/ed/Adobe Premiere Pro Video Previews/p.mov", "/Users/ed/Music/A & B.wav",
                                 "/Volumes/VIDEO/Shelf/x.mov"], files_named(xml)
-    out, n = repoint(xml, {"/Users/ed/Music/A & B.wav": "/Volumes/VIDEO/Stock Library/Music/A & B.wav"})
-    assert n == 1 and ">/Volumes/VIDEO/Stock Library/Music/A &amp; B.wav<" in out
+    out, n = repoint(xml, {"/Users/ed/Music/A & B.wav": "/Volumes/VIDEO/Shelf/Projects/Stock Library/Music/A & B.wav"})
+    assert n == 1 and ">/Volumes/VIDEO/Shelf/Projects/Stock Library/Music/A &amp; B.wav<" in out
     assert skip("/Users/ed/Adobe Premiere Pro Video Previews/p.mov", {}) and skip("/x/a.pek", {"sweep": [{"ext": ["pek"]}]})
     assert shoot_of(["/Volumes/VIDEO/S/PARKS/2026/Kite/a.mov", "/Volumes/VIDEO/S/PARKS/2026/Kite/b.mov",
                      "/Volumes/VIDEO/S/PARKS/2025/Old/c.mov", "/Users/ed/x.wav"], "/Volumes/VIDEO", "S") == "S/PARKS/2026/Kite"
