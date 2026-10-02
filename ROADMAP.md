@@ -26,6 +26,7 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
   archive.
 - Tidy-up into departments, and pointing Premiere projects, and FCPXML or XML
   from Final Cut and Resolve, at the new places.
+- Playing proxies in search, and a described moment playing from its time.
 - Pulls with descriptions as Premiere markers, and as FCPXML for Final Cut and
   Resolve (not yet opened in either).
 - Following Rushes to a new address, and reconnecting dropped shares.
@@ -39,7 +40,6 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 
 ### Not built yet
 
-- Playing proxies in search, and jumping to a described moment.
 - Faces (see [Decided](#decided-and-why)).
 - The describing tools in an installer (today they are set up by hand on the Mac).
 - Rushes Helper for Windows.
@@ -145,7 +145,6 @@ In this order of importance:
 Later versions:
 
 - camera card structures and RAW as one clip;
-- watching in search;
 - rights and releases;
 - selects, ratings and notes;
 - teams, roles and safe remote access;

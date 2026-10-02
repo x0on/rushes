@@ -265,7 +265,8 @@ remember footage.
 When footage has been described, a panel called **In the footage** shows the
 matching moments: shots whose description, on-screen text, themes or tags
 match, with the still the model looked at, and lines that were spoken, with
-their time.
+their time. Click one and its file's proxy plays from that moment, in a window
+over the page.
 
 Click a file to see what it is:
 
@@ -273,9 +274,15 @@ Click a file to see what it is:
 - when it was recorded, the camera, timecode and reel (read when its proxy is
   made);
 - how many copies of it exist and where;
-- whether it has a proxy;
+- whether it has a proxy, and if so a player with it;
 - the shoot and year;
 - where it lives.
+
+**Playing** is always the proxy, never the original. Only a file the catalogue
+knows can be played, and only its own proxy (`PROXIES/<its path>.mp4`): nothing
+else on the archive can be asked for this way. It is sent in pieces as the
+player asks, so a jump reads only from there, and the archive is read only while
+someone plays.
 
 Buttons: **Add to pull**, and **Copy path**, which copies the file's path
 written the way your computer sees it.
@@ -293,7 +300,7 @@ Your browser keeps a few things for itself, on your computer only:
 - light or dark (the button in the top bar).
 
 **In the code:** `db/find.php` (the page), `db/search.php` (the search),
-`db/analysis.php` (`analysis_search()`), `db/thumb.php` (the stills),
+`db/analysis.php` (`analysis_search()`), `db/thumb.php` (the stills), `db/play.php` (playing),
 `head.php` (the top bar).
 
 ### Pulls
@@ -1157,7 +1164,7 @@ exception is installing an update: its copies go through the limit.
   - opening the tidy-up;
   - adding a folder to the prepare list, or reordering it;
   - Premiere relinking;
-  - a still in search;
+  - a still in search, or playing a proxy;
   - a zip download;
   - downloading the helper's code or Rushes Helper.
 

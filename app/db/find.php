@@ -6,7 +6,8 @@
 // where it lives; the panel beside it describes whichever one you picked.
 //
 // Files show no thumbnails yet; described moments show the still the model
-// looked at (thumb.php). Playing proxies here is on the roadmap.
+// looked at (thumb.php). A file with a proxy plays it (play.php), and a
+// described moment plays from its own time.
 $NAV = 'search';
 require __DIR__ . '/config.php';
 ?><!doctype html>
@@ -78,6 +79,12 @@ require __DIR__ . '/config.php';
   dialog#pullDlg { width: min(460px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
     padding: 18px 20px 20px; background: var(--surface); color: var(--fg) }
   dialog#pullDlg::backdrop { background: rgba(10, 22, 21, .6) }
+  dialog#playDlg { width: min(960px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
+                   background: var(--panel); color: var(--fg); padding: 14px }
+  dialog#playDlg::backdrop { background: rgba(10, 22, 21, .75) }
+  dialog#playDlg video, .inspect video { width: 100%; border-radius: 8px; background: #000; display: block }
+  .mo[data-play] { cursor: pointer }
+  .mo[data-play] .tc::before { content: '▶ '; }
   #pullDlg .dh { display: flex; align-items: center; margin: 0 0 8px } #pullDlg .dh b { flex: 1; font-size: 15px }
   .pd-pick { display: flex; width: 100%; justify-content: space-between; gap: 10px; padding: 9px 12px; margin: 0 0 6px;
              border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--fg);
@@ -165,6 +172,11 @@ require __DIR__ . '/config.php';
   <button class="ghost" id="pbSwitch">Switch</button>
 </div>
 
+<dialog id="playDlg" aria-labelledby="plT">
+  <div class="dh"><b id="plT"></b><button type="button" class="ghost" id="plClose">Close</button></div>
+  <video id="plV" controls playsinline preload="metadata"></video>
+  <p class="note" id="plSaid" style="margin:8px 0 0"></p>
+</dialog>
 <dialog id="pullDlg" aria-labelledby="pdT">
   <div class="dh"><b id="pdT">Add to a pull</b><button type="button" class="ghost" id="pdClose">Close</button></div>
   <p class="note" style="margin:0 0 12px">A pull gathers clips for a job. Send its link to whoever edits.</p>
@@ -265,7 +277,7 @@ function momentsHTML() {
     moments.rows.map(function (m) {
       const speech = m.kind === 'speech';
       const tags = [].concat(m.on_screen ? m.on_screen.split(' · ') : [], m.themes ? m.themes.split(' · ') : []);
-      return '<div class="mo">' +
+      return '<div class="mo" data-play="' + esc(m.path) + '" data-t="' + (+m.start_s || 0) + '" title="Play from here">' +
         (speech ? '<div class="said">“ ”</div>'
                 : '<img loading="lazy" alt="" src="thumb.php?fp=' + encodeURIComponent(m.fp) + '&shot=' + m.shot + '">') +
         '<div class="b"><div class="tc">' + tcode(m.start_s) + ' → ' + tcode(m.end_s) +
@@ -275,6 +287,24 @@ function momentsHTML() {
         '<small title="' + esc(m.path) + '">' + esc(m.path.split('/').pop()) + '</small></div></div>';
     }).join('') + '</div></div>';
 }
+
+// A described moment plays its file's proxy from that moment's time.
+function play(path, t) {
+  const v = $('plV');
+  $('plT').textContent = path.split('/').pop() + ' · from ' + tcode(t);
+  $('plSaid').textContent = 'Loading its proxy from the archive…';
+  v.onloadeddata = function () { $('plSaid').textContent = 'Playing its proxy (the original stays where it is).'; };
+  v.onerror = function () { $('plSaid').textContent = 'No proxy to play yet. Proxies are made in Manage → Describe.'; };
+  v.src = 'play.php?p=' + encodeURIComponent(path) + '#t=' + t;
+  $('playDlg').showModal();
+  v.play().catch(function () {});
+}
+$('plClose').onclick = function () { $('plV').pause(); $('plV').removeAttribute('src'); $('plV').load(); $('playDlg').close(); };
+$('playDlg').addEventListener('close', function () { $('plV').pause(); });
+$('out').addEventListener('click', function (e) {
+  const m = e.target.closest('[data-play]');
+  if (m) play(m.dataset.play, +m.dataset.t || 0);
+});
 
 function draw() {
   if (!rows.length && moments.rows.length) { $('out').innerHTML = momentsHTML(); return; }
@@ -377,6 +407,8 @@ function inspect(r) {
   $('inspect').innerHTML =
     '<header><b>' + esc(r.name) + '</b></header>' +
     '<div style="padding:12px 14px">' +
+      (r.proxy_at ? '<video controls playsinline preload="metadata" src="play.php?p=' + encodeURIComponent(r.path) + '"></video>' +
+                    '<p class="note" style="margin:6px 0 12px">Its proxy, read from the archive as it plays.</p>' : '') +
       '<div class="k">Kind</div><div class="v">' + esc(r.kind || 'file') +
         (r.ext ? ' · ' + esc(r.ext.toUpperCase()) : '') + '</div>' +
       '<div class="k">Size</div><div class="v">' + tb(r.bytes) + '</div>' +

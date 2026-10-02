@@ -3,6 +3,7 @@
 // server would make it. Used by test_helper.sh, because the doors end each
 // answer with exit.
 [$_, $app, $method, $get, $post, $door] = $argv + [null, '', 'GET', '{}', '{}', 'db/helper.php'];
+if ($method === 'SQL') { require "$app/db/schema.php"; db_init(); db()->exec($get); exit; }    // set up the catalogue
 if ($method === 'SEED' || $method === 'ITEMS') {        // set up, or look at, a transfer
     require "$app/db/transfers.php"; db_init();
     if ($method === 'SEED') {
@@ -15,6 +16,7 @@ if ($method === 'SEED' || $method === 'ITEMS') {        // set up, or look at, a
 $_SERVER['REQUEST_METHOD'] = $method;
 $_SERVER['HTTP_HOST'] = 'nas.test';
 if (getenv('ORIGIN') !== false) $_SERVER['HTTP_ORIGIN'] = getenv('ORIGIN');
+if (getenv('RANGE')) $_SERVER['HTTP_RANGE'] = getenv('RANGE');
 if (getenv('SIGNED')) { @session_start(); $_SESSION['rushes_in'] = true; }      // as if signed in to Manage
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];
 include "$app/$door";

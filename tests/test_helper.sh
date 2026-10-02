@@ -69,6 +69,16 @@ check 'SIGNED=1 call GET "{\"what\":\"files\"}" "{}" db/export.php | head -1 | g
 check 'SIGNED=1 call GET "{\"what\":\"pulls\"}" "{}" db/export.php | python3 -c "import json,sys; d=json.load(sys.stdin); assert \"pulls\" in d"' 'pulls come out as JSON'
 check 'SIGNED=1 call GET "{\"what\":\"moments\"}" "{}" db/export.php | head -1 | grep -q "path,kind,shot,start_s"' 'what describing found comes out as CSV'
 
+# Search plays a file's proxy, in pieces; nothing but a known file's proxy can be asked for
+mkdir -p "$ROOT/archive/PROXIES/Library/K"; printf '0123456789' > "$ROOT/archive/PROXIES/Library/K/a.mp4"; echo secret > "$ROOT/archive/x.txt"
+call SQL "INSERT INTO files (path,name) VALUES ('$ROOT/archive/Library/K/a.MXF','a.MXF'), ('$ROOT/archive/x.txt','x.txt');
+          INSERT INTO media (file_id, proxy_at) SELECT id, 1 FROM files" >/dev/null
+check '[ "$(call GET "{\"p\":\"$ROOT/archive/Library/K/a.MXF\"}" "{}" db/play.php)" = 0123456789 ]' 'a file plays from its proxy'
+check '[ "$(RANGE=bytes=3-5 call GET "{\"p\":\"$ROOT/archive/Library/K/a.MXF\"}" "{}" db/play.php)" = 345 ]' 'in pieces, as the player asks (a jump reads from there)'
+check 'call GET "{\"p\":\"$ROOT/archive/x.txt\"}" "{}" db/play.php | grep -q "not on the archive" && ! call GET "{\"p\":\"$ROOT/archive/x.txt\"}" "{}" db/play.php | grep -q secret' \
+      'only a proxy can be played, never another file'
+check 'call GET "{\"p\":\"/etc/passwd\"}" "{}" db/play.php | grep -q "No proxy"' 'a path the catalogue does not know plays nothing'
+
 # another website cannot make a browser press Rushes' buttons; Rushes' own pages can
 check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "another website"' \
       'a button pressed from another website is refused, even with the password'
