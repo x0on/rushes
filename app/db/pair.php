@@ -7,7 +7,7 @@
 //
 //   POST action=start [role=watcher]  signed in (Setup): a one-time code, good for ten
 //                                     minutes, for the helper or for an editor's computer
-//   POST code=<6 digits> host         Rushes Helper or Rushes Watcher: the code → its ID
+//   POST code=<6 digits> host [role=watcher]  Rushes Helper or Rushes Watcher: the code → its ID
 //   POST action=forget key=<16>       signed in (Setup): an editor's computer is not paired any more
 //   GET                               a helper, with its ID: {"pairing": "none" | "this" | "other"}
 //
@@ -52,6 +52,12 @@ if (!hash_equals((string)$c['hash'], hash('sha256', $given))) {
     php_keep($C, $c);
     said(403, ['error' => 'That is not the code Rushes shows. Try again.']);
 }
+// A helper's code makes the helper and a Watcher's code makes a Watcher: an
+// editor's computer given the helper's code by mistake must not take its place.
+if ((string)($_POST['role'] ?? 'helper') !== ($c['role'] ?? 'helper'))
+    said(403, ['error' => ($c['role'] ?? 'helper') === 'watcher'
+        ? 'That code is for an editor\'s computer: enter it in Rushes Watcher, not Rushes Helper.'
+        : 'That code is for the helper: in Rushes → Setup → Editors\' computers, get a code for this computer.']);
 @unlink($C);
 $host = substr(preg_replace('/[^\p{L}\p{N} ._\'’-]/u', '', (string)($_POST['host'] ?? '')), 0, 80);
 $id = bin2hex(random_bytes(16));

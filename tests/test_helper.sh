@@ -81,7 +81,8 @@ check 'call GET "{\"p\":\"/etc/passwd\"}" "{}" db/play.php | grep -q "No proxy"'
 
 # editors' computers: a Watcher pairs with its own code and can only deliver
 code=$(SIGNED=1 call POST "{}" "{\"action\":\"start\",\"role\":\"watcher\"}" db/pair.php | sed 's/.*"code":"\([0-9]*\)".*/\1/')
-wid=$(call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\"}" db/pair.php | sed 's/.*"id":"\([0-9a-f]*\)".*/\1/')
+check 'call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\"}" db/pair.php | grep -q "enter it in Rushes Watcher"' 'a Watcher'"'"'s code given to a helper does not make it the helper'
+wid=$(call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\",\"role\":\"watcher\"}" db/pair.php | sed 's/.*"id":"\([0-9a-f]*\)".*/\1/')
 check '[ ${#wid} = 32 ] && ! grep -q "$wid" "$ROOT/app/watchers.php"' 'an editor'"'"'s computer pairs as a Watcher; Rushes keeps only the fingerprint of its ID'
 check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "\"shelf\":\"Library\""' 'a Watcher asks where things are'
 check 'WATCHER=nope call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'an unpaired one is refused'

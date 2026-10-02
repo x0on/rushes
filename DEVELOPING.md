@@ -97,6 +97,7 @@ archive.
 ```sh
 cd tests
 python3 -m unittest test_transfer          # the helper: copying, proof, pause, stalls, pairing
+python3 -m unittest test_watcher           # Rushes Watcher and the helper, end to end: save, deliver, quit, repoint
 busybox sh test_runner.sh                  # the runner, on a pretend archive, on its bad days
 php test_server.php                        # the catalogue, imports, plans, pulls, passwords
 php test_pages.php                         # what Overview says

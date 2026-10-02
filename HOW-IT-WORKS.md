@@ -757,15 +757,48 @@ failed.
 ## Projects in and out
 
 Editors work as usual. Rushes keeps every project and everything it uses,
-without anyone pressing anything. *Built so far: Rushes' side and the helper's.
-Rushes Watcher, the small program on each editor's computer, is next
-([roadmap](ROADMAP.md)).*
+without anyone pressing anything. *Built so far: Rushes' side, the helper's,
+and the core of Rushes Watcher (`mac/rushes_watcher.py`, Premiere projects, on
+a Mac). Its app and menu bar icon, resting and moving aside, Final Cut and
+Resolve come next ([roadmap](ROADMAP.md)).*
 
 **Three shares.** VIDEO, the archive: people only read it; only Rushes writes.
 Projects: where editors work. Deliveries: where outside files arrive for Rushes
 to take in. Each editor's computer writes only in its own folder of Deliveries,
 named by its key. Setup → 06 Editors' work says where each share is, how the
 helper sees Deliveries, and the stock library's folder.
+
+**Rushes Watcher** runs on each editor's computer, paired with Rushes by a code
+from Setup → 06 Editors' work (a code for the helper is refused there, and a
+Watcher's code is refused by Rushes Helper, so an editor's computer can never
+take the helper's place). It follows the rules every Rushes program does:
+
+- **Idle reads nothing.** While no editing program is open, it only asks this
+  computer which programs are open, every 20 seconds, and tells Rushes it is
+  there every 5 minutes.
+- **While Premiere is open,** every 2 minutes it looks through the Projects
+  share for projects (within a minute; past that it stops and says so),
+  leaving out hidden folders, caches, previews, auto-saves and its own backups.
+- **A project saved here,** unchanged for 3 minutes, is read (only read) for
+  the files it uses. Files in the archive are left; caches and previews too.
+  The rest are *from outside*: copied to Deliveries (below), unless already
+  delivered unchanged. Files it cannot find are said in its log and in Rushes.
+  A project whose outside files are all missing here is another computer's,
+  and is left to that computer's Watcher.
+- **Which kind:** guessed from the file: sound effects (`sfx`, `foley` in its
+  path), voiceover (`vo`, `narration`: made for the project), other audio is
+  music, video from a stock site's folder is stock, the rest is made for the
+  project.
+- **When Premiere is quit,** each project it saved is pointed at the archive's
+  copies: a backup of the project as it was goes first into `Rushes backups`
+  beside it; the project is changed only if nobody saved it meanwhile, and is
+  written whole under another name, then put in place. Then a copy of the
+  project file is delivered into the archive. *A project open on another
+  computer at that moment is not known to it: one project, one editor at a
+  time.*
+- Its log (`~/Library/Logs/Rushes Watcher/watcher.log`) says every step, and its
+  last 40 lines go to Rushes with each report. If Rushes does not answer, it
+  asks less and less, up to every 15 minutes.
 
 **A delivery.** When an editor saves (and the project has been quiet a few
 minutes), the Watcher copies the files the project uses from outside the
@@ -1601,6 +1634,9 @@ and caches are **moved** to the holding folder, and only you empty it.
   on Put back. Copy proofs whose footage all moved go to `_rushes/ascmhl-moved`.
 - **`ingest.py --undo`** moves the last run's copies to `ARCHIVE/_rollback`.
 - **The old layout's undo** puts back what it once moved.
+- **Rushes Watcher** changes a project file in one way only: when the editing
+  program is quit, the paths of files that are now in the archive, after a
+  backup of the project beside it in `Rushes backups`.
 
 ### What it deletes, and when
 
