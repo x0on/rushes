@@ -107,8 +107,12 @@ for a, z in ARCHES.items():
 
 # ── the rest of the app ─────────────────────────────────────────────────────
 shutil.copy(os.path.join(HERE, "rushes_helper.py"), os.path.join(C, "Resources"))
+# The Rushes mark for the menu bar (MenuIcon.svg, made into a PDF once; macOS colours it).
+shutil.copy(os.path.join(HERE, "MenuIcon.pdf"), os.path.join(C, "Resources"))
 if WATCHER:
     shutil.copy(os.path.join(HERE, "rushes_watcher.py"), os.path.join(C, "Resources"))
+    # checks an update of the app itself (release.py → app_update)
+    shutil.copy(os.path.join(HERE, "..", "app", "release.py"), os.path.join(C, "Resources"))
 else:
     # Checks that the helper's code it downloads is a signed release (app/release.py),
     # and brings that code with it (installed when newer than the one in place).

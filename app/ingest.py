@@ -2274,6 +2274,7 @@ def update_self():
         if mine != h:
             stale[f] = h
     if not stale:
+        _app_update()
         return
     try:
         got = {}
@@ -2319,6 +2320,23 @@ def update_self():
     print(f"\n{time.strftime('%H:%M:%S')}  a new version of the helper is on the archive — updated, restarting …")
     sys.stdout.flush()
     os.execv(sys.executable, [sys.executable, "-u"] + [a for a in sys.argv if a != "-u"])
+
+def _app_update():
+    """The app around this helper (Rushes Helper) is kept at Rushes' version
+    too, checked the same way, at the same moments (release.py → app_update)."""
+    app = os.environ.get("RUSHES_APP", "")
+    if sys.platform != "darwin" or not app.endswith(".app") or not os.path.isfile(os.path.join(HERE_DIR, "release.py")):
+        return
+    try:
+        spec = importlib.util.spec_from_file_location("rushes_release", os.path.join(HERE_DIR, "release.py"))
+        release = importlib.util.module_from_spec(spec); spec.loader.exec_module(release)
+        if not hasattr(release, "app_update"):
+            return                                       # an older release.py: the next update brings it
+        release.app_update(NAS_URL, app, say=lambda m: print(f"\n{time.strftime('%H:%M:%S')}  {m}"))
+    except Exception as e:
+        print(f"\n{time.strftime('%H:%M:%S')}  ! the app was not updated: {e} — this version carries on")
+    sys.stdout.flush()
+
 
 # Stop before the archive is full, not after. A copy that dies at 100% leaves
 # the NAS with no room to write anything at all — including its own logs and

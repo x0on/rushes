@@ -421,9 +421,29 @@ class Window:
             s.update(self.home())
         return s
 
+    def newer(self):
+        """A newer Rushes Helper (or Watcher) on Rushes: asked at most every 10 minutes, and
+        only for the copy in Applications, which is the one the background service runs."""
+        if time.time() - getattr(self, "_newer_at", 0) > 600:
+            self._newer_at = time.time()
+            try:
+                import release
+                same = os.path.realpath(APP) == os.path.realpath(HOMEAPP)
+                self._newer = release.app_update(self.s["url"], APP, check_only=True) if same and hasattr(release, "app_update") else ""
+            except Exception:
+                self._newer = getattr(self, "_newer", "")
+        return getattr(self, "_newer", "")
+
+    def update_app(self):
+        import release
+        v = release.app_update(self.s["url"], APP, say=lambda m: (log(m), self.set(said=m)))
+        if not v:
+            self.set(said=f"Already up to date: {NAME} {app_version()}, the same as Rushes.")
+
     def home(self):
         loaded, pid = service_running()
-        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": WORKLOG}
+        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": WORKLOG,
+             "newer": self.newer(), "version": app_version()}
         if WATCHER:
             # Everything is on this computer: what it says it is doing, and its switch.
             n = watcher_now()
@@ -525,6 +545,16 @@ class Window:
         elif do == "pair":
             code = "".join(ch for ch in str(a.get("code", "")) if ch.isdigit())
             self.run("Pairing with Rushes …", lambda: self.pair(code))
+        elif do == "paste-pair":
+            # The code copied in Rushes (its Copy button), read from the clipboard only now, when asked.
+            clip = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout.strip()
+            if not re.fullmatch(r"\d{3} ?\d{3}", clip):
+                self.set(error="The clipboard does not hold a pairing code. In Rushes → Setup, press Copy beside the six numbers, then Paste here.")
+            else:
+                self.set(error="")
+                self.run("Pairing with Rushes …", lambda: self.pair(clip.replace(" ", "")))
+        elif do == "update-app":
+            self.run(f"Updating {NAME} …", self.update_app)
         elif do == "back-home":
             self.set(step="home", said="")
         elif do == "done":
@@ -844,7 +874,7 @@ function home(s) {
     : '<p class="muted">Nothing to do right now.</p>';
   const sw = (on_, off, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
     '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? off[1] : off[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
-  return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' +
+  return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' + upd(s) +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div>' + now + '</div>' +
     // what went wrong, said where it happened (a wrong pairing code, a switch Rushes refused, …)
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
@@ -856,7 +886,7 @@ function home(s) {
         : '<b>Pair this Mac</b><small>Rushes did not say whether this Mac is paired (it is slow to answer right now). If Rushes → Setup → 04 says no helper is paired, or names another computer, ') +
       'open Rushes → Setup → Pair a helper and type the six numbers here. The helper paired before is refused from then on.</small></div></div>' +
       '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
-      btn('Pair', 'pair', true, !!s.busy) + '</div></div>'
+      btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>'
       : s.pairing === 'this' ? '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — it gives work to this Mac only.</p>' : '') +
     '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here.') +
@@ -885,6 +915,10 @@ function home(s) {
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }
+// A newer version on Rushes: one button, it puts itself in place and starts again.
+const upd = s => s.newer ? '<div class="box"><div class="row"><div class="t"><b>Rushes ' + esc(s.newer) + ' is ready</b><small>This is ' +
+  esc(s.version) + '. The update comes from your Rushes, signed by its author; settings, pairing and permissions stay.</small></div>' +
+  btn('Update to ' + s.newer, 'update-app', true, !!s.busy) + '</div></div>' : '';
 // Rushes Watcher on this computer: everything it shows is on this computer.
 const WATCHING = {idle: 'Idle — no editing program open', watching: 'Watching — an editing program is open', delivering: 'Copying a project\'s files to Deliveries',
   pointing: 'Pointing projects at the archive', offline: 'Cannot reach Rushes', unpaired: 'Not paired with Rushes yet', paused: 'Paused'};
@@ -895,7 +929,7 @@ function whome(s) {
     : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
   const sw = (on_, ids, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
     '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? ids[1] : ids[0]) + '"' + (dis ? ' disabled' : '') + '></button></div>';
-  return '<h2>Rushes Watcher on this Mac</h2><div class="box">' + state + '</div>' +
+  return '<h2>Rushes Watcher on this Mac</h2><div class="box">' + state + '</div>' + upd(s) +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div><p><b>' + esc(WATCHING[n.state] || n.state || 'Starting') + '</b>' +
       (n.note ? ' · ' + esc(n.note) : '') + '</p></div>' +
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
@@ -903,7 +937,7 @@ function whome(s) {
     (!s.paired ? '<div class="box"><div class="row"><div class="t"><b>Not paired yet</b><small>It delivers nothing until it is. In Rushes → Setup → 06 Editors\' work, ' +
       'press Add an editor\'s computer, and type the six numbers here. (A code for the helper does not work here, so an editor\'s computer never takes the helper\'s place.)</small></div></div>' +
       '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
-      btn('Pair', 'pair', true, !!s.busy) + '</div></div>'
+      btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>'
       : '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — Rushes lists this computer in Setup → 06 Editors\' work.</p>') +
     '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here. Its icon goes with it.') +
@@ -1038,12 +1072,18 @@ def menu_state(w):
             items.append({"label": "Try again", "do": "try-again"})
         if s.get("pairing") != "this":
             items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
-    items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}"),
+    items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}")]
+    if s.get("newer"):
+        items.append({"label": f"Update to {s['newer']}", "do": "update-app"})
+    items += [
               {"label": "Open Rushes", "do": "open-rushes"}, {"label": "Show the log", "do": "show-log"},
               {"label": "Collect diagnostics", "do": "diagnostics"}, {"label": "Ask for help…", "do": "ask-help"},
               {"label": f"Open {NAME}…", "do": "open-window"}, {"sep": True},
               {"label": f"Quit {NAME}", "do": "quit"}]
-    return {"icon": icon, "tip": f"{NAME} — {head}", "items": items}
+    # what the launcher's icon shows (the Rushes mark): dimmed when paused or cut off, "!" when it needs you
+    state = {"pause.circle": "paused", "wifi.exclamationmark": "offline", "exclamationmark.triangle": "attention",
+             "film": "ok"}.get(icon, "busy")
+    return {"icon": icon, "state": state, "tip": f"{NAME} — {head}", "items": items}
 
 
 def menu(port, key):

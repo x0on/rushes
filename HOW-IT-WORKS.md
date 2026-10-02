@@ -1476,8 +1476,25 @@ or when it has no list yet.
 - When Rushes Helper is first set up, it downloads the same files and checks
   them the same way, with the `release.py` inside the app.
 
-**The Rushes Helper app itself** (its window, Python and launcher) is not
-updated by Rushes. A new version is downloaded from Setup and opened.
+**The apps themselves** (Rushes Helper and Rushes Watcher: the window, Python,
+the launcher) update from Rushes too, since 0.9.2. Rushes has one version
+number for everything (`app/VERSION`), so when Rushes is newer than an app, the
+app on the archive (`_rushes/Rushes Helper.zip`, `Rushes Watcher.zip`) is too.
+
+- **When:** by itself, between jobs, at most once an hour (the helper when it
+  checks its code; the Watcher when no editing program is open, and never
+  before projects just closed are pointed at the archive). At once with
+  **Update to …** in the menu bar or the window, which appears when there is
+  one.
+- **How** (`release.py` → `app_update`): the new app is downloaded from Rushes
+  and unpacked aside. It is taken only if it is that version, the same app, its
+  signature is intact (`codesign --verify --deep --strict`) and it is signed with
+  the Rushes author's certificate (its fingerprint is in `release.py`, inside
+  the app already running, so a server cannot change it). Then a small script
+  of its own puts it in place of the old one (the old one back if that fails)
+  and starts it again. Settings, pairing and the macOS permissions stay: it is
+  the same signed app. Each step is in the log, and the window and menu say it.
+- Opened from Downloads, a new app is still set up as on the first day.
 
 - The Terminal command in Setup (`curl … ?install | sh`) downloads the new app
   from Rushes and unpacks it aside. It checks that the app's signature is intact
@@ -1485,7 +1502,7 @@ updated by Rushes. A new version is downloaded from Setup and opened.
   certificate (its fingerprint is written in `db/helper.php`). Only then does it
   delete the old app, put the new one in its place, save the Rushes address, and
   open it. It does not stop the helper already running.
-- That check catches an app swapped on the share. It cannot catch a change to
+- The Terminal command's check catches an app swapped on the share. It cannot catch a change to
   the command itself: the command comes from your Rushes server over plain
   http, like the pages, so whoever controls that server or your network could
   change it. On a network you do not trust, download the app from Setup in the

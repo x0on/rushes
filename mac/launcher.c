@@ -201,15 +201,32 @@ static void pick(id self, SEL cmd, id sender) {
 
 static void opened(id self, SEL cmd, id m) { (void)self; (void)cmd; (void)m; wake(); }
 
+// The Rushes mark (MenuIcon.pdf inside the app), drawn by macOS in the menu
+// bar's own colour. The state is shown on it: dimmed when paused or cut off
+// from Rushes, a "!" beside it when it needs someone.
+static id logo_;
+typedef struct { double w, h; } Size;
 static void refresh(id self, SEL cmd, id d) {
     (void)self; (void)cmd;
     id button = m0(status_, "button");
-    id icon = d ? m1(d, "objectForKey:", str("icon")) : NULL, img = NULL;
-    if (!icon) icon = str("exclamationmark.triangle");
-    if (((signed char (*)(id, SEL, SEL))msg)(C("NSImage"), sel("respondsToSelector:"), sel("imageWithSystemSymbolName:accessibilityDescription:")))
-        img = ((id (*)(id, SEL, id, id))msg)(C("NSImage"), sel("imageWithSystemSymbolName:accessibilityDescription:"), icon, str(NAME));
-    if (img) { mb(img, "setTemplate:", 1); m1(button, "setImage:", img); m1(button, "setTitle:", str("")); }
-    else m1(button, "setTitle:", str("R"));
+    const char *st = d ? utf8(m1(d, "objectForKey:", str("state"))) : "offline";
+    if (!logo_ && (logo_ = m1(m0(C("NSBundle"), "mainBundle"), "imageForResource:", str("MenuIcon")))) {
+        m0(logo_, "retain"); mb(logo_, "setTemplate:", 1);
+        ((void (*)(id, SEL, Size))msg)(logo_, sel("setSize:"), (Size){18, 18});
+    }
+    if (logo_) {
+        m1(button, "setImage:", logo_);
+        m1(button, "setTitle:", str(strcmp(st, "attention") == 0 || !d ? "!" : ""));
+        ((void (*)(id, SEL, long))msg)(button, sel("setImagePosition:"), 2);          // the mark, then the "!"
+        mb(button, "setAppearsDisabled:", strcmp(st, "paused") == 0 || strcmp(st, "offline") == 0);
+    } else {                                // no mark inside the app: the state as a symbol
+        id icon = d ? m1(d, "objectForKey:", str("icon")) : NULL, img = NULL;
+        if (!icon) icon = str("exclamationmark.triangle");
+        if (((signed char (*)(id, SEL, SEL))msg)(C("NSImage"), sel("respondsToSelector:"), sel("imageWithSystemSymbolName:accessibilityDescription:")))
+            img = ((id (*)(id, SEL, id, id))msg)(C("NSImage"), sel("imageWithSystemSymbolName:accessibilityDescription:"), icon, str(NAME));
+        if (img) { mb(img, "setTemplate:", 1); m1(button, "setImage:", img); m1(button, "setTitle:", str("")); }
+        else m1(button, "setTitle:", str("R"));
+    }
     id tip = d ? m1(d, "objectForKey:", str("tip")) : NULL;
     char wait[200]; snprintf(wait, sizeof wait, "%s — starting, or not answering", NAME);
     m1(button, "setToolTip:", tip ? tip : str(wait));

@@ -90,6 +90,25 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(got["items"][-1], {"label": "Quit Rushes Helper", "do": "quit"})
 
 
+class AppUpdateTests(unittest.TestCase):
+    def test_newer_on_rushes_is_offered_in_the_menu(self):
+        import plistlib
+        sys.path.insert(0, str(HERE.parent / "app")); import release
+        with tempfile.TemporaryDirectory() as t:
+            app = Path(t) / "Rushes Helper.app"; (app / "Contents").mkdir(parents=True)
+            (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "0.9.1",
+                "CFBundleIdentifier": "org.rushes.helper", "CFBundleExecutable": "Rushes Helper"}))
+            for theirs, want in (("0.9.2", "0.9.2"), ("0.9.1", ""), ("0.8.9", ""), ("0.10.0", "0.10.0")):
+                with patch("urllib.request.urlopen", return_value=io.BytesIO(theirs.encode())):
+                    self.assertEqual(release.app_update("http://rushes.test", str(app), check_only=True), want, theirs)
+        m = front("Rushes Helper", Path(tempfile.mkdtemp()))
+        with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")), \
+             patch.object(m.Window, "newer", return_value="0.9.2"):
+            got = serve(m)("menu?fresh=1")
+        self.assertIn({"label": "Update to 0.9.2", "do": "update-app"}, got["items"])
+        self.assertEqual(got["state"], "offline")
+
+
 class BundledCodeTests(unittest.TestCase):
     """A new Rushes Helper brings the helper's code inside it, a signed release,
     installed when newer than the one in place, never when it is not signed."""

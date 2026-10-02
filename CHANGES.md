@@ -3,6 +3,20 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.9.2 — October 2026
+
+- **The apps update themselves from Rushes.** When Rushes is a newer version,
+  Rushes Helper and Rushes Watcher take the same signed app from it, check it
+  (its version, and the Rushes author's certificate), put it in place and
+  start again: settings, pairing and macOS permissions stay. By themselves
+  between jobs (once an hour), or at once with **Update to …** in the menu
+  bar or the window. No more downloading and replacing.
+- **Pairing by copy and paste:** Setup shows the code in a box with a Copy
+  button; the apps have **Paste the code from Rushes**. Setup says
+  "Paired ✓" the moment it happens.
+- **The menu bar icon is the Rushes mark,** dimmed when paused or cut off
+  from Rushes, with "!" when it needs you.
+
 ## 0.9.1 — October 2026
 
 - **Rushes Helper:** the box to type the pairing code is always in its window

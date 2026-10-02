@@ -374,7 +374,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
 
           <?php if ($hmode === 'external'): $pp = helper_paired(); ?>
             <!-- Pairing (HOW-IT-WORKS.md → Pairing): only one helper is given work. -->
-            <div class="seen <?= $pp ? 'ok' : 'bad' ?>" style="margin-top:8px">
+            <div class="seen <?= $pp ? 'ok' : 'bad' ?>" style="margin-top:8px" id="pairState">
               <?= $pp ? '✓ Paired with ' . $e($pp['host'] ?: 'a helper') . ' since ' . $e(date('j M Y', (int)$pp['at'])) . ' — only it is given work.'
                       : 'No helper is paired: any helper on the network is given work, and two at once would copy over each other.' ?>
               <?php foreach (helper_refused() as $r): ?>
@@ -396,8 +396,25 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
                 try {
                   var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start'})})).json();
                   if (r.error) throw new Error(r.error);
-                  said.innerHTML = 'Type <b style="font-size:20px;letter-spacing:3px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
-                    '</b> in Rushes Helper on the Mac (its window, under Not paired) within ten minutes. It works once.';
+                  // The code in a box with its own Copy button: Rushes Helper pastes it in one press.
+                  said.innerHTML = '<span class="code" style="font-size:20px;letter-spacing:3px;padding:4px 10px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
+                    '</span> <button type="button" class="ghost" id="pairCopy">Copy</button> — then in Rushes Helper on the Mac (its window): ' +
+                    '<b>Paste the code from Rushes</b>. Within ten minutes; it works once.';
+                  document.getElementById('pairCopy').onclick = function () { copyText(r.code, this); };
+                  // Said here the moment the helper is paired (asked every 3 s, only while this page shows the code).
+                  var asked = r.until - 605, until = Date.now() + 600000;      // the server's own clock: the code was made 600 s before it ends
+                  (async function look() {
+                    if (Date.now() > until || document.hidden) { if (Date.now() <= until) setTimeout(look, 3000); return; }
+                    try {
+                      var p = await (await fetch('/db/pair.php?t=' + Date.now())).json();
+                      if (p.at && p.at >= asked) {
+                        var st = document.getElementById('pairState');
+                        st.className = 'seen ok'; st.textContent = '✓ Paired with ' + (p.host || 'a helper') + ' just now — only it is given work.';
+                        said.textContent = ''; paired = true; return;
+                      }
+                    } catch (e) {}
+                    setTimeout(look, 3000);
+                  })();
                 } catch (e) { said.textContent = 'Could not make a code: ' + e.message; }
                 b.disabled = false; b.textContent = 'Pair a helper';
               };
@@ -624,8 +641,10 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             try {
               var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start', role: 'watcher'})})).json();
               if (r.error) throw new Error(r.error);
-              said.innerHTML = 'Type <b style="font-size:20px;letter-spacing:3px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
-                '</b> in Rushes Watcher on the editor\'s computer within ten minutes. It works once.';
+              said.innerHTML = '<span class="code" style="font-size:20px;letter-spacing:3px;padding:4px 10px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
+                '</span> <button type="button" class="ghost" id="wCopy">Copy</button> — then in Rushes Watcher on the editor\'s computer: ' +
+                '<b>Paste the code from Rushes</b>. Within ten minutes; it works once.';
+              document.getElementById('wCopy').onclick = function () { copyText(r.code, this); };
             } catch (e) { said.textContent = 'Could not make a code: ' + e.message; }
             b.disabled = false; b.textContent = 'Add an editor\'s computer';
           };

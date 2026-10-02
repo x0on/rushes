@@ -51,6 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         out(file_get_contents(helper_src($f)), 'text/x-python; charset=utf-8');
     }
     if (isset($_GET['hash']))    out(helper_hashes());
+    // Which Rushes this is: the apps update themselves to it (release.py → app_update)
+    if (isset($_GET['version'])) out(rushes_version(), 'text/plain');
     // The work: only for the paired helper (pair.php), once there is one.
     if (isset($_GET['queue'])) { helper_gate(); out((string)@file_get_contents(web_dir() . '/ingest-queue.tsv'), 'text/plain; charset=utf-8'); }
     if (isset($_GET['control'])) out(helper_control());

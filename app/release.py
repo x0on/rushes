@@ -39,6 +39,9 @@ import time
 # A fork that signs its own releases puts its own public key here.
 PUBLIC = "a1752f2a93d4e93e044611088f350958c6321dddbeb457f02b91c56f8b1ecf6c"
 FILES = ("analyze.py", "ingest.py", "release.py", "transfer_state.py")
+# The certificate both Mac apps are signed with (its fingerprint): an app update
+# is taken only when the new app is signed with exactly this one.
+APP_CERT_SHA256 = "74bc21677be17b1aa348e67ea1d5912ddca4a27f1d133264ad43f5d4c988b6c5"
 
 # ── Ed25519 (RFC 8032, section 5.1) ─────────────────────────────────────────
 P = 2 ** 255 - 19
@@ -182,6 +185,85 @@ def check(files, sig_text, public=None, not_before=0):
         if hashes.get(n) != hashlib.sha256(data).hexdigest():
             raise ValueError(f"{n} is not the signed version")
     return hashes
+
+
+# ── the Mac apps, updated from Rushes ───────────────────────────────────────
+def version_tuple(v):
+    """'0.9.2' -> (0, 9, 2); anything else is (0,), older than every version."""
+    import re
+    n = re.findall(r"\d+", v or "")
+    return tuple(int(x) for x in n[:3]) if n else (0,)
+
+
+def app_update(url, app, say=print, check_only=False):
+    """Rushes Helper or Rushes Watcher (the app at `app`), updated to the version
+    Rushes has: one number for all of Rushes, so when Rushes is newer than this
+    app, the app on the archive is too. The new app is downloaded from Rushes,
+    unpacked beside, and taken only if it is that version, the same app, and
+    signed with the Rushes author's certificate (macOS checks the signature).
+    Then a small script, on its own, puts it in place of this one and starts it
+    again: the settings, pairing and macOS permissions stay, the same signed app.
+    -> the newer version ("" when there is none). Raises RuntimeError saying why not."""
+    import plistlib, shutil, subprocess, tempfile, urllib.request
+    with open(os.path.join(app, "Contents", "Info.plist"), "rb") as f:
+        info = plistlib.load(f)
+    mine, bundle, name = info.get("CFBundleShortVersionString", "0"), info["CFBundleIdentifier"], info["CFBundleExecutable"]
+    with urllib.request.urlopen(url.rstrip("/") + "/db/helper.php?version", timeout=20) as r:
+        theirs = r.read().decode("utf-8", "replace").strip()
+    if version_tuple(theirs) <= version_tuple(mine):
+        return ""
+    if check_only:
+        return theirs
+    say(f"updating {name} {mine} → {theirs}: downloading it from Rushes …")
+    tmp = tempfile.mkdtemp(prefix="rushes-update-")
+    try:
+        zf = os.path.join(tmp, "app.zip")
+        which = "watcher" if bundle.endswith(".watcher") else "helper"
+        with urllib.request.urlopen(url.rstrip("/") + "/db/helper.php?app=" + which, timeout=600) as r, open(zf, "wb") as f:
+            shutil.copyfileobj(r, f)
+        if subprocess.run(["ditto", "-x", "-k", zf, os.path.join(tmp, "x")], capture_output=True).returncode:
+            raise RuntimeError("the app from Rushes could not be unpacked")
+        new = os.path.join(tmp, "x", name + ".app")
+        with open(os.path.join(new, "Contents", "Info.plist"), "rb") as f:
+            got = plistlib.load(f)
+        if got.get("CFBundleIdentifier") != bundle or got.get("CFBundleShortVersionString") != theirs:
+            raise RuntimeError(f"the app on the archive is {got.get('CFBundleShortVersionString')}, not {theirs}: "
+                               "it is put there with each new version (Install day / Manage)")
+        if subprocess.run(["codesign", "--verify", "--deep", "--strict", new], capture_output=True).returncode:
+            raise RuntimeError("the app from Rushes is not intact (its signature does not verify)")
+        subprocess.run(["codesign", "-d", "--extract-certificates=" + os.path.join(tmp, "cert"), new], capture_output=True)
+        try:
+            cert = hashlib.sha256(open(os.path.join(tmp, "cert0"), "rb").read()).hexdigest()
+        except OSError:
+            cert = ""
+        if cert != APP_CERT_SHA256:
+            raise RuntimeError("the app from Rushes is not signed by the Rushes author's certificate")
+    except RuntimeError:
+        shutil.rmtree(tmp, ignore_errors=True); raise
+    except Exception as e:
+        shutil.rmtree(tmp, ignore_errors=True); raise RuntimeError(f"could not get it from Rushes ({e})")
+    # On its own (a session of its own), since starting the app again ends this
+    # process: the old app aside, the new one in, started; the old one back if not.
+    q = lambda s: "'" + s.replace("'", "'\\''") + "'"
+    script = os.path.join(tmp, "swap.sh")
+    with open(script, "w") as f:
+        f.write(f"""sleep 2
+A={q(app)}; N={q(new)}
+rm -rf "$A.old"
+if mv "$A" "$A.old" && mv "$N" "$A"; then
+  xattr -dr com.apple.quarantine "$A" 2>/dev/null
+  rm -rf "$A.old"; echo "$(date '+%Y-%m-%d %H:%M:%S')  updated to {theirs} ✓"
+else
+  [ -d "$A" ] || mv "$A.old" "$A"; echo "$(date '+%Y-%m-%d %H:%M:%S')  ! could not put {theirs} in place; {mine} kept"
+fi
+launchctl kickstart -k gui/$(id -u)/{bundle}
+rm -rf {q(tmp)}
+""")
+    log = os.path.expanduser(os.path.join("~", "Library", "Logs", "Rushes Watcher" if which == "watcher" else "Rushes", "setup.log"))
+    with open(log, "a") as out:
+        subprocess.Popen(["/bin/sh", script], stdout=out, stderr=out, start_new_session=True)
+    say(f"{name} {theirs} checked (signed by the Rushes author) — it is put in place and starts again in a few seconds")
+    return theirs
 
 
 def _files_in(folder):
