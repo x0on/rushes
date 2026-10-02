@@ -235,6 +235,12 @@ One Rushes, packaged three ways:
    **Start** and **Stop** there like any other app, and its own line, name and
    icon in Resource Monitor, so what Rushes costs the machine is plain to see.
    Not before the editors' projects are tried end to end.
+   On a Mac, Rushes Helper and Rushes Watcher come as a disk image (.dmg)
+   with the app beside an Applications folder to drag it onto, as Mac apps
+   usually do, not a zip. Installing is once per computer, by the person or by
+   IT (a signed, notarized app can be pushed by the office's device
+   management); Rushes never installs anything on a computer by itself.
+   After that, updates come from Rushes, when the person presses Update.
 
 ## Decided, and why
 
