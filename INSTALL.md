@@ -160,7 +160,7 @@ as waiting. Update it once by hand:
 
 | To stop… | Do this |
 |---|---|
-| everything on the archive machine | Manage → What runs by itself → **Stop** on the runner's line (it writes `STOP` in the web folder). **Start** to carry on. |
+| everything on the archive machine | Manage → Overview → **Stop Rushes on the server** (it writes `STOP` in the web folder). **Start Rushes on the server** to carry on. |
 | copying | Manage → **Pause copying** (or Rushes Helper → Copy footage off). |
 | describing, or checking | Their own Pause buttons. |
 | the helper on a Mac | Rushes Helper → **Run in the background** off. It stays off after a restart. |

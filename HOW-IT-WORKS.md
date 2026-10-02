@@ -1387,7 +1387,7 @@ seconds after each answer: the switches, the state, and pairing.
 | pause describing | **Pause describing** (Manage → Describe, the helper row, or Rushes Helper) | The describing lane only. Files already described are kept. |
 | pause checking | **Pause checking** (Manage or Rushes Helper) | Checking copies only, after the file it is reading. |
 | stop the helper on a Mac | Rushes Helper → **Run in the background** off | It stops now and does not start at the next login. |
-| stop everything on the archive machine | Manage → What runs by itself → **Stop** on the runner's line (or put a file called `STOP` in the web folder) | The runner does nothing at all, every minute, until **Start** (or the file is removed). What it is in the middle of finishes; the pages keep answering. |
+| stop everything on the archive machine | Manage → Overview → **Stop Rushes on the server** (beside Pause copying; also on the runner's line in What runs by itself), or put a file called `STOP` in the web folder) | The runner does nothing at all, every minute, until **Start** (or the file is removed). What it is in the middle of finishes; the pages keep answering. |
 | skip one folder | Overview → **Skip** (offered when a folder has stopped for 3 minutes) | That folder is taken out of the transfer and the work list. |
 | look again now | **Try again now** | The helper stops waiting and looks again. It also clears "stopped by itself". |
 
