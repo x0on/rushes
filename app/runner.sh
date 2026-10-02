@@ -64,7 +64,10 @@ if ! mkdir "$TICK" 2>/dev/null; then
     rm -rf "$TICK"; mkdir "$TICK" 2>/dev/null || exit 0      # its run ended without tidying up
 fi
 echo $$ > "$TICK/pid"
-trap 'rm -rf "$TICK"' EXIT
+# What one minute's turn costs the machine, said in the web folder (Manage shows
+# it): the machine's load (1, 5, 15 min) and how long this turn took.
+T0=$(date +%s)
+trap 'printf "%s\t%s\t%s\n" "$(date +%s)" "$(cut -d" " -f1-3 /proc/loadavg 2>/dev/null)" "$(( $(date +%s) - T0 ))" > $WEB/load.txt; rm -rf "$TICK"' EXIT
 trap 'exit 130' INT TERM          # stopped: leave (the EXIT trap tidies up), never carry on
 
 # Paused from Manage (Pause copying): paused is paused. Nothing is read from or

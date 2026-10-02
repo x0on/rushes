@@ -439,7 +439,9 @@ function tb(int $b): string {
 // last did its work, and whether it stopped. Read from files on Web only.
 $hv = helper_volumes();
 $repeats = [
-    ['The runner on the archive machine', 'every minute; does nothing when there is nothing to do', $alive,
+    ['The runner on the archive machine', 'every minute; does nothing when there is nothing to do'
+        . (($ld = explode("\t", trim((string)@file_get_contents("$WEB/load.txt")))) && count($ld) === 3
+           ? " · last turn {$ld[2]} s, machine load {$ld[1]} (1, 5, 15 min)" : ''), $alive,
         $stopped ? 'stopped — nothing runs until Start' : ($runner_ok ? 'ok' : 'bad'),
         $stopped ? ['start-runner', 'Start'] : ['stop-runner', 'Stop']],
     ['Reaching the VIDEO share', 'every minute, never while paused; walked away from after 20 s, stops after three',
