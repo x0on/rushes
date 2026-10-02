@@ -14,7 +14,8 @@ if (!in_array($from, ['127.0.0.1', '::1', $_SERVER['SERVER_ADDR'] ?? '-'], true)
 // proxies' details, the daily database copy), however long it takes. ?part=video:
 // only what reads the VIDEO share (new descriptions, the prepare list's proxy
 // check); the runner asks for it separately, within a time limit, and only when
-// VIDEO may be read. No part (Jobs and tools → Rebuild search): both.
+// VIDEO may be read. No part: both. &force=1 (Jobs and tools → Rebuild search)
+// rebuilds from the file list even when search already has it.
 $part  = (string)($_GET['part'] ?? '');
 $web   = $part !== 'video';
 $video = $part !== 'web';
@@ -27,7 +28,7 @@ if ($video) {
 set_time_limit(0);
 require_once __DIR__ . '/analysis.php';
 require_once __DIR__ . '/prepare.php';
-$result = $web ? sync_search() : ['state' => 'current'];
+$result = $web ? sync_search(($_GET['force'] ?? '') === '1') : ['state' => 'current'];
 if ($busy) $result['video'] = 'busy: the last look at VIDEO has not finished';
 // What the helper has described since last time, into search too.
 if ($video) try { $result['analysis'] = analysis_import(); } catch (Throwable $e) { $result['analysis'] = ['error' => $e->getMessage()]; }

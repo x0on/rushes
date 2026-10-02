@@ -1940,8 +1940,11 @@ def watch(root, every=20):
     blocked = False        # said the source was gone; do not say it again
     threading.Thread(target=report_forever, daemon=True).start()
     threading.Thread(target=describe_lane, daemon=True).start()      # the second lane
-    if not control().get("paused"):                                  # Rushes' copies, brought up to date once
-        send_file("history"); send_file("sections")
+    if not control().get("paused") and not stopped():                # Rushes' copies, brought up to date once
+        try:                                                         # read off the share: within a time limit
+            within("history", 30, lambda: (send_file("history"), send_file("sections")))
+        except Stalled:
+            stall("the archive share")
     if sys.platform == "darwin":
         print("The Mac is kept awake while a copy runs (the screen can still sleep).\n")
     paused = False         # said it was paused; once

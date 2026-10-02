@@ -621,7 +621,7 @@ class StallTests(unittest.TestCase):
             n[0] += 1
             if n[0] >= 3: raise StopIteration()
         with patch.object(m.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(b'')), \
-             patch.object(m.threading.Thread, 'start'), patch.object(m, 'wait', side_effect=sleep), \
+             patch.object(m.threading.Thread, 'start'), patch.object(m, 'within', side_effect=lambda k, t, fn: fn()), patch.object(m, 'wait', side_effect=sleep), \
              patch.object(m, 'update_self'), patch.object(m, 'control', return_value={}), \
              patch.object(m, 'check_due', return_value=False), patch.object(m, '_push'), \
              patch.object(m, 'server_of', side_effect=AssertionError('looked at the shares with nothing to do')), \
@@ -683,7 +683,7 @@ class PairingTests(unittest.TestCase):
             if len(waits) >= 3: raise StopIteration()
         def urlopen(url, *a, **k):
             raise m.urllib.error.HTTPError(url, 403, 'not the paired helper', {}, None)
-        with patch.object(m.urllib.request, 'urlopen', side_effect=urlopen), patch.object(m.threading.Thread, 'start'), \
+        with patch.object(m.urllib.request, 'urlopen', side_effect=urlopen), patch.object(m.threading.Thread, 'start'), patch.object(m, 'within', side_effect=lambda k, t, fn: fn()), \
              patch.object(m, 'wait', side_effect=wait), patch.object(m, 'update_self'), patch.object(m, 'remember_shares'), \
              patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch.object(m, 'send_file'), \
              patch.object(m, '_archive_here', side_effect=AssertionError('touched the archive while refused')), \

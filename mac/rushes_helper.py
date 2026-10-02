@@ -143,14 +143,18 @@ def fetch_files(url):
     os.makedirs(DIR, exist_ok=True)
     with urllib.request.urlopen(f"{url}/db/helper.php?hash", timeout=20) as r:
         want = json.loads(r.read().decode("utf-8", "replace")) or {}
-    for f in FILES:
+    got = {}
+    for f in FILES:                  # every file checked before any goes in: never half an update
+        if not want.get(f):          # not listed until someone presses Check now in Manage
+            raise RuntimeError("Rushes has not listed the helper's files yet, so they cannot be checked. "
+                               "In Rushes, Manage → What runs by itself → Check now, then try again.")
         with urllib.request.urlopen(f"{url}/db/helper.php?code={f}", timeout=60) as r:
             data = r.read()
-        if not want.get(f):          # no list yet: the runner makes it within a minute of starting
-            raise RuntimeError("Rushes has not listed the helper's files yet, so they cannot be checked. Try again in a minute.")
         if hashlib.sha256(data).hexdigest() != want[f]:
             raise RuntimeError(f"{f} from Rushes does not match its fingerprint; nothing was installed. Try again in a minute.")
         compile(data, f, "exec")                 # a broken download never goes in
+        got[f] = data
+    for f, data in got.items():
         with open(os.path.join(DIR, f + ".new"), "wb") as fh:
             fh.write(data)
         os.replace(os.path.join(DIR, f + ".new"), os.path.join(DIR, f))

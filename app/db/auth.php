@@ -73,7 +73,11 @@ function signed_in(): bool {
 // Endpoints (run.php, queue.php) accept a signed-in session OR the password in
 // the request, so scripts and the page can both talk to them.
 function may_act(string $given = ''): bool {
-    return signed_in() || ($given !== '' && pass_ok($given));
+    if (signed_in()) return true;
+    if ($given === '') return false;
+    if (pass_ok($given)) return true;
+    sleep(1);                                       // slow a guessing loop down, as at sign-in
+    return false;
 }
 
 // ── the gate ───────────────────────────────────────────────────────────────
