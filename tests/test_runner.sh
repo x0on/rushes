@@ -101,6 +101,13 @@ mkdir -p "$R/tmp/.archive-runner.lock"; echo 999999 > "$R/tmp/.archive-runner.lo
 printf 'ACTION=df\n' > "$W/queue/l1.job"; run
 [ ! -e "$W/queue/l1.job" ] && grep -q "took over the job lock" "$W/job.log" && ok "a stale job lock is taken over" || no "stale job lock blocked jobs"
 
+# a long job (here: one still holding the job lock) does not hold up the search update
+sleep 30 & busy=$!
+mkdir -p "$R/tmp/.archive-runner.lock"; echo $busy > "$R/tmp/.archive-runner.lock/pid"
+printf 'ACTION=df\n' > "$W/queue/l2.job"; : > "$R/asked"; run
+[ -e "$W/queue/l2.job" ] && grep -q "import.php?part=web" "$R/asked" && ok "a job still running: the search update happens anyway, the next job waits" || no "upkeep waited for the job lock"
+kill $busy 2>/dev/null; rm -rf "$R/tmp/.archive-runner.lock" "$W/queue/l2.job"
+
 # the search update's look at VIDEO hangs: walked away from and counted, like any touch of VIDEO
 touch "$R/hang"; t0=$(date +%s); run; rm -f "$R/hang"
 [ $(( $(date +%s) - t0 )) -lt 15 ] && grep -q "VIDEO did not answer" "$W/job.log" && ok "a stuck look at VIDEO by the search update is walked away from" || no "search update held the runner"
@@ -116,6 +123,13 @@ n=$(grep -c "did not answer" "$W/job.log"); touch "$W/survey-now"; run
 [ "$(tail -1 "$R/asked")" = "http://127.0.0.1/db/import.php?part=web" ] && ok "tripped: the search update leaves VIDEO alone" || no "search update while tripped"
 printf 'ACTION=reset-breaker\n' > "$W/queue/3.job"; run
 [ ! -e "$W/video-tripped.txt" ] && ok "Try again resets it" || no "reset"
+
+# logs that only grow are trimmed; each folder keeps only its last proxy run
+head -c 6000000 /dev/zero | tr '\0' 'x' | fold -w 99 > "$W/helper.log"; echo "the newest line" >> "$W/helper.log"
+awk 'BEGIN { for (i = 0; i < 90000; i++) printf "f%d\tdone\t1\t0\t0\t1\t%d\n", i % 3, i }' > "$W/proxy-folders.tsv"
+run
+[ "$(wc -c < "$W/helper.log")" -le 1000000 ] && tail -1 "$W/helper.log" | grep -q "the newest line" && ok "a log past 5 MB keeps its newest 1 MB" || no "helper.log not trimmed"
+[ "$(wc -l < "$W/proxy-folders.tsv")" = 3 ] && grep -q "	89999$" "$W/proxy-folders.tsv" && ok "the proxy runs list keeps each folder's last run" || no "proxy-folders: $(wc -l < "$W/proxy-folders.tsv")"
 
 # STOP: nothing at all, not even the heartbeat
 rm -f "$W/runner-alive.txt"; touch "$W/STOP"; run

@@ -111,7 +111,7 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
         echo "waiting" > /share/Web/helper-builtin.txt
     else
         [ -f /share/Web/helper.log ] && [ "$(wc -c < /share/Web/helper.log)" -gt 5000000 ] && mv /share/Web/helper.log /share/Web/helper.log.old
-        "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
+        RUSHES_LOG=/share/Web/helper.log "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
         echo $! > /share/Web/helper.pid
         echo "started" > /share/Web/helper-builtin.txt
         echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper" >> "$LOG"
@@ -188,21 +188,123 @@ if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ]; }
 fi
 
 
-[ "$VSTALLED" = 0 ] && [ -f "$VSTALL" ] && rm -f "$VSTALL"     # a whole minute without a stall: the count starts again
 rm -rf "$TICK"; trap - EXIT INT TERM       # this minute's share work is done; long jobs have their own lock
-# One job runner at a time. ponytail: mkdir is the portable atomic lock (busybox
-# has no flock). The number inside lets a lock left by a run that was killed be
-# taken over, instead of blocking every job until the machine restarts.
-if ! mkdir "$LOCKDIR" 2>/dev/null; then
-    old=$(cat "$LOCKDIR/pid" 2>/dev/null)
-    if [ -n "$old" ]; then kill -0 "$old" 2>/dev/null && exit 0
-    elif [ -n "$(find "$LOCKDIR" -maxdepth 0 -mmin -2 2>/dev/null)" ]; then exit 0     # just made, number not written yet
+# ponytail: mkdir is the portable atomic lock (busybox has no flock). The
+# number inside lets a lock left by a run that was killed be taken over,
+# instead of blocking everything until the machine restarts.
+takelock() {     # $1 the lock, $2 what it is called in the log
+    if ! mkdir "$1" 2>/dev/null; then
+        old=$(cat "$1/pid" 2>/dev/null)
+        if [ -n "$old" ]; then kill -0 "$old" 2>/dev/null && return 1
+        elif [ -n "$(find "$1" -maxdepth 0 -mmin -2 2>/dev/null)" ]; then return 1     # just made, number not written yet
+        fi
+        rm -rf "$1"; mkdir "$1" 2>/dev/null || return 1
+        log "$(date '+%Y-%m-%d %H:%M:%S')  took over $2 from a run that had stopped"
     fi
-    rm -rf "$LOCKDIR"; mkdir "$LOCKDIR" 2>/dev/null || exit 0
-    log "$(date '+%Y-%m-%d %H:%M:%S')  took over the job lock from a run that had stopped"
+    echo $$ > "$1/pid"
+}
+
+# The upkeep that must not wait behind a long job (a duplicate scan takes
+# hours): the search update, the daily database copy, the private-file check.
+# It has its own lock, so it runs every minute whether or not a job is busy,
+# and never twice at once.
+MAINT=/tmp/.archive-runner-upkeep
+upkeep() {
+    # Logs that only grow: past 5 MB the oldest part goes, and the newest 1 MB
+    # stays, in the same file, so a program writing to it carries on. (Records
+    # that are needed for undo, or that Rushes reads from where it left off,
+    # are not here: dedupe-moves.tsv, cache-moves.tsv, proxy-made.tsv.)
+    for f in helper.log proxy.log proxy-built.tsv proxy-built.tsv.err proxy-speed.tsv proxy-failed.tsv; do
+        f=/share/Web/$f
+        [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 5000000 ] || continue
+        tail -c 1000000 "$f" | sed 1d > "$f.tmp" && cat "$f.tmp" > "$f"; rm -f "$f.tmp"
+        log "$(date '+%Y-%m-%d %H:%M:%S')  trimmed $(basename "$f") to its newest 1 MB"
+    done
+    # One line per proxy run, per folder: only each folder's last one is read.
+    f=/share/Web/proxy-folders.tsv
+    if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1000000 ]; then
+        awk -F'\t' '{ if (!($1 in last)) order[++n] = $1; last[$1] = $0 }
+                     END { for (i = 1; i <= n; i++) print last[order[i]] }' "$f" > "$f.tmp" && cat "$f.tmp" > "$f"; rm -f "$f.tmp"
+    fi
+
+    # Reconcile newer inventories even when nobody has the browser open. A failed
+    # attempt retains the old catalog and is retried by the next scheduled run.
+    # Set RUSHES_URL when the web application is served from a different address.
+    # Two halves: what lives in the web folder, however long it takes; then what
+    # reads VIDEO (new descriptions, the prepare list's proxy check), only when
+    # VIDEO may be read, and through v() like every other touch of VIDEO, so a
+    # dying disk is walked away from and counted towards the breaker.
+    IMP_URL="${RUSHES_URL:-http://127.0.0.1}/db/import.php"
+    if command -v curl >/dev/null 2>&1; then
+        SYNC=$(curl --silent --show-error --fail --max-time 3600 "$IMP_URL?part=web" 2>&1)
+        importv() { curl --silent --show-error --fail --max-time 110 "$IMP_URL?part=video" > /share/Web/import-video.out 2>&1; }
+        if may_v; then
+            VL0=$VLIMIT; VLIMIT=${IMPORT_LIMIT:-120}
+            v importv && SYNC="$SYNC $(cat /share/Web/import-video.out 2>/dev/null)"
+            VLIMIT=$VL0
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        SYNC=$(wget -q -O - "$IMP_URL?part=web" 2>&1)
+    else
+        SYNC="Search update needs curl or wget on the archive host"
+    fi
+    # Every minute it answers "current" when nothing changed. That is not news:
+    # written to the log each time, it buried the real jobs in a wall of it.
+    case "$SYNC" in
+        ''|*'"state":"current"'*) ;;
+        *) log "$(date '+%Y-%m-%d %H:%M:%S')  search update: $SYNC" ;;
+    esac
+
+    # HOW-IT-WORKS.md → Rushes' own backups: Rushes copies its database once a day (db-copy.sqlite, only when
+    # it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
+    # them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
+    # room for a big file: ten minutes.
+    DBC=$(head -1 /share/Web/db-copy.path 2>/dev/null)
+    case "$DBC" in /*/db-copy.sqlite) ;; *) DBC=/share/Web/db-copy.sqlite ;; esac
+    # A function, not "sh -c" with the path written into it: the path comes from a
+    # file PHP writes, and must never be read as shell code by this root script.
+    dbcopy() {
+        mkdir -p /share/VIDEO/_rushes/db-copies \
+            && cp "$DBC" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" \
+            && mv -f "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite"
+    }
+    if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/db-copied ]; } && may_v; then
+        DAY=$(date +%a); VL0=$VLIMIT; VLIMIT=600
+        if v dbcopy; then
+            touch /share/Web/db-copied
+            log "$(date '+%Y-%m-%d %H:%M:%S')  database copied to _rushes/db-copies/rushes-$DAY.sqlite"
+        fi
+        VLIMIT=$VL0
+    fi
+
+    # Can anything private be downloaded? (HOW-IT-WORKS.md → Security.) Once a
+    # day, this machine's own web server is asked for the files .htaccess forbids.
+    # Any it hands out are listed in exposed.txt, and Overview says so in red.
+    if [ ! -f /share/Web/exposed.txt ] || [ -n "$(find /share/Web/exposed.txt -mmin +1440 2>/dev/null)" ]; then
+        : > /share/Web/exposed.txt.new
+        if command -v curl >/dev/null 2>&1; then
+            for f in rushes.sqlite db-copy.sqlite ingest-queue.tsv helper-refused.tsv; do
+                [ -f "/share/Web/$f" ] || continue
+                code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "${RUSHES_URL:-http://127.0.0.1}/$f" 2>/dev/null)
+                [ "$code" = 200 ] && echo "$f" >> /share/Web/exposed.txt.new
+            done
+        fi
+        mv -f /share/Web/exposed.txt.new /share/Web/exposed.txt
+    fi
+}
+upkeep_once() {
+    if takelock "$MAINT" "the upkeep lock"; then upkeep; rm -rf "$MAINT"; fi
+    # A whole minute without a stall, upkeep included: the count starts again.
+    [ "$VSTALLED" = 0 ] && [ -f "$VSTALL" ] && rm -f "$VSTALL"
+    return 0
+}
+
+# One job runner at a time. A minute that finds a job still running does the
+# upkeep and leaves.
+if ! takelock "$LOCKDIR" "the job lock"; then
+    upkeep_once; exit 0
 fi
-echo $$ > "$LOCKDIR/pid"
-trap 'rm -rf "$LOCKDIR"' EXIT INT TERM
+trap 'rm -rf "$LOCKDIR"; [ "$(cat "$MAINT/pid" 2>/dev/null)" = "$$" ] && rm -rf "$MAINT"' EXIT INT TERM
 
 # keep the log from growing forever
 [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ] && tail -c 500000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
@@ -673,67 +775,4 @@ done
 
 [ -f "$STATUS" ] || echo "idle" > "$STATUS"
 
-# Reconcile newer inventories even when nobody has the browser open. A failed
-# attempt retains the old catalog and is retried by the next scheduled run.
-# Set RUSHES_URL when the web application is served from a different address.
-# Two halves: what lives in the web folder, however long it takes; then what
-# reads VIDEO (new descriptions, the prepare list's proxy check), only when
-# VIDEO may be read, and through v() like every other touch of VIDEO, so a
-# dying disk is walked away from and counted towards the breaker.
-IMP_URL="${RUSHES_URL:-http://127.0.0.1}/db/import.php"
-if command -v curl >/dev/null 2>&1; then
-    SYNC=$(curl --silent --show-error --fail --max-time 3600 "$IMP_URL?part=web" 2>&1)
-    importv() { curl --silent --show-error --fail --max-time 110 "$IMP_URL?part=video" > /share/Web/import-video.out 2>&1; }
-    if may_v; then
-        VL0=$VLIMIT; VLIMIT=${IMPORT_LIMIT:-120}
-        v importv && SYNC="$SYNC $(cat /share/Web/import-video.out 2>/dev/null)"
-        VLIMIT=$VL0
-    fi
-elif command -v wget >/dev/null 2>&1; then
-    SYNC=$(wget -q -O - "$IMP_URL?part=web" 2>&1)
-else
-    SYNC="Search update needs curl or wget on the archive host"
-fi
-# Every minute it answers "current" when nothing changed. That is not news:
-# written to the log each time, it buried the real jobs in a wall of it.
-case "$SYNC" in
-    ''|*'"state":"current"'*) ;;
-    *) log "$(date '+%Y-%m-%d %H:%M:%S')  search update: $SYNC" ;;
-esac
-
-# HOW-IT-WORKS.md → Rushes' own backups: Rushes copies its database once a day (db-copy.sqlite, only when
-# it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
-# them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
-# room for a big file: ten minutes.
-DBC=$(head -1 /share/Web/db-copy.path 2>/dev/null)
-case "$DBC" in /*/db-copy.sqlite) ;; *) DBC=/share/Web/db-copy.sqlite ;; esac
-# A function, not "sh -c" with the path written into it: the path comes from a
-# file PHP writes, and must never be read as shell code by this root script.
-dbcopy() {
-    mkdir -p /share/VIDEO/_rushes/db-copies \
-        && cp "$DBC" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" \
-        && mv -f "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite"
-}
-if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/db-copied ]; } && may_v; then
-    DAY=$(date +%a); VL0=$VLIMIT; VLIMIT=600
-    if v dbcopy; then
-        touch /share/Web/db-copied
-        log "$(date '+%Y-%m-%d %H:%M:%S')  database copied to _rushes/db-copies/rushes-$DAY.sqlite"
-    fi
-    VLIMIT=$VL0
-fi
-
-# Can anything private be downloaded? (HOW-IT-WORKS.md → Security.) Once a
-# day, this machine's own web server is asked for the files .htaccess forbids.
-# Any it hands out are listed in exposed.txt, and Overview says so in red.
-if [ ! -f /share/Web/exposed.txt ] || [ -n "$(find /share/Web/exposed.txt -mmin +1440 2>/dev/null)" ]; then
-    : > /share/Web/exposed.txt.new
-    if command -v curl >/dev/null 2>&1; then
-        for f in rushes.sqlite db-copy.sqlite ingest-queue.tsv helper-refused.tsv; do
-            [ -f "/share/Web/$f" ] || continue
-            code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "${RUSHES_URL:-http://127.0.0.1}/$f" 2>/dev/null)
-            [ "$code" = 200 ] && echo "$f" >> /share/Web/exposed.txt.new
-        done
-    fi
-    mv -f /share/Web/exposed.txt.new /share/Web/exposed.txt
-fi
+upkeep_once

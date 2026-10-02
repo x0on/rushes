@@ -237,22 +237,31 @@ MEDIA = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d",
 
 # ───────────────────────── is it already on the NAS? ────────────────────────
 
+MANIFEST_DAYS = 7                 # the archive's file list is fetched again when older than this
+
 def load_manifest(refresh=False):
     """size -> [paths] for every file on the NAS."""
-    if refresh or not MANIFEST.exists():
+    old = MANIFEST.exists() and time.time() - MANIFEST.stat().st_mtime > MANIFEST_DAYS * 86400
+    fetched = False
+    if refresh or old or not MANIFEST.exists():
         print(f"fetching the archive's file list from {NAS_URL} …")
         try:
-            urllib.request.urlretrieve(NAS_URL + "/manifest.tsv", MANIFEST)
+            urllib.request.urlretrieve(NAS_URL + "/manifest.tsv", str(MANIFEST) + ".new")
+            os.replace(str(MANIFEST) + ".new", MANIFEST); fetched = True
         except Exception as e:
-            # A stack trace here tells you nothing useful. The file simply is
-            # not on the NAS yet, and one button builds it.
-            sys.exit(
-                f"\nCannot read the archive's file list ({e}).\n\n"
-                "This is the list of every file's size in the archive — without it\n"
-                "there is no way to tell what is already there, so nothing can start.\n\n"
-                "Fix it in Manage:\n"
-                "  Bring in footage \u2192 Step 0 \u2192 Build the archive's file list\n"
-                "Wait a minute or two for it to finish, then run this again.\n")
+            if MANIFEST.exists():
+                print(f"  ! could not fetch it ({e}) — using the copy from "
+                      f"{time.strftime('%Y-%m-%d', time.localtime(MANIFEST.stat().st_mtime))}, plus what this computer copied since")
+            else:
+                # A stack trace here tells you nothing useful. The file simply is
+                # not on the NAS yet, and one button builds it.
+                sys.exit(
+                    f"\nCannot read the archive's file list ({e}).\n\n"
+                    "This is the list of every file's size in the archive — without it\n"
+                    "there is no way to tell what is already there, so nothing can start.\n\n"
+                    "Fix it in Manage:\n"
+                    "  Jobs and tools \u2192 Rebuild the file list\n"
+                    "Wait a few minutes for it to finish, then run this again.\n")
     by_size = defaultdict(list)
     with open(MANIFEST, errors="replace") as f:
         for line in f:
@@ -261,8 +270,18 @@ def load_manifest(refresh=False):
                 by_size[int(size)].append(path)
     total = sum(len(v) for v in by_size.values())
     # Files copied since the list was built are candidates too, or a clip that
-    # sits in two source folders would be copied twice in one night.
-    for path, size in checkpoints().db.execute("SELECT path, bytes FROM arrivals"):
+    # sits in two source folders would be copied twice in one night. Once a new
+    # list has them, they are forgotten here: the table does not grow for ever.
+    db = checkpoints().db
+    if fetched and total >= 1000:
+        remote = setting("archive.local", "/share/VIDEO")
+        listed = {p for v in by_size.values() for p in v}
+        gone = [(p,) for p, in db.execute("SELECT path FROM arrivals") if p.replace(NAS_MOUNT, remote, 1) in listed]
+        with db:
+            db.executemany("DELETE FROM arrivals WHERE path=?", gone)
+        if gone:
+            print(f"  {len(gone):,} files this computer copied are in the new list now — forgotten here")
+    for path, size in db.execute("SELECT path, bytes FROM arrivals"):
         by_size[size].append(path)
     if total < 1000:
         # An empty or stunted list makes everything look new. Copying 40 TB
@@ -290,6 +309,29 @@ def save_cache():
 
 
 _HEARTBEAT = lambda: None     # set while copying, so a long hash still reports progress
+
+# What is being read or written right now, and when data last moved. A read
+# from a dying disk can block for ever, and nothing in Python can cut it short.
+# What can be done: notice, say so on the pages, and after ten minutes stop
+# starting anything else, as after three stalls (rule 4). report_forever, in
+# its own thread, does the noticing (watch_feeding).
+_feeding = ["", 0.0]
+STUCK_SAY, STUCK_STOP = 120, 600
+
+def fed(what=""):
+    _feeding[0] = what; _feeding[1] = time.time()
+
+def watch_feeding():
+    """-> what to tell Rushes, or "" while data is moving."""
+    what, at = _feeding
+    idle = time.time() - at
+    if not what or idle < STUCK_SAY:
+        return ""
+    said = f"{what} — no data for {int(idle // 60)} min"
+    if idle >= STUCK_STOP and not _stopped_file().exists():
+        _stalls[0] = max(_stalls[0], 2)
+        stall(f"reading {what}")                   # the third in a row: stopped, until Try again
+    return said
 
 
 # The copy proof's fingerprint: XXH3-128, what the film world's copy-proof
@@ -319,8 +361,11 @@ def read_back(path):
                 fcntl.fcntl(f, 48, 1)                       # F_NOCACHE
             except (ImportError, OSError):
                 pass
-        for chunk in iter(lambda: f.read(8 << 20), b""):
-            h.update(chunk); _HEARTBEAT()
+        try:
+            for chunk in iter(lambda: f.read(8 << 20), b""):
+                h.update(chunk); fed(path); _HEARTBEAT()
+        finally:
+            fed()
     return h.hexdigest()
 
 
@@ -333,15 +378,18 @@ def digest(path, full=False):
     h = hashlib.blake2b(digest_size=16)
     try:
         with open(path, "rb") as f:
+            fed(path)
             if full or st.st_size <= HEAD_TAIL * 2:
                 for chunk in iter(lambda: f.read(8 << 20), b""):
-                    h.update(chunk); _HEARTBEAT()
+                    h.update(chunk); fed(path); _HEARTBEAT()
             else:
                 h.update(f.read(HEAD_TAIL))
                 f.seek(-HEAD_TAIL, os.SEEK_END)
                 h.update(f.read(HEAD_TAIL))
     except OSError:
         return None
+    finally:
+        fed()
     _cache[key] = h.hexdigest()
     return _cache[key]
 
@@ -1283,6 +1331,16 @@ def _mark_done(key):
         f.write(key + "\n")
 
 
+def _unmark_done(key):
+    """Asked again: a tidy-up stopped part-way is picked up when work resumes."""
+    with _io:
+        try:
+            keep = [l for l in DONE.read_text().splitlines() if l != key]
+            DONE.write_text("".join(l + "\n" for l in keep))
+        except OSError:
+            pass
+
+
 def move_proxy(old, new, o):
     """A proxy follows its original. Proxies mirror the archive's paths under
     PROXIES, so when a file moves, its proxy moves to the matching place — and
@@ -1407,7 +1465,14 @@ def tidy(plan_id):
     o = Origin("tidy", f"tidy-up plan {plan_id}", ARCHIVE, "archive", shelf)
     status(phase="tidying", source=plan_id, copied=0, of=len(work))
     moved, examples, mb = [], {}, 0
+    why_stopped = ""
     for i, (old, new, src, size) in enumerate(work, 1):
+        # Pause, Try again pending, or a share that stops answering: stop at
+        # this file, keep everything moved so far (recorded, search told), and
+        # carry on from here when work resumes. Nothing is half-moved: a rename
+        # either happened or did not.
+        if control().get("paused") or stopped():
+            why_stopped = "paused"; break
         if any(inside(src, b) for b in busy):
             o.add("skipped", old, new, size, "its folder is still being copied — the next tidy-up takes it")
         elif not os.path.isfile(old):
@@ -1416,14 +1481,18 @@ def tidy(plan_id):
             o.add("skipped", old, new, size, "a file of that name is already there — left where it was")
         else:
             try:
-                os.makedirs(os.path.dirname(new), exist_ok=True)
-                os.rename(old, new)
+                within("tidy", 30, lambda: (os.makedirs(os.path.dirname(new), exist_ok=True), os.rename(old, new)))
+                unstalled()
                 o.add("moved", old, new, size, src)
                 move_proxy(old, new, o)
                 moved.append((old, new)); mb += size
                 d = os.path.dirname(old)
                 while d.startswith(area) and d not in examples:
                     examples[d] = (old, new); d = os.path.dirname(d)
+            except Stalled:
+                stall("the archive share, moving " + os.path.basename(old))
+                o.add("skipped", old, new, size, "the archive did not answer within 30 s — tried again when the tidy-up carries on")
+                why_stopped = "the archive share did not answer"; break
             except OSError as e:
                 o.add("failed", old, new, size, str(e))
         if i % 500 == 0:
@@ -1439,9 +1508,14 @@ def tidy(plan_id):
     print(f"  every move: _rushes/origin/{o.path.name}")
     if moved:
         tell_moved(moved)
+    if why_stopped:
+        _unmark_done(f"tidy {plan_id}")
+        print(f"  stopped part-way ({why_stopped}) — the rest is moved when work resumes")
     history("tidied", f"tidy {plan_id}", len(moved), mb, time.time() - t0,
-            f"{left} left where they were" if left else "")
-    status(phase="done", source=f"tidy-up {plan_id}", copied=len(moved), of=len(work), failed=o.n["failed"])
+            (f"stopped part-way ({why_stopped}); the rest follows when work resumes. " if why_stopped else "")
+            + (f"{left} left where they were" if left else ""))
+    status(phase="stopped" if why_stopped else "done", source=f"tidy-up {plan_id}",
+           copied=len(moved), of=len(work), failed=o.n["failed"])
 
 
 def untidy(name):
@@ -1539,7 +1613,7 @@ def report_forever(every=20):
                       "cards plugged in now may not show in Ingest until it does. Copies carry on.")
             late = bool(at) and time.time() - at > 120
             py, model, speech = analysis_tools()
-            stuck = _net_stuck[0] or (_looking[0] if late or (not at and _looking[0]) else "")
+            stuck = watch_feeding() or _net_stuck[0] or (_looking[0] if late or (not at and _looking[0]) else "")
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
                                            "an": ("ready" if py else "missing") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
                                            "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
@@ -1858,6 +1932,24 @@ def only_one():
 
 _checked = [0.0]
 
+def trim_own_log(limit=5_000_000, keep=1_000_000):
+    """When this program's output goes to a log file (RUSHES_LOG: the Mac's
+    background service, or the helper built into the archive machine), that
+    file is kept small: past 5 MB, only the newest 1 MB stays. The file is
+    open for appending, so writing carries on at its new end."""
+    path = os.environ.get("RUSHES_LOG")
+    try:
+        if not path or os.path.getsize(path) <= limit:
+            return
+        sys.stdout.flush(); sys.stderr.flush()
+        with open(path, "rb") as f:
+            f.seek(-keep, os.SEEK_END); tail = f.read().split(b"\n", 1)[-1]
+        os.ftruncate(sys.stdout.fileno(), 0)
+        os.write(sys.stdout.fileno(), b"(older lines trimmed: this log is kept under 5 MB)\n" + tail)
+    except (OSError, ValueError):
+        pass
+
+
 def update_self():
     """Stay the same as the helper on the archive. Checked between steps,
     never during a copy; after an update it restarts itself in place, so a
@@ -1960,6 +2052,7 @@ def watch(root, every=20):
     refused = 0            # tries in a row Rushes said this is not the paired helper
     while True:
         update_self()                  # between steps only; restarts itself if it did
+        trim_own_log()
         learn_where()                  # and follows Rushes to a new address, if it has one
         checkpoints().flush()          # search updates still waiting, if any
         try:
@@ -2611,13 +2704,15 @@ def main():
             h, algo = new_fingerprint()              # the original's fingerprint, taken while reading it anyway
             before = os.stat(src)
             try:
+                fed(src)
                 with open(src, "rb") as fi, open(tmp, "wb") as fo:
                     while True:
                         buf = fi.read(8 << 20)
                         if not buf: break
                         fo.write(buf); h.update(buf); done_b += len(buf)
-                        progress(name)
-                    fo.flush(); os.fsync(fo.fileno())    # stored on the archive's disk, not only on its way there
+                        fed(src); progress(name)
+                    fed(dest); fo.flush(); os.fsync(fo.fileno())    # stored on the archive's disk, not only on its way there
+                fed()
                 shutil.copystat(src, tmp)
                 # As rclone does: an original that changed while it was read
                 # (still being written by a camera or another copy) gives a copy
@@ -2626,6 +2721,7 @@ def main():
                 if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
                     raise OSError("the original changed while it was being copied (still being written?)")
             except BaseException:
+                fed()
                 # No half-copied file is ever left behind, whatever stopped it.
                 try: os.remove(tmp)
                 except OSError: pass

@@ -426,6 +426,41 @@ class ProxyFollowsTests(unittest.TestCase):
         self.assertEqual(pb.read_text(), 'proxy'); self.assertEqual(pa.read_text(), 'another')
 
 
+class TidyPauseTests(unittest.TestCase):
+    """A tidy-up stops at the next file for Pause, keeps what it moved, and the
+    rest follows when work resumes."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_pause_stops_it_part_way_and_it_carries_on_later(self):
+        m = self.mod
+        m.ARCHIVE = str(self.archive / 'ARCHIVE')
+        m.SETTINGS = dict(m.SETTINGS, organise={'shelves': 'Library'})
+        srcs = []
+        for n in range(4):
+            p = self.archive / 'ARCHIVE' / 'old' / 'Kite' / f'A00{n}.MXF'
+            p.parent.mkdir(parents=True, exist_ok=True); p.write_text('x'); srcs.append(p)
+        rows = {str(p): [('copied', f'/src/Kite/{p.name}', '1')] for p in srcs}
+        plan = f"map\t/src\t{self.archive / 'Library' / 'PARKS'}\n"
+        asked = [0]
+        def control():
+            asked[0] += 1
+            return {'paused': asked[0] > 2}                    # paused after two files
+        common = dict(_fetch=lambda u: plan, fetch_queue=lambda *a: '', control=control, tell_moved=lambda *a: None,
+                      history=lambda *a: None, status=lambda **k: None, mhl_follow=lambda *a: None)
+        with patch.multiple(m, replay=lambda: rows, **common), patch('sys.stdout', new_callable=io.StringIO) as out:
+            m.tidy('t1')
+        moved = sorted(p.name for p in (self.archive / 'Library' / 'PARKS' / 'Kite').glob('*.MXF'))
+        self.assertEqual(moved, ['A000.MXF', 'A001.MXF'])
+        self.assertIn('stopped part-way (paused)', out.getvalue())
+        self.assertNotIn('tidy t1', m.DONE.read_text().splitlines())   # asked again when work resumes
+        left = {k: v for k, v in rows.items() if os.path.exists(k)}
+        common['control'] = lambda: {}
+        with patch.multiple(m, replay=lambda: left, **common), patch('sys.stdout', new_callable=io.StringIO):
+            m.tidy('t1')
+        self.assertEqual(len(list((self.archive / 'Library' / 'PARKS' / 'Kite').glob('*.MXF'))), 4)
+        self.assertIn('tidy t1', m.DONE.read_text().splitlines())
+
+
 class ProofTests(unittest.TestCase):
     """ASC MHL records beside the footage: written from the copy's own fingerprints,
     following tidy-up moves, and filled in and re-checked by the checker."""
@@ -601,6 +636,32 @@ class StallTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)                       # never two at once
         gate.set(); m._asking["x"].join(1)
         self.assertEqual(m.within("x", 1, lambda: 7), 7)
+
+    def test_a_read_that_stops_getting_data_is_said_then_stops_the_helper(self):
+        m = self.mod
+        m.fed("/VIDEO/A001.MXF"); self.assertEqual(m.watch_feeding(), "")          # data moving
+        m._feeding[1] = time.time() - 130
+        self.assertIn("A001.MXF — no data for 2 min", m.watch_feeding())          # said on the pages
+        self.assertFalse(m._stopped_file().exists())
+        m._feeding[1] = time.time() - 700
+        with patch.object(m, 'control', return_value={'nudge': 5}), patch('sys.stdout', new_callable=io.StringIO):
+            m.watch_feeding()
+            self.assertIn("A001.MXF", m.stopped())                                # stopped until Try again
+        m.fed(); self.assertEqual(m.watch_feeding(), "")
+        try: m._stopped_file().unlink()
+        except OSError: pass
+        m._stalls[0] = 0
+
+    def test_its_own_log_is_kept_under_5_mb(self):
+        m = self.mod; log = self.root / 'helper.log'
+        log.write_bytes(b'old line\n' * 700_000 + b'the newest line\n')
+        with open(log, 'a') as out, patch.dict(os.environ, {'RUSHES_LOG': str(log)}), patch.object(m.sys, 'stdout', out):
+            m.trim_own_log()
+            print('written after', file=out); out.flush()
+        data = log.read_bytes()
+        self.assertLess(len(data), 1_100_000)
+        self.assertTrue(data.startswith(b'(older lines trimmed'))
+        self.assertTrue(data.endswith(b'the newest line\nwritten after\n'))
 
     def test_three_stalls_stop_it_until_try_again(self):
         m = self.mod

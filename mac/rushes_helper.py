@@ -846,6 +846,18 @@ def service(args):
             time.sleep(60)
             return 1
     ingest = os.path.join(DIR, "ingest.py")
+    # Its output goes to helper.log, opened for appending, so the helper can
+    # keep the file small itself (trim_own_log in ingest.py).
+    log = os.path.join(LOGS, "helper.log")
+    try:
+        if "--service" not in args:
+            raise OSError("run by hand: output stays where it is")
+        os.makedirs(LOGS, exist_ok=True)
+        fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        os.dup2(fd, 1); os.dup2(fd, 2); os.close(fd)
+        os.environ["RUSHES_LOG"] = log
+    except OSError:
+        pass
     os.execv(sys.executable, [sys.executable, "-u", ingest, *args])
 
 

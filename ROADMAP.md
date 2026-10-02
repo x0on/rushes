@@ -81,14 +81,10 @@ happens in HOW-IT-WORKS.
 
 **Doing the work**
 
-- A copy or a check that hangs in the middle of a file is not walked away from
-  (only the quick questions are).
-- A tidy-up does not stop for Pause, or for a share that stops answering, once
-  it has started.
-- The catalogue update can hold the job lock for up to an hour, and a long job
-  (such as the duplicate scan) delays the catalogue update, the database copy
-  and the daily check.
-- Stalls during the database copy are not counted towards the breaker.
+- A copy or a check that hangs in the middle of a file cannot be cut short
+  (nothing can interrupt a stuck read). It is said after 2 minutes and stops
+  the helper after 10, but the stuck file stays stuck until the drive is
+  reconnected or the computer restarted.
 - Card ingests do not show a transfer percentage, only the live status. A card
   is copied whole, without looking for files already in the archive.
 - A new file list (`manifest.tsv`) replaces the old one before the size check
@@ -96,8 +92,8 @@ happens in HOW-IT-WORKS.
   (search keeps the old catalogue).
 - `ingest.py --undo` covers only the last run, and is not reachable from the
   pages.
-- Some lists grow for ever: the helper's arrivals table, and several proxy logs.
-  The built-in helper's log is only trimmed when the runner starts it.
+- The media ledger's source (`proxy-made.tsv`) grows by one line per proxy,
+  for ever: about 200 bytes each.
 - Ingest's date rules (before 2005, in the future, 1 January) are checked only
   by the page, not again by `queue.php`.
 - The `cachescan` job lists only Premiere's caches, not every kind in
@@ -126,7 +122,7 @@ What could go wrong, what was decided, and where it stands.
 | No backup of the footage (RAID is not a backup) | A second machine with a one-way copy that keeps versions, mounted by nobody; Rushes shows when it last ran and counts it as a copy | When a second machine is available |
 | Ransomware encrypts every share a computer has mounted | Snapshots; few accounts with write access; a backup with versions; the NAS never on the internet | Depends on the installation (INSTALL.md) |
 | A mistaken delete or move in Finder | The archive read-only for people; projects on a separate share; recycle bin on | Depends on the installation |
-| Running out of space: logs and records grow | Rotate logs, show growth, warn early | Partly done (two logs rotate) |
+| Running out of space: logs and records grow | Rotate logs, show growth, warn early | Mostly done: logs trimmed; growth not shown yet |
 | A system update removes the runner from the schedule | Overview says "not picking up jobs"; INSTALL.md says how to restore it | Done |
 | The database is damaged; pulls exist only there | A checked copy every day, a week kept | Done |
 | The helper's computer holds its own notes and the signing key | Keep a private copy of the key | To do |

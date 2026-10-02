@@ -421,10 +421,11 @@ where this section says otherwise.
   1. First the records: a file Rushes copied before, still there at the same
      size, is not copied again.
   2. Then the archive's file list, by size. The helper downloads it from Rushes
-     the first time and keeps that copy. It is not downloaded again unless the
-     helper is run with `--refresh-manifest`; what the helper copied since comes
-     from its own records. A file whose size appears nowhere is new, and nothing
-     needs to be read.
+     and keeps a copy, fetched again when it is more than 7 days old (or with
+     `--refresh-manifest`). If Rushes cannot be reached, the old copy is used
+     and it says so. What the helper copied since comes from its own records,
+     and is forgotten there once a new list has it. A file whose size appears
+     nowhere is new, and nothing needs to be read.
   3. When the sizes match, Rushes reads the first and last megabyte of both files
      and compares their fingerprints. With `--paranoid` it reads the whole
      file. Fingerprints are cached, so a second look is almost free.
@@ -462,6 +463,12 @@ is retried every 10 seconds, up to every 5 minutes.
   the folder stops part-way. It resumes later: files already in place match and
   are not copied again, and a cut-off file was only a `.part` and is redone.
 - **A full archive** stops the folder at once.
+- **A read or write that stops getting data.** A file can hang in the middle on
+  a dying disk, and nothing can cut that short. So the helper watches: after 2
+  minutes with no data, the pages say which file and for how long; after 10, it
+  stops by itself, as after three stalls (see [What runs by
+  itself](#what-runs-by-itself)). Restarting the helper's computer, or
+  reconnecting the drive, frees the stuck file.
 - **A network share that drops** is reconnected by the helper (on a Mac).
   - It first checks that the file server answers on its file-sharing port (445).
     Only then does it ask macOS to mount the share again, using the password
@@ -495,6 +502,7 @@ elsewhere, such as a card's, are left where they are. It is not in the pages.
 - recording: `mhl_copied()`, `mhl_write()`, `Origin`, `leave_a_note()`,
   `history()`, `send_file()`;
 - space and drives: `free_bytes()`, `Dropped`, `reachable()`, `reconnect()`;
+- a file that stops getting data: `fed()`, `watch_feeding()`;
 - undo: `undo()`.
 
 `transfer_state.py` keeps the list of files still to add to search. On the
@@ -741,8 +749,10 @@ its department's folder:
 - Search, every pull, and what describing found all follow each file to its new
   place.
 - Folders left empty are removed.
-- Once started, a tidy-up does not stop for Pause ([known
-  problem](ROADMAP.md#known-problems)).
+- A tidy-up stops at the next file when copying is paused, when the helper has
+  stopped by itself, or when a move does not answer within 30 seconds. What it
+  moved so far is recorded, and search is told; the rest is moved when work
+  resumes.
 
 **Put back** undoes a tidy-up from its record.
 
@@ -1043,16 +1053,19 @@ In this order:
 6. If the machine's scratch space (`/tmp`) is smaller than 256 MB, it mounts it
    again at 256 MB. It notes how full it is.
 7. It asks its own web server whether the helper is built in. If it is, and is
-   not running, and VIDEO may be read, it starts it. When it starts it, a log
-   over 5 MB is moved to `helper.log.old`.
+   not running, and VIDEO may be read, it starts it.
 8. **Proxies:** if a prepared folder needs proxies, nothing else is being made,
    and VIDEO may be read, it starts making them.
 9. **Updates:** if someone pressed **Check now** or **Try again**, an install
    just finished, or there is no list yet, and VIDEO may be read, it looks in
    `_rushes` for waiting updates.
-10. Then, if no job is running (one at a time; a lock left by a run that was
-    killed is taken over, and said in the log):
-    1. **the jobs** you asked for, in order;
+10. **The jobs** you asked for, in order, if no job is running already (one at
+    a time).
+11. **The upkeep,** whether or not a job is running, so a job that takes hours
+    (a duplicate scan) never holds it up. It has its own lock, so it never runs
+    twice at once:
+    1. logs that only grow are trimmed (see [What Rushes deletes or
+       moves](#what-rushes-deletes-or-moves));
     2. **the catalogue update,** from the web folder;
     3. **then, if VIDEO may be read, the look at VIDEO:**
        - new descriptions into search;
@@ -1062,12 +1075,15 @@ In this order:
     4. **the database copy** onto VIDEO, if there is a new one;
     5. **once a day,** the private-file check.
 
+A lock left by a run that was killed is taken over, and said in the log.
+
 **The time limit** works like this. Every automatic touch of VIDEO above (free
 space, updates, the look at VIDEO, the database copy) is started in the
 background and abandoned if it has not answered in time: 20 seconds, two
 minutes for the look at VIDEO, ten for the database copy. It is never waited
 on, because a process stuck on a dying disk cannot even be killed. After three
-in a row, the runner stops touching VIDEO by itself. Overview shows "Rushes
+in a row (a minute with no stall at all, upkeep included, starts the count
+again), the runner stops touching VIDEO by itself. Overview shows "Rushes
 stopped reaching the VIDEO share by itself", with **Try again**.
 
 Proxies, once started, and the jobs you ask for (duplicates, tests, rebuilds),
@@ -1120,7 +1136,8 @@ address it knows answers. It takes its saved progress with it (renaming its
 restarts itself.
 
 **Stopped by itself:** if a share does not answer within 30 seconds three times
-in a row, the helper stops touching shares. It says so in Rushes Helper
+in a row, or a file being copied or checked gets no data for 10 minutes, the
+helper stops touching shares. It says so in Rushes Helper
 ("Stopped by itself", with **Try again**) and on the pages ("helper stopped ·
 press Try again"). **Try again now** in Manage also clears it.
 
@@ -1129,15 +1146,16 @@ seconds after each answer: the switches, the state, and pairing.
 
 **In the code:**
 
-- the runner: `runner.sh`, top to bottom (`v()`, `may_v()`, `survey()`, the job
-  loop, `importv()`, `dbcopy()`);
+- the runner: `runner.sh`, top to bottom (`v()`, `may_v()`, `survey()`,
+  `takelock()`, the job loop, `upkeep()`, `importv()`, `dbcopy()`);
 - the server: `db/import.php` (its two halves), `db/prepare.php`
   (`prepare_advance()`);
 - the pages: `head.php` (`every()`, the wrapped `fetch`);
 - the helper, in `ingest.py`:
   - `watch()` (the main loop), `control()`, `wait()`, `backoff()`;
   - `report_forever()`, `look_forever()`, `volumes()`;
-  - `within()`, `stall()`, `stopped()`, `check_due()`;
+  - `within()`, `stall()`, `stopped()`, `check_due()`, `fed()`,
+    `watch_feeding()`, `trim_own_log()`;
   - `update_self()`, `learn_where()`, `rushes_elsewhere()`, `move_to()`,
     `remember_shares()`;
 - `transfer_state.py` (`flush()`);
@@ -1439,12 +1457,17 @@ and caches are **moved** to the holding folder, and only you empty it.
 - the pairing code once used, and the refused-helper list on pairing;
 - the cached plan, on Remake;
 - a zip once sent, and the holding-folder check's scratch folder;
-- the built-in helper's log, once past 5 MB, replaces the previous old one;
-- the job log is trimmed.
+- logs that only grow, once past 5 MB, keep their newest 1 MB: the built-in
+  helper's log, `proxy.log`, the proxy lists (`proxy-built.tsv` and its errors,
+  `proxy-speed.tsv`, `proxy-failed.tsv`); `proxy-folders.tsv` keeps each
+  folder's last run. The job log keeps its newest 500 KB once past 2 MB. Undo
+  logs and the media ledger (`proxy-made.tsv`) are never trimmed.
 
 **On the helper's computer:**
 
 - a downloaded file list that looks incomplete;
+- its notes of files it copied, once the archive's new file list has them;
+- its own log, past 5 MB, down to the newest 1 MB;
 - its list of originals after 7 days;
 - `stopped.txt` on Try again.
 
