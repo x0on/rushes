@@ -116,6 +116,26 @@ a Mac that also edits can pause it during a busy day.
   To work from elsewhere, use a VPN (on a QNAP, QVPN; or Tailscale). Do not
   forward its port to the internet, and do not expose the NAS's own admin page
   either.
+
+### From anywhere, on a phone too: any VPN
+
+Rushes is a web page at an address, so any VPN that reaches the machine
+Rushes runs on (a NAS, a Mac, a Windows computer) reaches Rushes: your
+office's own, the NAS maker's, WireGuard. Rushes neither includes one nor
+prefers one. If you have none, **Tailscale** is one of the easiest to set up:
+
+1. Make an account at tailscale.com. Their free plan is for personal,
+   non-commercial use; an office usually needs a paid plan (see their prices).
+   At work, ask IT first: they may already have a VPN.
+2. Install Tailscale on the machine Rushes runs on (on a QNAP: App Center →
+   Tailscale) and sign in.
+3. Install Tailscale on your phone or laptop, signed in to the same account.
+4. In the Tailscale app, find that machine and copy its address (100.…). In the
+   browser: `http://` and that address. Rushes opens; Manage asks its password.
+
+The machine running Rushes must be on and awake. On a phone everything works
+except installing Rushes Helper and Rushes Watcher, which are Mac apps: those
+pages say so.
 - **Watch for the red card "Anyone on your network can download …".** Once a
   day the runner checks that the database and other private files cannot be
   downloaded. If they can, your web server ignores `.htaccess`. Either turn

@@ -235,6 +235,10 @@ One Rushes, packaged three ways:
    **Start** and **Stop** there like any other app, and its own line, name and
    icon in Resource Monitor, so what Rushes costs the machine is plain to see.
    Not before the editors' projects are tried end to end.
+   Reaching Rushes from elsewhere, on a phone too, is any VPN's job: Rushes
+   names one easy option in its guide (INSTALL.md) and bundles none. When
+   Rushes runs on a Mac or Windows computer, its pages listen on the network,
+   not only on that computer, so a VPN reaches them.
    On a Mac, Rushes Helper and Rushes Watcher come as a disk image (.dmg)
    with the app beside an Applications folder to drag it onto, as Mac apps
    usually do, not a zip. Installing is once per computer, by the person or by
