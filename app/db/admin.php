@@ -54,18 +54,31 @@ if (isset($_POST['_newpass'])) {
   .transfer-summary .job-percent small { font-size:14px; font-weight:500; color:var(--muted) }
   .transfer-summary p { margin:5px 0; line-height:1.5 }
   .side .ev { padding: 9px 14px }
-  .hctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; padding: 10px 14px;
+  .hctl { display: block; margin: 12px 0; padding: 10px 14px;
           border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; background: var(--surface) }
   .hctl .t { flex: 1; min-width: 220px; color: var(--muted) }
   .hctl .t b { color: var(--fg); font-weight: 600 }
   .hctl .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none }
   .hctl .dot.ok { background: var(--ok) } .hctl .dot.off { background: var(--bad) }
   .hctl .btn { padding: 6px 12px; font-size: 12.5px }
-  .hctl .note { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--muted) }
+  .hctl .note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted) }
+  /* switches, as in Rushes Helper's own window: on means it runs */
+  .hctl .grp { margin: 4px 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+  .hctl .grp + .row { border-top: 0 }
+  .hctl .row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line) }
+  .hctl .row .t { flex: 1; min-width: 0; color: var(--fg) }
+  .hctl .row .t small { display: block; margin-top: 2px; color: var(--muted); line-height: 1.45 }
+  .hctl .sw { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; border-radius: 11px; border: 0; padding: 0;
+              background: var(--line); position: relative; cursor: pointer; flex: none }
+  .hctl .sw:after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+                    background: #fff; transition: left .15s }
+  .hctl .sw.on { background: var(--accent) } .hctl .sw.on:after { left: 18px }
+  .hctl .sw:disabled { opacity: .45; cursor: default }
+  .hctl .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
   .transfer-summary .now { border: 0; padding: 0; margin: 16px 0 10px; background: none }
   .transfer-summary .hctl { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none;
                             margin: 16px 0 0; padding: 14px 0 0 }
-  .hctl .alarm { flex-basis: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px;
+  .hctl .alarm { margin-top: 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px;
                  border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 8px; color: var(--fg) }
   .hctl .alarm p { margin: 0; flex: 1; min-width: 240px; line-height: 1.5 }
   .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px }
@@ -903,7 +916,7 @@ function drawNow(d) {
 let armed = { what: '', until: 0 }, said = { text: '', until: 0 };
 function drawHelper(d) {
   const h = d.helper || {}, el = $('hctl');
-  el.hidden = !['overview', 'transfers'].includes(pane) || !h.label;   // Pause wherever the transfer shows
+  el.hidden = !['overview', 'transfers'].includes(pane);   // the switches wherever the transfer shows
   if (el.hidden) return;
   const how = h.how === 'service' ? 'runs in the background' : h.how === 'window' ? 'runs in a Terminal window' : '';
   const seen = h.seen ? (h.fresh ? 'seen ' + h.seen_ago : 'not heard from since ' + h.seen_ago) : 'not started yet';
@@ -914,23 +927,33 @@ function drawHelper(d) {
   // (Just resumed: the helper's own status still says paused for a few seconds — not stuck.)
   const stuck = cur && h.fresh && !h.paused && !(d.copy && d.copy.phase === 'paused') && d.transfer.phase === 'interrupted' && !liveFor(d.transfer, d.copy)
     && Date.now() / 1000 - d.transfer.updated > 180;
-  const btns = [];
-  if (h.fresh) btns.push(h.paused ? ['resume', 'Resume copying'] : ['pause', 'Pause copying']);
-  if (h.fresh) btns.push(h.describe_paused ? ['describe-resume', 'Resume describing'] : ['describe-pause', 'Pause describing']);
-  if (h.fresh) btns.push(h.check_paused ? ['check-resume', 'Resume checking'] : ['check-pause', 'Pause checking']);
-  btns.push(['nudge', 'Try again now']);
-  btns.push(h.no_reconnect ? ['reconnect-on', 'Reconnect shares by itself'] : ['reconnect-off', 'Stop reconnecting shares']);
   const off = d.runner && d.runner.stopped;   // the runner on the server: STOP in the web folder
-  btns.push(off ? ['start-runner', 'Start Rushes on the server'] : ['stop-runner', 'Stop Rushes on the server']);
+  // Switches, as in Rushes Helper's own window: on means it runs; each acts at once and says what happened.
+  const sw = function (on, ids, title, sub, dis) {
+    return '<div class="row"><div class="t">' + esc(title) + '<small>' + esc(sub) + '</small></div>' +
+      '<button class="sw' + (on ? ' on' : '') + '" role="switch" aria-checked="' + on + '" aria-label="' + esc(title) +
+      '" title="' + (on ? 'Turn off' : 'Turn on') + '" data-h="' + (on ? ids[1] : ids[0]) + '"' + (dis ? ' disabled' : '') + '></button></div>';
+  };
+  const doing = h.describe && h.describe.phase === 'analysing' && !h.describe_paused
+    ? ' · describing ' + (h.describe.label || '') + (h.describe.of ? ' (' + h.describe.n + ' of ' + h.describe.of + ')' : '') : '';
+  const late = h.drives_late ? (h.drive_stuck ? h.drive_stuck.split('/').pop() + ' is not answering (' + h.drive_stuck + ')' : 'a connected drive is not answering') +
+    ', so cards plugged in now may not show in Ingest — eject it in Finder, or connect it again' : '';
+  const ask = h.fresh ? '' : ' Switches work once it is heard from again.';
   const now = Date.now();
-  el.innerHTML = '<span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span>' +
-    '<span class="t"><b>Helper on ' + esc(h.label) + '</b> · ' + esc([how, seen].filter(Boolean).join(' · ')) +
-    esc(updating) + (h.paused ? ' · <b>copying paused</b>' : '') + (h.describe_paused ? ' · <b>describing paused</b>'
-      : h.describe && h.describe.phase === 'analysing' ? ' · describing ' + esc((h.describe.label || '')) + (h.describe.of ? ' (' + esc(h.describe.n) + ' of ' + esc(h.describe.of) + ')' : '') : '') + (h.check_paused ? ' · <b>checking paused</b>' : '') + (h.drives_late ? ' · ' + (h.drive_stuck ? '<b>' + esc(h.drive_stuck.split('/').pop()) + '</b> is not answering (' + esc(h.drive_stuck) + ')' : 'a connected drive is not answering') +
-      ', so cards plugged in now may not show in Ingest — eject it in Finder, or connect it again' : '') + (h.no_reconnect ? ' · <b>not reconnecting shares</b>' : '') + (off ? ' · <b>Rushes stopped on the server</b>' : '') + '</span>' +
-    btns.map(function (b) {
-      const sure = armed.what === b[0] && now < armed.until;
-      return '<button class="btn quiet" data-h="' + b[0] + '">' + esc(sure ? 'Sure? ' + b[1] : b[1]) + '</button>'; }).join('') +
+  el.innerHTML = (h.label
+      ? '<div class="grp">Rushes Helper on ' + esc(h.label) + '</div>' +
+        '<div class="row"><span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span><div class="t">' +
+          esc([how, seen].filter(Boolean).join(' · ') + updating + doing) + (late ? '<small>' + esc(late) + '</small>' : '') + '</div>' +
+          '<button class="btn quiet" data-h="nudge">Try again now</button></div>' +
+        sw(!h.paused, ['resume', 'pause'], 'Copy footage', 'Off pauses copying at its next safe point; nothing is lost.' + ask, !h.fresh) +
+        sw(!h.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage', 'Off pauses describing; files already described are kept. Copying is not affected.' + ask, !h.fresh) +
+        sw(!h.check_paused, ['check-resume', 'check-pause'], 'Check copies', 'When there is nothing to copy, copies are read again against their fingerprints. Off pauses it; where it got to is kept.' + ask, !h.fresh) +
+        sw(!h.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, the helper connects it again once the server answers. Off: you connect drives in Finder.', false)
+      : '') +
+    '<div class="grp" style="margin-top:10px">On the server</div>' +
+    sw(!off, ['start-runner', 'stop-runner'], 'Rushes on the server', off
+      ? 'Off: nothing runs on the server (no jobs, no checks, nothing touching VIDEO) until you turn it on. These pages keep working.'
+      : 'Its jobs and checks, once a minute. Off stops all of it, for a disk rebuild or repairs, until you turn it on. These pages keep working.', false) +
     (stuck ? '<div class="alarm"><p><b>' + esc(cur.split('/').pop()) + ' stopped at ' + esc(clock(d.transfer.updated)) +
       ' and has not started again.</b> The helper keeps retrying by itself. If it keeps stopping — a file it cannot read, ' +
       'a source that drops — skip this folder for now: nothing already copied is lost, and ticking it again in Transfers brings it back.</p>' +
@@ -942,8 +965,8 @@ function drawHelper(d) {
   el.querySelectorAll('[data-h]').forEach(function (b) {
     b.onclick = async function () {
       const what = b.dataset.h;
-      if (armed.what !== what || Date.now() > armed.until) { armed = { what: what, until: Date.now() + 5000 }; drawHelper(d); return; }
-      armed = { what: '', until: 0 }; b.disabled = true; b.textContent = 'Asking…';
+      if (what === 'skip' && (armed.what !== what || Date.now() > armed.until)) { armed = { what: what, until: Date.now() + 5000 }; drawHelper(d); return; }
+      armed = { what: '', until: 0 }; b.disabled = true; if (!b.classList.contains('sw')) b.textContent = 'Asking…';
       const body = new URLSearchParams({ action: what }); if (what === 'skip') body.set('path', cur);
       try {
         const r = await (await fetch('helper.php', { method: 'POST', body: body })).json();

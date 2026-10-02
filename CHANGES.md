@@ -17,6 +17,13 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   archive.
 - **Deliverables in Search:** everything in Output folders, as its own section.
 - Duplicates never moves anything in Projects or the stock library.
+- **Switches in Manage, as in Rushes Helper:** Copy footage, Describe footage,
+  Check copies, Reconnect network drives by itself, and Rushes on the server,
+  each on or off with one line saying what off means. They act at once.
+- **A share that goes away is written down:** Rushes Helper notes when a network
+  share disappears from the Mac, whether it had touched it lately and what it
+  was doing, whether the server still answers, and macOS's own messages from
+  that minute (`~/archive-pilot/drops/`), so a drop can be traced.
 - **Stop Rushes on the server from Manage:** beside Pause copying on Overview
   (and on the runner's line in What runs by itself), the same as putting
   `STOP` in the web folder.

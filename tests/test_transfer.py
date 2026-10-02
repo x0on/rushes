@@ -569,6 +569,26 @@ class ProofTests(unittest.TestCase):
         self.posted = getattr(self, 'posted', []) + [(url, parse_qs(data.decode()) if data else {})]
         return io.BytesIO(b'{}')
 
+    def test_a_share_that_goes_away_is_written_down(self):
+        m = self.mod
+        mounts = ["//me@nas.test/VIDEO on /Volumes/VIDEO (smbfs, nodev, nosuid, mounted by me)\n"
+                  "//me@nas.test/Web on /Volumes/Web (smbfs, nodev, nosuid, mounted by me)\n",
+                  "//me@nas.test/Web on /Volumes/Web (smbfs, nodev, nosuid, mounted by me)\n"]
+        run = lambda *a, **k: m.subprocess.CompletedProcess(a, 0, mounts.pop(0) if a[0] == ["mount"] else "kernel: smb timeout\n", "")
+        m._netlook["/Volumes/VIDEO"] = [time.time() - 360, None]
+        with patch.object(m.subprocess, "run", side_effect=run), patch.object(m, "reachable", return_value=True), \
+             patch.object(m, "control", return_value={"paused": True}), patch.object(m.threading, "Thread") as T:
+            T.side_effect = lambda target, args, daemon: type("T", (), {"start": lambda self: target(*args)})()
+            m.drop_witness(); m.drop_witness()         # VIDEO there, then gone; Web stays
+        files = list((m.HOME / "drops").glob("* VIDEO.txt"))
+        self.assertEqual(len(files), 1)
+        said = files[0].read_text()
+        self.assertIn("VIDEO went away", said)
+        self.assertIn("6 min before", said)
+        self.assertIn("copying paused: no share is looked at", said)
+        self.assertIn("answers file sharing right after: yes", said)
+        self.assertFalse(list((m.HOME / "drops").glob("* Web.txt")))
+
     def test_new_code_is_looked_for_only_when_rushes_says_it_changed(self):
         m = self.mod
         asked = []

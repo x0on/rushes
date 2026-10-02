@@ -1869,12 +1869,64 @@ _looked = [[], 0.0]        # the latest look at what is plugged in here, and whe
 _looking = [""]            # the drive being looked at right now
 
 
+# ── a share that goes away by itself ────────────────────────────────────────
+# When a network share disappears from this Mac, it is written down at once:
+# when, whether this helper had touched that share lately and what it was doing,
+# whether the server still answers, and macOS's own account of that minute (its
+# file-sharing, network, sleep and wake messages). So "was it us?" has an answer
+# from facts, not guesses. Reading the list of mounts asks the shares nothing,
+# so this carries on while paused.
+_mounts_seen = {}                  # mount point -> server, as last seen
+def drop_witness():
+    global _mounts_seen
+    try:
+        out = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return
+    now = {}
+    for line in out.splitlines():
+        m = re.match(r"(//\S+) on (.*?) \((smbfs|afpfs|nfs|webdav)", line)
+        if m: now[m.group(2).rstrip("/")] = m.group(1).split("@")[-1]
+    for mount in sorted(set(_mounts_seen) - set(now)):
+        threading.Thread(target=_witness, args=(mount, _mounts_seen[mount]), daemon=True).start()
+    _mounts_seen = now
+
+
+def _witness(mount, srv):
+    at = time.time(); name = os.path.basename(mount) or mount
+    looked = _netlook.get(mount, [0])[0]
+    doing = ", ".join(f"{lane or 'copying'}: {ph}" for lane, (_, ph) in _last_push.items() if ph) or "nothing yet"
+    if control().get("paused"):
+        doing += " (copying paused: no share is looked at)"
+    answers = reachable("//" + srv) if srv else False
+    said = [f"{name} went away at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(at))} ({mount}, //{srv})",
+            "this helper last looked at it: " + (time.strftime("%H:%M:%S", time.localtime(looked)) + f", {round((at - looked) / 60)} min before"
+                                                 if looked else "not since it started"),
+            "this helper was doing: " + doing,
+            "the server answers file sharing right after: " + ("yes" if answers else "no"), ""]
+    if sys.platform == "darwin":
+        pred = ('eventMessage CONTAINS[c] "smb" OR process == "NetAuthSysAgent" OR (process == "kernel" AND '
+                '(eventMessage CONTAINS[c] "link" OR eventMessage CONTAINS[c] "wake" OR eventMessage CONTAINS[c] "sleep"))')
+        try:
+            log = subprocess.run(["log", "show", "--last", "5m", "--style", "compact", "--predicate", pred],
+                                 capture_output=True, text=True, timeout=120).stdout.splitlines()
+            said += ["macOS, the five minutes before (file sharing, network, sleep, wake):"] + log[-400:]
+        except Exception as e:
+            said.append(f"(macOS's log could not be read: {e})")
+    d = HOME / "drops"; d.mkdir(parents=True, exist_ok=True)
+    f = d / (time.strftime("%Y%m%d-%H%M%S", time.localtime(at)) + f" {name}.txt")
+    f.write_text("\n".join(said) + "\n")
+    print(f"\n{time.strftime('%H:%M:%S', time.localtime(at))}  {name} went away by itself. {said[1].capitalize()}; "
+          f"{said[2]}; {said[3]}. What macOS said that minute: {f}")
+
+
 def look_forever(every=20):
     """What is plugged in, looked at over and over in a thread of its own. A
     network drive that stops answering can hold a look up for minutes (the
     system waits on it); only this thread waits, and the reports carry on."""
     ok = lambda x: "\t" not in x and "\n" not in x
     while True:
+        drop_witness()
         if control().get("paused") or _stopped_file().exists():
             # Paused, or stopped by itself: no drive is looked at (a network share included).
             # The last look stands; a card plugged in now shows after Resume.
