@@ -9,7 +9,8 @@ one switch in System Settings macOS needs a person to turn on) ending on
 macOS with arguments, it runs the helper, with no window.
 
 The window is the app's own (see launcher.c); this file serves the page in it,
-on this computer only, behind a random key. Everything it does is written to
+on this computer only, behind a random key. What it sets up or changes (install,
+pairing, the switches, Try again, errors) is written to
 ~/Library/Logs/Rushes/setup.log. Nothing is written inside the app itself.
 """
 import http.server
@@ -33,7 +34,7 @@ LOGS = os.path.join(HOME, "Library", "Logs", "Rushes")
 LABEL = "org.rushes.helper"
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
-FILES = ("ingest.py", "transfer_state.py")
+FILES = ("ingest.py", "transfer_state.py", "analyze.py")
 # The helper writes this when a share stopped answering three times (RISKS.md
 # rule 4): it then touches no share until Try again here removes it.
 STOPPED = os.path.join(HOME, "archive-pilot", "stopped.txt")
@@ -136,10 +137,17 @@ def guess_url():
 
 # ── the helper's own files, kept outside the app so they can update ─────────
 def fetch_files(url):
+    """The helper's code, from Rushes: each file must match the fingerprint
+    Rushes lists for it (helper.php?hash) and be valid Python, or nothing goes in."""
+    import hashlib
     os.makedirs(DIR, exist_ok=True)
+    with urllib.request.urlopen(f"{url}/db/helper.php?hash", timeout=20) as r:
+        want = json.loads(r.read().decode("utf-8", "replace")) or {}
     for f in FILES:
         with urllib.request.urlopen(f"{url}/db/helper.php?code={f}", timeout=60) as r:
             data = r.read()
+        if want.get(f) and hashlib.sha256(data).hexdigest() != want[f]:
+            raise RuntimeError(f"{f} from Rushes does not match its fingerprint; nothing was installed. Try again in a minute.")
         compile(data, f, "exec")                 # a broken download never goes in
         with open(os.path.join(DIR, f + ".new"), "wb") as fh:
             fh.write(data)
@@ -271,9 +279,11 @@ def diagnostics(url):
     """Everything someone helping would ask for, in one plain text file on the
     Desktop, for the person to read before sending it anywhere — or not at all.
     Versions, switches, what the helper said lately. It names folders and files
-    (that is what the log is about); it holds no footage and no passwords, and
-    nothing is sent: where it goes next is the person's choice."""
-    import platform, hashlib
+    (that is what the log is about) and holds no footage. It should hold no
+    passwords — none are written on purpose — but it copies the logs as they
+    are, so it is for the person to read first. Nothing is sent: where it goes
+    next is the person's choice."""
+    import hashlib
     lines = []
     def add(title, value=""):
         lines.append(f"{title}: {value}" if value != "" else f"\n── {title} ──")
@@ -322,7 +332,7 @@ def diagnostics(url):
 # ── the window ──────────────────────────────────────────────────────────────
 class Window:
     """Everything the page shows, and what its buttons do. The page asks for
-    this state every 1.5 seconds and draws it; slow work runs in a thread and moves
+    this state 1.5 seconds after each answer and draws it; slow work runs in a thread and moves
     the state on, so the window never freezes and never goes away mid-way."""
 
     def __init__(self):
@@ -441,7 +451,7 @@ class Window:
         elif do == "service-on":
             self.run("Starting …", lambda: self.set(said="Running ✓ It carries on where it left off."
                                                     if start_service() else "Could not start it — see setup.log."))
-        elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "check-pause", "check-resume", "nudge"):
+        elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "check-pause", "check-resume"):
             self.run("Asking Rushes …", lambda: self.switch(do))
 
     def pair(self, code):
@@ -461,7 +471,6 @@ class Window:
         """Help is asked for in the open: a new GitHub issue for Rushes, filled in
         with what to say, and the diagnostics on the Desktop to read first and
         attach only if nothing in it is private (issues are public)."""
-        import platform
         out = diagnostics(self.s["url"])
         try:
             with open(os.path.join(APP, "Contents", "Info.plist"), "rb") as f:
@@ -475,7 +484,8 @@ class Window:
         subprocess.run(["open", "https://github.com/x0on/rushes/issues/new?" +
                         urllib.parse.urlencode({"title": "Help: ", "body": body})])
         self.set(said="A new GitHub issue is open in your browser, and " + os.path.basename(out) +
-                 " is on your Desktop. Issues are public: read the file before you attach it. Nothing was sent.")
+                 " is on your Desktop. Issues are public: read the file before you attach it. The issue page's address "
+                 "carries this Rushes Helper's version, the macOS version and the processor type; nothing else was sent.")
 
     def switch(self, do):
         r = rushes(self.s["url"], "/db/helper.php", {"action": do})
@@ -489,8 +499,7 @@ class Window:
             "reconnect-off": "Off ✓ It no longer connects dropped network drives by itself — no more “problem connecting” windows. Connect them in Finder; it carries on once they are back.",
             "reconnect-on": "On ✓ It connects dropped network drives again by itself, only when the server answers.",
             "check-pause": "Checking paused ✓ It stops after the file it is reading; where it got to is kept.",
-            "check-resume": "Checking resumed ✓ It carries on whenever there is nothing to copy.",
-            "nudge": "Asked ✓ It stops waiting and looks again now."}[do])
+            "check-resume": "Checking resumed ✓ It carries on whenever there is nothing to copy."}[do])
         log(f"switch: {do}")
 
     def check(self, url):
@@ -584,11 +593,10 @@ th,td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid va
 <script>
 const K = location.pathname;       // the page's own key, needed for every question
 const STEPS = [['welcome','Welcome'],['address','Where Rushes is'],['install','Installing'],['fda','Full Disk Access'],['all-set','All set']];
-let S = {}, typed = null, sent = '', credits = null, paircode = '';
+let S = {}, typed = null, credits = null, paircode = '';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function act(d, extra) {
-  sent = d;
   try { await fetch(K + 'act', {method: 'POST', body: JSON.stringify(Object.assign({do: d}, extra || {}))}); } catch (e) {}
   if (d === 'done') { document.body.innerHTML = ''; return; }
   poll();
@@ -686,7 +694,7 @@ function draw() {
     b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
   case 'removed':
-    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag Rushes Helper from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access.</p>';
+    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag Rushes Helper from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ~/archive-pilot (its progress and pairing), ~/Library/Application Support/Rushes and ~/Library/Logs/Rushes.</p>';
     f = btn('Done', 'done', true); break;
   }
   if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left"><button data-credits="1">What it is made of</button> ')
@@ -707,7 +715,7 @@ function draw() {
   });
 }
 const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
-  analysing:'Describing footage', tidying:'Tidying up', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
+  analysing:'Describing footage', tidying:'Tidying up', idle:'Nothing to describe', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
 function home(s) {
   const n = s.now || {}, on = s.running;
   const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
@@ -743,26 +751,31 @@ function home(s) {
       sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes) +
     '</div>' +
     // Support: said here, where the person at this Mac sees it, so nobody has
-    // to wonder whether someone can reach in. Off, and not built yet.
+    // to wonder whether someone can reach in. There is no way in.
     '<div class="box">' +
       '<div class="row"><div class="t">Diagnostics<small>Everything someone helping you would ask for, in one text file on your Desktop, ' +
         'to read before you send it to anyone: versions, switches, and what the helper said lately. It names folders and files; ' +
-        'it holds no footage and no passwords. Nothing is sent.</small></div>' + btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
+        'it holds no footage, and no passwords are written to it on purpose — read it first. Nothing is sent.</small></div>' + btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
       '<div class="row"><div class="t">Ask for help<small>Opens a new issue for Rushes on GitHub, where help is asked for in the open, ' +
         'and saves the diagnostics on your Desktop. GitHub issues are public: read the file, and attach it only if nothing in it is private.</small></div>' +
         btn('Ask for help', 'ask-help', false, !!s.busy) + '</div>' +
       '<div class="row"><div class="t">Support access<small>None. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
         'Help happens in the open, on GitHub, with what you choose to share.</small></div></div>' +
     '</div>' +
-    '<p class="muted" style="font-size:12.5px">Updates: Rushes Helper keeps its own code the same as your Rushes server\'s (' + esc(s.url) +
-      ', never anywhere else), checking once an hour and only between jobs. Nothing else can reach this Mac through it.</p>' +
+    '<p class="muted" style="font-size:12.5px">Updates: the helper keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) +
+      ', never anywhere else), checking once an hour and only between jobs. This app itself is updated by downloading a new one from Setup. Nothing else can reach this Mac through it.</p>' +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }
+// Asks again 1.5 s after each answer, never while the last question is still out.
+let polling = false;
 async function poll() {
+  if (polling) return;
+  polling = true;
   try { S = await (await fetch(K + 'state')).json(); draw(); } catch (e) {}
+  polling = false;
 }
-poll(); setInterval(poll, 1500);
+(function again() { poll().then(function () { setTimeout(again, 1500); }); })();
 </script></body></html>"""
 
 
