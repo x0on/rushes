@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.10.1 — October 2026
+
+- **One Rushes icon on a Mac** that runs both apps: the Helper's menu has a
+  section for each, and the Watcher hides its own icon while the Helper runs.
+- **Setup 06, plain:** a Download Rushes Watcher button (or a link to send),
+  name and pair, and every editor's computer in a list, with when it was last
+  heard from and its last saved project.
+
 ## 0.10.0 — October 2026
 
 - **Editors' work, kept per computer.** Editors save Premiere projects
@@ -20,11 +28,6 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 - **Switches in Manage, as in Rushes Helper:** Copy footage, Describe footage,
   Check copies, Reconnect network drives by itself, and Rushes on the server,
   each on or off with one line saying what off means. They act at once.
-- **One Rushes icon on a Mac** that runs both apps: the Helper's menu has a
-  section for each, and the Watcher hides its own icon while the Helper runs.
-- **Setup 06, plain:** a Download Rushes Watcher button (or a link to send),
-  name and pair, and every editor's computer in a list, with when it was last
-  heard from and its last saved project.
 - **A share that goes away is written down:** Rushes Helper notes when a network
   share disappears from the Mac, whether it had touched it lately and what it
   was doing, whether the server still answers, and macOS's own messages from
