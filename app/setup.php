@@ -436,8 +436,8 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
                  itself from here — the terminal is needed exactly once. -->
             <div class="how-h">Install Rushes Helper on <?= $e($hwho) ?> — once</div>
             <p class="note" style="margin:0 0 8px">After that it runs in the background: it starts when <?= $e($hwho) ?> is on
-               and logged in, starts again if it stops, keeps the Mac awake only while it copies, and updates itself
-               whenever Rushes has a new version. No window to keep open.</p>
+               and logged in, starts again if it stops, keeps the Mac awake only while it copies. No window to keep open. When Rushes
+               has a newer version, it offers <b>Update to …</b> in its menu; nothing changes until someone presses it.</p>
             <?php if (!is_readable(archive_dir() . '/_rushes/Rushes Helper.zip')): ?>
               <div class="seen bad">Rushes Helper for Mac is not on the archive yet: it goes in <b>_rushes/Rushes Helper.zip</b>.</div>
             <?php endif; ?>
@@ -596,9 +596,13 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['host']) ?>">Remove</button>
           </div>
         <?php endforeach; ?>
-        <p class="note" style="margin:8px 0 4px">On the editor's computer: open Rushes in the browser, come to this page,
-          <a href="/db/helper.php?app=watcher">download Rushes Watcher</a>, open it and follow its window. When it asks
-          for the code: give the computer a name here (the editor's, usually), press the button, and Copy.</p>
+        <ol class="how">
+          <li>On the editor's computer, open Rushes in the browser, come to this page and download Rushes Watcher
+            (about 30 MB). Open it and follow its window; it is installed once, and asks before any update.
+            <p style="margin:10px 0 6px"><a class="btn" href="/db/helper.php?app=watcher">Download Rushes Watcher</a></p></li>
+          <li>When its window asks for the code: give the computer a name here (the editor's, usually), press
+            <b>Add an editor's computer</b>, and <b>Copy</b>. In Rushes Watcher: <b>Paste the code from Rushes</b>.</li>
+        </ol>
         <p style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="text" id="wName" placeholder="Name, e.g. Maria" maxlength="40" style="width:14em">
           <button type="button" class="btn" id="wPair">Add an editor's computer</button> <span id="wSaid"></span></p>
