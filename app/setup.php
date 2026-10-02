@@ -93,9 +93,6 @@ if (($_POST['_save'] ?? '') === '1') {
     };
     $s['duplicates'] = ['never_keep' => $names('d_never'), 'card_dumps' => $names('d_cards')];
 
-    // Editors' work (06): the stock library's folder in the archive.
-    $lib = trim(preg_replace('#[/\\\\:*?"<>|]+#', ' ', (string)($_POST['lib'] ?? '')));
-    $s['library']['folder'] = $lib !== '' ? mb_substr($lib, 0, 80) : 'Stock Library';
     // A project resting, and moved aside (projects.php): days without a save. 0 = never moved aside.
     $s['projects']['rest_days']  = max(1, min(365, (int)($_POST['rest_days'] ?? 10)));
 
@@ -617,10 +614,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           </div>
         <?php endforeach; ?>
         </div>
-        <details style="margin-top:14px"><summary class="note">More settings: the stock library's folder, and when a project is called resting</summary>
-          <label class="f"><span>The stock library's folder, in the archive</span>
-            <input type="text" name="lib" value="<?= $e(settings()['library']['folder'] ?? 'Stock Library') ?>">
-            <small>Music, stock footage and sound effects that projects use are kept here once, however many projects use them.</small></label>
+        <details style="margin-top:14px"><summary class="note">More settings: when a project is called resting</summary>
           <label class="f"><span>Resting after</span>
             <input type="number" name="rest_days" min="1" max="365" style="width:7em" value="<?= (int)(settings()['projects']['rest_days'] ?? 10) ?>"> days without a save
             <small>Nothing moves: Manage and the editor's Watcher say it, so everyone knows the project is quiet.</small></label>
