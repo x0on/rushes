@@ -230,6 +230,11 @@ One Rushes, packaged three ways:
    machine first and shows progress while the models download. On managed
    computers nothing is a loose script: the app is signed and notarized, so IT
    approves one publisher once.
+   On a NAS, the server package is also an app of the NAS's own (a QNAP
+   package; Synology's later): installed and updated from App Center, with
+   **Start** and **Stop** there like any other app, and its own line, name and
+   icon in Resource Monitor, so what Rushes costs the machine is plain to see.
+   Not before the editors' projects are tried end to end.
 
 ## Decided, and why
 
