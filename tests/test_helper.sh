@@ -79,6 +79,23 @@ check 'call GET "{\"p\":\"$ROOT/archive/x.txt\"}" "{}" db/play.php | grep -q "no
       'only a proxy can be played, never another file'
 check 'call GET "{\"p\":\"/etc/passwd\"}" "{}" db/play.php | grep -q "No proxy"' 'a path the catalogue does not know plays nothing'
 
+# editors' computers: a Watcher pairs with its own code and can only deliver
+code=$(SIGNED=1 call POST "{}" "{\"action\":\"start\",\"role\":\"watcher\"}" db/pair.php | sed 's/.*"code":"\([0-9]*\)".*/\1/')
+wid=$(call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\"}" db/pair.php | sed 's/.*"id":"\([0-9a-f]*\)".*/\1/')
+check '[ ${#wid} = 32 ] && ! grep -q "$wid" "$ROOT/app/watchers.php"' 'an editor'"'"'s computer pairs as a Watcher; Rushes keeps only the fingerprint of its ID'
+check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "\"shelf\":\"Library\""' 'a Watcher asks where things are'
+check 'WATCHER=nope call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'an unpaired one is refused'
+check 'WATCHER=$wid call GET "{\"queue\":\"\"}" "{}" db/helper.php | grep -q "not the paired helper" || [ ! -s "$ROOT/app/helper-id.php" ]' 'a Watcher is not the helper'
+key=$(WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | sed 's/.*"key":"\([0-9a-f]*\)".*/\1/')
+WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"b1\"}" db/watcher.php >/dev/null
+check 'grep -qx "deliver	$key/b1" "$ROOT/app/ingest-queue.tsv"' 'a delivery is queued for the helper, in that Watcher'"'"'s own folder'
+check 'WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"../x\"}" db/watcher.php | grep -q "not a batch"' 'and nowhere else'
+WATCHER=$wid call POST "{}" "{\"action\":\"project\",\"path\":\"PARKS/2026/20260929 Kite/Kite.prproj\",\"saved\":\"100\",\"files\":\"12\",\"outside\":\"2\"}" db/watcher.php >/dev/null
+check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"PARKS/2026/20260929 Kite/Kite.prproj\"}" "{}" db/watcher.php | grep -q "\"files\":\[\]\|\"files\":{}"' 'a project is known; nothing delivered for it yet'
+k16=$(php_key=$(grep -o "'[0-9a-f]\{64\}'" "$ROOT/app/watchers.php" | head -1 | tr -d "'"); echo "$php_key" | cut -c1-16)
+SIGNED=1 call POST "{}" "{\"action\":\"forget\",\"key\":\"$k16\"}" db/pair.php >/dev/null
+check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'a removed computer can no longer deliver'
+
 # another website cannot make a browser press Rushes' buttons; Rushes' own pages can
 check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "another website"' \
       'a button pressed from another website is refused, even with the password'

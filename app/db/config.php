@@ -571,6 +571,32 @@ function helper_paired(): array {
     return is_array($p) && !empty($p['id']) ? $p : [];
 }
 
+// Rushes Watchers, one on each editor's computer (HOW-IT-WORKS.md → Projects
+// in and out). Many, each paired once, each only able to deliver files. Kept
+// by the fingerprint of each ID, never the ID itself, in a .php file that
+// prints nothing: a copy of the file does not let anyone act as a Watcher.
+function watchers_file(): string { return web_dir() . '/watchers.php'; }
+function watchers(): array {
+    $w = is_readable(watchers_file()) ? @include watchers_file() : [];
+    return is_array($w) ? $w : [];
+}
+// The Watcher asking (its ID in X-Rushes-Watcher), or null.
+function watcher_me(): ?array {
+    $id = (string)($_SERVER['HTTP_X_RUSHES_WATCHER'] ?? '');
+    if ($id === '') return null;
+    $h = hash('sha256', $id);
+    foreach (watchers() as $k => $w) if (hash_equals((string)$k, $h)) return $w + ['key' => substr($k, 0, 16)];
+    return null;
+}
+function watcher_gate(): array {
+    $w = watcher_me();
+    if ($w) return $w;
+    http_response_code(403); header('Content-Type: application/json');
+    echo json_encode(['error' => 'not a paired Watcher',
+        'why' => 'Pair this computer in Rushes → Setup → Editors\' computers → Add one, and enter the six numbers in Rushes Watcher.']);
+    exit;
+}
+
 function php_keep(string $f, array $a): bool {
     $ok = @file_put_contents("$f.new", "<?php return " . var_export($a, true) . ";\n") !== false && @rename("$f.new", $f);
     if ($ok) { @chmod($f, 0600); if (function_exists('opcache_invalidate')) @opcache_invalidate($f, true); }

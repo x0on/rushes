@@ -17,6 +17,8 @@ $_SERVER['REQUEST_METHOD'] = $method;
 $_SERVER['HTTP_HOST'] = 'nas.test';
 if (getenv('ORIGIN') !== false) $_SERVER['HTTP_ORIGIN'] = getenv('ORIGIN');
 if (getenv('RANGE')) $_SERVER['HTTP_RANGE'] = getenv('RANGE');
+if (getenv('WATCHER')) $_SERVER['HTTP_X_RUSHES_WATCHER'] = getenv('WATCHER');
+if (getenv('HELPERID')) $_SERVER['HTTP_X_RUSHES_HELPER'] = getenv('HELPERID');
 if (getenv('SIGNED')) { @session_start(); $_SESSION['rushes_in'] = true; }      // as if signed in to Manage
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];
 include "$app/$door";

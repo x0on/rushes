@@ -93,6 +93,14 @@ if (($_POST['_save'] ?? '') === '1') {
     };
     $s['duplicates'] = ['never_keep' => $names('d_never'), 'card_dumps' => $names('d_cards')];
 
+    // Editors' work (06): two shares picked from what this machine has, where
+    // the helper finds Deliveries, and the stock library's folder in the archive.
+    $pick('p_proj',   'shares.projects',          $lpath);
+    $pick('p_deliv',  'shares.deliveries',        $lpath);
+    $pick('p_deliv_h','shares.deliveries_helper', $hpath);
+    $lib = trim(preg_replace('#[/\\\\:*?"<>|]+#', ' ', (string)($_POST['lib'] ?? '')));
+    $s['library']['folder'] = $lib !== '' ? mb_substr($lib, 0, 80) : 'Stock Library';
+
     if ($bad) {
         $said = implode(' ', $bad);
     } else {
@@ -544,6 +552,80 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <small>Where whole cards were once copied as they were. The copy on your shelf
             (<?= shelf_name() !== '' ? '<b>' . $e(shelf_name()) . '</b>' : 'chosen in Reorganize' ?>) wins over these.
             Leave it empty and neither side is preferred.</small></label>
+      </div>
+
+      <!-- ══ 06 editors' work ══ -->
+      <?php $pProj = s_path('shares.projects'); $pDel = s_path('shares.deliveries'); $pDelH = s_path('shares.deliveries_helper');
+            $shareOpts = function (string $cur) use ($local, $e) {
+                $o = '<option value="">— not set</option>'; $seen = false;
+                foreach ($local as $v) { $seen = $seen || $v['path'] === $cur;
+                    $o .= '<option value="' . $e($v['path']) . '"' . ($v['path'] === $cur ? ' selected' : '') . '>' . $e($v['name']) . ' — ' . $e($v['path']) . '</option>'; }
+                if (!$seen && $cur !== '') $o .= '<option value="' . $e($cur) . '" selected>' . $e($cur) . ' (not visible right now)</option>';
+                return $o;
+            }; ?>
+      <div class="grp">
+        <h2><span>06 /</span> Editors' work</h2>
+        <p>Editors work on the <b>Projects</b> share and only read the archive. Rushes Watcher, on each
+           editor's computer, copies the files a project uses that are not on the server yet (stock music,
+           downloads, graphics) into the <b>Deliveries</b> share, and Rushes takes them into the archive from
+           there, checked like a card. Editors should be able to write to Projects and Deliveries, and only
+           read the archive.</p>
+        <label class="f"><span>The Projects share, on this machine</span>
+          <select name="p_proj"><?= $shareOpts($pProj) ?></select></label>
+        <label class="f"><span>The Deliveries share, on this machine</span>
+          <select name="p_deliv"><?= $shareOpts($pDel) ?></select></label>
+        <label class="f"><span>Where the helper finds Deliveries</span>
+          <select name="p_deliv_h">
+            <option value="">— not set</option>
+            <?php $seen = false; foreach ($hv['vols'] as $v): $seen = $seen || $v['path'] === $pDelH; ?>
+              <option value="<?= $e($v['path']) ?>" <?= $v['path'] === $pDelH ? 'selected' : '' ?>><?= $e($v['name']) ?></option>
+            <?php endforeach; if (!$seen && $pDelH): ?>
+              <option value="<?= $e($pDelH) ?>" selected><?= $e($pDelH) ?> (not reported right now)</option>
+            <?php endif; ?>
+          </select></label>
+        <label class="f"><span>The stock library's folder, in the archive</span>
+          <input type="text" name="lib" value="<?= $e(settings()['library']['folder'] ?? 'Stock Library') ?>">
+          <small>Music, stock footage and sound effects that projects use are kept here once, in Music,
+            Stock footage and Sound effects, however many projects use them.</small></label>
+
+        <!-- Editors' computers: any number of Rushes Watchers, each paired once, each only able to deliver. -->
+        <?php $ws = watchers(); ?>
+        <div class="how-h" style="margin-top:14px">Editors' computers</div>
+        <?php if (!$ws): ?><p class="note" style="margin:0">None yet.</p><?php endif; ?>
+        <?php foreach ($ws as $k => $w): ?>
+          <div class="seen ok" style="display:flex;gap:10px;align-items:center">
+            <span>✓ <?= $e($w['host'] ?: 'a computer') ?> &mdash; paired <?= $e(date('j M Y', (int)$w['at'])) ?></span>
+            <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['host']) ?>">Remove</button>
+          </div>
+        <?php endforeach; ?>
+        <p style="margin:8px 0"><button type="button" class="btn" id="wPair">Add an editor's computer</button> <span id="wSaid"></span></p>
+        <script>
+        (function () {
+          var b = document.getElementById('wPair'), said = document.getElementById('wSaid');
+          b.onclick = async function () {
+            b.disabled = true; b.textContent = 'Asking …';
+            try {
+              var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start', role: 'watcher'})})).json();
+              if (r.error) throw new Error(r.error);
+              said.innerHTML = 'Type <b style="font-size:20px;letter-spacing:3px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
+                '</b> in Rushes Watcher on the editor\'s computer within ten minutes. It works once.';
+            } catch (e) { said.textContent = 'Could not make a code: ' + e.message; }
+            b.disabled = false; b.textContent = 'Add an editor\'s computer';
+          };
+          document.querySelectorAll('.wForget').forEach(function (x) {
+            x.onclick = async function () {
+              // That computer stops being able to deliver: asked twice, on the button.
+              if (!sure(x, 'Sure? ' + (x.dataset.host || 'It') + ' can no longer deliver files', 'forget:' + x.dataset.key)) return;
+              x.disabled = true;
+              try {
+                var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'forget', key: x.dataset.key})})).json();
+                if (r.error) throw new Error(r.error);
+                x.textContent = 'Removed ✓';
+              } catch (e) { x.textContent = 'Did not happen: ' + e.message; x.disabled = false; }
+            };
+          });
+        })();
+        </script>
       </div>
 
       <input type="hidden" name="_save" value="1">

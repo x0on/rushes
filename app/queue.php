@@ -17,6 +17,8 @@ require_once __DIR__ . '/db/auth.php';
 require_once __DIR__ . '/db/transfers.php';
 
 $OUT = web_dir() . '/ingest-queue.tsv';
+// one writer of the queue at a time (watcher.php and tidy.php add to it too)
+$QLOCK = fopen(web_dir() . '/ingest-queue.lock', 'c'); if ($QLOCK) flock($QLOCK, LOCK_EX);
 function bail(int $code, string $why) { http_response_code($code); echo json_encode(['error' => $why]); exit; }
 
 // What is already asked for, split by kind, so each door only rewrites its own.
@@ -25,6 +27,7 @@ foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
     $f = explode("\t", rtrim($l, "\n"));
     if (count($f) >= 3 && in_array($f[1], ['copied', 'refused'], true)) $landed[$f[2]] = true;
     if (count($f) >= 3 && in_array($f[1], ['tidied', 'untidied', 'refused'], true)) $landed[preg_replace('/ /', "\t", $f[2], 1)] = true;
+    if (count($f) >= 3 && $f[1] === 'delivered') $landed["deliver\t{$f[2]}"] = true;
     if (count($f) >= 3 && $f[1] === 'analysed') {
         $landed["analyze\t" . $f[2]] = true;
         if (preg_match('/asked=(\d+)/', $f[6] ?? '', $m)) $landed["analyze\t{$f[2]}\t{$m[1]}"] = true;
@@ -32,13 +35,15 @@ foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
 }
 // A tidy-up (Structure → Tidy-up) is its own door, db/tidy.php. Kept here
 // untouched, and dropped once the helper has done it.
-$ingests = []; $tidies = []; $others = []; $describes = [];
+$ingests = []; $tidies = []; $others = []; $describes = []; $delivers = [];
 foreach (@file($OUT) ?: [] as $l) {
     $l = rtrim($l, "\n");
     if ($l === '') continue;
     if (preg_match('/^(un)?tidy\t/', $l)) { if (!isset($landed[$l])) $tidies[] = $l; continue; }
     // Describing footage (db/analyze.php) is its own door too, and runs after the copies.
     if (str_starts_with($l, "analyze\t")) { if (!isset($landed[$l])) $describes[] = $l; continue; }
+    // What an editor's Watcher delivered (watcher.php): kept until the helper has taken it in.
+    if (str_starts_with($l, "deliver\t")) { if (!isset($landed[$l])) $delivers[] = $l; continue; }
     if (!str_starts_with($l, "ingest\t")) { $others[] = $l; continue; }
     // A card that has landed leaves the list, or the list grows for ever.
     if (!isset($landed[explode("\t", $l)[2] ?? ''])) $ingests[] = $l;
@@ -130,7 +135,7 @@ if (isset($_POST['ingest_src'])) {
 
 // Cards first. Someone standing there with a card should not wait behind a
 // week-long migration; whatever is already copying still finishes first.
-$all = array_merge($ingests, $tidies, $others, $describes);
+$all = array_merge($ingests, $tidies, $delivers, $others, $describes);
 if (@file_put_contents("$OUT.new", $all ? implode("\n", $all) . "\n" : '') === false || !@rename("$OUT.new", $OUT))
     bail(500, "could not write $OUT — is the web folder writable?");
 echo json_encode($said);

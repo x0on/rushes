@@ -165,6 +165,7 @@ function tidies_finished(): array {
 // and before the long copies — a tidy-up is renames, it takes minutes.
 function queue_add(string $line): void {
     $OUT = web_dir() . '/ingest-queue.tsv';
+    $lock = fopen(web_dir() . '/ingest-queue.lock', 'c'); if ($lock) flock($lock, LOCK_EX);   // one writer at a time
     $first = []; $rest = []; $gone = tidies_finished();
     foreach (@file($OUT) ?: [] as $l) {
         $l = rtrim($l, "\n");

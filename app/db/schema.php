@@ -120,6 +120,17 @@ function db_init(): void {
     $db->exec("CREATE TABLE IF NOT EXISTS pulls (
         id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
         made_by TEXT, created INTEGER, updated INTEGER)");
+    // ── projects in and out (HOW-IT-WORKS.md → Projects in and out) ──────────
+    // Each project a Watcher has seen, by its path inside the Projects share;
+    // and each outside file a Watcher delivered, with where it now is in the
+    // archive (rel, inside the archive), so the project can be pointed there.
+    $db->exec("CREATE TABLE IF NOT EXISTS projects (
+        path TEXT PRIMARY KEY, name TEXT, host TEXT, watcher TEXT, saved INTEGER, seen INTEGER,
+        files INTEGER, outside INTEGER, missing TEXT, shoot TEXT, archived TEXT, state TEXT)");
+    $db->exec("CREATE TABLE IF NOT EXISTS delivered (
+        batch TEXT NOT NULL, original TEXT NOT NULL, rel TEXT NOT NULL, fp TEXT, kind TEXT, project TEXT,
+        at INTEGER, PRIMARY KEY (batch, original))");
+    $db->exec('CREATE INDEX IF NOT EXISTS i_delivered_project ON delivered (project)');
     $db->exec("CREATE TABLE IF NOT EXISTS pull_items (
         pull_id INTEGER NOT NULL, rel TEXT NOT NULL, name TEXT, kind TEXT, bytes INTEGER,
         pos INTEGER, added INTEGER, PRIMARY KEY (pull_id, rel))");
