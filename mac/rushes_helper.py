@@ -1119,7 +1119,9 @@ def menu_state(w):
 def own_menu(w):
     s = dict(w.s); s.update(w.home())
     info = lambda t: {"label": t}
-    items, lately = [], [l[-80:] for l in (s.get("log") or [])[-4:]]
+    # the last lines it wrote, each from its start: the date goes (the time stays), a long one ends in "…"
+    day = lambda l: l[11:] if re.match(r"\d{4}-\d\d-\d\d \d", l) else l
+    items, lately = [], [(lambda t: t if len(t) <= 80 else t[:79] + "…")(day(l)) for l in (s.get("log") or [])[-4:]]
     said = s.get("said") if time.time() - w.said_at < 30 else ""
     if WATCHER:
         n = s.get("now") or {}
