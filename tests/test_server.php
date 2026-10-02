@@ -137,10 +137,14 @@ check(($rl['map']['/Volumes/VIDEO/ARCHIVE/pa/Parks/Kite/A001.MXF'] ?? '') === '/
 check(count($rl['map']) === 2 && $rl['missing'] === [],
       'relink: a clip put back by an undo, a file outside the archive and a bare file name are left as they are');
 mkdir("$root/archive/shelf"); rename("$root/archive/b4k.mov", "$root/archive/shelf/b4k.mov");
+db()->exec("INSERT INTO moments (fp, path, kind, shot, start_s, end_s, what) VALUES ('ff', '$root/archive/b4k.mov', 'shot', 0, 0, 1, 'a kite')");
 $_POST = ['moves' => "$root/archive/b4k.mov\t$root/archive/shelf/b4k.mov"];
 ob_start(); include "$root/app/db/moved.php"; ob_end_clean();
 check(db()->querySingle("SELECT path FROM files WHERE name='b4k.mov'") === "$root/archive/shelf/b4k.mov" && $ledger() === '3840x2160 29.97 h264 125.5',
       'after a tidy-up moves the original, the ledger still follows it');
+check(db()->querySingle("SELECT path FROM moments WHERE fp='ff'") === "$root/archive/shelf/b4k.mov",
+      'and so does what describing found in it (search moments, Premiere markers)');
+db()->exec("DELETE FROM moments WHERE fp='ff'");
 // A folder's plan comes from the catalogue at once: videos, what already has a proxy, what is left to read.
 @mkdir("$root/archive/PARKS/day1", 0777, true); @mkdir("$root/archive/PROXIES/PARKS/day1", 0777, true);
 foreach (['a.MOV' => 100, 'b.mxf' => 200, 'notes.txt' => 5] as $n => $size) {

@@ -98,7 +98,11 @@ if (!may_act()) { http_response_code(403); exit("Sign in first.\n"); }
 $out = web_dir() . '/cache-files.txt';
 $fh = fopen($out, 'w');
 $n = 0;
-$q = $db->query("SELECT path FROM files WHERE " . implode(' OR ', $sqls) . " ORDER BY path");
+// What looks like clutter but is not (the keep groups) is never on the list,
+// even if a sweep pattern would also match it.
+$keepSql = array_values($KEEP);
+$q = $db->query("SELECT path FROM files WHERE (" . implode(' OR ', $sqls) . ")"
+    . ($keepSql ? " AND NOT (" . implode(' OR ', $keepSql) . ")" : '') . " ORDER BY path");
 while ($r = $q->fetchArray(SQLITE3_ASSOC)) { fwrite($fh, $r['path'] . "\n"); $n++; }
 fclose($fh);
 

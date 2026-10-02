@@ -49,7 +49,9 @@ function analysis_import(): array {
         if (!is_array($r) || empty($r['fingerprint'])) continue;
         $newest = max($newest, $t); $n++;
         $fp = $r['fingerprint'];
-        $path = as_here((string)(($r['seen_at'] ?? [])[0] ?? $r['file'] ?? ''));
+        // where the file was seen last: after a tidy-up, its new place
+        $seen = (array)($r['seen_at'] ?? []);
+        $path = as_here((string)($seen ? end($seen) : ($r['file'] ?? '')));
         $del->bindValue(1, $fp); $del->execute(); $del->reset();
         $row = function (array $v) use ($ins) {
             foreach (array_values($v) as $i => $x) $ins->bindValue($i + 1, $x);

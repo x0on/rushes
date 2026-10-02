@@ -10,20 +10,32 @@ $from = $_SERVER['REMOTE_ADDR'] ?? '';
 if (!in_array($from, ['127.0.0.1', '::1', $_SERVER['SERVER_ADDR'] ?? '-'], true) && !may_act()) {
     http_response_code(403); echo '{"error":"sign in first"}'; exit;
 }
+// Two halves. ?part=web: only what lives in the web folder (the file list, the
+// proxies' details, the daily database copy), however long it takes. ?part=video:
+// only what reads the VIDEO share (new descriptions, the prepare list's proxy
+// check); the runner asks for it separately, within a time limit, and only when
+// VIDEO may be read. No part (Jobs and tools → Rebuild search): both.
+$part  = (string)($_GET['part'] ?? '');
+$web   = $part !== 'video';
+$video = $part !== 'web';
+$busy  = false;
+if ($video) {
+    // never two at once: a look stuck on a dying disk is not joined by another
+    $vl = fopen(web_dir() . '/import-video.lock', 'c');
+    if (!$vl || !flock($vl, LOCK_EX | LOCK_NB)) { $video = false; $busy = true; }
+}
 set_time_limit(0);
-$result = sync_search();
-// What the helper has described since last time, into search too.
 require_once __DIR__ . '/analysis.php';
-// ?video=0: the runner says the VIDEO share is not answering (or paused).
-// Then only what lives here is brought in; nothing that reads VIDEO runs.
-$video = ($_GET['video'] ?? '1') !== '0';
+require_once __DIR__ . '/prepare.php';
+$result = $web ? sync_search() : ['state' => 'current'];
+if ($busy) $result['video'] = 'busy: the last look at VIDEO has not finished';
+// What the helper has described since last time, into search too.
 if ($video) try { $result['analysis'] = analysis_import(); } catch (Throwable $e) { $result['analysis'] = ['error' => $e->getMessage()]; }
 // Proxies made since last time: what each original is, into the media ledger.
-require_once __DIR__ . '/prepare.php';
-try { $result['media'] = media_import(); } catch (Throwable $e) { $result['media'] = ['error' => $e->getMessage()]; }
+if ($web) try { $result['media'] = media_import(); } catch (Throwable $e) { $result['media'] = ['error' => $e->getMessage()]; }
 // Folders being prepared: start the next proxies, or queue the next describing.
 if ($video) try { $result['prepare'] = prepare_advance(); } catch (Throwable $e) { $result['prepare'] = ['error' => $e->getMessage()]; }
 // Once a day: the database checked, and a good one copied (HOW-IT-WORKS.md → Rushes' own backups).
-try { $result['db_copy'] = db_daily_copy(); } catch (Throwable $e) { $result['db_copy'] = ['error' => $e->getMessage()]; }
+if ($web) try { $result['db_copy'] = db_daily_copy(); } catch (Throwable $e) { $result['db_copy'] = ['error' => $e->getMessage()]; }
 if (isset($result['error'])) http_response_code(503);
 echo json_encode($result);

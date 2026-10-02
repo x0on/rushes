@@ -146,7 +146,9 @@ def fetch_files(url):
     for f in FILES:
         with urllib.request.urlopen(f"{url}/db/helper.php?code={f}", timeout=60) as r:
             data = r.read()
-        if want.get(f) and hashlib.sha256(data).hexdigest() != want[f]:
+        if not want.get(f):          # no list yet: the runner makes it within a minute of starting
+            raise RuntimeError("Rushes has not listed the helper's files yet, so they cannot be checked. Try again in a minute.")
+        if hashlib.sha256(data).hexdigest() != want[f]:
             raise RuntimeError(f"{f} from Rushes does not match its fingerprint; nothing was installed. Try again in a minute.")
         compile(data, f, "exec")                 # a broken download never goes in
         with open(os.path.join(DIR, f + ".new"), "wb") as fh:

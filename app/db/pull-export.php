@@ -106,8 +106,7 @@ echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE xmeml>\n<xmeml versi
 echo "  <bin>\n    <name>" . $x($p['name']) . "</name>\n    <children>\n";
 require_once __DIR__ . '/analysis.php'; analysis_init();
 $ledger = $db->prepare('SELECT m.fps, m.duration FROM media m JOIN files f ON f.id = m.file_id WHERE f.path = ?');
-// ponytail: by the path the description was made at; after a tidy-up a clip keeps
-// its file but its markers wait for describing to see it at its new place
+// by the file's path: a tidy-up moves the descriptions along with the file (moved.php)
 $said = $db->prepare("SELECT kind, start_s, what, on_screen, themes FROM moments WHERE path = ? AND kind IN ('shot', 'speech') ORDER BY start_s");
 foreach ($items as $i => $it) {
     $n = $i + 1;

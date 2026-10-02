@@ -676,13 +676,21 @@ done
 # Reconcile newer inventories even when nobody has the browser open. A failed
 # attempt retains the old catalog and is retried by the next scheduled run.
 # Set RUSHES_URL when the web application is served from a different address.
-# Paused, or VIDEO not answering: only what lives on Web is brought in
-# (video=0); the descriptions and proxy checks wait for VIDEO.
-IMP=import.php; may_v || IMP='import.php?video=0'
+# Two halves: what lives in the web folder, however long it takes; then what
+# reads VIDEO (new descriptions, the prepare list's proxy check), only when
+# VIDEO may be read, and through v() like every other touch of VIDEO, so a
+# dying disk is walked away from and counted towards the breaker.
+IMP_URL="${RUSHES_URL:-http://127.0.0.1}/db/import.php"
 if command -v curl >/dev/null 2>&1; then
-    SYNC=$(curl --silent --show-error --fail --max-time 3600 "${RUSHES_URL:-http://127.0.0.1}/db/$IMP" 2>&1)
+    SYNC=$(curl --silent --show-error --fail --max-time 3600 "$IMP_URL?part=web" 2>&1)
+    importv() { curl --silent --show-error --fail --max-time 110 "$IMP_URL?part=video" > /share/Web/import-video.out 2>&1; }
+    if may_v; then
+        VL0=$VLIMIT; VLIMIT=${IMPORT_LIMIT:-120}
+        v importv && SYNC="$SYNC $(cat /share/Web/import-video.out 2>/dev/null)"
+        VLIMIT=$VL0
+    fi
 elif command -v wget >/dev/null 2>&1; then
-    SYNC=$(wget -q -O - "${RUSHES_URL:-http://127.0.0.1}/db/$IMP" 2>&1)
+    SYNC=$(wget -q -O - "$IMP_URL?part=web" 2>&1)
 else
     SYNC="Search update needs curl or wget on the archive host"
 fi
@@ -721,7 +729,7 @@ fi
 if [ ! -f /share/Web/exposed.txt ] || [ -n "$(find /share/Web/exposed.txt -mmin +1440 2>/dev/null)" ]; then
     : > /share/Web/exposed.txt.new
     if command -v curl >/dev/null 2>&1; then
-        for f in rushes.sqlite db-copy.sqlite .adminpass ingest-queue.tsv; do
+        for f in rushes.sqlite db-copy.sqlite ingest-queue.tsv helper-refused.tsv; do
             [ -f "/share/Web/$f" ] || continue
             code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "${RUSHES_URL:-http://127.0.0.1}/$f" 2>/dev/null)
             [ "$code" = 200 ] && echo "$f" >> /share/Web/exposed.txt.new

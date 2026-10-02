@@ -28,6 +28,8 @@ $move = $db->prepare('UPDATE files SET path=?, dept=?, year=?, event=?, why=?, s
 $add  = $db->prepare('INSERT OR REPLACE INTO files (path,name,ext,kind,bytes,dept,year,event,why,seen_at)
                       VALUES (?,?,?,?,?,?,?,?,?,?)');
 $pull = $db->prepare('UPDATE OR IGNORE pull_items SET rel = ? WHERE rel = ?');
+require_once __DIR__ . '/analysis.php'; analysis_init();
+$said = $db->prepare('UPDATE moments SET path = ? WHERE path = ?');   // what describing found follows too
 $bind = function ($st, array $v) { foreach ($v as $i => $x) $st->bindValue($i + 1, $x); $r = $st->execute(); $st->reset(); return $r; };
 
 $updated = 0; $refused = 0; $now = time();
@@ -55,6 +57,7 @@ foreach (explode("\n", $raw) as $l) {
                      'moved by a tidy-up', $now]);
     }
     $bind($pull, [substr($lb, strlen($to) + 1), substr($la, strlen($to) + 1)]);
+    $bind($said, [$lb, $la]);
     $updated++;
 }
 $db->exec('COMMIT');

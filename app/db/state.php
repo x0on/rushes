@@ -327,6 +327,9 @@ foreach (helper_refused() as $r)
 // Once you said yes, it says what happens next instead of asking again.
 if ($sw = scripts_waiting()) {
     $names = implode(', ', array_column($sw, 'name'));
+    // each with the start of its fingerprint, so what is installed can be checked
+    // against the file you put there (sha256sum, or shasum -a 256 on a Mac)
+    $prints = implode(', ', array_map(fn($x) => $x['name'] . ' (' . substr($x['hash'], 0, 12) . '…)', $sw));
     $asked = glob("$WEB/queue/*-scripts.job") ?: [];
     if ($asked) {
         $c[] = ['level' => 'warn', 'title' => 'Installing ' . $names . ' — you said yes ' . $ago(max(array_map('filemtime', $asked))),
@@ -339,7 +342,7 @@ if ($sw = scripts_waiting()) {
         $tail = @file_get_contents("$WEB/job.log", false, null, max(0, (int)@filesize("$WEB/job.log") - 4000)) ?: '';
         $why = preg_match_all('/^  refused .*$/m', $tail, $m) ? ' Last try: ' . trim(end($m[0])) . '.' : '';
         $c[] = ['level' => 'warn', 'title' => count($sw) . ' update' . (count($sw) > 1 ? 's are' : ' is') . ' waiting to be installed',
-            'body' => $names . '. Scripts run with full rights on this machine and pages on its web server, so nothing is installed until you say so.' . $why,
+            'body' => $prints . '. Scripts run with full rights on this machine and pages on its web server, so nothing is installed until you say so.' . $why,
             'act' => ['scripts', 'Install ' . (count($sw) > 1 ? 'them' : 'it')]];
     }
 }

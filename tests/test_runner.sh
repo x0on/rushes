@@ -11,10 +11,10 @@ W=$R/share/Web; V=$R/share/VIDEO/_rushes
 mkdir -p "$R/bin"; cat > "$R/bin/curl" <<EOF
 #!/bin/sh
 for a; do u=\$a; done; echo "\$u" >> "$R/asked"
-case "\$u" in *.sqlite) echo 200 ;; *) echo '{"state":"current"}' ;; esac
+case "\$u" in *.sqlite) echo 200 ;; *part=video) [ -e "$R/hang" ] && sleep 30; echo '{"state":"current"}' ;; *) echo '{"state":"current"}' ;; esac
 EOF
 chmod +x "$R/bin/curl"
-run() { PATH="$R/bin:$PATH" VLIMIT=2 busybox sh "$R/runner.sh" >/dev/null 2>&1; }
+run() { PATH="$R/bin:$PATH" VLIMIT=2 IMPORT_LIMIT=2 busybox sh "$R/runner.sh" >/dev/null 2>&1; }
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }
 
@@ -44,8 +44,8 @@ printf 'ACTION=update-scripts\nPAGE=db/y.php:%s\n' "$h" > "$W/queue/2.job"; run
 # paused: VIDEO is left alone (the list is not looked at again)
 rm -f "$W/waiting.tsv"; echo '{"paused":true}' > "$W/helper-control.json"; run
 [ ! -e "$W/waiting.tsv" ] && ok "paused: nothing reads VIDEO" || no "read VIDEO while paused"
-[ "$(tail -1 "$R/asked")" = "http://127.0.0.1/db/import.php?video=0" ] && grep -q "/db/import.php$" "$R/asked" \
-  && ok "search update: VIDEO parts only when VIDEO may be read" || no "search update read VIDEO while paused"
+[ "$(tail -1 "$R/asked")" = "http://127.0.0.1/db/import.php?part=web" ] && grep -q "/db/import.php?part=video$" "$R/asked" \
+  && ok "search update: the VIDEO half only when VIDEO may be read" || no "search update read VIDEO while paused"
 rm -f "$W/helper-control.json"
 
 # HOW-IT-WORKS.md → Rushes' own backups: the day's database copy goes onto VIDEO, one per weekday, once
@@ -97,6 +97,11 @@ mkdir -p "$R/tmp/.archive-runner.lock"; echo 999999 > "$R/tmp/.archive-runner.lo
 printf 'ACTION=df\n' > "$W/queue/l1.job"; run
 [ ! -e "$W/queue/l1.job" ] && grep -q "took over the job lock" "$W/job.log" && ok "a stale job lock is taken over" || no "stale job lock blocked jobs"
 
+# the search update's look at VIDEO hangs: walked away from and counted, like any touch of VIDEO
+touch "$R/hang"; t0=$(date +%s); run; rm -f "$R/hang"
+[ $(( $(date +%s) - t0 )) -lt 15 ] && grep -q "VIDEO did not answer" "$W/job.log" && ok "a stuck look at VIDEO by the search update is walked away from" || no "search update held the runner"
+rm -f "$W/video-stalls.txt"
+
 # a disk that stops answering: walked away from, counted, and after three the breaker trips
 rm -f "$V/ingest.py"; mkfifo "$V/ingest.py"
 for i in 1 2 3; do touch "$W/survey-now"; t0=$(date +%s); run; [ $(( $(date +%s) - t0 )) -lt 10 ] || no "a stuck read held the runner"; done
@@ -104,7 +109,7 @@ ok "a stuck read never holds the runner past its time limit"
 [ -f "$W/video-tripped.txt" ] && ok "three in a row: the breaker trips" || no "breaker did not trip"
 n=$(grep -c "did not answer" "$W/job.log"); touch "$W/survey-now"; run
 [ "$(grep -c "did not answer" "$W/job.log")" = "$n" ] && ok "tripped: VIDEO is not tried again by itself" || no "tried VIDEO while tripped"
-[ "$(tail -1 "$R/asked")" = "http://127.0.0.1/db/import.php?video=0" ] && ok "tripped: the search update leaves VIDEO alone" || no "search update while tripped"
+[ "$(tail -1 "$R/asked")" = "http://127.0.0.1/db/import.php?part=web" ] && ok "tripped: the search update leaves VIDEO alone" || no "search update while tripped"
 printf 'ACTION=reset-breaker\n' > "$W/queue/3.job"; run
 [ ! -e "$W/video-tripped.txt" ] && ok "Try again resets it" || no "reset"
 
