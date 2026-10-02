@@ -11,6 +11,10 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   for folder names.
 - The panel says when that look was already carried out (the numbers are
   then what moved, not what would), and fits a phone: names above the buttons.
+- **Rushes on a phone** (on the office network, or from anywhere through a VPN
+  such as Tailscale): the Mac apps' downloads and install steps step aside on a
+  phone or tablet, with a line saying they are installed from a Mac; the top
+  bar's slow note is short; the search hint fits.
 
 ## 0.10.1 — October 2026
 

@@ -425,7 +425,9 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <?php if (!is_readable(archive_dir() . '/_rushes/Rushes Helper.zip')): ?>
               <div class="seen bad">Rushes Helper for Mac is not on the archive yet: it goes in <b>_rushes/Rushes Helper.zip</b>.</div>
             <?php endif; ?>
-            <ol class="how">
+            <p class="phone-only note">Rushes Helper is a Mac app: install it from that Mac, on this page. From a phone you
+              can pair it, and see and switch what it does (Manage).</p>
+            <ol class="how mac-only">
               <li>On <b><?= $e($hwho) ?></b>, open this page and download it.
                 <span class="note">About 30 MB. It carries its own copy of Python — the free, open-source language the
                 helper is written in — so nothing else has to be installed or updated on the Mac. Safari unpacks it into
@@ -449,7 +451,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <?php elseif ($hv['fresh'] && $hv['how'] === 'service'): ?>
               <div class="seen ok">✓ Installed: it runs in the background on <?= $e($hwho) ?>.</div>
             <?php endif; ?>
-            <details class="note" style="margin-top:8px"><summary>Install from Terminal instead, take it off, or run it in a window</summary>
+            <details class="note mac-only" style="margin-top:8px"><summary>Install from Terminal instead, take it off, or run it in a window</summary>
               <p>From Terminal — the same app, and macOS does not stop it the first time:
                 <?= cmd_block("curl -fsS \"" . $url . "/db/helper.php?install\" | sh") ?></p>
               <p>To take it off: open Rushes Helper from Applications and press <b>Remove…</b>, or
@@ -545,8 +547,9 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <div class="how-h" style="margin-top:14px">Add an editor's computer</div>
         <ol class="how">
           <li>On the editor's computer, download Rushes Watcher (about 30 MB):
-            <p style="margin:12px 0 6px"><a class="btn" href="<?= $e($wurl) ?>/db/helper.php?app=watcher">Download Rushes Watcher</a></p>
-            <small>Not at that computer? Send the editor this link to download it:</small>
+            <p class="mac-only" style="margin:12px 0 6px"><a class="btn" href="<?= $e($wurl) ?>/db/helper.php?app=watcher">Download Rushes Watcher</a></p>
+            <small class="mac-only">Not at that computer? Send the editor this link to download it:</small>
+            <small class="phone-only">Rushes Watcher is a Mac app. Send the editor this link, to open on their Mac:</small>
             <?= cmd_block($wurl . '/db/helper.php?app=watcher') ?></li>
           <li>Open <b>Rushes Watcher</b> from Downloads. The first time, macOS stops it with
             <i>“Apple could not verify Rushes Watcher…”</i>: press <b>Done</b>, then <b>System Settings → Privacy &amp; Security</b>,

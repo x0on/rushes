@@ -21,6 +21,11 @@ $NAV = $NAV ?? '';
 <link rel="icon" type="image/png" sizes="64x64" href="/icon.php?v=<?= $iv ?>">
 <link rel="apple-touch-icon" href="/icon.php?s=180&amp;v=<?= $iv ?>">
 <script>
+// A phone or tablet (iPads say they are a Mac, but with a touch screen): the Mac apps' downloads step aside.
+if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1))
+  document.documentElement.classList.add('on-phone');
+</script>
+<script>
   // Theme before first paint, so a dark page never flashes white on the way in.
   try { var t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; }
   catch (e) {}
