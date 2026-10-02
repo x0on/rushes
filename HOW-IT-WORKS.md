@@ -314,6 +314,11 @@ A pull is a named list of clips, made for handing to an editor.
     description goes into the clip's Description, and the themes of all its
     shots into its notes.
     Markers need the clip's frame rate, which is known once it has a proxy.
+  - **For Final Cut or Resolve (FCPXML):** an event of clips in FCPXML 1.8,
+    which Final Cut Pro and DaVinci Resolve both open. Each clip carries the
+    same markers, its first shot's description as a note, and its themes as a
+    keyword. FCPXML needs each clip's length and frame rate, so clips without a
+    proxy yet are left out, and named in a note at the top of the file.
   - **List of paths:** a text file.
   - **The files (zip):** up to 1 GB and 1,000 files, stored without compression.
     It is built in the web folder under a hidden name, and deleted once sent.
@@ -322,7 +327,7 @@ Everyone who can open Rushes can see and change every pull. They are the team's
 lists. No password is needed.
 
 **In the code:** `pull.php` (the page), `db/pulls.php` (create, add, remove,
-move, rename), `db/pull-export.php` (the three downloads).
+move, rename), `db/pull-export.php` (the four downloads).
 
 ---
 

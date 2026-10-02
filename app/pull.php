@@ -129,9 +129,12 @@ async function show() {
         '<button class="ghost" data-os="other">Something else</button></div>' +
       '<input type="text" id="base" aria-label="Where this computer sees the archive">' +
       '<div class="dl"><button class="btn" data-f="premiere">For Premiere (XML)</button>' +
+        '<button class="btn quiet" data-f="fcpxml">For Final Cut or Resolve (FCPXML)</button>' +
         '<button class="btn quiet" data-f="list">List of paths</button>' +
         '<button class="btn quiet" data-f="zip"' + (total > 1073741824 ? ' disabled title="Over 1 GB — use the Premiere file or the list; they point at the originals"' : '') + '>The files (zip)</button></div>' +
-      '<p class="note" id="dlNote" style="margin:10px 0 0">Premiere opens it with File → Import, as a bin of clips.' +
+      '<p class="note" id="dlNote" style="margin:10px 0 0">Premiere opens the XML with File → Import, as a bin of clips. ' +
+        'Final Cut opens the FCPXML with File → Import → XML, and DaVinci Resolve with File → Import → Timeline; ' +
+        'clips that have no proxy yet are left out of it (their length is not known yet).' +
         (total > 1073741824 ? ' The zip is for small sets of stills; this pull is ' + tb(total) + '.' : '') + '</p></div>';
 
   // which computer this is — remembered, or guessed from the browser

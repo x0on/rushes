@@ -25,7 +25,8 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 - Copy proof in ASC MHL, checking older copies, counting copies, re-reading the
   archive.
 - Tidy-up into departments, and pointing Premiere projects at the new places.
-- Pulls with descriptions as Premiere markers.
+- Pulls with descriptions as Premiere markers, and as FCPXML for Final Cut and
+  Resolve (not yet opened in either).
 - Following Rushes to a new address, and reconnecting dropped shares.
 - The hardening of autumn 2026:
   - the six rules;

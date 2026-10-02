@@ -182,6 +182,18 @@ check($doc && count($mk) === 2 && (string)$mk[0]->in === '60' && (string)$mk[1]-
       && str_contains((string)$mk[0]->comment, 'On screen: KITE FEST 2024') && (string)$doc->xpath('//clip/rate/timebase')[0] === '30'
       && (string)$doc->xpath('//clip/logginginfo/description')[0] === 'Children fly kites & laugh',
       'a pull for Premiere carries a marker at each shot and line spoken, at its frame, and the description');
+$_GET = ['p' => 'p1', 'fmt' => 'fcpxml', 'base' => '/Volumes/VIDEO'];
+ob_start(); include web_dir() . "/db/pull-export.php"; $xml = ob_get_clean();
+$doc = simplexml_load_string(preg_replace('/<!DOCTYPE[^>]*>/', '', $xml));
+$mk = $doc ? $doc->xpath('//asset-clip/marker') : [];
+check($doc && (string)$doc['version'] === '1.8' && count($mk) === 2 && (string)$mk[0]['start'] === '60060/30000s' && (string)$mk[1]['start'] === '300300/30000s'
+      && (string)$doc->xpath('//asset')[0]['src'] === 'file:///Volumes/VIDEO/shelf/b4k.mov'
+      && str_contains((string)$mk[0]['note'], 'KITE FEST 2024') && (string)$doc->xpath('//asset-clip/note')[0] === 'Children fly kites & laugh'
+      && str_contains((string)$doc->xpath('//asset-clip/keyword')[0]['value'], 'Parks & Recreation'),
+      'a pull for Final Cut and Resolve (FCPXML): the clip by its path, markers at their frames, description and themes');
+$_GET = ['p' => 'p1', 'fmt' => 'fcpxml', 'base' => 'Z:\\'];
+ob_start(); include web_dir() . "/db/pull-export.php"; $xml = ob_get_clean();
+check(str_contains($xml, 'src="file:///Z:/shelf/b4k.mov"'), 'FCPXML for a PC points at the drive letter');
 // HOW-IT-WORKS.md → Rushes' own backups: once a day a checked copy of the database, made safely while it is in use.
 @unlink(web_dir() . '/db-copy.sqlite');
 check(db_daily_copy()['state'] === 'copied' && (new SQLite3(web_dir() . '/db-copy.sqlite'))->querySingle("SELECT COUNT(*) FROM files") >= 1,
