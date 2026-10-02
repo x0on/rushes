@@ -324,6 +324,25 @@ if (isset($_POST['_newpass'])) {
           </div>
         </div>
 
+        <!-- No lock-in: everything Rushes knows, in formats any other program reads. -->
+        <div class="panel" style="margin-top:14px">
+          <header><b>Take everything with you</b></header>
+          <div style="padding:14px">
+            <p class="note" style="margin:0 0 10px">What Rushes knows, in open formats, to keep or to move to
+              another program. Downloaded to this computer; nothing on the archive changes.</p>
+            <div class="btns" id="exports">
+              <a class="btn quiet" href="export.php?what=files" download>Every file, and what it is (CSV)</a>
+              <a class="btn quiet" href="export.php?what=moments" download>What describing found (CSV)</a>
+              <a class="btn quiet" href="export.php?what=pulls" download>Every pull (JSON)</a>
+              <a class="btn quiet" href="export.php?what=copies" download>Where else each file exists (CSV)</a>
+            </div>
+            <p class="note" style="margin:10px 0 0">Already open files on the archive, readable without Rushes:
+              the descriptions (<code>_rushes/analysis</code>, JSON), the record of every copy and move
+              (<code>_rushes/origin</code>, text), and the copy proofs (the <code>ascmhl</code> folder in each
+              copied folder, ASC MHL).</p>
+          </div>
+        </div>
+
         <div class="panel" style="margin-top:14px">
           <header><b>Admin password</b></header>
           <form method="post" style="padding:14px;max-width:360px">
@@ -486,6 +505,14 @@ async function act(name, btn) {
   }
   setTimeout(load, 1200);
 }
+
+// The export links download at once; each says so on itself, then goes back.
+document.querySelectorAll('#exports a').forEach(function (a) {
+  a.addEventListener('click', function () {
+    const was = a.textContent; a.textContent = 'Downloading ✓';
+    setTimeout(function () { a.textContent = was; }, 2500);
+  });
+});
 
 // ── cache ──────────────────────────────────────────────────────────────────
 async function loadCache() {

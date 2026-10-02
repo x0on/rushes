@@ -133,7 +133,8 @@ In this order of importance:
    the machine and sets everything up, with no Terminal. Updates are signed,
    say what changed, and can be rolled back.
 2. **No lock-in.** Everything Rushes knows (descriptions, records, copy proofs)
-   can be exported in open formats: CSV, JSON, XMP, ASC MHL.
+   can be exported in open formats: CSV, JSON, XMP, ASC MHL. *Built: CSV and
+   JSON in Manage → Jobs and tools; XMP sidecars to come.*
 3. **Round trip with every editor:** Premiere, DaVinci Resolve and Final Cut Pro
    (FCPXML). Pulls, markers and relinking for all three. *Built for all three;
    to be tried in Final Cut and Resolve.*

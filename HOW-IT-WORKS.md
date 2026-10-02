@@ -946,6 +946,21 @@ Buttons for running things by hand, each asking twice:
 Below them: **Admin password**, to change it. It needs the current password,
 and the new one must be at least 4 characters.
 
+**Take everything with you** (below the buttons) downloads, to the computer
+you are on, what Rushes knows, in open formats:
+
+- every file in the catalogue and what it is: kind, size, department, year,
+  event, and from its proxy its size, frame rate, codec, length, camera clock,
+  timecode, reel and camera (CSV);
+- what describing found: every shot and line spoken, with its time (CSV);
+- every pull, with its clips in order (JSON);
+- where else each file exists, as last counted (CSV).
+
+Each is read and sent as it goes, signed in only. Text a spreadsheet would read
+as a formula is written with a `'` in front. The rest of what Rushes keeps is
+already open files on the archive: the descriptions (`_rushes/analysis`, JSON),
+the record of every copy and move (`_rushes/origin`), the copy proofs (ASC MHL).
+
 A few jobs exist only for scripts and have no button: `reindex`, `holding`
 (measures the holding folder), `organize-undo`, and checking one folder or file
 in the holding folder. A page can start them only when signed in.
@@ -980,7 +995,7 @@ Each section saves with **Save settings**.
 
 Opening Setup lists the shares on the archive machine.
 
-**In the code:** `db/admin.php`, `db/rail.php`, `db/state.php`, `setup.php`.
+**In the code:** `db/admin.php`, `db/rail.php`, `db/state.php`, `setup.php`, `db/export.php`.
 
 ---
 
@@ -1376,7 +1391,8 @@ can do today.
 - reorganize and relink;
 - change settings;
 - pair a helper;
-- change the password.
+- change the password;
+- download everything Rushes knows (Take everything with you).
 
 A script can do most of this by sending the password with its request
 (`pass`) instead of signing in: jobs, transfers, updates, pairing, tidy-ups and

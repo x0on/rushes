@@ -15,5 +15,6 @@ if ($method === 'SEED' || $method === 'ITEMS') {        // set up, or look at, a
 $_SERVER['REQUEST_METHOD'] = $method;
 $_SERVER['HTTP_HOST'] = 'nas.test';
 if (getenv('ORIGIN') !== false) $_SERVER['HTTP_ORIGIN'] = getenv('ORIGIN');
+if (getenv('SIGNED')) { @session_start(); $_SESSION['rushes_in'] = true; }      // as if signed in to Manage
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];
 include "$app/$door";

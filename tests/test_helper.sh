@@ -63,6 +63,12 @@ check 'call POST "{}" "{\"action\":\"plan\"}" run.php | grep -q "not signed in"'
 check 'call POST "{}" "{\"action\":\"plan\",\"pass\":\"rushes\",\"dest\":\"/etc\"}" run.php >/dev/null; grep -h "^DEST=" "$ROOT"/app/queue/*.job | grep -qv "^DEST=/etc"' \
       'a holding folder outside the archive is replaced by the archive'"'"'s own'
 
+# taking everything with you: whole lists, behind the password, in open formats
+check 'call GET "{\"what\":\"files\"}" "{}" db/export.php | grep -q "Sign in"' 'the export needs signing in'
+check 'SIGNED=1 call GET "{\"what\":\"files\"}" "{}" db/export.php | head -1 | grep -q "path,name,kind,bytes"' 'the catalogue comes out as CSV'
+check 'SIGNED=1 call GET "{\"what\":\"pulls\"}" "{}" db/export.php | python3 -c "import json,sys; d=json.load(sys.stdin); assert \"pulls\" in d"' 'pulls come out as JSON'
+check 'SIGNED=1 call GET "{\"what\":\"moments\"}" "{}" db/export.php | head -1 | grep -q "path,kind,shot,start_s"' 'what describing found comes out as CSV'
+
 # another website cannot make a browser press Rushes' buttons; Rushes' own pages can
 check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "another website"' \
       'a button pressed from another website is refused, even with the password'
