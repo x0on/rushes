@@ -320,7 +320,10 @@ require_once __DIR__ . '/schema.php'; db_init();
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
 $ago = function (int $t): string { if (!$t) return '—'; $d = time() - $t;
     return $d < 3600 ? max(1, intdiv($d, 60)) . ' min ago' : ($d < 86400 ? intdiv($d, 3600) . ' h ago' : date('Y-m-d', $t)); };
-$restDays = (int)(settings()['projects']['rest_days'] ?? 10);
+$restDays  = (int)(settings()['projects']['rest_days'] ?? 10);
+$asideDays = (int)(settings()['projects']['aside_days'] ?? 90);
+// What the runner moved lately, newest first (projects.php writes it)
+$moves = array_reverse(array_slice(@file(web_dir() . '/projects-moves.tsv', FILE_IGNORE_NEW_LINES) ?: [], -8));
 $prj = []; $r = db()->query('SELECT p.*, (SELECT COUNT(*) FROM delivered d WHERE d.project = p.path) AS taken FROM projects p ORDER BY saved DESC LIMIT 500');
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $prj[] = $x;
 // What each Watcher last said, and the end of its log: the same lines the editor sees on that computer.
@@ -340,17 +343,45 @@ foreach (watchers() as $k => $w) {
           <div style="overflow-x:auto"><table class="prep"><thead><tr><th>Project</th><th>Computer</th><th>Last saved</th>
             <th title="files the project uses from outside the archive">From outside</th><th>Missing</th><th>In the archive</th><th>State</th></tr></thead><tbody>
 <?php foreach ($prj as $p):
-    $state = $p['state'] === 'aside' ? 'moved aside' : ((int)$p['saved'] && time() - (int)$p['saved'] > $restDays * 86400 ? 'resting' : 'active'); ?>
+    $idle = (int)$p['saved'] ? time() - (int)$p['saved'] : 0;
+    $state = $p['state'] === 'aside' ? 'moved aside' : ($idle > $restDays * 86400 ? 'resting' : 'active');
+    // why it will, or will not, be moved aside: said before it happens
+    $when = $state !== 'resting' || !$asideDays ? ''
+          : ((string)$p['archived'] === '' ? 'stays: no copy of the project in the archive yet'
+          : ((string)$p['missing'] !== '' ? 'stays: files it uses are missing'
+          : 'its folder moves aside after ' . date('j M', max((int)$p['saved'], (int)$p['aside_at']) + $asideDays * 86400))); ?>
             <tr><td><b><?= $h($p['name']) ?></b><div class="note"><?= $h($p['path']) ?></div></td>
               <td><?= $h($p['host']) ?></td><td><?= $ago((int)$p['saved']) ?></td>
               <td><?= (int)$p['outside'] ?></td>
               <td<?= $p['missing'] !== '' ? ' class="bad" title="' . $h($p['missing']) . '"' : '' ?>><?= $p['missing'] !== '' ? count(explode(';', $p['missing'])) : '0' ?></td>
               <td><?= (int)$p['taken'] ?> file<?= (int)$p['taken'] === 1 ? '' : 's' ?><?= $p['archived'] ? '<div class="note">project kept: ' . $h($p['archived']) . '</div>' : '' ?></td>
-              <td title="resting: no save for <?= $restDays ?> days; nothing moves"><?= $state ?></td></tr>
+              <td title="resting: no save for <?= $restDays ?> days; nothing moves"><?= $state ?>
+                <?= $state === 'moved aside' ? '<div class="note">' . date('j M Y', (int)$p['aside_at']) . ', to _Moved aside</div>'
+                    . '<button type="button" class="ghost" data-back="' . $h(dirname($p['path'])) . '">Bring it back</button>'
+                    : ($when !== '' ? '<div class="note">' . $h($when) . '</div>' : '') ?></td></tr>
 <?php endforeach; ?>
           </tbody></table></div>
 <?php endif; ?>
+<?php if ($moves): ?>
+          <div class="note" style="padding:10px 14px">Moved lately:
+            <?php foreach ($moves as $m): [$t, $w, $d, $why] = array_pad(explode("\t", $m), 4, ''); ?>
+              <div><?= date('j M H:i', (int)$t) ?> · <?= $h($d) ?> · <?= $w === 'aside' ? 'moved aside' : 'brought back' ?><?= $why === 'ok' ? ' ✓' : ' — ' . $h($why) ?></div>
+            <?php endforeach; ?></div>
+<?php endif; ?>
         </div>
+        <script>
+        // Bring it back: asked twice, on the button; the runner does it within a minute.
+        document.querySelectorAll('[data-back]').forEach(function (b) {
+          b.onclick = async function () {
+            if (!sure(b, 'Sure? Back to ' + b.dataset.back, 'back:' + b.dataset.back)) return;
+            b.disabled = true;
+            try {
+              var r = await (await fetch('/db/projects.php', {method: 'POST', body: new URLSearchParams({action: 'back', folder: b.dataset.back})})).json();
+              b.outerHTML = '<div class="note">' + (r.error ? 'Did not happen: ' + r.error : r.said).replace(/</g, '&lt;') + '</div>';
+            } catch (e) { b.disabled = false; b.textContent = 'Could not ask — try again'; }
+          };
+        });
+        </script>
         <div class="panel" style="margin-top:14px">
           <header><b>Editors' computers</b> <span class="note">what each Watcher is doing, and its log</span></header>
 <?php if (!$said): ?>

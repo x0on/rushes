@@ -757,10 +757,10 @@ failed.
 ## Projects in and out
 
 Editors work as usual. Rushes keeps every project and everything it uses,
-without anyone pressing anything. *Built so far: Rushes' side, the helper's,
-and the core of Rushes Watcher (`mac/rushes_watcher.py`, Premiere projects, on
-a Mac). Its app and menu bar icon, resting and moving aside, Final Cut and
-Resolve come next ([roadmap](ROADMAP.md)).*
+without anyone pressing anything. *Built: Rushes' side, the helper's, Rushes
+Watcher (`mac/rushes_watcher.py`, Premiere projects, on a Mac) with its app and
+menu bar icon, and resting and moving aside. Final Cut and Resolve come later
+([roadmap](ROADMAP.md)).*
 
 **Three shares.** VIDEO, the archive: people only read it; only Rushes writes.
 Projects: where editors work. Deliveries: where outside files arrive for Rushes
@@ -853,10 +853,29 @@ stays, and Activity says why.
 
 **Seeing it.** Manage → Editors' projects lists every project the Watchers
 report: its computer, last save, files from outside, files missing, what is in
-the archive, and its state. A project not saved for 10 days is *resting*:
-nothing moves. Below, each editor's computer: what it is doing, when it was
+the archive, and its state, with why it will or will not be moved aside, and
+when. Below, each editor's computer: what it is doing, when it was
 last heard from, and the end of its log, the same lines the editor sees. Search
 has the stock library as its own section: Music, Stock footage, Sound effects.
+
+**No Finished button.** A project is ongoing until it is not:
+
+- **Resting:** not saved for 10 days (Setup → 06). Nothing moves. Manage says
+  it, and so does the editor's Watcher, in its log, once.
+- **Moved aside:** not saved for 90 days (Setup → 06; 0 for never). Its folder
+  on the Projects share goes into `_Moved aside` on the same share, at the same
+  path inside it: a rename, so nothing is copied and nothing is deleted. Only
+  when **every** project in that folder has slept that long, has a copy of the
+  project kept in the archive, and has no file missing; otherwise it stays, and
+  Manage says why. A folder at the top of the share is never moved. Rushes
+  decides (`db/projects.php`, which only the runner can ask); the runner moves,
+  once a day, never over anything already there, and not while paused. Each move
+  is in the job log and on Manage → Editors' projects, and the editor's Watcher
+  says it in its log. The Watcher never looks inside `_Moved aside`.
+- **Bring it back** (Manage → Editors' projects, asked twice on the button)
+  puts the folder back where it was within a minute, even while paused, never
+  over a folder that has taken its place. A folder brought back is left in its
+  place for another 90 days.
 
 ## Keeping the archive tidy
 
@@ -1275,7 +1294,9 @@ In this order:
          most every 10 minutes);
        - queueing the next folder for proxies or describing;
     4. **the database copy** onto VIDEO, if there is a new one;
-    5. **once a day,** the private-file check.
+    5. **once a day,** the private-file check;
+    6. **once a day,** editors' project folders moved aside, and any **Bring it
+       back** within a minute (see [Projects in and out](#projects-in-and-out)).
 
 A lock left by a run that was killed is taken over, and said in the log.
 
@@ -1670,6 +1691,8 @@ and caches are **moved** to the holding folder, and only you empty it.
   on Put back. Copy proofs whose footage all moved go to `_rushes/ascmhl-moved`.
 - **`ingest.py --undo`** moves the last run's copies to `ARCHIVE/_rollback`.
 - **The old layout's undo** puts back what it once moved.
+- **Project folders** on the Projects share into `_Moved aside` on the same
+  share, after 90 days without a save, and back on **Bring it back**.
 - **Rushes Watcher** changes a project file in one way only: when the editing
   program is quit, the paths of files that are now in the archive, after a
   backup of the project beside it in `Rushes backups`.

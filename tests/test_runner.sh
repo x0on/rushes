@@ -11,7 +11,7 @@ W=$R/share/Web; V=$R/share/VIDEO/_rushes
 mkdir -p "$R/bin"; cat > "$R/bin/curl" <<EOF
 #!/bin/sh
 for a; do u=\$a; done; echo "\$u" >> "$R/asked"
-case "\$u" in *.sqlite) echo 200 ;; *builtin) [ -e "$R/builtin" ] && echo yes || echo no ;; *part=video) [ -e "$R/hang" ] && sleep 30; echo '{"state":"current"}' ;; *) echo '{"state":"current"}' ;; esac
+case "\$u" in *projects.php?plan) cat "$R/plan" 2>/dev/null ;; *.sqlite) echo 200 ;; *builtin) [ -e "$R/builtin" ] && echo yes || echo no ;; *part=video) [ -e "$R/hang" ] && sleep 30; echo '{"state":"current"}' ;; *) echo '{"state":"current"}' ;; esac
 EOF
 chmod +x "$R/bin/curl"
 run() { PATH="$R/bin:$PATH" VLIMIT=2 IMPORT_LIMIT=2 busybox sh "$R/runner.sh" >/dev/null 2>&1; }
@@ -166,6 +166,22 @@ if command -v python3 >/dev/null 2>&1; then
     [ "$(cat "$W/helper-builtin.txt")" = unsigned ] && grep -q "not a signed release" "$W/job.log" && ok "code changed after signing: not started, and said" || no "unsigned code was started"
     rm -f "$R/builtin" "$W/helper.pid"; rm -rf "$W/helper-code"
 fi
+
+# Projects in and out: a folder Rushes says has slept long enough is moved aside, on the same share, and back
+P=$R/share/Projects; mkdir -p "$P/PARKS/Kite" "$P/PARKS/Live"; echo p > "$P/PARKS/Kite/Kite.prproj"
+echo "$P" > "$W/projects-path.txt"; rm -f "$W/projects-day.txt"
+printf 'aside\tPARKS/Kite\naside\t../escape\naside\tPARKS/Gone\n' > "$R/plan"; run
+[ -f "$P/_Moved aside/PARKS/Kite/Kite.prproj" ] && [ ! -e "$P/PARKS/Kite" ] && [ -d "$P/PARKS/Live" ] \
+  && grep -q "^aside	PARKS/Kite	ok$" "$W/projects-moved.tsv" && grep -q "^aside	PARKS/Gone	not there$" "$W/projects-moved.tsv" \
+  && ! grep -q escape "$W/projects-moved.tsv" && ok "a sleeping project folder is moved aside on its share; nothing outside it" || no "moved aside: $(cat "$W/projects-moved.tsv")"
+printf 'aside\tPARKS/Live\n' > "$R/plan"; run
+[ -d "$P/PARKS/Live" ] && ok "once a day: the next minute moves nothing more" || no "moved twice in a day"
+mkdir -p "$P/PARKS/Kite"; echo "PARKS/Kite" > "$W/projects-back.txt"; printf 'back\tPARKS/Kite\n' > "$R/plan"; run
+[ -d "$P/_Moved aside/PARKS/Kite" ] && grep -q "^back	PARKS/Kite	something is already where it would go" "$W/projects-moved.tsv" \
+  && ok "Bring it back never writes over a folder that took its place" || no "brought back over another folder"
+rmdir "$P/PARKS/Kite"; run
+[ -f "$P/PARKS/Kite/Kite.prproj" ] && [ ! -e "$P/_Moved aside/PARKS/Kite" ] && ok "Bring it back: within a minute, exactly where it was" || no "brought back: $(cat "$W/projects-moved.tsv")"
+: > "$W/projects-back.txt"; rm -f "$R/plan"
 
 # STOP: nothing at all, not even the heartbeat
 rm -f "$W/runner-alive.txt"; touch "$W/STOP"; run

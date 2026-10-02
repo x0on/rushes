@@ -100,6 +100,11 @@ if (($_POST['_save'] ?? '') === '1') {
     $pick('p_deliv_h','shares.deliveries_helper', $hpath);
     $lib = trim(preg_replace('#[/\\\\:*?"<>|]+#', ' ', (string)($_POST['lib'] ?? '')));
     $s['library']['folder'] = $lib !== '' ? mb_substr($lib, 0, 80) : 'Stock Library';
+    // A project resting, and moved aside (projects.php): days without a save. 0 = never moved aside.
+    $s['projects']['rest_days']  = max(1, min(365, (int)($_POST['rest_days'] ?? 10)));
+    $s['projects']['aside_days'] = max(0, min(3650, (int)($_POST['aside_days'] ?? 90)));
+    if ($s['projects']['aside_days'] && $s['projects']['aside_days'] < $s['projects']['rest_days'])
+        $bad[] = 'A project can be moved aside only after it is resting: make the second number larger than the first, or 0.';
 
     if ($bad) {
         $said = implode(' ', $bad);
@@ -587,6 +592,15 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <input type="text" name="lib" value="<?= $e(settings()['library']['folder'] ?? 'Stock Library') ?>">
           <small>Music, stock footage and sound effects that projects use are kept here once, in Music,
             Stock footage and Sound effects, however many projects use them.</small></label>
+
+        <label class="f"><span>Resting after</span>
+          <input type="number" name="rest_days" min="1" max="365" style="width:7em" value="<?= (int)(settings()['projects']['rest_days'] ?? 10) ?>"> days without a save
+          <small>Nothing moves: Manage and the editor's Watcher say it, so everyone knows the project is quiet.</small></label>
+        <label class="f"><span>Moved aside after</span>
+          <input type="number" name="aside_days" min="0" max="3650" style="width:7em" value="<?= (int)(settings()['projects']['aside_days'] ?? 90) ?>"> days without a save
+          <small>Its folder on the Projects share goes into “_Moved aside” on the same share, only when every project in it
+            has a copy kept in the archive and nothing it uses is missing. Bring it back, in Manage → Editors' projects,
+            puts it where it was. Nothing is deleted. 0: never moved.</small></label>
 
         <!-- Editors' computers: any number of Rushes Watchers, each paired once, each only able to deliver. -->
         <?php $ws = watchers(); ?>

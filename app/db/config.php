@@ -497,6 +497,9 @@ function save_settings(array $s): bool {
 function runner_paths(): void {
     $f = web_dir() . '/archive-path.txt'; $want = archive_dir() . "\n";
     if (@file_get_contents($f) !== $want) @file_put_contents($f, $want);
+    // the Projects share, where the runner moves folders aside and back (projects.php)
+    $f = web_dir() . '/projects-path.txt'; $want = s_path('shares.projects') . "\n";
+    if (@file_get_contents($f) !== $want) @file_put_contents($f, $want);
 }
 
 // What this installation calls its top folders — Departments here, Clients or

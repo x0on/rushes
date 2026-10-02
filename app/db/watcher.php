@@ -24,7 +24,15 @@ $clean = fn($s, int $n = 300) => mb_substr(trim(preg_replace('/[\t\r\n]+/', ' ',
 
 if (isset($_GET['hello'])) {
     $s = settings();
-    said(200, [
+    // Its own projects that are resting or moved aside, so its editor hears it there too.
+    db_init(); $rest = (int)($s['projects']['rest_days'] ?? 10); $quiet = ['resting' => [], 'aside' => []];
+    $st = db()->prepare('SELECT path, saved, state FROM projects WHERE watcher = ?'); $st->bindValue(1, $me['key']);
+    $r = $st->execute();
+    while ($x = $r->fetchArray(SQLITE3_ASSOC)) {
+        if ($x['state'] === 'aside') $quiet['aside'][] = $x['path'];
+        elseif ((int)$x['saved'] && time() - (int)$x['saved'] > $rest * 86400) $quiet['resting'][] = $x['path'];
+    }
+    said(200, $quiet + [
         'name'       => $s['name'] ?? 'Rushes',
         'key'        => $me['key'],
         // Each editor's computer mounts the shares by their names (on a Mac, /Volumes/<name>).

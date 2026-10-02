@@ -131,6 +131,11 @@ function db_init(): void {
         batch TEXT NOT NULL, original TEXT NOT NULL, rel TEXT NOT NULL, fp TEXT, kind TEXT, project TEXT,
         at INTEGER, PRIMARY KEY (batch, original))");
     $db->exec('CREATE INDEX IF NOT EXISTS i_delivered_project ON delivered (project)');
+    // when its folder was last moved aside or brought back (projects.php)
+    $have = [];
+    $cols = $db->query('PRAGMA table_info(projects)');
+    while ($c = $cols->fetchArray(SQLITE3_ASSOC)) $have[] = $c['name'];
+    if (!in_array('aside_at', $have, true)) $db->exec('ALTER TABLE projects ADD COLUMN aside_at INTEGER DEFAULT 0');
     $db->exec("CREATE TABLE IF NOT EXISTS pull_items (
         pull_id INTEGER NOT NULL, rel TEXT NOT NULL, name TEXT, kind TEXT, bytes INTEGER,
         pos INTEGER, added INTEGER, PRIMARY KEY (pull_id, rel))");

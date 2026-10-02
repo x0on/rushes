@@ -142,6 +142,20 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(self.queue, [])
         self.assertFalse(w.state["projects"][str(self.prproj)].get("touched"))
 
+    def test_resting_and_moved_aside_are_said_once(self):
+        w, hello = self.w.Watcher(self.cfg), self.w.rushes
+        quiet = {"resting": ["PARKS/2026/Kite/Kite.prproj"], "aside": ["PARKS/2025/Old/Old.prproj"]}
+        self.w.rushes = lambda cfg, get=None, **k: dict(hello(cfg, get=get, **k), **quiet) if get and "hello" in get else hello(cfg, get=get, **k)
+        with patch.object(self.w, "editing", return_value=[]), patch("sys.stdout", new_callable=io.StringIO):
+            w.tick(); w.hello_at = 0; w.tick()
+        log = Path(os.environ["RUSHES_WATCHER_LOG"]).read_text()
+        self.assertEqual(log.count("Kite.prproj is resting"), 1)
+        self.assertEqual(log.count("Old.prproj was moved aside"), 1)
+        quiet["resting"] = []                             # saved again: said again when it next rests
+        with patch.object(self.w, "editing", return_value=[]), patch("sys.stdout", new_callable=io.StringIO):
+            w.hello_at = 0; w.tick()
+        self.assertNotIn("PARKS/2026/Kite/Kite.prproj", w.state["told"])
+
     def test_idle_reads_nothing(self):
         w = self.w.Watcher(self.cfg)
         with patch.object(self.w, "editing", return_value=[]), patch.object(self.w, "find_projects") as look, \

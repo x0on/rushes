@@ -36,9 +36,13 @@ check(count($s['ingests']) === 2 && $s['ingests'][0]['state'] === 'done' && $s['
 ini_set('session.save_path', "$root/app"); session_start(); $_SESSION['rushes_in'] = true;
 db()->exec("INSERT INTO projects (path, name, host, watcher, saved, seen, files, outside, missing, shoot, state)
             VALUES ('Parks/Kite.prproj', 'Kite', 'edit-1', 'ab12cd34ef567890', " . ($now - 86400 * 12) . ", $now, 12, 2, 'a.wav;b.mov', '', 'active')");
+db()->exec("INSERT INTO projects (path, name, saved, archived, missing, state, aside_at)
+            VALUES ('Parks/Old/Old.prproj', 'Old', " . ($now - 86400 * 200) . ", 'x', '', 'aside', $now)");
 ob_start(); include "$root/app/db/admin.php"; $html = ob_get_clean();
-check(str_contains($html, 'id="pane-projects"') && str_contains($html, 'Parks/Kite.prproj') && str_contains($html, '>resting<'),
+check(str_contains($html, 'id="pane-projects"') && str_contains($html, 'Parks/Kite.prproj') && str_contains($html, '>resting'),
       "Editors' projects: each one the Watchers reported, and one not saved for 10 days is resting (nothing moves)");
+check(str_contains($html, 'data-back="Parks/Old"') && str_contains($html, 'stays: no copy of the project in the archive yet'),
+      "a folder moved aside has Bring it back; a resting one says why it will not be moved aside");
 check(str_contains($html, 'id="now"') && str_contains($html, 'id="transferSummary"'), 'Overview has both the live card and the transfer card');
 check(str_contains($html, 'helperNow') && str_contains($html, 'tokens.css?v='), 'shared top bar with live words and a fresh stylesheet');
 echo "Page tests complete.\n";

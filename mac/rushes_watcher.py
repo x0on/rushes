@@ -55,7 +55,7 @@ AUDIO = {"wav", "mp3", "aif", "aiff", "m4a", "flac", "ogg", "aac"}
 # ponytail: guessed from the path; a menu to correct a file's kind comes with the icon (P3)
 STOCK_HINTS = r"(stock|artlist|pond5|storyblocks|envato|shutterstock|getty|motion ?array|epidemic)"
 SKIP_PARTS = ("Adobe Premiere Pro Video Previews", "Adobe Premiere Pro Audio Previews",
-              "Adobe Premiere Pro Auto-Save", "Media Cache", "/.Trash", "/Rushes backups/")
+              "Adobe Premiere Pro Auto-Save", "Media Cache", "/.Trash", "/Rushes backups/", "/_Moved aside/")
 
 
 # ── its words ───────────────────────────────────────────────────────────────
@@ -306,6 +306,7 @@ class Watcher:
             log(f"{', '.join(open_)} open — watching for saved projects")
         if time.time() - self.hello_at > 3600 or not self.hello:
             self.hello, self.hello_at = rushes(self.cfg, get={"hello": ""}), time.time()
+            self.heard()
         where_ = mounts(self.hello, self.cfg)
         if open_ and time.time() - self.last_scan >= SCAN_EVERY:
             self.last_scan = time.time()
@@ -316,6 +317,19 @@ class Watcher:
             for p in [p for p, s in self.state["projects"].items() if s.get("touched")]:
                 self.close(p, where_)
         self.report("watching" if open_ else "idle", note=", ".join(open_))
+
+    def heard(self):
+        """Its projects that Rushes says are resting or moved aside: said in its log, once each."""
+        told = self.state.setdefault("told", {})
+        for kind, words in (("resting", "is resting: not saved for a while; nothing moves"),
+                            ("aside", "was moved aside on the Projects share (into _Moved aside), kept in the archive. "
+                                      "Bring it back in Rushes → Manage → Editors' projects")):
+            for p in self.hello.get(kind) or []:
+                if told.get(p) != kind:
+                    log(f"{p} {words}"); told[p] = kind
+        for p in [p for p in told if p not in (self.hello.get("resting") or []) + (self.hello.get("aside") or [])]:
+            del told[p]                                # saved again, or brought back: said again next time
+        save(STATE, self.state)
 
     def look(self, where_):
         if not where_["projects"] or not os.path.isdir(where_["projects"]):

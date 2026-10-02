@@ -99,6 +99,25 @@ check 'call POST "{}" "{\"batch\":\"$key/b1\",\"files\":\"/Users/m/song.wav\tSto
       'the helper says where a delivered file is now; only a file really inside the archive is taken'
 check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"PARKS/2026/20260929 Kite/Kite.prproj\"}" "{}" db/watcher.php | grep -q "\"/Users/m/song.wav\":{\"rel\":\"Stock Library/Music/song.wav\""' \
       'and the Watcher learns it, to point the project there'
+# resting and moving aside: Rushes decides which project folders, the runner moves them
+old=$(( $(date +%s) - 100 * 86400 ))
+call SQL "INSERT INTO projects (path, name, saved, archived, missing, state, aside_at) VALUES
+  ('PARKS/Old/Old.prproj', 'Old', $old, 'PARKS/Finished/Old/Old 1.prproj', '', 'active', 0),
+  ('PARKS/Mixed/A.prproj', 'A', $old, 'x', '', 'active', 0), ('PARKS/Mixed/B.prproj', 'B', $(date +%s), 'x', '', 'active', 0),
+  ('PARKS/NotKept/C.prproj', 'C', $old, '', '', 'active', 0), ('PARKS/Missing/D.prproj', 'D', $old, 'x', 'a.wav', 'active', 0)" >/dev/null
+plan() { LOCAL=1 call GET "{\"plan\":\"\"}" "{}" db/projects.php; }
+check '[ "$(plan)" = "aside	PARKS/Old" ]' 'only a folder asleep 90 days, kept in the archive and missing nothing, is planned to move aside'
+check 'call GET "{\"plan\":\"\"}" "{}" db/projects.php | grep -q "Only the runner"' 'only the runner asks for the plan'
+check 'call POST "{}" "{\"action\":\"moved\",\"lines\":\"aside\tPARKS/Mixed\tok\"}" db/projects.php | grep -q "only the runner"' 'and only the runner says what it moved'
+LOCAL=1 call POST "{}" "{\"action\":\"moved\",\"lines\":\"aside\tPARKS/Old\tok\"}" db/projects.php >/dev/null
+check '[ -z "$(plan)" ] && grep -q "	aside	PARKS/Old	ok" "$ROOT/app/projects-moves.tsv"' 'moved aside: recorded, and not planned again'
+check 'call POST "{}" "{\"action\":\"back\",\"folder\":\"PARKS/Old\"}" db/projects.php | grep -q "Sign in"' 'Bring it back needs Manage'
+check 'SIGNED=1 call POST "{}" "{\"action\":\"back\",\"folder\":\"PARKS/Mixed\"}" db/projects.php | grep -q "not moved aside"' 'and only for a folder moved aside'
+SIGNED=1 call POST "{}" "{\"action\":\"back\",\"folder\":\"PARKS/Old\"}" db/projects.php >/dev/null
+check '[ "$(plan)" = "back	PARKS/Old" ]' 'Bring it back is handed to the runner'
+LOCAL=1 call POST "{}" "{\"action\":\"moved\",\"lines\":\"back\tPARKS/Old\tok\"}" db/projects.php >/dev/null
+check '[ -z "$(plan)" ] && [ ! -s "$ROOT/app/projects-back.txt" ]' 'brought back: not asked again, and left in its place for another 90 days'
+
 k16=$(php_key=$(grep -o "'[0-9a-f]\{64\}'" "$ROOT/app/watchers.php" | head -1 | tr -d "'"); echo "$php_key" | cut -c1-16)
 SIGNED=1 call POST "{}" "{\"action\":\"forget\",\"key\":\"$k16\"}" db/pair.php >/dev/null
 check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'a removed computer can no longer deliver'

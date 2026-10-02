@@ -297,6 +297,42 @@ upkeep() {
         *) log "$(date '+%Y-%m-%d %H:%M:%S')  search update: $SYNC" ;;
     esac
 
+    # HOW-IT-WORKS.md → Projects in and out: once a day, the project folders
+    # Rushes says have slept long enough (and are kept in the archive) are
+    # moved aside on the Projects share, into "_Moved aside"; a Bring it back
+    # pressed in Manage is done within a minute. A rename on the same share:
+    # nothing is copied, nothing is deleted, nothing is written over.
+    PROJ=$(head -1 "$WEB/projects-path.txt" 2>/dev/null)
+    case "$PROJ" in
+        *[!A-Za-z0-9._/-]*|*..*|*/.*|/mnt/HDA_ROOT*|"$WEB"|"$WEB"/*|"$ARCH"|"$ARCH"/*) PROJ= ;;
+        /share/?*|/volume[0-9]*/?*|/srv/?*|/mnt/?*|/media/?*|/data/?*) [ -d "$PROJ" ] || PROJ= ;;
+        *) PROJ= ;;
+    esac
+    if [ -n "$PROJ" ] && { [ -s $WEB/projects-back.txt ] || [ "$(cat $WEB/projects-day.txt 2>/dev/null)" != "$(date +%F)" ]; }; then
+        date +%F > $WEB/projects-day.txt
+        PURL="${RUSHES_URL:-http://127.0.0.1}/db/projects.php"
+        curl -fsS --max-time 30 "$PURL?plan" > $WEB/projects-plan.tsv 2>/dev/null || : > $WEB/projects-plan.tsv
+        : > $WEB/projects-moved.tsv
+        T=$(printf '\t')
+        while IFS="$T" read -r what rel; do
+            case "$rel" in ''|/*|*..*|.*|*/.*) continue ;; esac
+            [ "$what" = aside ] && [ "$PAUSED" = 1 ] && continue     # paused: nothing moves by itself (Bring it back still does)
+            case "$what" in
+                aside) from="$PROJ/$rel"; to="$PROJ/_Moved aside/$rel" ;;
+                back)  from="$PROJ/_Moved aside/$rel"; to="$PROJ/$rel" ;;
+                *) continue ;;
+            esac
+            if [ ! -d "$from" ]; then why="not there"
+            elif [ -e "$to" ]; then why="something is already where it would go; left where it was"
+            elif mkdir -p "$(dirname "$to")" && mv "$from" "$to"; then why=ok
+            else why="could not be moved"; fi
+            printf '%s\t%s\t%s\n' "$what" "$rel" "$why" >> $WEB/projects-moved.tsv
+            log "$(date '+%Y-%m-%d %H:%M:%S')  project folder $rel: $([ "$what" = aside ] && echo 'moved aside' || echo 'brought back') — $why"
+        done < $WEB/projects-plan.tsv
+        [ -s $WEB/projects-moved.tsv ] && curl -fsS --max-time 30 --data-urlencode "action=moved" \
+            --data-urlencode "lines@$WEB/projects-moved.tsv" "$PURL" >/dev/null 2>&1
+    fi
+
     # HOW-IT-WORKS.md → Rushes' own backups: Rushes copies its database once a day (db-copy.sqlite, only when
     # it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
     # them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with

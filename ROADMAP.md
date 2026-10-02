@@ -145,10 +145,10 @@ In this order of importance:
 5. **Projects in and out** (designed October 2026). *Built: Rushes' side
    (pairing editors' computers, their door, the projects list in Manage, the
    stock library in Search), the helper taking deliveries in, and the core of
-   Rushes Watcher (Premiere, on a Mac), Rushes Watcher as its own app, and the
-   menu bar icon for both apps (built and signed; to be tried on a Mac). To
-   come: resting and moving aside, one combined app for a single computer,
-   Final Cut and Resolve.* Editors
+   Rushes Watcher (Premiere, on a Mac), Rushes Watcher as its own app, the
+   menu bar icon for both apps (built and signed; to be tried on a Mac), and
+   resting and moving aside with Bring it back. To come: one combined app for a
+   single computer, Final Cut and Resolve.* Editors
    work as usual; Rushes keeps every project and everything it uses, without
    anyone pressing anything:
    - **Three shares.** VIDEO, the archive: read only for people, only Rushes
