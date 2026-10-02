@@ -25,18 +25,19 @@ Where Rushes falls short of what it should do, this document says so, and the
 6. [How a file is copied](#how-a-file-is-copied)
 7. [Checking copies later](#checking-copies-later)
 8. [Making footage findable](#making-footage-findable)
-9. [Keeping the archive tidy](#keeping-the-archive-tidy)
-10. [Manage](#manage)
-11. [Rushes Helper on the Mac](#rushes-helper-on-the-mac)
-12. [What runs by itself](#what-runs-by-itself)
-13. [Stopping things](#stopping-things)
-14. [Updates](#updates)
-15. [Pairing: one helper only](#pairing-one-helper-only)
-16. [Who can do what](#who-can-do-what)
-17. [What crosses the network](#what-crosses-the-network)
-18. [What Rushes deletes or moves](#what-rushes-deletes-or-moves)
-19. [Rushes' own backups](#rushes-own-backups)
-20. [What could go wrong](#what-could-go-wrong)
+9. [Projects in and out](#projects-in-and-out)
+10. [Keeping the archive tidy](#keeping-the-archive-tidy)
+11. [Manage](#manage)
+12. [Rushes Helper on the Mac](#rushes-helper-on-the-mac)
+13. [What runs by itself](#what-runs-by-itself)
+14. [Stopping things](#stopping-things)
+15. [Updates](#updates)
+16. [Pairing: one helper only](#pairing-one-helper-only)
+17. [Who can do what](#who-can-do-what)
+18. [What crosses the network](#what-crosses-the-network)
+19. [What Rushes deletes or moves](#what-rushes-deletes-or-moves)
+20. [Rushes' own backups](#rushes-own-backups)
+21. [What could go wrong](#what-could-go-wrong)
 
 ---
 
@@ -752,6 +753,77 @@ failed.
   - `db/analysis.php`: `analysis_import()`.
 
 ---
+
+## Projects in and out
+
+Editors work as usual. Rushes keeps every project and everything it uses,
+without anyone pressing anything. *Built so far: Rushes' side and the helper's.
+Rushes Watcher, the small program on each editor's computer, is next
+([roadmap](ROADMAP.md)).*
+
+**Three shares.** VIDEO, the archive: people only read it; only Rushes writes.
+Projects: where editors work. Deliveries: where outside files arrive for Rushes
+to take in. Each editor's computer writes only in its own folder of Deliveries,
+named by its key. Setup → 06 Editors' work says where each share is, how the
+helper sees Deliveries, and the stock library's folder.
+
+**A delivery.** When an editor saves (and the project has been quiet a few
+minutes), the Watcher copies the files the project uses from outside the
+archive into `Deliveries/<its key>/<batch>/files/`, fingerprints each one on the
+editor's computer, and writes `batch.tsv` last:
+
+```
+rushes-delivery 1
+watcher     <its key>
+host        <the computer's name>
+project     <the project, inside the Projects share>
+shoot       <its shoot folder in the archive, or empty>
+file        <name>  <algo:fingerprint>  <bytes>  <music|stock|sfx|project>  <where it was>
+projectfile <name>  <algo:fingerprint>  <bytes>  <project name>
+end
+```
+
+A `batch.tsv` without `end` is a batch still being copied, and is refused. The
+Watcher then tells Rushes (`db/watcher.php`), which queues `deliver <key>/<batch>`
+for the helper, after cards and tidy-ups.
+
+**Taking it in.** The helper (`ingest.py --deliver`) reads `batch.tsv`, refuses
+the whole batch if it names another computer, a path that climbs out, or a file
+it cannot check, and then, file by file:
+
+- **Music, stock footage, sound effects** go into the stock library,
+  `<library folder>/Music`, `/Stock footage`, `/Sound effects`. Each is stored
+  once: `_rushes/library.tsv` lists every fingerprint, and the same file
+  delivered again, under any name, for any project, points at the copy already
+  there.
+- **Things made for one project** go beside its shoot:
+  `<shoot>/Finished/<project>/Media/`. With no shoot named, `Finished` on the
+  shelf.
+- **The project file** goes in `<shoot>/Finished/<project>/` as
+  `<name> <date time>.prproj`, one per change: unchanged since the last one,
+  nothing new is kept.
+- A file of the same name already there gets ` (2)`; nothing is written over.
+
+Each file is copied [the careful way](#how-a-file-is-copied), and its
+fingerprint is taken on the same read and compared with the one taken on the
+editor's computer: a file that changed on its way is not taken. Every file is
+in the run's origin record (`_rushes/origin/… deliver.tsv`), with where it was
+on the editor's computer, and in a copy proof. Pause stops it at the next file;
+it carries on from there.
+
+Then the helper tells Rushes where each file is now (`db/delivered.php`, which
+takes only files really inside the archive, at the size said), and the Watcher
+asks (`?where`) to point the project at the server's copies when it is closed.
+**Only when every file of the batch is safe in the archive and Rushes has
+recorded it** is the batch removed from Deliveries. Otherwise the whole batch
+stays, and Activity says why.
+
+**Seeing it.** Manage → Editors' projects lists every project the Watchers
+report: its computer, last save, files from outside, files missing, what is in
+the archive, and its state. A project not saved for 10 days is *resting*:
+nothing moves. Below, each editor's computer: what it is doing, when it was
+last heard from, and the end of its log, the same lines the editor sees. Search
+has the stock library as its own section: Music, Stock footage, Sound effects.
 
 ## Keeping the archive tidy
 
@@ -1547,6 +1619,12 @@ and caches are **moved** to the holding folder, and only you empty it.
   - a copied folder's `Where this came from.txt`, when the folder empties, is
     added to the same note where the files went, or moved there.
 - **An approved page** in `_rushes/deploy`, once it is installed.
+
+**On the Deliveries share:**
+
+- **A delivery,** once every file in it is in the archive, checked against the
+  fingerprint taken on the editor's computer, and recorded by Rushes. Nothing
+  else there, and never part of a batch.
 - **A database copy** in `_rushes/db-copies` is replaced by the one made a week
   later on the same weekday.
 

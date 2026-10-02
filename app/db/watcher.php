@@ -13,7 +13,7 @@
 //   GET  ?hello                         the shares and folders it needs
 //   POST action=report  state, now, log what it is doing (for Setup and the project pages)
 //   POST action=delivered batch=<name>  a batch is complete in Deliveries/<its key>/<name>
-//   POST action=project path, name, saved, files, outside, missing, shoot
+//   POST action=project path, name, saved, files, outside, missing (names, separated by ;), shoot
 //   GET  ?where&project=<path>          where its delivered files are now, inside the archive
 require_once __DIR__ . '/schema.php';
 header('Content-Type: application/json');

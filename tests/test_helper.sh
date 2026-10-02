@@ -92,6 +92,11 @@ check 'grep -qx "deliver	$key/b1" "$ROOT/app/ingest-queue.tsv"' 'a delivery is q
 check 'WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"../x\"}" db/watcher.php | grep -q "not a batch"' 'and nowhere else'
 WATCHER=$wid call POST "{}" "{\"action\":\"project\",\"path\":\"PARKS/2026/20260929 Kite/Kite.prproj\",\"saved\":\"100\",\"files\":\"12\",\"outside\":\"2\"}" db/watcher.php >/dev/null
 check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"PARKS/2026/20260929 Kite/Kite.prproj\"}" "{}" db/watcher.php | grep -q "\"files\":\[\]\|\"files\":{}"' 'a project is known; nothing delivered for it yet'
+mkdir -p "$ROOT/archive/Stock Library/Music"; printf 'lala' > "$ROOT/archive/Stock Library/Music/song.wav"
+check 'call POST "{}" "{\"batch\":\"$key/b1\",\"files\":\"/Users/m/song.wav\tStock Library/Music/song.wav\tsha256:ab\tmusic\tPARKS/2026/20260929 Kite/Kite.prproj\t4\n/x\t../../etc/passwd\tx\tmusic\tP\t1\"}" db/delivered.php | grep -q "\"recorded\":1,\"refused\":\[\"../../etc/passwd\"\]"' \
+      'the helper says where a delivered file is now; only a file really inside the archive is taken'
+check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"PARKS/2026/20260929 Kite/Kite.prproj\"}" "{}" db/watcher.php | grep -q "\"/Users/m/song.wav\":{\"rel\":\"Stock Library/Music/song.wav\""' \
+      'and the Watcher learns it, to point the project there'
 k16=$(php_key=$(grep -o "'[0-9a-f]\{64\}'" "$ROOT/app/watchers.php" | head -1 | tr -d "'"); echo "$php_key" | cut -c1-16)
 SIGNED=1 call POST "{}" "{\"action\":\"forget\",\"key\":\"$k16\"}" db/pair.php >/dev/null
 check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'a removed computer can no longer deliver'

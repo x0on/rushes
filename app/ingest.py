@@ -370,6 +370,55 @@ def read_back(path):
     return h.hexdigest()
 
 
+def copy_verified(src, dest, size, on_bytes=None, also=None):
+    """The one careful copy (HOW-IT-WORKS.md → How a file is copied), for every
+    file Rushes copies: cards, old servers, editors' deliveries. Written under a
+    temporary name while its fingerprint is taken, stored on the disk (fsync),
+    thrown away if the original changed meanwhile, read back from the
+    destination and compared, and only then given its real name, so an
+    interrupted or bad copy never looks like a finished file.
+    also: another fingerprint to take on the same read (a delivery's own).
+    -> (fingerprint, algo). Raises OSError and leaves nothing behind."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = dest + ".part"
+    h, algo = new_fingerprint()              # the original's fingerprint, taken while reading it anyway
+    before = os.stat(src)
+    try:
+        fed(src)
+        with open(src, "rb") as fi, open(tmp, "wb") as fo:
+            while True:
+                buf = fi.read(8 << 20)
+                if not buf: break
+                fo.write(buf); h.update(buf)
+                if also: also.update(buf)
+                fed(src)
+                if on_bytes: on_bytes(len(buf))
+            fed(dest); fo.flush(); os.fsync(fo.fileno())    # stored on the destination's disk, not only on its way there
+        fed()
+        shutil.copystat(src, tmp)
+        # As rclone does: an original that changed while it was read (still
+        # being written by a camera or another copy) gives a copy of neither
+        # version. Thrown away; it is tried again later.
+        after = os.stat(src)
+        if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+            raise OSError("the original changed while it was being copied (still being written?)")
+    except BaseException:
+        fed()
+        # No half-copied file is ever left behind, whatever stopped it.
+        try: os.remove(tmp)
+        except OSError: pass
+        raise
+    if os.path.getsize(tmp) != size:
+        os.remove(tmp)
+        if os.path.getsize(src) != size:
+            raise OSError("the original has changed since it was listed (still being written?) — it is copied on the next run")
+        raise OSError("size mismatch after copy")
+    if read_back(tmp) != h.hexdigest():      # the copy, read back from where it landed
+        os.remove(tmp); raise OSError("the copy did not match the original byte for byte")
+    os.rename(tmp, dest)
+    return h.hexdigest(), algo
+
+
 def digest(path, full=False):
     """Hash the ends of a file, or all of it. Cached by path+size+mtime."""
     try: st = os.stat(path)
@@ -1576,6 +1625,237 @@ def untidy(name):
     status(phase="done", source=f"undo {name}", copied=len(back), of=len(rows))
 
 
+# ── an editor's delivery (Rushes Watcher) ──────────────────────────────────
+# HOW-IT-WORKS.md → Projects in and out. A Watcher copies the outside files a
+# project uses into its own folder of the Deliveries share, writes batch.tsv
+# last, and tells Rushes. Here each file is checked against the fingerprint the
+# Watcher took on the editor's computer, copied into the archive the careful
+# way, recorded, and only then is the delivery copy removed.
+LIBRARY_KINDS = {"music": "Music", "stock": "Stock footage", "sfx": "Sound effects"}
+
+
+def _hasher(algo):
+    """A new fingerprint of the kind a delivery names, or None for one this helper cannot take."""
+    if algo == "sha256": return hashlib.sha256()
+    if algo == "blake2b": return hashlib.blake2b(digest_size=16)
+    if algo == "xxh128" and new_fingerprint()[1] == "xxh128": return new_fingerprint()[0]
+    return None
+
+
+def _fingerprint_of(path, algo):
+    h = _hasher(algo)
+    fed(path)
+    with open(path, "rb") as f:
+        for buf in iter(lambda: f.read(8 << 20), b""):
+            h.update(buf); fed(path)
+    fed()
+    return h.hexdigest()
+
+
+def _plain(name, n=120):
+    """A name that stays one name: no folder inside it, nothing hidden."""
+    return re.sub(r"[/\\:\x00-\x1f]+", "-", name).strip().lstrip(".")[:n]
+
+
+def _free_name(path):
+    """Never over another file: "name (2).ext", "name (3).ext" …"""
+    stem, ext = os.path.splitext(path)
+    n = 2
+    while os.path.lexists(path):
+        path = f"{stem} ({n}){ext}"; n += 1
+    return path
+
+
+def read_batch(text):
+    """batch.tsv -> dict, or ValueError. The Watcher writes it last and ends it
+    with "end", so a batch still being copied is never taken for a whole one."""
+    lines = text.split("\n")
+    while lines and lines[-1] == "":
+        lines.pop()
+    if not lines or lines[0] != "rushes-delivery 1" or lines[-1] != "end":
+        raise ValueError("batch.tsv is not complete")
+    b = {"watcher": "", "host": "", "project": "", "shoot": "", "name": "", "files": []}
+    for l in lines[1:-1]:
+        f = l.split("\t")
+        if f[0] in ("watcher", "host", "project", "shoot") and len(f) == 2:
+            b[f[0]] = f[1]; continue
+        if f[0] == "file" and len(f) == 6:
+            x = {"name": f[1], "fp": f[2], "size": f[3], "kind": f[4], "original": f[5]}
+        elif f[0] == "projectfile" and len(f) == 5:
+            x = {"name": f[1], "fp": f[2], "size": f[3], "kind": "projectfile", "original": ""}
+            b["name"] = f[4]
+        else:
+            raise ValueError(f"batch.tsv has a line it should not: {l[:80]}")
+        algo, _, hexd = x["fp"].partition(":")
+        if (not x["name"] or _plain(x["name"], 255) != x["name"] or not x["size"].isdigit()
+                or x["kind"] not in (*LIBRARY_KINDS, "project", "projectfile")
+                or _hasher(algo) is None or not re.fullmatch(r"[0-9a-f]{32,64}", hexd)):
+            raise ValueError(f"batch.tsv lists a file it cannot take: {l[:80]}")
+        x["size"] = int(x["size"])
+        b["files"].append(x)
+    p = b["project"]
+    if not p or p.startswith(("/", "\\")) or ".." in p.replace("\\", "/").split("/"):
+        raise ValueError("batch.tsv does not say which project, inside the Projects share")
+    if len({x["name"] for x in b["files"]}) != len(b["files"]):
+        raise ValueError("batch.tsv lists the same file twice")
+    return b
+
+
+def _library():
+    """fingerprint -> (path inside the archive, size): the stock library, each file stored once."""
+    idx = {}
+    try:
+        for l in (STATUS / "library.tsv").read_text(encoding="utf-8", errors="replace").splitlines():
+            f = l.split("\t")
+            if len(f) == 3 and f[2].isdigit():
+                idx[f[0]] = (f[1], int(f[2]))
+    except OSError:
+        pass
+    return idx
+
+
+def deliver(rel):
+    t0 = time.time()
+    _mark_done(f"deliver {rel}")               # asked once: a refusal is not retried every 20 s
+
+    def refuse(why):
+        print(f"Delivery {rel} not taken in: {why}.\nNothing in the archive changed; the batch is still in Deliveries.")
+        history("refused", f"deliver {rel}", 0, 0, 0, why)
+
+    base = setting("shares.deliveries_helper") or (setting("shares.deliveries") if BUILT_IN else "")
+    if not base:
+        return refuse("Setup does not say where this helper finds the Deliveries share")
+    if not re.fullmatch(r"[0-9a-f]{16}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}", rel):
+        return refuse("that is not a delivery")
+    key = rel.split("/")[0]
+    folder = os.path.join(base, *rel.split("/"))
+    try:
+        b = read_batch(Path(folder, "batch.tsv").read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError) as e:
+        return refuse(f"its batch.tsv cannot be read ({e})")
+    if b["watcher"] != key:
+        return refuse("batch.tsv names another editor's computer than the folder it is in")
+
+    # Where things go. Made in a project: beside its shoot, in Finished. The
+    # shared stock library: once, in its own folder of the archive.
+    plain_parts = lambda p: [x for x in p.replace("\\", "/").split("/") if x]
+    sh = plain_parts(b["shoot"])
+    if sh and all(_plain(x, 255) == x and x != ".." for x in sh) and os.path.isdir(os.path.join(NAS_MOUNT, *sh)):
+        home = os.path.join(NAS_MOUNT, *sh)
+    elif _shelf():
+        home = _shelf()                          # no shoot known: Finished on the shelf
+    else:
+        return refuse("no shoot is named and no shelf is chosen in Reorganize, so it has nowhere to go")
+    pname = _plain(b["name"] or os.path.splitext(os.path.basename(b["project"].replace("\\", "/")))[0]) or "Project"
+    finished = os.path.join(home, "Finished", pname)
+    lp = plain_parts(setting("library.folder") or "Stock Library")
+    if not lp or any(_plain(x, 255) != x or x == ".." for x in lp):
+        return refuse("the stock library's folder in Setup is not a plain folder name")
+    lib = os.path.join(NAS_MOUNT, *lp)
+
+    need = sum(x["size"] for x in b["files"])
+    free = free_bytes()
+    if free is not None and free - need < FLOOR:
+        return refuse(f"only {free / 1024 ** 3:.0f} GB free on the archive, and the floor is {FLOOR / 1024 ** 3:.0f} GB")
+
+    print(f"delivery from {b['host'] or key}: {len(b['files'])} file(s) used by {b['project']}")
+    o = Origin("deliver", folder, base, f"delivery {key}", finished)
+    status(phase="delivering", source=b["project"], copied=0, of=len(b["files"]))
+    index, taken, proofs, mb, why_stopped = _library(), [], defaultdict(list), 0, ""
+    for i, x in enumerate(b["files"], 1):
+        if control().get("paused") or stopped():
+            why_stopped = "paused"; break
+        src = os.path.join(folder, "files", x["name"])
+        algo, _, want = x["fp"].partition(":")
+        stem, ext = os.path.splitext(x["name"])
+        if x["kind"] in LIBRARY_KINDS:
+            top = os.path.join(lib, LIBRARY_KINDS[x["kind"]]); dest = os.path.join(top, x["name"])
+        elif x["kind"] == "project":
+            top = finished; dest = os.path.join(finished, "Media", x["name"])
+        else:                                      # the project file itself, dated: one per change
+            top = finished; dest = os.path.join(finished, f"{stem} {time.strftime('%Y-%m-%d %H%M')}{ext}")
+        try:
+            if not os.path.isfile(src) or os.path.getsize(src) != x["size"]:
+                raise OSError("it is not in the batch at the size batch.tsv says")
+            # Already in the archive? The same music in ten projects is stored once.
+            same = lambda p: os.path.isfile(p) and os.path.getsize(p) == x["size"] and _fingerprint_of(p, algo) == want
+            have = None
+            if x["kind"] in LIBRARY_KINDS and x["fp"] in index and same(os.path.join(NAS_MOUNT, index[x["fp"]][0])):
+                have = os.path.join(NAS_MOUNT, index[x["fp"]][0])
+            elif x["kind"] == "projectfile" and os.path.isdir(finished):
+                older = sorted((os.path.join(finished, n) for n in os.listdir(finished)
+                                if n.startswith(stem + " ") and n.endswith(ext)), key=os.path.getmtime)
+                if older and same(older[-1]):
+                    have = older[-1]              # unchanged since the last one kept
+            elif same(dest):
+                have = dest
+            if have:
+                if _fingerprint_of(src, algo) != want:
+                    raise OSError("it does not match the fingerprint taken on the editor's computer")
+                o.add("already", src, have, x["size"], x["original"]); dest = have
+            else:
+                dest = _free_name(dest)
+                also = _hasher(algo)
+                hexd, used = copy_verified(src, dest, x["size"], also=also)
+                if also.hexdigest() != want:
+                    os.remove(dest)
+                    raise OSError("it does not match the fingerprint taken on the editor's computer (changed on the way?)")
+                o.add("copied", src, dest, x["size"], x["original"]); mb += x["size"]
+                if used == "xxh128":
+                    proofs[top].append((dest, x["size"], hexd))
+                if x["kind"] in LIBRARY_KINDS:
+                    r = os.path.relpath(dest, NAS_MOUNT).replace(os.sep, "/")
+                    with _io, open(STATUS / "library.tsv", "a", encoding="utf-8") as f:
+                        f.write(f"{x['fp']}\t{r}\t{x['size']}\n")
+                    index[x["fp"]] = (r, x["size"])
+            taken.append((x, dest))
+        except OSError as e:
+            o.add("failed", src, dest, x["size"], str(e))
+            print(f"  ! {x['name']}: {e}")
+        status(phase="delivering", source=b["project"], copied=i, of=len(b["files"]))
+    for top, files in proofs.items():
+        mhl_copied(top, files, o, f"{b['host'] or key}, for {b['project']}")
+    o.close()
+    if why_stopped:
+        _unmark_done(f"deliver {rel}")          # carries on when work resumes; what is in already is found there
+        print(f"  stopped part-way ({why_stopped}) — the rest is taken in when work resumes")
+        status(phase="stopped", source=b["project"], copied=len(taken), of=len(b["files"]))
+        return
+
+    # Rushes learns where each file is now, so the Watcher can point the project at it.
+    told = False
+    rows = "\n".join(f"{x['original'] or b['project']}\t{os.path.relpath(d, NAS_MOUNT).replace(os.sep, '/')}"
+                     f"\t{x['fp']}\t{x['kind']}\t{b['project']}\t{x['size']}" for x, d in taken)
+    try:
+        body = urllib.parse.urlencode({"batch": rel, "files": rows}).encode()
+        with urllib.request.urlopen(NAS_URL + "/db/delivered.php", data=body, timeout=60) as r:
+            said = json.loads(r.read().decode("utf-8", "replace"))
+        told = said.get("recorded") == len(taken) and not said.get("refused")
+        if not told:
+            print(f"  ! Rushes recorded {said.get('recorded')} of {len(taken)}; refused: {said.get('refused')}")
+    except Exception as e:
+        print(f"  ! could not tell Rushes where the files are ({e})")
+    failed = len(b["files"]) - len(taken)
+    # The delivery copies go only when every one of them is safe in the archive
+    # and Rushes knows where: otherwise the whole batch stays, for a person to see.
+    if told and not failed:
+        for x in b["files"]:
+            try: os.remove(os.path.join(folder, "files", x["name"]))
+            except OSError: pass
+        for p in (os.path.join(folder, "batch.tsv"),):
+            try: os.remove(p)
+            except OSError: pass
+        for d in (os.path.join(folder, "files"), folder):
+            try: os.rmdir(d)
+            except OSError: pass
+    note = (f"{o.n['copied']} copied, {o.n['already']} already in the archive"
+            + (f", {failed} could not be taken in — the batch is left in Deliveries" if failed else "")
+            + ("" if told else ", Rushes was not told where they are — the batch is left in Deliveries"))
+    print(f"  {note}\n  record: _rushes/origin/{o.path.name}")
+    history("delivered", rel, len(taken), mb, time.time() - t0, note)
+    status(phase="done", source=b["project"], copied=len(taken), of=len(b["files"]), failed=failed)
+
+
 _looked = [[], 0.0]        # the latest look at what is plugged in here, and when
 _looking = [""]            # the drive being looked at right now
 
@@ -2154,7 +2434,7 @@ def watch(root, every=20):
             elif len(f) >= 2 and f[0] == "analyze" and f[1].startswith("/"):
                 # the third field is when it was asked for: asking again (new footage) runs again
                 want.append(("analyze", f[1], f[2] if len(f) > 2 and f[2].isdigit() else ""))
-            elif len(f) >= 2 and f[0] in ("tidy", "untidy") and f[1]:
+            elif len(f) >= 2 and f[0] in ("tidy", "untidy", "deliver") and f[1]:
                 want.append((f[0], f[1], ""))
             elif len(f) >= 3 and f[0] == "ingest" and f[1] and f[2]:
                 # a card, the folder it goes in, and — for a card that spans
@@ -2209,11 +2489,12 @@ def watch(root, every=20):
         # one the transfer does not know is finished when this computer did it.
         item_done = lambda p: job_items[p]["phase"] in ("done", "removed")
         finished = lambda v, p, i: ((v == "copy" and (item_done(p) if p in job_items else p in done)) or (v == "ingest" and i.split("\t")[0] in done)
-                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy") and f"{v} {p}" in done)
+                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy", "deliver") and f"{v} {p}" in done)
                                     or (v == "analyze" and f"analyze {p}{' ' + i if i else ''}" in done))
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
-        # A tidy-up works inside the archive, so a source going away does not stop it.
-        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy")]
+        # A tidy-up works inside the archive, and a delivery comes from the
+        # Deliveries share, so a source drive going away stops neither.
+        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy", "deliver")]
         try:
             gone = within("sources", 30, lambda: [p for p in copies if not os.path.isdir(p)]) if copies else []
         except Stalled:
@@ -2312,6 +2593,10 @@ def watch(root, every=20):
                 did = True
                 print(f"\n=== undoing tidy-up {path} ===")
                 run_self("--untidy", path); break
+            if verb == "deliver":
+                did = True
+                print(f"\n=== an editor's delivery: {path} ===")
+                run_self("--deliver", path); break
             if verb == "copy" and path in c.get("skip", []):
                 continue                               # skipped from Manage
             item = job_items.get(path) if verb == "copy" else None
@@ -2556,6 +2841,7 @@ def main():
     ap.add_argument("--root", default=ARCHIVE, help="archive root on the NAS")
     ap.add_argument("--tidy", metavar="PLAN", help="move copied footage onto the shelf by an approved plan")
     ap.add_argument("--untidy", metavar="RECORD", help="put back what one tidy-up moved")
+    ap.add_argument("--deliver", metavar="KEY/BATCH", help="take in what an editor's Watcher delivered")
     ap.add_argument("--into", help="copy the whole source into exactly this folder, "
                                    "keeping its layout (a card into its shoot folder)")
     ap.add_argument("--day", help="with --into: only the files recorded on this day (YYYY-MM-DD)")
@@ -2592,7 +2878,7 @@ def main():
     # Anything that copies or lists needs to know where things are. Without
     # Rushes' settings it would be guessing, and a guessed path is how files
     # land somewhere nobody looks. Stop and say why instead.
-    if (a.sections or a.source or a.trace or a.tidy or a.untidy) and not SETTINGS:
+    if (a.sections or a.source or a.trace or a.tidy or a.untidy or a.deliver) and not SETTINGS:
         sys.exit(f"Cannot reach Rushes at {NAS_URL} — nothing copied.\n"
                  "Stop the helper (Ctrl-C) and start it again with the command from Setup.")
     # The one boundary every copy must respect: it lands inside the archive.
@@ -2610,6 +2896,7 @@ def main():
         if not re.fullmatch(r"[0-9-]+", a.tidy): sys.exit("That is not a tidy-up plan.")
         return tidy(a.tidy)
     if a.untidy:   return untidy(a.untidy)
+    if a.deliver:  return deliver(a.deliver)
     if a.sections: return sections(a.sections, a.fresh)
     if a.undo:     return undo()
     if not a.source: sys.exit("need --source")
@@ -2767,51 +3054,17 @@ def main():
                 raise OSError("a different file with this name is already there — left untouched")
             kind, note = "already", "there from an earlier run"
         else:
-            # Copy to a temp name, make sure it is on the archive's disk, check
-            # it byte for byte, then put it in place — so an interrupted or bad
-            # copy never looks like a finished file.
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            tmp = dest + ".part"
             progress(name, force=True)
-            h, algo = new_fingerprint()              # the original's fingerprint, taken while reading it anyway
-            before = os.stat(src)
-            try:
-                fed(src)
-                with open(src, "rb") as fi, open(tmp, "wb") as fo:
-                    while True:
-                        buf = fi.read(8 << 20)
-                        if not buf: break
-                        fo.write(buf); h.update(buf); done_b += len(buf)
-                        fed(src); progress(name)
-                    fed(dest); fo.flush(); os.fsync(fo.fileno())    # stored on the archive's disk, not only on its way there
-                fed()
-                shutil.copystat(src, tmp)
-                # As rclone does: an original that changed while it was read
-                # (still being written by a camera or another copy) gives a copy
-                # of neither version. Thrown away; it is tried again later.
-                after = os.stat(src)
-                if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
-                    raise OSError("the original changed while it was being copied (still being written?)")
-            except BaseException:
-                fed()
-                # No half-copied file is ever left behind, whatever stopped it.
-                try: os.remove(tmp)
-                except OSError: pass
-                raise
-            if os.path.getsize(tmp) != size:
-                os.remove(tmp)
-                if os.path.getsize(src) != size:
-                    raise OSError("the original has changed since it was listed (still being written?) — it is copied on the next run")
-                raise OSError("size mismatch after copy")
-            if read_back(tmp) != h.hexdigest():      # the copy, read back from the archive
-                os.remove(tmp); raise OSError("the copy did not match the original byte for byte")
-            os.rename(tmp, dest)
+            def moved(n):
+                nonlocal done_b
+                done_b += n; progress(name)
+            hexd, algo = copy_verified(src, dest, size, moved)
             log.write(f"{src}\t{dest}\n"); log.flush()
             # Kept in the where-it-came-from record: years from now, the archive
             # copy can still be proven to be the original.
-            copied += 1; copied_b += size; kind, note = "copied", f"verified {algo} {h.hexdigest()}"
+            copied += 1; copied_b += size; kind, note = "copied", f"verified {algo} {hexd}"
             if algo == "xxh128":
-                proof.append((dest, size, h.hexdigest()))
+                proof.append((dest, size, hexd))
         cp.landed(dest, size)
         cp.complete_file(a.job, a.source, src, size, kind)
         o.add(kind, src, dest, size, note)

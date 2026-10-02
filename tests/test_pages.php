@@ -34,7 +34,11 @@ check(count($s['ingests']) === 2 && $s['ingests'][0]['state'] === 'done' && $s['
       'a landed card says how many files could not be copied (Ingest says safe to format only at none)');
 
 ini_set('session.save_path', "$root/app"); session_start(); $_SESSION['rushes_in'] = true;
+db()->exec("INSERT INTO projects (path, name, host, watcher, saved, seen, files, outside, missing, shoot, state)
+            VALUES ('Parks/Kite.prproj', 'Kite', 'edit-1', 'ab12cd34ef567890', " . ($now - 86400 * 12) . ", $now, 12, 2, 'a.wav;b.mov', '', 'active')");
 ob_start(); include "$root/app/db/admin.php"; $html = ob_get_clean();
+check(str_contains($html, 'id="pane-projects"') && str_contains($html, 'Parks/Kite.prproj') && str_contains($html, '>resting<'),
+      "Editors' projects: each one the Watchers reported, and one not saved for 10 days is resting (nothing moves)");
 check(str_contains($html, 'id="now"') && str_contains($html, 'id="transferSummary"'), 'Overview has both the live card and the transfer card');
 check(str_contains($html, 'helperNow') && str_contains($html, 'tokens.css?v='), 'shared top bar with live words and a fresh stylesheet');
 echo "Page tests complete.\n";

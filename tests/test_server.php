@@ -15,7 +15,7 @@ function check($ok, $what) { if (!$ok) throw new RuntimeException($what); echo "
 function landed($path, $size) {
     global $root;
     $_POST = ['files'=>"$path\t$size"];
-    ob_start(); include "$root/app/db/landed.php"; $r = json_decode(ob_get_clean(), true);
+    ob_start(); include web_dir() . "/db/landed.php"; $r = json_decode(ob_get_clean(), true);
     return $r;
 }
 file_put_contents("$root/archive/a.mov", 'abc');
@@ -230,4 +230,14 @@ $s['organise']['shelves'] = ''; save_settings($s); settings(true);
 check(shelf_name() === '' && !in_array("450\tproject\t/Library/", dedupe_rules_write(), true) && !is_dir(shelf_dir()),
       'no shelf chosen: no folder is guessed');
 $s['organise']['shelves'] = 'Library'; save_settings($s); settings(true);
+// The stock library is a section of Search: its own folder, wherever Setup puts it, browsed without words.
+$arch = archive_dir();
+@mkdir("$arch/Stock Library/Music", 0777, true); @mkdir("$arch/Shoots/Library talk", 0777, true);
+file_put_contents("$arch/Stock Library/Music/song.wav", 'la'); landed("$arch/Stock Library/Music/song.wav", 2);
+file_put_contents("$arch/Shoots/Library talk/talk.mov", 'tk'); landed("$arch/Shoots/Library talk/talk.mov", 2);
+$find = function (array $get) { $_GET = $get; ob_start(); include web_dir() . "/db/search.php"; return json_decode(ob_get_clean(), true); };
+$r = $find(['in' => 'library']); $r2 = $find(['in' => 'library/sfx']); $r3 = $find(['q' => 'song', 'in' => 'library/music']);
+check($r['total'] === 1 && $r['rows'][0]['name'] === 'song.wav' && $r2['total'] === 0 && $r3['total'] === 1,
+      'Search: the stock library is its own section, and a shoot with "Library" in its name is not in it');
+$_GET = [];
 echo "Server tests complete. Fixture: $root\n";

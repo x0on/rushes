@@ -313,6 +313,58 @@ if (isset($_POST['_newpass'])) {
         </div>
       </section>
 
+      <!-- ══ editors' projects (HOW-IT-WORKS.md → Projects in and out) ══ -->
+      <section id="pane-projects" hidden>
+<?php
+require_once __DIR__ . '/schema.php'; db_init();
+$h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
+$ago = function (int $t): string { if (!$t) return '—'; $d = time() - $t;
+    return $d < 3600 ? max(1, intdiv($d, 60)) . ' min ago' : ($d < 86400 ? intdiv($d, 3600) . ' h ago' : date('Y-m-d', $t)); };
+$restDays = (int)(settings()['projects']['rest_days'] ?? 10);
+$prj = []; $r = db()->query('SELECT p.*, (SELECT COUNT(*) FROM delivered d WHERE d.project = p.path) AS taken FROM projects p ORDER BY saved DESC LIMIT 500');
+while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $prj[] = $x;
+// What each Watcher last said, and the end of its log: the same lines the editor sees on that computer.
+$said = [];
+foreach (watchers() as $k => $w) {
+    $key = substr($k, 0, 16); $t = @file_get_contents(web_dir() . "/watchers/$key.txt") ?: '';
+    [$head, $log] = array_pad(explode("\n--\n", $t, 2), 2, '');
+    $f = []; foreach (explode("\n", $head) as $l) { [$a, $b] = array_pad(explode("\t", $l, 2), 2, ''); $f[$a] = $b; }
+    $said[$key] = ['host' => $w['host'] ?? $key, 'at' => (int)($f['at'] ?? 0), 'state' => $f['state'] ?? '', 'now' => $f['now'] ?? '', 'log' => trim($log)];
+}
+?>
+        <div class="panel" style="margin-top:8px">
+          <header><b>Editors' projects</b> <span class="note">as each editor's Rushes Watcher reports them, newest save first</span></header>
+<?php if (!$prj): ?>
+          <div class="empty">No project reported yet. Pair an editor's computer in Setup &rarr; 06 Editors' work, and its projects appear here after their next save.</div>
+<?php else: ?>
+          <div style="overflow-x:auto"><table class="prep"><thead><tr><th>Project</th><th>Computer</th><th>Last saved</th>
+            <th title="files the project uses from outside the archive">From outside</th><th>Missing</th><th>In the archive</th><th>State</th></tr></thead><tbody>
+<?php foreach ($prj as $p):
+    $state = $p['state'] === 'aside' ? 'moved aside' : ((int)$p['saved'] && time() - (int)$p['saved'] > $restDays * 86400 ? 'resting' : 'active'); ?>
+            <tr><td><b><?= $h($p['name']) ?></b><div class="note"><?= $h($p['path']) ?></div></td>
+              <td><?= $h($p['host']) ?></td><td><?= $ago((int)$p['saved']) ?></td>
+              <td><?= (int)$p['outside'] ?></td>
+              <td<?= $p['missing'] !== '' ? ' class="bad" title="' . $h($p['missing']) . '"' : '' ?>><?= $p['missing'] !== '' ? count(explode(';', $p['missing'])) : '0' ?></td>
+              <td><?= (int)$p['taken'] ?> file<?= (int)$p['taken'] === 1 ? '' : 's' ?><?= $p['archived'] ? '<div class="note">project kept: ' . $h($p['archived']) . '</div>' : '' ?></td>
+              <td title="resting: no save for <?= $restDays ?> days; nothing moves"><?= $state ?></td></tr>
+<?php endforeach; ?>
+          </tbody></table></div>
+<?php endif; ?>
+        </div>
+        <div class="panel" style="margin-top:14px">
+          <header><b>Editors' computers</b> <span class="note">what each Watcher is doing, and its log</span></header>
+<?php if (!$said): ?>
+          <div class="empty">None paired yet.</div>
+<?php else: foreach ($said as $key => $s): ?>
+          <details style="padding:10px 14px;border-bottom:1px solid var(--line)">
+            <summary style="cursor:pointer"><b><?= $h($s['host']) ?></b> &middot; <?= $s['at'] ? $h($s['state'] ?: 'running') . ', heard ' . $ago($s['at']) : 'not heard from yet' ?>
+              <?= $s['now'] !== '' ? '<span class="note"> &middot; ' . $h($s['now']) . '</span>' : '' ?></summary>
+            <pre class="code block" style="max-height:300px;overflow:auto;white-space:pre-wrap;margin-top:8px"><?= $s['log'] !== '' ? $h($s['log']) : 'Nothing in its log yet.' ?></pre>
+          </details>
+<?php endforeach; endif; ?>
+        </div>
+      </section>
+
       <section id="pane-tools" hidden>
         <div class="panel" style="margin-top:8px">
           <header><b>Run something by hand</b></header>
@@ -411,7 +463,7 @@ let pane = 'overview', latestTransfer = null, quiet = 0;
 // ── moving between sections ────────────────────────────────────────────────
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
                  duplicates: 'Duplicates', describe: 'Describe',
-                 activity: 'Activity', tools: 'Jobs and tools' };
+                 activity: 'Activity', tools: 'Jobs and tools', projects: "Editors' projects" };
 
 function show(which) {
   pane = which;
@@ -420,7 +472,7 @@ function show(which) {
     if (b.dataset.go === which) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  ['transfers', 'duplicates', 'cache', 'describe', 'activity', 'tools'].forEach(function (p) {
+  ['transfers', 'duplicates', 'cache', 'describe', 'projects', 'activity', 'tools'].forEach(function (p) {
     $('pane-' + p).hidden = (p !== which);
   });
   // Overview shows the tiles and the cards; a section shows its own thing.

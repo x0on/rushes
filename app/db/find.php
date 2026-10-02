@@ -45,6 +45,7 @@ require __DIR__ . '/config.php';
   .q .mag { position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
             color: var(--faint); pointer-events: none; display: block }
   .q .mag svg { width: 17px; height: 17px; display: block }
+  .rail .nav.sub { padding-left: 38px; font-size: 12.5px }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px }
   .chip { border: 1px solid var(--line); background: var(--surface); color: var(--muted);
           padding: 5px 12px; border-radius: 999px; font: 12.5px var(--font); cursor: pointer }
@@ -130,7 +131,10 @@ require __DIR__ . '/config.php';
     <button class="nav" data-scope="" aria-current="page" title="every file the archive knows about"><span class="ico"><?= icon('everything') ?></span> Everything</button>
     <button class="nav" data-scope="ARCHIVE" title="finished shoots, kept"><span class="ico"><?= icon('archive') ?></span> Archive</button>
     <button class="nav" data-scope="PROJECTS" title="edits and project files"><span class="ico"><?= icon('projects') ?></span> Projects</button>
-    <button class="nav" data-scope="LIBRARY" title="music, graphics, reusable pieces"><span class="ico"><?= icon('library') ?></span> Library</button>
+    <button class="nav" data-scope="" data-in="library" title="the stock library editors share: each file stored once"><span class="ico"><?= icon('library') ?></span> Stock library</button>
+    <button class="nav sub" data-scope="" data-in="library/music">Music</button>
+    <button class="nav sub" data-scope="" data-in="library/stock">Stock footage</button>
+    <button class="nav sub" data-scope="" data-in="library/sfx">Sound effects</button>
     <h2>Pulls</h2>
     <div id="pulls"></div>
     <a class="nav" href="/pull.php"><span class="ico"><?= icon('everything') ?></span> All pulls</a>
@@ -210,11 +214,11 @@ const trail = function (p) {
 };
 
 const KINDS = ['all', 'video', 'image', 'audio', 'project', 'sidecar', 'other'];
-let kind = 'all', scope = '', rows = [], total = 0, offset = 0, seq = 0, timer = null, moments = { count: 0, rows: [] };
+let kind = 'all', scope = '', place = '', rows = [], total = 0, offset = 0, seq = 0, timer = null, moments = { count: 0, rows: [] };
 
 document.querySelectorAll('.rail [data-scope]').forEach(function (b) {
   b.onclick = function () {
-    scope = b.dataset.scope;
+    scope = b.dataset.scope; place = b.dataset.in || '';
     document.querySelectorAll('.rail [data-scope]').forEach(function (x) {
       if (x === b) x.setAttribute('aria-current', 'page'); else x.removeAttribute('aria-current');
     });
@@ -226,8 +230,8 @@ async function run(more) {
   const my = ++seq;
   if (!more) { offset = 0; rows = []; }
   const words = ($('q').value.trim() + ' ' + scope).trim();
-  const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset });
-  $('stat').textContent = words ? 'searching…' : 'Start typing.';
+  const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset, in: place });
+  $('stat').textContent = words || place ? 'searching…' : 'Start typing.';
 
   let raw;
   try { raw = await (await fetch('search.php?' + p)).text(); }
@@ -253,7 +257,7 @@ async function run(more) {
     b.onclick = function () { kind = b.dataset.k; run(); };
   });
 
-  $('stat').textContent = words
+  $('stat').textContent = words || place
     ? total.toLocaleString() + ' file' + (total === 1 ? '' : 's') + (d.bytes ? ' · ' + tb(d.bytes) : '')
     : 'Start typing.';
   draw();

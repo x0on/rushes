@@ -389,7 +389,7 @@ if (is_readable("$WEB/ingest-history.tsv")) {
         $tidy = preg_match('/^(un)?tidy /', $f[2]);
         $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
                  'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted',
-                 'dropped' => 'dropped', 'analysed' => 'described',
+                 'dropped' => 'dropped', 'analysed' => 'described', 'delivered' => "taken in from an editor's computer",
                  'proven' => 'checked against its originals', 'checked' => 'checked for damage', 'counted' => 'counted'][$f[1]] ?? 'looked at';
         $recent[] = ['when' => $f[0], 'what' => $what,
                      'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],

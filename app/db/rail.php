@@ -19,6 +19,7 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
     <?= $railItem('duplicates', 'Duplicates', 'library',   '/db/admin.php#duplicates', true) ?>
     <?= $railItem('cache',      'Cache',      'cache',     '/db/admin.php#cache',      true, ' <span class="count" id="nCache"></span>') ?>
     <?= $railItem('describe',   'Describe',   'search',    '/db/admin.php#describe',   true) ?>
+    <?= $railItem('projects',   "Editors' projects", 'project', '/db/admin.php#projects', true) ?>
     <?= $railItem('structure',  'Reorganize',  'projects',  '/structure.php',           false) ?>
 
     <h2>System</h2>

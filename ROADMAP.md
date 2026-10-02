@@ -142,7 +142,10 @@ In this order of importance:
    card", and copying to two places at once. *Built: safe to format. To come:
    two places at once.*
 
-5. **Projects in and out** (designed October 2026, not built yet). Editors
+5. **Projects in and out** (designed October 2026). *Built: Rushes' side
+   (pairing editors' computers, their door, the projects list in Manage, the
+   stock library in Search) and the helper taking deliveries in. To come:
+   Rushes Watcher itself, the menu bar icons, resting and moving aside.* Editors
    work as usual; Rushes keeps every project and everything it uses, without
    anyone pressing anything:
    - **Three shares.** VIDEO, the archive: read only for people, only Rushes

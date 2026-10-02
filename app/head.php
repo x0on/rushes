@@ -201,6 +201,11 @@ window.helperNow = function (c) {
                      [num(c.failed), 'shots it could not read']]
                  : [[c.step || 'starting', 'loading the model']]};
   }
+  if (c.phase === 'delivering') {
+    var p6 = c.of ? Math.floor(c.copied / c.of * 100) : 0;
+    return {busy: true, pct: p6, title: 'Taking in what an editor delivered · ' + name, short: 'taking in a delivery · ' + p6 + '%',
+      facts: [[num(c.copied) + ' / ' + num(c.of), 'files checked and copied']]};
+  }
   if (c.phase === 'tidying') {
     var p2 = c.of ? Math.floor(c.copied / c.of * 100) : 0;
     return {busy: true, pct: p2, title: 'Tidying up', short: 'tidying up · ' + p2 + '%',

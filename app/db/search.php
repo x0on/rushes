@@ -2,6 +2,7 @@
 // search.php — the query endpoint. Returns JSON, not a 102 MB download.
 //
 //   search.php?q=DJI_0002&kind=video&limit=200&offset=0
+//   search.php?in=library/music          the stock library, or one part of it, with or without words
 //
 // Every word must match somewhere in the path, which is how the old page
 // behaved and what people expect. Counts per kind come back with the results
@@ -20,7 +21,7 @@ register_shutdown_function(function () {
     }
 });
 
-require __DIR__ . '/schema.php';
+require_once __DIR__ . '/schema.php';
 db_init();   // new tables (the media ledger) exist before the first search
 
 $q      = trim($_GET['q'] ?? '');
@@ -41,6 +42,13 @@ foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
 }
 if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
+// The shared stock library (HOW-IT-WORKS.md → Projects in and out): its own
+// folder of the archive, wherever Setup says it is, so a section of its own.
+if (preg_match('#^library(?:/(music|stock|sfx))?$#', (string)($_GET['in'] ?? ''), $m)) {
+    $sub = ['music' => 'Music/', 'stock' => 'Stock footage/', 'sfx' => 'Sound effects/'][$m[1] ?? ''] ?? '';
+    $pre = rtrim(archive_dir(), '/') . '/' . trim((string)(settings()['library']['folder'] ?? 'Stock Library'), '/') . "/$sub";
+    $where[] = "path LIKE ? ESCAPE '\\'"; $args[] = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $pre) . '%';
+}
 
 $sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
