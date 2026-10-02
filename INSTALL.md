@@ -51,7 +51,7 @@ minimums the parts are built for; describing is the one to plan for.
 | The helper's Mac (describing) | an Apple chip (M1 or later), **16 GB** memory, 20 GB free disk | **32 GB** if the same Mac also edits | The vision model takes about 6 GB of memory while it works (5.4 GB on disk) and Whisper about 2 GB more. With less memory it does not run. |
 | An editor's computer (Rushes Watcher, when it exists) | anything that runs the editing software | — | It only watches and copies; it uses almost nothing. |
 
-Describing runs one file at a time, at low priority, and has its own Pause, so
+Describing runs one file at a time and has its own Pause, so
 a Mac that also edits can pause it during a busy day.
 
 ## First install
