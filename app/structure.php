@@ -325,14 +325,17 @@ $opts = function (string $cur) use ($folders, $e) {
 
     <!-- ══ Premiere projects after a tidy-up ══ -->
     <div class="grp" id="relink">
-      <h2><span>05 /</span> Premiere projects after a tidy-up</h2>
-      <p>A tidy-up moves footage, so a Premiere project that used it opens with &ldquo;media offline&rdquo;.
+      <h2><span>05 /</span> Edit projects after a tidy-up</h2>
+      <p>A tidy-up moves footage, so a project that used it opens with &ldquo;media offline&rdquo;.
          Choose the project here and Rushes points every clip at where the tidy-up put it, from the record
-         of every move. You get a copy, &ldquo;<i>name</i> (relinked).prproj&rdquo;; the project you chose is not changed.
+         of every move. You get a copy, &ldquo;<i>name</i> (relinked)&rdquo;; the file you chose is not changed.
          It is read on this computer: only the file paths written in it are sent to Rushes, never the project.</p>
+      <p class="note">Premiere: the project itself (<code>.prproj</code>). Final Cut Pro: export the library or event as
+         XML (<code>.fcpxml</code>), relink it here, and import the copy. DaVinci Resolve: export the timeline as FCPXML
+         or as XML, relink it here, and import the copy.</p>
       <div class="btns">
-        <button class="btn" type="button" id="rlGo">Choose a Premiere project&hellip;</button>
-        <input type="file" id="rlPick" accept=".prproj" hidden>
+        <button class="btn" type="button" id="rlGo">Choose a project or an XML&hellip;</button>
+        <input type="file" id="rlPick" accept=".prproj,.fcpxml,.xml" hidden>
       </div>
       <p class="note" id="rlSaid" style="margin:10px 0 0"></p>
       <div id="rlOut"></div>
@@ -347,6 +350,21 @@ $opts = function (string $cur) use ($folders, $e) {
       var enc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
       var TEXT = />([^<>]{3,2000})</g;                 // every piece of text in the project
       var isPath = function (s) { return /[\\/]/.test(s) && /\.\w{2,5}$/.test(s); };
+      // file:///Volumes/A/b.mov -> /Volumes/A/b.mov; file:///Z:/A -> Z:\A; file://server/share/A -> \\server\share\A
+      var toPath = function (u) {
+        var m = u.match(/^file:\/\/([^\/]*)(\/.*)$/i); if (!m) return '';
+        var p; try { p = decodeURIComponent(m[2]); } catch (e) { return ''; }
+        if (m[1] && m[1].toLowerCase() !== 'localhost') return '\\\\' + m[1] + p.replace(/\//g, '\\');
+        return /^\/[A-Za-z]:/.test(p) ? p.slice(1).replace(/\//g, '\\') : p;
+      };
+      // and back, written the way the file wrote it (with or without "localhost")
+      var toUrl = function (p, was) {
+        var pre = /^file:\/\/localhost\//i.test(was) ? 'file://localhost' : 'file://';
+        var segs = function (s) { return s.split(/[\\\/]+/).filter(Boolean).map(encodeURIComponent).join('/'); };
+        if (/^\\\\/.test(p)) { var parts = p.split('\\').filter(Boolean); return 'file://' + parts.shift() + '/' + segs(parts.join('/')); }
+        if (/^[A-Za-z]:/.test(p)) return pre + '/' + p.slice(0, 2) + '/' + segs(p.slice(2));
+        return pre + '/' + segs(p);
+      };
       $('rlGo').onclick = function () { $('rlPick').value = ''; $('rlPick').click(); };
       $('rlPick').onchange = async function () {
         var f = (this.files || [])[0], said = $('rlSaid'), out = $('rlOut');
@@ -358,9 +376,14 @@ $opts = function (string $cur) use ($folders, $e) {
           var xml = b[0] === 0x1f && b[1] === 0x8b      // a .prproj is gzipped XML
             ? await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
             : new TextDecoder().decode(buf);
-          if (!/<PremiereData/.test(xml.slice(0, 4000))) throw new Error(f.name + ' is not a Premiere project');
+          var head = xml.slice(0, 4000);
+          var kind = /<PremiereData/.test(head) ? 'premiere' : /<fcpxml/.test(head) ? 'fcpxml' : /<xmeml/.test(head) ? 'xmeml' : '';
+          if (!kind) throw new Error(f.name + ' is not a Premiere project, an FCPXML, or an XML from Premiere or Resolve');
+          // FCPXML and XML name each file as an address (file:///Volumes/…): a path in, a path out.
+          var URLS = kind === 'fcpxml' ? /(\ssrc=")(file:[^"]+)(")/g : /(<pathurl>)(file:[^<]+)(<\/pathurl>)/g;
           var found = new Set();
-          xml.replace(TEXT, function (m, t) { var d = dec(t); if (isPath(d)) found.add(d); return m; });
+          if (kind === 'premiere') xml.replace(TEXT, function (m, t) { var d = dec(t); if (isPath(d)) found.add(d); return m; });
+          else xml.replace(URLS, function (m, a, u) { var p = toPath(dec(u)); if (p) found.add(p); return m; });
           said.textContent = 'Asking Rushes where the ' + found.size.toLocaleString() + ' files this project names are now…';
           var r = await (await fetch('/db/relink.php', {method: 'POST', body: new URLSearchParams({paths: JSON.stringify(Array.from(found))})})).json();
           if (r.error) throw new Error(r.error);
@@ -371,9 +394,14 @@ $opts = function (string $cur) use ($folders, $e) {
                          : 'No tidy-up has run yet, so every file is where it was.') + ' No copy is needed.</div></div>';
             return;
           }
-          var n = 0, fixed = xml.replace(TEXT, function (m, t) { var to = r.map[dec(t)]; if (!to) return m; n++; return '>' + enc(to) + '<'; });
-          var gz = await new Response(new Blob([fixed]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
-          var name = f.name.replace(/\.prproj$/i, '') + ' (relinked).prproj', url = URL.createObjectURL(gz);
+          var n = 0, fixed = kind === 'premiere'
+            ? xml.replace(TEXT, function (m, t) { var to = r.map[dec(t)]; if (!to) return m; n++; return '>' + enc(to) + '<'; })
+            : xml.replace(URLS, function (m, a, u, c) { var to = r.map[toPath(dec(u))]; if (!to) return m; n++; return a + enc(toUrl(to, dec(u))).replace(/"/g, '&quot;') + c; });
+          var ext = (f.name.match(/\.(prproj|fcpxml|xml)$/i) || ['', 'xml'])[1];
+          var blob = kind === 'premiere'
+            ? await new Response(new Blob([fixed]).stream().pipeThrough(new CompressionStream('gzip'))).blob()
+            : new Blob([fixed], {type: 'application/xml'});
+          var name = f.name.replace(/\.(prproj|fcpxml|xml)$/i, '') + ' (relinked).' + ext, url = URL.createObjectURL(blob);
           said.textContent = '';
           out.innerHTML = '<div class="banner ok"><div class="txt"><b>' + r.moved.toLocaleString() + ' file' + (r.moved === 1 ? '' : 's') +
             ' pointed at where the tidy-up put ' + (r.moved === 1 ? 'it' : 'them') + '</b> (' + n.toLocaleString() + ' places in the project); ' +

@@ -24,7 +24,8 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 - The media ledger (resolution, frame rate, camera, timecode, reel).
 - Copy proof in ASC MHL, checking older copies, counting copies, re-reading the
   archive.
-- Tidy-up into departments, and pointing Premiere projects at the new places.
+- Tidy-up into departments, and pointing Premiere projects, and FCPXML or XML
+  from Final Cut and Resolve, at the new places.
 - Pulls with descriptions as Premiere markers, and as FCPXML for Final Cut and
   Resolve (not yet opened in either).
 - Following Rushes to a new address, and reconnecting dropped shares.
@@ -134,7 +135,8 @@ In this order of importance:
 2. **No lock-in.** Everything Rushes knows (descriptions, records, copy proofs)
    can be exported in open formats: CSV, JSON, XMP, ASC MHL.
 3. **Round trip with every editor:** Premiere, DaVinci Resolve and Final Cut Pro
-   (FCPXML). Pulls, markers and relinking for all three.
+   (FCPXML). Pulls, markers and relinking for all three. *Built for all three;
+   to be tried in Final Cut and Resolve.*
 4. **Card offload you can trust:** a clear "verified — safe to format this
    card", and copying to two places at once.
 

@@ -20,10 +20,11 @@ never leaves them.
 - **Finds it again.** You can search by file name, camera, reel, what the
   picture shows, the words on screen, and what was said. The descriptions and
   transcripts are made on your own computer.
-- **Hands it to the edit.** You collect clips into a *pull* and download it as a
-  Premiere project with markers, a list of paths, or the files themselves.
+- **Hands it to the edit.** You collect clips into a *pull* and download it for
+  Premiere, Final Cut or DaVinci Resolve, with markers, or as a list of paths,
+  or the files themselves.
 - **Keeps the archive tidy.** It sorts footage into your departments or clients,
-  and Premiere projects can be pointed at the new places. It also finds
+  and edit projects can be pointed at the new places. It also finds
   duplicate copies and editing caches and moves them to a holding folder.
 - **Keeps checking.** It re-reads copies against their fingerprints, counts how
   many copies of each file exist, and warns when one is lost.

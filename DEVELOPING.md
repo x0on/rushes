@@ -103,6 +103,7 @@ php test_pages.php                         # what Overview says
 PHPBIN=php sh test_helper.sh               # the helper's doors and install script
 sh test_pair.sh                            # pairing (needs PHPBIN or the php-wasm runner)
 node test_every.js                         # pages asking only while looked at; Sure?
+node test_relink.js                        # relinking FCPXML and XML addresses
 cd .. && python3 app/analyze.py --selftest  # describing's rules, without a model
 python3 app/ingest.py --selftest
 python3 app/release.py --selftest

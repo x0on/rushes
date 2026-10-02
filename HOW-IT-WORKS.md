@@ -782,12 +782,17 @@ its department's folder:
 
 **Put back** undoes a tidy-up from its record.
 
-**Premiere projects after a tidy-up** (Reorganize → 05):
+**Edit projects after a tidy-up** (Reorganize → 05):
 
-1. Choose a `.prproj` file. Your browser opens it and sends only its file paths
-   (up to 50,000) to Rushes. The project itself never leaves your computer.
+1. Choose a Premiere project (`.prproj`), or an FCPXML or XML exported from
+   Final Cut Pro or DaVinci Resolve. Your browser opens it and sends only its
+   file paths (up to 50,000) to Rushes. The project itself never leaves your
+   computer. In FCPXML and XML, files are written as addresses
+   (`file:///Volumes/…`); they are turned into paths and back, written the way
+   the file wrote them.
 2. Rushes answers with where each clip went, and lists clips that are missing.
-3. You save a corrected copy of the project. Mac and Windows paths both work.
+3. You save a corrected copy (`… (relinked)`), and open or import it. Mac and
+   Windows paths both work.
 
 **In the code:** `structure.php` (the page), `db/tidy.php` (the proposal and
 asking), `db/relink.php` (Premiere paths), `db/moved.php` (search, pulls and
