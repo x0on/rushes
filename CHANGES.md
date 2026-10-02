@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.10.2 — October 2026
+
+- **Duplicates asks about folders where it matters:** Manage → Duplicates lists
+  the folders holding the most copies, with how many would move and stay, and
+  each is Normal, Stopover or Whole cards with one press. Setup no longer asks
+  for folder names.
+
 ## 0.10.1 — October 2026
 
 - **One Rushes icon on a Mac** that runs both apps: the Helper's menu has a
@@ -10,10 +17,6 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 - **Setup 06, plain:** a Download Rushes Watcher button (or a link to send),
   name and pair, and every editor's computer in a list, with when it was last
   heard from and its last saved project.
-- **Duplicates asks about folders where it matters:** Manage → Duplicates lists
-  the folders holding the most copies, with how many would move and stay, and
-  each is Normal, Stopover or Whole cards with one press. Setup no longer asks
-  for folder names.
 - **The stock library lives in Projects** (`Projects/Stock Library`), beside the
   editors' folders, shared and stored once; nothing to set up.
 
