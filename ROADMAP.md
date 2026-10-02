@@ -169,6 +169,12 @@ In this order of importance:
      archive is complete, and Search shows it so. After longer (90, a setting)
      its workspace folder is moved to the holding folder, said in Rushes and in
      the editor's Watcher, with **Bring it back**. Nothing is deleted.
+   - **Always in sight:** the Watcher, and Rushes Helper too, live as a small
+     icon in the menu bar (Mac) or the notification area (Windows). The icon
+     says the state at a glance: idle, working, needs you, cannot reach Rushes.
+     Its menu shows what it is doing now, the last few things it did, Pause,
+     and Open (the full window and its log). Nothing works without the icon
+     being there.
    - Like every Rushes program, it uses little: it only watches and copies, so
      it runs beside Premiere or Resolve on any computer that runs them.
    - Rushes makes each project's folder (New project: department and shoot), in
