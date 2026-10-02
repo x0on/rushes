@@ -22,7 +22,7 @@ require_once __DIR__ . '/config.php';
 // folder it does not serve (INSTALL.md → Keeping the database private).
 define('DB_PATH', s_path('archive.database', web_dir() . '/rushes.sqlite'));
 
-// RISKS.md #7: a power cut can damage the database, and pulls live only in it.
+// HOW-IT-WORKS.md → Rushes' own backups: a power cut can damage the database, and pulls live only in it.
 // Once a day it is checked, and only a good one is copied beside it
 // (db-copy.sqlite, with SQLite's own backup, safe while in use). The runner
 // then puts that copy on VIDEO, one per weekday: a week of copies, none deleted

@@ -42,7 +42,7 @@ except ImportError:
     sys.exit("transfer_state.py is missing. It must sit beside ingest.py in _rushes.")
 
 HOME      = Path.home() / "archive-pilot"
-# Pairing (RISKS.md #10): the ID Rushes gave this helper when it was paired
+# Pairing (HOW-IT-WORKS.md → Pairing): the ID Rushes gave this helper when it was paired
 # (Rushes Helper writes it here), sent with every request. Rushes gives work
 # only to the paired helper, so two helpers never copy over each other.
 try:
@@ -1641,7 +1641,7 @@ DENIED = ("macOS is not letting the helper open the archive. Turn on Rushes Help
 
 # ── what Manage asks of the helper: pause, "try again now", folders to skip ──
 _control = [0.0, {}, 0]     # when to ask next, the last answer, failures in a row
-# Rule 4 (RISKS.md): asking again after a failure waits longer each time —
+# Rule 4 (DEVELOPING.md, the six rules): asking again after a failure waits longer each time —
 # 20 s, 1 min, 5 min, then every 15 min. Asking a web page that is not there
 # costs nothing and harms nothing, so it never stops for good: a laptop that
 # leaves the office and comes back carries on by itself.
@@ -1667,7 +1667,7 @@ def control():
     return _control[1]
 
 
-# ── a share that stops answering: walked away from, then stopped (RISKS.md) ──
+# ── a share that stops answering: walked away from, then stopped (DEVELOPING.md, the six rules) ──
 # A disk that is dying can hold any read of its share for minutes, or for good,
 # and a process waiting on it cannot even be killed. So the quick questions
 # ("is the archive there?") are asked in a thread of their own and walked away

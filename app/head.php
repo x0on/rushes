@@ -26,7 +26,7 @@ $NAV = $NAV ?? '';
   catch (e) {}
 
   // Pages ask the archive only while someone is looking, and ask less when it
-  // is slow (RISKS.md rule 6). every(fn, ms) replaces setInterval: one ask at a
+  // is slow (rule 6 of DEVELOPING.md). every(fn, ms) replaces setInterval: one ask at a
   // time, none while the tab is hidden, and after a slow or failed answer the
   // wait doubles up to a minute, back to normal on the first quick one.
   // ponytail: one shared count of bad answers for the whole page; if the

@@ -3,7 +3,7 @@
 // Open source: https://github.com/x0on/rushes
 //
 // pair.php — one helper is paired with Rushes, and only it is given work
-// (RISKS.md #10; the doors check it with helper_gate() in config.php).
+// (HOW-IT-WORKS.md → Pairing; the doors check it with helper_gate() in config.php).
 //
 //   POST action=start          signed in (Setup): a one-time code, good for ten minutes
 //   POST code=<6 digits> host  Rushes Helper: the code Setup shows → this helper's ID

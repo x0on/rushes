@@ -587,7 +587,7 @@ class DescribeLaneTests(unittest.TestCase):
 
 
 class StallTests(unittest.TestCase):
-    """RISKS.md rules 1-4 in the helper: idle touches no share, a share that does
+    """rule 1-4 of DEVELOPING.md in the helper: idle touches no share, a share that does
     not answer is walked away from and then stopped, a dead Rushes is asked less."""
     setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
 
@@ -663,7 +663,7 @@ class StallTests(unittest.TestCase):
 
 
 class PairingTests(unittest.TestCase):
-    """RISKS.md #10, the helper's side: the queue comes from the paired door."""
+    """HOW-IT-WORKS.md → Pairing, the helper's side: the queue comes from the paired door."""
     setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
 
     def test_the_queue_is_asked_at_the_paired_door_and_an_older_rushes_still_works(self):

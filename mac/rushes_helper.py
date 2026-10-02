@@ -35,10 +35,10 @@ LABEL = "org.rushes.helper"
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
 FILES = ("ingest.py", "transfer_state.py", "analyze.py")
-# The helper writes this when a share stopped answering three times (RISKS.md
+# The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
 STOPPED = os.path.join(HOME, "archive-pilot", "stopped.txt")
-# Pairing (RISKS.md #10): the ID Rushes gave this Mac, sent with every request.
+# Pairing (HOW-IT-WORKS.md → Pairing): the ID Rushes gave this Mac, sent with every request.
 HELPER_ID = os.path.join(HOME, "archive-pilot", "helper-id")
 TCC = os.path.join(HOME, "Library", "Application Support", "com.apple.TCC", "TCC.db")
 LAN_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork",

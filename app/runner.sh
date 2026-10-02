@@ -149,7 +149,7 @@ DROP=/share/VIDEO/_rushes/deploy
 # Updated scripts (_rushes/scripts) and pages (_rushes/deploy) are never put in
 # place by themselves: a page runs on this machine's web server and a script as
 # root, so both wait for an admin's "Install it" in Manage, exactly as approved
-# (RISKS.md #14 — pages used to go live within a minute of being dropped).
+# (HOW-IT-WORKS.md → Updates — pages used to go live within a minute of being dropped).
 # What is waiting, with fingerprints, and the fingerprint of the helper's code,
 # is looked at here when asked (below), within the time limit, and kept in the
 # web folder — so no page ever has to read VIDEO itself.
@@ -693,7 +693,7 @@ case "$SYNC" in
     *) log "$(date '+%Y-%m-%d %H:%M:%S')  search update: $SYNC" ;;
 esac
 
-# RISKS.md #7: Rushes copies its database once a day (db-copy.sqlite, only when
+# HOW-IT-WORKS.md → Rushes' own backups: Rushes copies its database once a day (db-copy.sqlite, only when
 # it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
 # them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
 # room for a big file: ten minutes.

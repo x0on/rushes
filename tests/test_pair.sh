@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pairing (RISKS.md #10): one code, one helper; any other is refused and named.
+# Pairing (HOW-IT-WORKS.md → Pairing): one code, one helper; any other is refused and named.
 # Run: sh tests/test_pair.sh   (each question is its own PHP run, as on the web server)
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)

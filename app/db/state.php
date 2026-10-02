@@ -318,7 +318,7 @@ if (is_readable("$WEB/db-damaged.txt"))
         'body' => 'Checked ' . $ago((int)filemtime("$WEB/db-damaged.txt")) . '. It was not copied, so the good copies stay as they are: '
             . 'one per weekday in _rushes/db-copies on VIDEO. Search can be rebuilt from the archive; pulls live only in the database. '
             . 'Ask for help (Rushes Helper → Ask for help) before replacing anything.'];
-// A second helper asked for work and was refused (pairing, RISKS.md #10): named, so nobody wonders.
+// A second helper asked for work and was refused (pairing, HOW-IT-WORKS.md → Pairing): named, so nobody wonders.
 foreach (helper_refused() as $r)
     $c[] = ['level' => 'warn', 'title' => 'A helper that is not the paired one asked for work',
         'body' => ($r['host'] !== '' ? $r['host'] . ' (' . $r['ip'] . ')' : $r['ip']) . ' — ' . $ago($r['at'])
@@ -402,7 +402,7 @@ function tb(int $b): string {
          : number_format($b / 1048576) . ' MB');
 }
 
-// What runs by itself (RISKS.md rule 5): each repeating thing, how often, when it
+// What runs by itself (rule 5 of DEVELOPING.md): each repeating thing, how often, when it
 // last did its work, and whether it stopped. Read from files on Web only.
 $hv = helper_volumes();
 $repeats = [

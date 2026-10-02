@@ -345,7 +345,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <?php endif; ?>
 
           <?php if ($hmode === 'external'): $pp = helper_paired(); ?>
-            <!-- Pairing (RISKS.md #10): only one helper is given work. -->
+            <!-- Pairing (HOW-IT-WORKS.md → Pairing): only one helper is given work. -->
             <div class="seen <?= $pp ? 'ok' : 'bad' ?>" style="margin-top:8px">
               <?= $pp ? '✓ Paired with ' . $e($pp['host'] ?: 'a helper') . ' since ' . $e(date('j M Y', (int)$pp['at'])) . ' — only it is given work.'
                       : 'No helper is paired: any helper on the network is given work, and two at once would copy over each other.' ?>

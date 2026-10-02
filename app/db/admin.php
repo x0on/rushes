@@ -127,7 +127,7 @@ if (isset($_POST['_newpass'])) {
 
       <section id="transferSummary" class="transfer-summary" aria-label="Transfer job" hidden></section>
       <div id="cards"></div>
-      <!-- RISKS.md rule 5: what repeats by itself is never invisible -->
+      <!-- rule 5 of DEVELOPING.md: what repeats by itself is never invisible -->
       <details id="repeats" style="margin:14px 0"><summary>What runs by itself</summary>
         <table class="prep" style="margin-top:8px"><thead><tr><th>What</th><th>How often</th><th>Last</th><th></th></tr></thead><tbody id="repeatRows"></tbody></table>
       </details>

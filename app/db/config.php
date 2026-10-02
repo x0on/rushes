@@ -463,7 +463,7 @@ function helper_control_save(array $c): bool {
 // Scripts run as root on this machine, so they are never published from the
 // share on their own: they wait in _rushes/scripts until the admin says yes,
 // and the runner installs exactly the files approved (checked by fingerprint).
-// What is waiting to be installed — updated scripts, and pages (RISKS.md #14) —
+// What is waiting to be installed — updated scripts, and pages (HOW-IT-WORKS.md → Updates) —
 // as the runner last saw it (waiting.tsv, when someone pressed Check for updates, within its time
 // limit). A page request never reads the VIDEO share itself.
 function waiting_read(): ?array {
@@ -485,7 +485,7 @@ function scripts_waiting(): array {
     return ($w = waiting_read()) !== null ? $w['items'] : [];
 }
 
-// ── pairing (RISKS.md #10) ───────────────────────────────────────────────────
+// ── pairing (HOW-IT-WORKS.md → Pairing) ───────────────────────────────────────────────────
 // One helper is paired with Rushes, and only it is given work: two helpers
 // copying the same queue would copy over each other. Setup shows a one-time
 // code; Rushes Helper sends it once and gets an ID back, which it then sends

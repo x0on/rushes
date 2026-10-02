@@ -79,7 +79,7 @@ damaged copies and resuming, and every file it copies is checked as above.
 | Python 3.12 | The language the helper is written in; a private copy inside the app | Inside Rushes Helper | PSF License | python.org |
 | python-build-standalone | The ready-to-ship build of that Python | Inside Rushes Helper | MPL-2.0 | github.com/astral-sh/python-build-standalone (Astral) |
 | xxHash (python-xxhash) | The XXH3-128 fingerprint that proves each copy matches its original — the one ASC MHL and professional copy tools read | Inside Rushes Helper | BSD-2-Clause | Yann Collet (xxHash); github.com/ifduyue/python-xxhash |
-| macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive; open | Part of macOS | Apple | Apple |
+| macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive; caffeinate keeps the Mac awake while a copy or describing runs; scutil gives the computer's name for pairing; xattr and pbpaste help find the Rushes address during setup (where the app was downloaded from, the clipboard); AppKit and WebKit draw the window; open | Part of macOS | Apple | Apple |
 
 ## On this Mac: describing footage
 
@@ -92,6 +92,7 @@ damaged copies and resuming, and every file it copies is checked as above.
 | mlx-whisper | Runs Whisper with MLX | This Mac | MIT | Apple — github.com/ml-explore/mlx-examples |
 | PySceneDetect | Cuts footage into shots | This Mac | BSD-3-Clause | Brandon Castellano — github.com/Breakthrough/PySceneDetect |
 | FFmpeg | Reads frames and sound from video | This Mac | LGPL-2.1+ (some builds GPL) | ffmpeg.org |
+| Hugging Face Hub | Where the models are downloaded from the first time, if they are not already on the Mac (by the MLX libraries; no footage is sent) | Download only | — | huggingface.co |
 
 ## On the archive machine
 
@@ -99,7 +100,8 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | PHP | Serves the Rushes pages | Archive machine | PHP License 3.01 | php.net |
 | SQLite | The search catalogue, the media ledger, transfers | Archive machine and the helper | Public domain | sqlite.org |
-| FFmpeg | Makes the 720p proxies, and reads what the camera wrote inside each original (its clock, timecode, reel, make and model) | Archive machine | LGPL-2.1+ (some builds GPL) | ffmpeg.org |
+| FFmpeg | Makes the proxies (720p or 1080p, on the video chip or in software), and reads what the camera wrote inside each original (its clock, timecode, reel, make and model) | Archive machine | LGPL-2.1+ (some builds GPL) | ffmpeg.org |
+| linuxserver/ffmpeg (optional) | FFmpeg with the Intel video chip's drivers, in a container, when the NAS's own FFmpeg cannot use the chip; also used by Test the video chip | Archive machine (its container) | GPL-3.0 (the image), FFmpeg's own license inside | github.com/linuxserver/docker-ffmpeg |
 | Czkawka | Finds duplicate files | Archive machine (its container) | MIT | Rafał Mikrut — github.com/qarmin/czkawka |
 | BusyBox and the NAS system | The shell the scheduled jobs run in | Archive machine | GPL-2.0 (part of the NAS system) | busybox.net |
 
@@ -109,3 +111,4 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | Zig | Compiles the app's small launcher for both Mac chips | The build machine | MIT | ziglang.org |
 | apple-codesign (rcodesign) | Signs the app | The build machine | MPL-2.0 | Gregory Szorc — github.com/indygreg/apple-platform-rs |
+| Python 3.12 and zip | Precompile the app's Python, and pack the app | The build machine | PSF License; Info-ZIP | python.org; info-zip.org |
