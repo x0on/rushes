@@ -378,3 +378,26 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
 .phone-only { display: none }
 .on-phone .phone-only { display: block }
 .on-phone .mac-only { display: none !important }
+
+/* The phone menu (head.php). On a computer: the bar and the sidebars as they
+   are. On a phone: ☰, the mark and the page's name; every page in one list. */
+.menu-btn, .here, .mnav { display: none }
+@media (max-width: 640px) {
+  .menu-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+              margin-right: 4px; border: 0; border-radius: 10px; background: var(--surface); color: var(--fg); cursor: pointer }
+  .menu-btn[aria-expanded="true"] { background: var(--accent); color: #fff }
+  .here { display: block; font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0 }
+  .topbar .tab { display: none }
+  .rail-manage { display: none }
+  .mnav:not([hidden]) { display: block; position: fixed; inset: 56px 0 0 0; z-index: 50; overflow-y: auto;
+                        background: var(--bg); padding: 8px 16px 32px; border-top: 1px solid var(--line) }
+  .mnav h2 { margin: 18px 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600 }
+  .mnav a { display: block; padding: 13px 12px; border-radius: 10px; color: var(--fg); text-decoration: none; font-size: 17px }
+  .mnav a[aria-current="page"] { background: var(--surface); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent) }
+  .mnav-foot { display: flex; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line) }
+  .mnav-foot button { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--fg); font-size: 15px }
+  .mnav-open body { overflow: hidden }
+  /* Search's own list (where to look) stays a row you swipe: its edge fades, so it shows there is more. */
+  .rail:not(.rail-manage) { -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
+                            mask-image: linear-gradient(to right, #000 82%, transparent) }
+}

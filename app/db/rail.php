@@ -12,7 +12,7 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
          . $label . $extra . '</a>';
 };
 ?>
-  <nav class="rail" aria-label="Manage sections">
+  <nav class="rail rail-manage" aria-label="Manage sections">
     <h2>Archive</h2>
     <?= $railItem('overview',   'Overview',   'overview',  '/db/admin.php#overview',   true, ' <span class="badge bad" id="nOverview" hidden></span>') ?>
     <?= $railItem('transfers',  'Transfers',  'transfers', '/db/admin.php#transfers',  true, ' <span class="count" id="nTransfers"></span>') ?>

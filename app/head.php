@@ -98,9 +98,13 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
 </script>
 
 <header class="topbar">
+  <!-- On a phone: one menu (☰) holds every page, and the bar says which one this is. -->
+  <button class="menu-btn" id="hMenu" aria-label="All pages" aria-expanded="false" aria-controls="mnav">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   <a class="brand" href="/db/find.php">
     <?= mark() ?><?= htmlspecialchars(settings()['name'] ?? 'Rushes') ?>
   </a>
+  <span class="here" id="hHere"></span>
 
   <a class="tab" href="/db/find.php" <?= $NAV === 'search' ? 'aria-current="page"' : '' ?>>Search</a>
   <a class="tab" href="/ingest.php"  <?= $NAV === 'ingest' ? 'aria-current="page"' : '' ?>>Ingest</a>
@@ -122,9 +126,58 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
     M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/></svg></button>
 </header>
 
+<nav class="mnav" id="mnav" aria-label="All pages" hidden>
+  <?php $m = function (string $label, string $href, string $go = '') {
+      return '<a href="' . $href . '"' . ($go !== '' ? ' data-go="' . $go . '"' : '') . '>' . $label . '</a>'; }; ?>
+  <h2>Find and bring in</h2>
+  <?= $m('Search', '/db/find.php') ?><?= $m('Ingest', '/ingest.php') ?>
+  <h2>Manage the archive</h2>
+  <?= $m('Overview', '/db/admin.php#overview', 'overview') ?><?= $m('Transfers', '/db/admin.php#transfers', 'transfers') ?>
+  <?= $m('Duplicates', '/db/admin.php#duplicates', 'duplicates') ?><?= $m('Cache', '/db/admin.php#cache', 'cache') ?>
+  <?= $m('Describe', '/db/admin.php#describe', 'describe') ?><?= $m("Editors' projects", '/db/admin.php#projects', 'projects') ?>
+  <?= $m('Reorganize', '/structure.php') ?>
+  <h2>System</h2>
+  <?= $m('Activity', '/db/admin.php#activity', 'activity') ?><?= $m('Jobs and tools', '/db/admin.php#tools', 'tools') ?>
+  <?= $m('Setup', '/setup.php') ?>
+  <div class="mnav-foot">
+    <button type="button" id="mTheme">Light or dark</button>
+    <form method="post" action="/db/admin.php"><button name="_signout" value="1" type="submit">Sign out</button></form>
+  </div>
+</nav>
+
 <script>
 (function () {
   var $ = function (i) { return document.getElementById(i); };
+
+  // The phone menu: opens over the page, says where you are, and closes on a choice.
+  var menu = $('mnav'), btn = $('hMenu'), here = $('hHere');
+  var title = null;                          // Manage's own heading, which follows its sections
+  function where() {
+    var t = (title && title.textContent) || document.title.split(' · ')[0];
+    here.textContent = t;
+    menu.querySelectorAll('a').forEach(function (a) {
+      if (a.textContent === t) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+  }
+  function open(yes) { menu.hidden = !yes; btn.setAttribute('aria-expanded', yes); document.documentElement.classList.toggle('mnav-open', yes); }
+  btn.onclick = function () { open(menu.hidden); };
+  menu.addEventListener('click', function (e) {
+    var a = e.target.closest('a');
+    if (!a) return;
+    // Already on Manage: switch its section without loading the page again.
+    if (a.dataset.go && typeof window.show === 'function' && location.pathname.indexOf('/db/admin.php') === 0) {
+      e.preventDefault(); window.show(a.dataset.go);
+    }
+    open(false);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') open(false); });
+  function watch() {                         // the page below this bar exists only now
+    title = $('title');
+    if (title) new MutationObserver(where).observe(title, { childList: true, characterData: true, subtree: true });
+    where();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
+  $('mTheme').onclick = function () { $('hTheme').onclick(); open(false); };
 
   $('hTheme').onclick = function () {
     var now = document.documentElement.dataset.theme

@@ -67,8 +67,8 @@ if (isset($_POST['_newpass'])) {
   .seg .btn.on { background: var(--accent); color: #fff; border-color: var(--accent) }
   .hctl .note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted) }
   /* switches, as in Rushes Helper's own window: on means it runs */
-  .hctl .grp { margin: 4px 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
-  .hctl .grp + .row { border-top: 0 }
+  .hctl .hgrp { margin: 4px 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+  .hctl .hgrp + .row { border-top: 0 }
   .hctl .row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line) }
   .hctl .row .t { flex: 1; min-width: 0; color: var(--fg) }
   .hctl .row .t small { display: block; margin-top: 2px; color: var(--muted); line-height: 1.45 }
@@ -998,7 +998,7 @@ function drawHelper(d) {
   const ask = h.fresh ? '' : ' Switches work once it is heard from again.';
   const now = Date.now();
   el.innerHTML = (h.label
-      ? '<div class="grp">Rushes Helper on ' + esc(h.label) + '</div>' +
+      ? '<div class="hgrp">Rushes Helper on ' + esc(h.label) + '</div>' +
         '<div class="row"><span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span><div class="t">' +
           esc([how, seen].filter(Boolean).join(' · ') + updating + doing) + (late ? '<small>' + esc(late) + '</small>' : '') + '</div>' +
           '<button class="btn quiet" data-h="nudge">Try again now</button></div>' +
@@ -1007,7 +1007,7 @@ function drawHelper(d) {
         sw(!h.check_paused, ['check-resume', 'check-pause'], 'Check copies', 'When there is nothing to copy, copies are read again against their fingerprints. Off pauses it; where it got to is kept.' + ask, !h.fresh) +
         sw(!h.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, the helper connects it again once the server answers. Off: you connect drives in Finder.', false)
       : '') +
-    '<div class="grp" style="margin-top:10px">On the server</div>' +
+    '<div class="hgrp" style="margin-top:10px">On the server</div>' +
     sw(!off, ['start-runner', 'stop-runner'], 'Rushes on the server', off
       ? 'Off: nothing runs on the server (no jobs, no checks, nothing touching VIDEO) until you turn it on. These pages keep working.'
       : 'Its jobs and checks, once a minute. Off stops all of it, for a disk rebuild or repairs, until you turn it on. These pages keep working.', false) +
