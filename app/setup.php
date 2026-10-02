@@ -594,10 +594,23 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <div class="how-h" style="margin-top:14px">Editors' computers (<span id="wN"><?= count($ws) ?></span>)</div>
         <div id="wList">
         <?php if (!$ws): ?><p class="note" style="margin:0">None yet. Each computer you add appears here.</p><?php endif; ?>
-        <?php foreach ($ws as $k => $w): ?>
+        <?php
+          require_once __DIR__ . '/db/schema.php';
+          // When each computer was last heard from (its Watcher reports every few minutes while it runs),
+          // and its last saved project: when that editor last worked.
+          $ago = function (int $t): string { $d = time() - $t;
+              return $d < 120 ? 'just now' : ($d < 7200 ? round($d / 60) . ' min ago' : ($d < 172800 ? round($d / 3600) . ' h ago' : date('j M Y', $t))); };
+          foreach ($ws as $k => $w):
+            $key = substr($k, 0, 16);
+            $heard = 0; foreach (explode("\n", explode("\n--\n", (string)@file_get_contents(web_dir() . "/watchers/$key.txt"))[0]) as $l)
+                if (str_starts_with($l, "at\t")) $heard = (int)substr($l, 3);
+            $last = null; try { $st = db()->prepare('SELECT name, saved FROM projects WHERE watcher = :k ORDER BY saved DESC LIMIT 1');
+                $st->bindValue(':k', $key); $last = $st->execute()->fetchArray(SQLITE3_ASSOC) ?: null; } catch (Throwable $x) {} ?>
           <div class="seen ok" style="display:flex;gap:10px;align-items:center">
             <span>✓ <b><?= $e($w['name'] ?? ($w['host'] ?: 'a computer')) ?></b> &mdash; <?= $e($w['host'] ?? '') ?>, paired <?= $e(date('j M Y', (int)$w['at'])) ?>
-              <?= !empty($w['folder']) ? '· its folder: <code>Projects/' . $e($w['folder']) . '</code>' : '· <b>pair it again</b> to give it its folder' ?></span>
+              <?= !empty($w['folder']) ? '· its folder: <code>Projects/' . $e($w['folder']) . '</code>' : '· <b>pair it again</b> to give it its folder' ?>
+              <br><small class="muted">Last heard from <?= $heard ? $e($ago($heard)) : 'never yet' ?> ·
+                <?= $last ? 'last project saved ' . $e($ago((int)$last['saved'])) . ': ' . $e($last['name']) : 'no project saved yet' ?></small></span>
             <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['name'] ?? $w['host']) ?>">Remove</button>
           </div>
         <?php endforeach; ?>
