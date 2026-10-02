@@ -15,6 +15,9 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   such as Tailscale): the Mac apps' downloads and install steps step aside on a
   phone or tablet, with a line saying they are installed from a Mac; the top
   bar's slow note is short; the search hint fits.
+- **One menu on a phone:** ☰ opens every page of Rushes, grouped (Find and
+  bring in, Manage the archive, System), the current one marked; the bar says
+  which page this is. Search's filter row fades at its edge to show there is more.
 
 ## 0.10.1 — October 2026
 
