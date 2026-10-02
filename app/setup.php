@@ -93,8 +93,7 @@ if (($_POST['_save'] ?? '') === '1') {
     };
     $s['duplicates'] = ['never_keep' => $names('d_never'), 'card_dumps' => $names('d_cards')];
 
-    // Editors' work (06): two shares picked from what this machine has, where
-    // the helper finds Deliveries, and the stock library's folder in the archive.
+    // Editors' work (06): the stock library's folder in the archive.
     $lib = trim(preg_replace('#[/\\\\:*?"<>|]+#', ' ', (string)($_POST['lib'] ?? '')));
     $s['library']['folder'] = $lib !== '' ? mb_substr($lib, 0, 80) : 'Stock Library';
     // A project resting, and moved aside (projects.php): days without a save. 0 = never moved aside.
@@ -573,54 +572,77 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
       <!-- ══ 06 editors' work ══ -->
       <div class="grp">
         <h2><span>06 /</span> Editors' work</h2>
-        <p>Editors work wherever they like on their own computer. Rushes Watcher, on each one, keeps every
-           Premiere project they save, with the files it uses and what they export into its <b>Output</b> folder,
-           in <b>Projects</b> on the shelf: one folder per computer, one per project inside it, made by Rushes.
-           Editors only read the archive; the files reach it through Rushes, checked like a card.</p>
-        <label class="f"><span>The stock library's folder, in the archive</span>
-          <input type="text" name="lib" value="<?= $e(settings()['library']['folder'] ?? 'Stock Library') ?>">
-          <small>Music, stock footage and sound effects that projects use are kept here once, in Music,
-            Stock footage and Sound effects, however many projects use them.</small></label>
-
-        <label class="f"><span>Resting after</span>
-          <input type="number" name="rest_days" min="1" max="365" style="width:7em" value="<?= (int)(settings()['projects']['rest_days'] ?? 10) ?>"> days without a save
-          <small>Nothing moves: Manage and the editor's Watcher say it, so everyone knows the project is quiet.</small></label>
-        <!-- Editors' computers: any number of Rushes Watchers, each paired once, each only able to deliver. -->
-        <?php $ws = watchers(); ?>
-        <div class="how-h" style="margin-top:14px">Editors' computers</div>
-        <?php if (!$ws): ?><p class="note" style="margin:0">None yet.</p><?php endif; ?>
+        <p>Rushes Watcher keeps each editor's Premiere projects in the archive: the files a project uses and what
+           the editor exports. Install it once on each editor's computer. The editor keeps working as usual.</p>
+        <?php $ws = watchers(); $wurl = rtrim((string)(settings()['archive']['url'] ?? ''), '/'); ?>
+        <div class="how-h" style="margin-top:14px">Add an editor's computer</div>
+        <ol class="how">
+          <li>On the editor's computer, download Rushes Watcher (about 30 MB):
+            <p style="margin:12px 0 6px"><a class="btn" href="<?= $e($wurl) ?>/db/helper.php?app=watcher">Download Rushes Watcher</a></p>
+            <small>Not at that computer? Send the editor this link to download it:</small>
+            <?= cmd_block($wurl . '/db/helper.php?app=watcher') ?></li>
+          <li>Open <b>Rushes Watcher</b> from Downloads. The first time, macOS stops it with
+            <i>“Apple could not verify Rushes Watcher…”</i>: press <b>Done</b>, then <b>System Settings → Privacy &amp; Security</b>,
+            <i>“Rushes Watcher was blocked”</i>, <b>Open Anyway</b>. macOS asks this once. Its window explains the rest.</li>
+          <li>Here, type the computer's name (the editor's, usually) and press the button:
+            <p style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="wName" placeholder="Name, e.g. Maria" maxlength="40" style="width:14em">
+              <button type="button" class="btn" id="wPair">Add an editor's computer</button></p>
+            <div id="wSaid"></div></li>
+          <li>In Rushes Watcher, press <b>Paste the code from Rushes</b>. The computer appears in the list below.</li>
+        </ol>
+        <div class="how-h" style="margin-top:14px">Editors' computers (<span id="wN"><?= count($ws) ?></span>)</div>
+        <div id="wList">
+        <?php if (!$ws): ?><p class="note" style="margin:0">None yet. Each computer you add appears here.</p><?php endif; ?>
         <?php foreach ($ws as $k => $w): ?>
           <div class="seen ok" style="display:flex;gap:10px;align-items:center">
             <span>✓ <b><?= $e($w['name'] ?? ($w['host'] ?: 'a computer')) ?></b> &mdash; <?= $e($w['host'] ?? '') ?>, paired <?= $e(date('j M Y', (int)$w['at'])) ?>
               <?= !empty($w['folder']) ? '· its folder: <code>Projects/' . $e($w['folder']) . '</code>' : '· <b>pair it again</b> to give it its folder' ?></span>
-            <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['host']) ?>">Remove</button>
+            <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['name'] ?? $w['host']) ?>">Remove</button>
           </div>
         <?php endforeach; ?>
-        <ol class="how">
-          <li>On the editor's computer, open Rushes in the browser, come to this page and download Rushes Watcher
-            (about 30 MB). Open it and follow its window; it is installed once, and asks before any update.
-            <p style="margin:10px 0 6px"><a class="btn" href="/db/helper.php?app=watcher">Download Rushes Watcher</a></p></li>
-          <li>When its window asks for the code: give the computer a name here (the editor's, usually), press
-            <b>Add an editor's computer</b>, and <b>Copy</b>. In Rushes Watcher: <b>Paste the code from Rushes</b>.</li>
-        </ol>
-        <p style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="text" id="wName" placeholder="Name, e.g. Maria" maxlength="40" style="width:14em">
-          <button type="button" class="btn" id="wPair">Add an editor's computer</button> <span id="wSaid"></span></p>
+        </div>
+        <details style="margin-top:14px"><summary class="note">More settings: the stock library's folder, and when a project is called resting</summary>
+          <label class="f"><span>The stock library's folder, in the archive</span>
+            <input type="text" name="lib" value="<?= $e(settings()['library']['folder'] ?? 'Stock Library') ?>">
+            <small>Music, stock footage and sound effects that projects use are kept here once, however many projects use them.</small></label>
+          <label class="f"><span>Resting after</span>
+            <input type="number" name="rest_days" min="1" max="365" style="width:7em" value="<?= (int)(settings()['projects']['rest_days'] ?? 10) ?>"> days without a save
+            <small>Nothing moves: Manage and the editor's Watcher say it, so everyone knows the project is quiet.</small></label>
+        </details>
         <script>
         (function () {
-          var b = document.getElementById('wPair'), said = document.getElementById('wSaid');
+          var b = document.getElementById('wPair'), said = document.getElementById('wSaid'), nameIn = document.getElementById('wName');
+          var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
           b.onclick = async function () {
+            var nm = nameIn.value.trim();
+            if (!nm) { said.textContent = 'Type the computer\'s name first: its folder in Projects carries it.'; nameIn.focus(); return; }
             b.disabled = true; b.textContent = 'Asking …';
             try {
-              var nm = document.getElementById('wName').value.trim();
-              if (!nm) { said.textContent = 'Give the computer a name first: its folder in Projects carries it.'; document.getElementById('wName').focus();
-                         b.disabled = false; b.textContent = 'Add an editor\'s computer'; return; }
               var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start', role: 'watcher', name: nm})})).json();
               if (r.error) throw new Error(r.error);
-              said.innerHTML = '<span class="code" style="font-size:20px;letter-spacing:3px;padding:4px 10px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
-                '</span> <button type="button" class="ghost" id="wCopy">Copy</button> — then in Rushes Watcher on the editor\'s computer: ' +
-                '<b>Paste the code from Rushes</b>. Within ten minutes; it works once.';
-              document.getElementById('wCopy').onclick = function () { copyText(r.code, this); };
+              said.innerHTML = '<p style="margin:6px 0">The code for <b>' + esc(nm) + '</b>: <span class="code" style="font-size:20px;letter-spacing:3px;padding:4px 10px">' +
+                r.code.slice(0, 3) + ' ' + r.code.slice(3) + '</span> <button type="button" class="ghost" data-copy="' + r.code + '">Copy</button></p>' +
+                '<p class="note" style="margin:0">Within ten minutes; it works once.</p>';
+              // Said here the moment that computer pairs (asked every 3 s, only while this page shows the code).
+              var asked = r.until - 605, until = Date.now() + 600000;
+              (async function look() {
+                if (Date.now() > until) return;
+                if (document.hidden) { setTimeout(look, 3000); return; }
+                try {
+                  var p = await (await fetch('/db/pair.php?watchers&t=' + Date.now())).json(), ws = p.watchers || [];
+                  var got = ws.filter(function (w) { return w.at >= asked; })[0];
+                  if (got) {
+                    document.getElementById('wN').textContent = ws.length;
+                    document.getElementById('wList').innerHTML = ws.map(function (w) {
+                      return '<div class="seen ok">✓ <b>' + esc(w.name || w.host) + '</b> &mdash; ' + esc(w.host) + (w.folder ? ' · its folder: <code>Projects/' + esc(w.folder) + '</code>' : '') + '</div>';
+                    }).join('');
+                    said.innerHTML = '<p class="seen ok" style="margin:6px 0">✓ ' + esc(got.name) + ' is paired. To add the next editor, type their computer\'s name.</p>';
+                    nameIn.value = ''; nameIn.focus(); return;
+                  }
+                } catch (e) {}
+                setTimeout(look, 3000);
+              })();
             } catch (e) { said.textContent = 'Could not make a code: ' + e.message; }
             b.disabled = false; b.textContent = 'Add an editor\'s computer';
           };

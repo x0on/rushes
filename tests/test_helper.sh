@@ -89,6 +89,7 @@ code=$(SIGNED=1 call POST "{}" "{\"action\":\"start\",\"role\":\"watcher\",\"nam
 check 'call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\"}" db/pair.php | grep -q "enter it in Rushes Watcher"' 'a Watcher'"'"'s code given to a helper does not make it the helper'
 wid=$(call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\",\"role\":\"watcher\"}" db/pair.php | sed 's/.*"id":"\([0-9a-f]*\)".*/\1/')
 check '[ ${#wid} = 32 ] && ! grep -q "$wid" "$ROOT/app/watchers.php"' 'an editor'"'"'s computer pairs as a Watcher; Rushes keeps only the fingerprint of its ID'
+check 'call GET "{\"watchers\":\"\"}" "{}" db/pair.php | grep -q "sign in" && SIGNED=1 call GET "{\"watchers\":\"\"}" "{}" db/pair.php | grep -q "\"name\":\"Maria\",\"host\":\"Maria Mac\",\"folder\":\"Maria ("' 'Setup lists the editors'"'"' computers, signed in only, so a new one shows the moment it pairs'
 check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "\"folder\":\"Maria ([0-9a-f]\{4\})\""' 'it learns its own folder in Projects: its name, and the start of its key'
 check 'WATCHER=nope call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'an unpaired one is refused'
 check 'WATCHER=$wid call GET "{\"queue\":\"\"}" "{}" db/helper.php | grep -q "not the paired helper" || [ ! -s "$ROOT/app/helper-id.php" ]' 'a Watcher is not the helper'

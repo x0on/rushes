@@ -10,6 +10,7 @@
 //   POST code=<6 digits> host [role=watcher]  Rushes Helper or Rushes Watcher: the code → its ID
 //   POST action=forget key=<16>       signed in (Setup): an editor's computer is not paired any more
 //   GET                               a helper, with its ID: {"pairing": "none" | "this" | "other"}
+//   GET ?watchers                     signed in (Setup): the editors' computers
 //
 // One helper (pairing it again replaces the last one); any number of Watchers.
 require_once __DIR__ . '/auth.php';
@@ -19,6 +20,12 @@ function said(int $code, array $a) { http_response_code($code); echo json_encode
 $C = web_dir() . '/pair-code.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    // Setup, signed in: the editors' computers, so a new one shows the moment it pairs.
+    if (isset($_GET['watchers'])) {
+        if (!signed_in()) said(403, ['error' => 'sign in first']);
+        said(200, ['watchers' => array_values(array_map(fn($w) => ['name' => $w['name'] ?? '', 'host' => $w['host'] ?? '',
+            'folder' => $w['folder'] ?? '', 'at' => (int)($w['at'] ?? 0)], watchers()))]);
+    }
     $p = helper_paired();
     said(200, ['pairing' => helper_pairing()] + (signed_in() ? ['host' => $p['host'] ?? '', 'at' => $p['at'] ?? 0, 'refused' => helper_refused()] : []));
 }
