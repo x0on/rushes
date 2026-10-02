@@ -1,0 +1,237 @@
+# Rushes — Media Management Software, by Alejandro Renteria.
+# Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
+"""Signed releases of the helper's code (HOW-IT-WORKS.md → Updates).
+
+The helper's code updates itself, and the helper built into the archive
+machine runs with full rights. So a new version is accepted only when it
+carries a signature (release.sig, beside the files in _rushes) made with the
+Rushes release key, which never leaves its owner's computer. Whoever controls
+the network, the Rushes server or the archive share, without that key, cannot
+change what runs.
+
+release.sig is plain text, readable by anyone:
+
+    rushes-release 1
+    <sha256> analyze.py
+    <sha256> ingest.py
+    <sha256> release.py
+    <sha256> transfer_state.py
+    sig <Ed25519 signature of every line above, in hex>
+
+    python3 release.py keygen <keyfile>         a new key (prints its public half)
+    python3 release.py sign <folder> <keyfile>  sign the files in <folder>
+    python3 release.py verify <folder>          exit 0 only if <folder> is signed
+    python3 release.py --selftest
+
+Ed25519 is written out here (RFC 8032), because the Python on a NAS or inside
+Rushes Helper has no library for it. It is slow, a few milliseconds per check,
+which is all it needs to be.
+"""
+import hashlib
+import os
+import sys
+
+# The Rushes release key, public half. Its private half is kept by the author.
+# A fork that signs its own releases puts its own public key here.
+PUBLIC = "a1752f2a93d4e93e044611088f350958c6321dddbeb457f02b91c56f8b1ecf6c"
+FILES = ("analyze.py", "ingest.py", "release.py", "transfer_state.py")
+
+# ── Ed25519 (RFC 8032, section 5.1) ─────────────────────────────────────────
+P = 2 ** 255 - 19
+L = 2 ** 252 + 27742317777372353535851937790883648493
+D = -121665 * pow(121666, P - 2, P) % P
+SQRT_M1 = pow(2, (P - 1) // 4, P)
+
+
+def _add(a, b):
+    A = (a[1] - a[0]) * (b[1] - b[0]) % P
+    B = (a[1] + a[0]) * (b[1] + b[0]) % P
+    C = 2 * a[3] * b[3] * D % P
+    Dd = 2 * a[2] * b[2] % P
+    E, F, G, H = B - A, Dd - C, Dd + C, B + A
+    return (E * F % P, G * H % P, F * G % P, E * H % P)
+
+
+def _mul(s, pt):
+    q = (0, 1, 1, 0)
+    while s:
+        if s & 1:
+            q = _add(q, pt)
+        pt = _add(pt, pt)
+        s >>= 1
+    return q
+
+
+def _encode(pt):
+    zi = pow(pt[2], P - 2, P)
+    x, y = pt[0] * zi % P, pt[1] * zi % P
+    return (y | ((x & 1) << 255)).to_bytes(32, "little")
+
+
+def _decode(s):
+    if len(s) != 32:
+        raise ValueError("not a point")
+    y = int.from_bytes(s, "little")
+    sign, y = y >> 255, y & ((1 << 255) - 1)
+    if y >= P:
+        raise ValueError("not a point")
+    xx = (y * y - 1) * pow(D * y * y + 1, P - 2, P) % P
+    x = pow(xx, (P + 3) // 8, P)
+    if (x * x - xx) % P:
+        x = x * SQRT_M1 % P
+    if (x * x - xx) % P:
+        raise ValueError("not a point")
+    if x == 0 and sign:
+        raise ValueError("not a point")
+    if (x & 1) != sign:
+        x = P - x
+    return (x, y, 1, x * y % P)
+
+
+_BY = 4 * pow(5, P - 2, P) % P
+BASE = _decode(_BY.to_bytes(32, "little"))
+
+
+def _expand(seed):
+    h = hashlib.sha512(seed).digest()
+    a = int.from_bytes(h[:32], "little")
+    a &= (1 << 254) - 8
+    a |= 1 << 254
+    return a, h[32:]
+
+
+def public_key(seed):
+    return _encode(_mul(_expand(seed)[0], BASE))
+
+
+def sign(seed, msg):
+    a, prefix = _expand(seed)
+    pub = _encode(_mul(a, BASE))
+    r = int.from_bytes(hashlib.sha512(prefix + msg).digest(), "little") % L
+    R = _encode(_mul(r, BASE))
+    h = int.from_bytes(hashlib.sha512(R + pub + msg).digest(), "little") % L
+    return R + ((r + h * a) % L).to_bytes(32, "little")
+
+
+def verify(pub, msg, sig):
+    try:
+        if len(sig) != 64:
+            return False
+        A, R = _decode(pub), _decode(sig[:32])
+        s = int.from_bytes(sig[32:], "little")
+        if s >= L:
+            return False
+        h = int.from_bytes(hashlib.sha512(sig[:32] + pub + msg).digest(), "little") % L
+        return _encode(_mul(s, BASE)) == _encode(_add(R, _mul(h, A)))
+    except ValueError:
+        return False
+
+
+# ── releases ────────────────────────────────────────────────────────────────
+def body(hashes):
+    """The signed part: one line per file, in name order."""
+    return ("rushes-release 1\n" + "".join(f"{hashes[n]} {n}\n" for n in sorted(hashes))).encode()
+
+
+def read_sig(text, public=None):
+    """-> {name: sha256} from a release.sig whose signature is good, or raises
+    ValueError saying why not."""
+    lines = text.strip("\n").split("\n")
+    if not lines or lines[0] != "rushes-release 1" or not lines[-1].startswith("sig "):
+        raise ValueError("release.sig is not in the expected form")
+    hashes = {}
+    for l in lines[1:-1]:
+        h, _, n = l.partition(" ")
+        if len(h) != 64 or n not in FILES or n in hashes:
+            raise ValueError(f"release.sig lists something unexpected: {l[:80]}")
+        hashes[n] = h
+    try:
+        sig = bytes.fromhex(lines[-1][4:].strip())
+        pub = bytes.fromhex(public or PUBLIC)
+    except ValueError:
+        raise ValueError("release.sig, or the release key, is not readable")
+    if not verify(pub, body(hashes), sig):
+        raise ValueError("release.sig is not signed with the Rushes release key")
+    return hashes
+
+
+def check(files, sig_text, public=None):
+    """files: {name: bytes}. Raises ValueError unless each one is exactly what
+    a good release.sig lists."""
+    hashes = read_sig(sig_text, public)
+    for n, data in files.items():
+        if hashes.get(n) != hashlib.sha256(data).hexdigest():
+            raise ValueError(f"{n} is not the signed version")
+    return hashes
+
+
+def _files_in(folder):
+    return {n: open(os.path.join(folder, n), "rb").read() for n in FILES if os.path.isfile(os.path.join(folder, n))}
+
+
+def main(argv):
+    if argv[:1] == ["--selftest"]:
+        return selftest()
+    if argv[:1] == ["keygen"] and len(argv) == 2:
+        seed = os.urandom(32)
+        fd = os.open(argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        os.write(fd, seed.hex().encode() + b"\n"); os.close(fd)
+        print(f"private key written to {argv[1]} (keep it private; it never goes in the repository)")
+        print(f"public key, for PUBLIC in release.py: {public_key(seed).hex()}")
+        return 0
+    if argv[:1] == ["sign"] and len(argv) == 3:
+        seed = bytes.fromhex(open(argv[2]).read().strip())
+        files = _files_in(argv[1])
+        if set(files) != set(FILES):
+            print(f"missing in {argv[1]}: {', '.join(sorted(set(FILES) - set(files)))}"); return 1
+        hashes = {n: hashlib.sha256(d).hexdigest() for n, d in files.items()}
+        text = body(hashes).decode() + "sig " + sign(seed, body(hashes)).hex() + "\n"
+        read_sig(text, public_key(seed).hex())
+        with open(os.path.join(argv[1], "release.sig"), "w") as f:
+            f.write(text)
+        print(f"signed {len(files)} files ✓ → {os.path.join(argv[1], 'release.sig')}")
+        if public_key(seed).hex() != PUBLIC:
+            print("  note: this key is not the one in release.py; helpers will refuse it")
+        return 0
+    if argv[:1] == ["verify"] and len(argv) == 2:
+        try:
+            files = _files_in(argv[1])
+            hashes = check(files, open(os.path.join(argv[1], "release.sig")).read())
+            if set(hashes) != set(files):
+                raise ValueError("release.sig and the files beside it do not match")
+        except (OSError, ValueError) as e:
+            print(f"not a signed release: {e}"); return 1
+        print("signed release ✓"); return 0
+    print(__doc__); return 2
+
+
+def selftest():
+    # RFC 8032, test 1 and test 2
+    s1 = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+    assert public_key(s1).hex() == "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    assert sign(s1, b"").hex() == ("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bac"
+                                   "c61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+    s2 = bytes.fromhex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb")
+    sig2 = sign(s2, b"\x72")
+    assert sig2.hex().startswith("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da")
+    assert verify(public_key(s2), b"\x72", sig2) and not verify(public_key(s2), b"\x73", sig2)
+    assert not verify(public_key(s1), b"\x72", sig2)
+    # a release: good, a file changed, a line added, another key
+    files = {n: n.encode() * 3 for n in FILES}
+    hashes = {n: hashlib.sha256(d).hexdigest() for n, d in files.items()}
+    text = body(hashes).decode() + "sig " + sign(s1, body(hashes)).hex() + "\n"
+    pub = public_key(s1).hex()
+    assert check(files, text, pub) == hashes
+    for bad_files, bad_text, key in [(dict(files, **{"ingest.py": b"evil"}), text, pub),
+                                     (files, text.replace("rushes-release 1\n", "rushes-release 1\n" + "0" * 64 + " ingest.py\n"), pub),
+                                     (files, text, public_key(s2).hex())]:
+        try:
+            check(bad_files, bad_text, key); raise AssertionError("accepted a bad release")
+        except ValueError:
+            pass
+    print("release: all checks pass")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

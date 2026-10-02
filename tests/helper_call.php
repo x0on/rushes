@@ -13,5 +13,7 @@ if ($method === 'SEED' || $method === 'ITEMS') {        // set up, or look at, a
     exit;
 }
 $_SERVER['REQUEST_METHOD'] = $method;
+$_SERVER['HTTP_HOST'] = 'nas.test';
+if (getenv('ORIGIN') !== false) $_SERVER['HTTP_ORIGIN'] = getenv('ORIGIN');
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];
 include "$app/$door";

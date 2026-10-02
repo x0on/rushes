@@ -21,7 +21,11 @@
 // and the one thing a GET can change is nothing.
 require_once __DIR__ . '/auth.php';
 
-const HELPER_FILES = ['ingest.py', 'transfer_state.py', 'analyze.py'];
+const HELPER_FILES = ['ingest.py', 'transfer_state.py', 'analyze.py', 'release.py'];
+// The fingerprint (SHA-256) of the certificate Rushes Helper is signed with.
+// The Terminal install refuses an app signed with any other. A fork that signs
+// its own app puts its own certificate's fingerprint here.
+const APP_CERT_SHA256 = '74bc21677be17b1aa348e67ea1d5912ddca4a27f1d133264ad43f5d4c988b6c5';
 function helper_src(string $f): string { return archive_dir() . '/_rushes/' . $f; }
 // As the runner last saw them (waiting.tsv): every helper asks this every five
 // minutes, and that must not read the VIDEO share. Only ?code, when a helper
@@ -41,7 +45,8 @@ function bail(int $code, string $why) { http_response_code($code); out(['error' 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['code'])) {
         $f = (string)$_GET['code'];
-        if (!in_array($f, HELPER_FILES, true) || !is_readable(helper_src($f))) bail(404, 'no such helper file');
+        // release.sig: the signature helpers check before they take any of it (release.py)
+        if (!in_array($f, [...HELPER_FILES, 'release.sig'], true) || !is_readable(helper_src($f))) bail(404, 'no such helper file');
         header('X-Hash: ' . hash_file('sha256', helper_src($f)));
         out(file_get_contents(helper_src($f)), 'text/x-python; charset=utf-8');
     }
@@ -85,17 +90,28 @@ SH, 'text/plain; charset=utf-8');
 
         // The app does the setting up, with its own windows. This only fetches it —
         // downloaded by curl, macOS does not stop it the first time it opens.
-        out("#!/bin/sh\n$common" . 'URL=' . $q($url) . "\n" . <<<'SH'
+        out("#!/bin/sh\n$common" . 'URL=' . $q($url) . "\nCERT=" . APP_CERT_SHA256 . "\n" . <<<'SH'
 APPS="$HOME/Applications"; APP="$APPS/Rushes Helper.app"; TMP=$(mktemp -d)
-echo "1/3  Downloading Rushes Helper from $URL (about 30 MB) …"
+echo "1/4  Downloading Rushes Helper from $URL (about 30 MB) …"
 curl -fS --progress-bar "$URL/db/helper.php?app" -o "$TMP/rh.zip"
-echo "2/3  Putting it in $APPS …"
+echo "2/4  Checking it is the one its author signed …"
+ditto -x -k "$TMP/rh.zip" "$TMP/x"
+NEW="$TMP/x/Rushes Helper.app"
+if ! codesign --verify "$NEW" 2>/dev/null; then
+    echo "✗ Not installed: the app's signature does not check out (changed after it was signed)."; rm -rf "$TMP"; exit 1
+fi
+( cd "$TMP" && codesign -d --extract-certificates=cert "$NEW" 2>/dev/null )
+if [ "$(shasum -a 256 "$TMP/cert0" 2>/dev/null | cut -d' ' -f1)" != "$CERT" ]; then
+    echo "✗ Not installed: the app is signed, but not by the Rushes author's certificate."; rm -rf "$TMP"; exit 1
+fi
+echo "     ✓ signed by the Rushes author"
+echo "3/4  Putting it in $APPS …"
 mkdir -p "$APPS" "$DIR"
 rm -rf "$APP"
-ditto -x -k "$TMP/rh.zip" "$APPS"
+ditto "$NEW" "$APP"
 rm -rf "$TMP"
 printf '%s\n' "$URL" > "$DIR/url"
-echo "3/3  Opening it …"
+echo "4/4  Opening it …"
 open "$APP"
 echo ""
 echo "✓ Rushes Helper is open. Its windows walk you through the rest: the background"

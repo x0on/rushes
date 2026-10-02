@@ -51,19 +51,18 @@ happens in HOW-IT-WORKS.
 
 **Security**
 
-- Plain http, one shared password, no user accounts, no CSRF tokens. Rushes is
-  for an office network only.
+- Plain http, one shared password, no user accounts. Rushes is for an office
+  network only. Requests from other websites are refused, but a site that points
+  its own name at your Rushes (DNS rebinding) is not.
 - Without a password, anyone on the network can change and download pulls
   (including a zip of the files), and ingest a card. While no helper is paired,
   they can also press the helper's switches.
 - Settings and status files in the web folder can be read by anyone who can open
   Rushes. They hold paths and progress, not passwords.
-- The helper's code is downloaded over plain http and is not signed. In built-in
-  mode, the runner starts it from `_rushes` with full rights.
 - Anyone who can write to the web share can change the runner (root). This is
   covered in INSTALL.md, but not enforced.
-- The Rushes Helper app does not update itself, and the Terminal install
-  command in Setup downloads it without checking a fingerprint.
+- The Rushes Helper app does not update itself. Its signing certificate is the
+  author's own, not one Apple issued, so macOS asks once before opening it.
 - The pairing ID is a plain-text secret in the web folder, protected only by
   being a `.php` file that prints nothing.
 
@@ -104,6 +103,8 @@ What could go wrong, what was decided, and where it stands.
 | A disk stalls, and Rushes' own repeating work piles up on it | The six rules (HOW-IT-WORKS → What runs by itself) | Done |
 | Two helpers at once copy over each other | Pairing | Done |
 | Anyone who can write to the archive share publishes a page | Pages wait for approval, like scripts | Done |
+| Anyone who can write to the archive share, or the network, changes the helper's code | Signed releases (`release.py`); the built-in helper runs only a checked copy | Done |
+| Another website makes a browser press Rushes' buttons | Requests from other websites refused | Done |
 | No backup of the footage (RAID is not a backup) | A second machine with a one-way copy that keeps versions, mounted by nobody; Rushes shows when it last ran and counts it as a copy | When a second machine is available |
 | Ransomware encrypts every share a computer has mounted | Snapshots; few accounts with write access; a backup with versions; the NAS never on the internet | Depends on the installation (INSTALL.md) |
 | A mistaken delete or move in Finder | The archive read-only for people; projects on a separate share; recycle bin on | Depends on the installation |

@@ -34,7 +34,7 @@ LOGS = os.path.join(HOME, "Library", "Logs", "Rushes")
 LABEL = "org.rushes.helper"
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
-FILES = ("ingest.py", "transfer_state.py", "analyze.py")
+FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 # The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
 STOPPED = os.path.join(HOME, "archive-pilot", "stopped.txt")
@@ -154,6 +154,15 @@ def fetch_files(url):
             raise RuntimeError(f"{f} from Rushes does not match its fingerprint; nothing was installed. Try again in a minute.")
         compile(data, f, "exec")                 # a broken download never goes in
         got[f] = data
+    # A signed release, checked with the release.py inside this app (which macOS
+    # checks is signed by its author), never one downloaded with it.
+    import release
+    with urllib.request.urlopen(f"{url}/db/helper.php?code=release.sig", timeout=20) as r:
+        sig = r.read().decode("utf-8", "replace")
+    try:
+        release.check(got, sig)
+    except ValueError as e:
+        raise RuntimeError(f"the helper's code on Rushes is not a signed release ({e}); nothing was installed.")
     for f, data in got.items():
         with open(os.path.join(DIR, f + ".new"), "wb") as fh:
             fh.write(data)

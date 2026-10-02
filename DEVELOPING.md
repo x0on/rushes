@@ -35,6 +35,7 @@ app/                     everything that is installed
   ingest.py              the helper: copying, proof, checking, describing lane, reporting
   transfer_state.py      the helper's saved progress (SQLite on its computer)
   analyze.py             describing one folder (run by the helper)
+  release.py             signed releases of the helper's code (Ed25519, written out)
   rules.json             what is the same everywhere: kinds of media, caches, limits, themes
   settings.example.json  what changes per installation
   .htaccess              files the web server must never hand out
@@ -104,10 +105,29 @@ sh test_pair.sh                            # pairing (needs PHPBIN or the php-wa
 node test_every.js                         # pages asking only while looked at; Sure?
 cd .. && python3 app/analyze.py --selftest  # describing's rules, without a model
 python3 app/ingest.py --selftest
+python3 app/release.py --selftest
 ```
 
 `test_runner.sh` rewrites `/share/` to a temporary folder, so it runs anywhere
 with BusyBox. The PHP tests run with any PHP 8 command line.
+
+## Signing a release of the helper's code
+
+The helper's code updates itself, so it is signed instead of approved
+(HOW-IT-WORKS → Updates). With the four files ready in a folder:
+
+```sh
+python3 app/release.py sign <folder> <release key file>
+python3 app/release.py verify <folder>
+```
+
+`sign` writes `release.sig` beside them. The key file holds the private half of
+the release key; it never goes in the repository or anywhere but its owner's
+computer. `release.py keygen <file>` makes a new key; a fork that signs its own
+releases puts the public half printed by `keygen` in `PUBLIC`, in `release.py`.
+
+`app/release.sig` in the repository is the signature of the last release. Any
+change to one of the four files needs a new signature before it is released.
 
 ## Building Rushes Helper
 

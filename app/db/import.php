@@ -7,8 +7,14 @@ require_once __DIR__ . '/sync.php';
 require_once __DIR__ . '/auth.php';
 header('Content-Type: application/json');
 $from = $_SERVER['REMOTE_ADDR'] ?? '';
-if (!in_array($from, ['127.0.0.1', '::1', $_SERVER['SERVER_ADDR'] ?? '-'], true) && !may_act()) {
+$local = in_array($from, ['127.0.0.1', '::1', $_SERVER['SERVER_ADDR'] ?? '-'], true);
+if (!$local && !may_act()) {
     http_response_code(403); echo '{"error":"sign in first"}'; exit;
+}
+// From a browser, only a POST: a link on another website cannot start it
+// (a signed-in browser follows links with its cookie; it never POSTs for them).
+if (!$local && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    http_response_code(405); echo '{"error":"press Rebuild search in Manage"}'; exit;
 }
 // Two halves. ?part=web: only what lives in the web folder (the file list, the
 // proxies' details, the daily database copy), however long it takes. ?part=video:

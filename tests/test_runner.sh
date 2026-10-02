@@ -11,7 +11,7 @@ W=$R/share/Web; V=$R/share/VIDEO/_rushes
 mkdir -p "$R/bin"; cat > "$R/bin/curl" <<EOF
 #!/bin/sh
 for a; do u=\$a; done; echo "\$u" >> "$R/asked"
-case "\$u" in *.sqlite) echo 200 ;; *part=video) [ -e "$R/hang" ] && sleep 30; echo '{"state":"current"}' ;; *) echo '{"state":"current"}' ;; esac
+case "\$u" in *.sqlite) echo 200 ;; *builtin) [ -e "$R/builtin" ] && echo yes || echo no ;; *part=video) [ -e "$R/hang" ] && sleep 30; echo '{"state":"current"}' ;; *) echo '{"state":"current"}' ;; esac
 EOF
 chmod +x "$R/bin/curl"
 run() { PATH="$R/bin:$PATH" VLIMIT=2 IMPORT_LIMIT=2 busybox sh "$R/runner.sh" >/dev/null 2>&1; }
@@ -151,6 +151,20 @@ printf 'ACTION=manifest\n' > "$W/queue/m1.job"; run
 [ "$(wc -l < "$W/manifest.tsv")" = 3000 ] && [ -f "$W/manifest-rejected.tsv" ] && grep -q "kept the last list" "$W/job.log" \
   && ok "a file list less than half the last one is refused, and said" || no "manifest guard: $(wc -l < "$W/manifest.tsv")"
 rm -f "$W/manifest.tsv" "$W/manifest-rejected.tsv"
+
+# the built-in helper runs with full rights: only a signed release, from a checked copy
+if command -v python3 >/dev/null 2>&1; then
+    touch "$R/builtin"; rm -f "$V/ingest.py"
+    for n in ingest.py transfer_state.py analyze.py; do echo 'import time; time.sleep(3)' > "$V/$n"; done
+    PUBT=$(python3 -c "import sys; sys.path.insert(0, '$HERE/app'); import release; print(release.public_key(bytes(32)).hex())")
+    sed "s/^PUBLIC = .*/PUBLIC = \"$PUBT\"/" "$HERE/app/release.py" > "$V/release.py"; cp "$V/release.py" "$W/release.py"
+    printf '%s' "$(printf '0%.0s' $(seq 1 64))" > "$R/key"; python3 "$V/release.py" sign "$V" "$R/key" >/dev/null
+    rm -f "$W/helper.pid"; run
+    [ "$(cat "$W/helper-builtin.txt")" = started ] && [ -f "$W/helper-code/ingest.py" ] && ok "a signed release: the built-in helper starts, from the checked copy" || no "signed built-in: $(cat "$W/helper-builtin.txt"); $(tail -3 "$W/job.log")"
+    sleep 4; echo 'import os; os.system("touch /tmp/pwned")' > "$V/ingest.py"; rm -f "$W/helper.pid"; run
+    [ "$(cat "$W/helper-builtin.txt")" = unsigned ] && grep -q "not a signed release" "$W/job.log" && ok "code changed after signing: not started, and said" || no "unsigned code was started"
+    rm -f "$R/builtin" "$W/helper.pid"; rm -rf "$W/helper-code"
+fi
 
 # STOP: nothing at all, not even the heartbeat
 rm -f "$W/runner-alive.txt"; touch "$W/STOP"; run

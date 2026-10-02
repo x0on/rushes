@@ -22,6 +22,8 @@ check() { if eval "$1"; then echo "PASS $2"; else echo "FAIL $2"; exit 1; fi; }
 out=$(call GET '{"install":""}')
 check 'echo "$out" | grep -q "URL='"'"'http://nas.test'"'"'" && echo "$out" | grep -q "helper.php?app" && echo "$out" | grep -q "open \"\$APP\""' \
       'install script carries this archive, fetches the app and opens it'
+check 'call GET "{\"install\":\"\"}" | grep -q "^CERT=[0-9a-f]\{64\}$" && call GET "{\"install\":\"\"}" | grep -q "extract-certificates"' \
+      'and opens it only if it is signed with the Rushes author'"'"'s certificate'
 check 'call GET "{\"app\":\"\"}" | grep -q "not on the archive yet"' 'no app on the archive: says so'
 printf 'PK-fake' > "$ROOT/archive/_rushes/Rushes Helper.zip"
 check 'call GET "{\"app\":\"\"}" | grep -q "PK-fake"' 'the app is served from the archive'
@@ -54,4 +56,9 @@ check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"dat
       'Ingest: a date in the future is refused by the server too'
 check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"date\":\"2024-05-01\",\"event\":\"x\"}" queue.php | grep -q "\"queued\"\|ok\|into"' \
       'Ingest: a real date goes through'
+# another website cannot make a browser press Rushes' buttons; Rushes' own pages can
+check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "another website"' \
+      'a button pressed from another website is refused, even with the password'
+check 'ORIGIN=http://nas.test call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "\"paused\"\|ok\|true"' \
+      'the same button from Rushes itself works'
 echo "Helper tests complete."

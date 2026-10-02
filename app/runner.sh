@@ -113,6 +113,13 @@ df -P /tmp | tail -1 > $WEB/tmp-disk.txt
 # it running. Started again within a minute if it stops; its output goes to
 # /share/Web/helper.log, which is kept small.
 RUSHES="${RUSHES_URL:-http://127.0.0.1}"
+copyhelper() {
+    rm -rf "$WEB/helper-code.new"; mkdir -p "$WEB/helper-code.new" || return 1
+    for n in ingest.py transfer_state.py analyze.py release.py release.sig; do
+        [ -f "$ARCH/_rushes/$n" ] && cp "$ARCH/_rushes/$n" "$WEB/helper-code.new/$n"
+    done
+    return 0
+}
 if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "yes" ]; then
     PY=$(command -v python3 2>/dev/null)
     pid=$(cat $WEB/helper.pid 2>/dev/null)
@@ -126,11 +133,25 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
         # is not started from there now. It starts again after Resume / Try again.
         echo "waiting" > $WEB/helper-builtin.txt
     else
-        [ -f $WEB/helper.log ] && [ "$(wc -c < $WEB/helper.log)" -gt 5000000 ] && mv $WEB/helper.log $WEB/helper.log.old
-        RUSHES_LOG=$WEB/helper.log "$PY" -u $ARCH/_rushes/ingest.py --watch --url "$RUSHES" --service >> $WEB/helper.log 2>&1 &
-        echo $! > $WEB/helper.pid
-        echo "started" > $WEB/helper-builtin.txt
-        echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper" >> "$LOG"
+        # It runs with full rights, so only a signed release (release.sig,
+        # checked by the release.py installed here as an approved script),
+        # from a copy in the web folder: what was checked is what runs.
+        HC=$WEB/helper-code
+        if [ ! -f $WEB/release.py ]; then
+            echo "unsigned" > $WEB/helper-builtin.txt
+            echo "$(date '+%Y-%m-%d %H:%M:%S')  built-in helper not started: release.py is not installed (Manage → What runs by itself → Check now, then Install it)" >> "$LOG"
+        elif ! v copyhelper; then
+            echo "waiting" > $WEB/helper-builtin.txt
+        elif ! "$PY" $WEB/release.py verify "$HC.new" >> "$LOG" 2>&1; then
+            echo "unsigned" > $WEB/helper-builtin.txt
+            echo "$(date '+%Y-%m-%d %H:%M:%S')  built-in helper not started: the code in _rushes is not a signed release" >> "$LOG"
+        else
+            rm -rf "$HC"; mv "$HC.new" "$HC"
+            RUSHES_LOG=$WEB/helper.log "$PY" -u $HC/ingest.py --watch --url "$RUSHES" --service >> $WEB/helper.log 2>&1 &
+            echo $! > $WEB/helper.pid
+            echo "started" > $WEB/helper-builtin.txt
+            echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper (signed release)" >> "$LOG"
+        fi
     fi
 fi
 
@@ -176,7 +197,7 @@ page_ok() {      # only these, only one folder deep, only db/
 }
 survey() {
     out=$WEB/waiting.tsv.new; : > "$out"
-    for f in $ARCH/_rushes/scripts/*.sh; do
+    for f in $ARCH/_rushes/scripts/*.sh $ARCH/_rushes/scripts/release.py; do
         [ -f "$f" ] || continue; n=${f##*/}
         case "$n" in *[!a-z0-9.-]*|.*) continue ;; esac
         h=$(sha256sum "$f" | cut -d' ' -f1); have=$(sha256sum "$WEB/$n" 2>/dev/null | cut -d' ' -f1)
@@ -189,7 +210,7 @@ survey() {
     printf 'helper\t%s\n' "$(sha256sum $ARCH/_rushes/ingest.py 2>/dev/null | cut -c1-12)" >> "$out"
     # the helper's own files, whole fingerprints: helpers ask for these to update
     # themselves (helper.php?hash), so that question never reads VIDEO
-    for n in ingest.py transfer_state.py analyze.py; do
+    for n in ingest.py transfer_state.py analyze.py release.py; do
         [ -f "$ARCH/_rushes/$n" ] && printf 'helperfile\t%s\t%s\n' "$n" "$(sha256sum "$ARCH/_rushes/$n" | cut -d' ' -f1)" >> "$out"
     done
     mv "$out" $WEB/waiting.tsv
@@ -756,7 +777,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             for s in $SCRIPTS; do
                 name=${s%%:*}; want=${s#*:}
                 case "$name" in *[!a-z0-9.-]*|.*|*/*|"") echo "  refused $name (not a script name)" >> "$LOG"; continue ;; esac
-                case "$name" in *.sh) ;; *) echo "  refused $name (not a .sh)" >> "$LOG"; continue ;; esac
+                case "$name" in *.sh|release.py) ;; *) echo "  refused $name (not a script Rushes has)" >> "$LOG"; continue ;; esac
                 tmp="$WEB/.$name.new"
                 if ! v cp "$ARCH/_rushes/scripts/$name" "$tmp" || [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
                     rm -f "$tmp"; echo "  refused $name: it changed after it was approved (or could not be read)" >> "$LOG"; continue

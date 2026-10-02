@@ -8,6 +8,25 @@
 // Both files sit beside the web root, not inside db/, because the Python build reads
 // exactly the same two files from exactly the same place.
 
+// Every POST must come from Rushes' own pages. A browser always says where a
+// request comes from (Origin, or else Referer), so another website's page that
+// tries to make this browser press a Rushes button, with or without a
+// password, is refused here, before any door reads the request. Scripts and
+// the helper send neither header and are not affected.
+(function () {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') return;
+    $from = (string)($_SERVER['HTTP_ORIGIN'] ?? ($_SERVER['HTTP_REFERER'] ?? ''));
+    if ($from === '') return;
+    $plain = fn($a) => preg_replace('/:(80|443)$/', '', strtolower($a));
+    $u = parse_url($from) ?: [];
+    $at = ($u['host'] ?? '') . (isset($u['port']) ? ':' . $u['port'] : '');
+    if ($at !== '' && $plain($at) === $plain((string)($_SERVER['HTTP_HOST'] ?? ''))) return;
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'refused: this came from another website (' . substr($from, 0, 80) . '), not from Rushes']);
+    exit;
+})();
+
 function rules(): array {
     static $r = null;
     if ($r === null) $r = load_json('rules.json', __DIR__ . '/../rules.json');

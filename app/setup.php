@@ -401,6 +401,10 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <?php if ($bi === 'no-python'): ?>
               <div class="seen bad">Python 3 is not installed on this machine yet. Install <b>Python 3</b> from the App
                 Center once; the helper starts by itself a minute later.</div>
+            <?php elseif ($bi === 'unsigned'): ?>
+              <div class="seen bad">Not started: the helper's code in <code>_rushes</code> is not a signed release
+                (<code>release.sig</code> missing, or not matching), or <code>release.py</code> is not installed yet.
+                It runs with full rights on this machine, so only signed code runs. The job log says which.</div>
             <?php endif; ?>
           <?php elseif (!$win && $url !== ''): ?>
             <!-- A Mac: installed once as a background service. It starts at login,

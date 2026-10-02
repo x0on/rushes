@@ -41,7 +41,7 @@ the Mac. Point Rushes at them in `settings.json` (`analysis.python`,
 
 1. **Copy the pages.** Put everything in `app/` into the web folder of the
    archive machine (on a QNAP, the `Web` share). Leave out `ingest.py`,
-   `transfer_state.py`, `analyze.py` and `README.md`.
+   `transfer_state.py`, `analyze.py` and `release.sig`.
 2. **Settings.** Copy `settings.example.json` to `settings.json` in the same
    folder and set at least:
    - `archive.local`: where the archive is on this machine (e.g. `/share/VIDEO`);
@@ -49,10 +49,11 @@ the Mac. Point Rushes at them in `settings.json` (`analysis.python`,
 
    Setup in Manage fills in the rest.
 3. **The helper's files.** Make a folder `_rushes` at the top of the archive
-   share, and put `ingest.py`, `transfer_state.py` and `analyze.py` in it. Also
-   put the runner's scripts in `_rushes/scripts/` (`runner.sh`, `proxy.sh`,
-   `dedupe.sh`, `verify.sh`, `organize.sh`). That way the copies on the archive
-   always match what is installed.
+   share, and put `ingest.py`, `transfer_state.py`, `analyze.py`, `release.py`
+   and `release.sig` in it (a signed release: helpers refuse anything else).
+   Also put the runner's scripts in `_rushes/scripts/` (`runner.sh`,
+   `proxy.sh`, `dedupe.sh`, `verify.sh`, `organize.sh`, `release.py`). That way
+   the copies on the archive always match what is installed.
 4. **The runner.** On the archive machine, as root:
    ```sh
    mkdir -p /share/Web/queue && chmod 777 /share/Web/queue
@@ -127,7 +128,7 @@ If Overview says the database can be downloaded:
 |---|---|
 | The runner and its scripts | Put the new file in `_rushes/scripts/`. Manage → What runs by itself → **Check now**. Then **Install it** → **Sure?** on the card that appears. |
 | Pages | Put the new files in `_rushes/deploy/` (sub-folder `db/` for files in `db/`), **Check now**, **Install it** → **Sure?**. |
-| The helper's code | Put `ingest.py`, `transfer_state.py` and `analyze.py` in `_rushes/`. The helper picks them up by itself within the hour, between jobs. |
+| The helper's code | Put `ingest.py`, `transfer_state.py`, `analyze.py`, `release.py` and their `release.sig` in `_rushes/`, then **Check now**. The helper takes them by itself within the hour, between jobs, only if they are the signed release. |
 | Rushes Helper (the Mac app) | Put the new `Rushes Helper.zip` in `_rushes/`. On the Mac, download it from Setup → 04 and open it. Its permissions stay. |
 
 **An install that predates update approval** cannot show new pages or scripts

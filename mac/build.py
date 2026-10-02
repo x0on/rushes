@@ -98,6 +98,8 @@ for a, z in ARCHES.items():
 
 # ── the rest of the app ─────────────────────────────────────────────────────
 shutil.copy(os.path.join(HERE, "rushes_helper.py"), os.path.join(C, "Resources"))
+# Checks that the helper's code it downloads is a signed release (app/release.py).
+shutil.copy(os.path.join(HERE, "..", "app", "release.py"), os.path.join(C, "Resources"))
 shutil.copy(os.path.join(HERE, "AppIcon.icns"), os.path.join(C, "Resources"))
 # What Rushes is made of, and whose each part is: shown in the app's window.
 shutil.copy(os.path.join(HERE, "..", "CREDITS.md") if os.path.exists(os.path.join(HERE, "..", "CREDITS.md"))

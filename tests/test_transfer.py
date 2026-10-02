@@ -461,6 +461,47 @@ class TidyPauseTests(unittest.TestCase):
         self.assertIn('tidy t1', m.DONE.read_text().splitlines())
 
 
+class SignedUpdateTests(unittest.TestCase):
+    """The helper takes a new version of its code only as a signed release,
+    checked with the release.py it already has."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def _serve(self, files, sig):
+        import hashlib
+        want = {n: hashlib.sha256(d).hexdigest() for n, d in files.items()}
+        def urlopen(url, *a, **k):
+            if url.endswith('?hash'): return io.BytesIO(json.dumps(want).encode())
+            if url.endswith('?code=release.sig'): return io.BytesIO(sig.encode())
+            return io.BytesIO(files[url.split('?code=')[1]])
+        return urlopen
+
+    def test_only_a_signed_release_is_taken(self):
+        import hashlib
+        m = self.mod
+        spec = importlib.util.spec_from_file_location('rel_t', APP / 'release.py')
+        rel = importlib.util.module_from_spec(spec); spec.loader.exec_module(rel)
+        seed = bytes(range(32)); pub = rel.public_key(seed).hex()
+        here = self.root / 'code'; here.mkdir()
+        relsrc = (APP / 'release.py').read_text().replace(rel.PUBLIC, pub)
+        old = {'ingest.py': b'print(1)\n', 'transfer_state.py': b'x = 1\n', 'analyze.py': b'y = 1\n', 'release.py': relsrc.encode()}
+        for n, d in old.items(): (here / n).write_bytes(d)
+        new = dict(old, **{'ingest.py': b'print(2)\n'})
+        hashes = {n: hashlib.sha256(d).hexdigest() for n, d in new.items()}
+        good = rel.body(hashes).decode() + 'sig ' + rel.sign(seed, rel.body(hashes)).hex() + '\n'
+        bad = rel.body(hashes).decode() + 'sig ' + rel.sign(bytes(32), rel.body(hashes)).hex() + '\n'
+        m.HERE_DIR = str(here)
+        with patch.object(m.urllib.request, 'urlopen', side_effect=self._serve(new, bad)), \
+             patch.object(m.os, 'execv') as execv, patch('sys.stdout', new_callable=io.StringIO) as out:
+            m._checked[0] = 0; m.update_self()
+        self.assertEqual((here / 'ingest.py').read_bytes(), b'print(1)\n')        # signed with another key: not taken
+        self.assertIn('not a signed release', out.getvalue()); execv.assert_not_called()
+        with patch.object(m.urllib.request, 'urlopen', side_effect=self._serve(new, good)), \
+             patch.object(m.os, 'execv') as execv, patch('sys.stdout', new_callable=io.StringIO):
+            m._checked[0] = 0; m.update_self()
+        self.assertEqual((here / 'ingest.py').read_bytes(), b'print(2)\n')        # signed: taken, and restarted
+        execv.assert_called_once()
+
+
 class ProofTests(unittest.TestCase):
     """ASC MHL records beside the footage: written from the copy's own fingerprints,
     following tidy-up moves, and filled in and re-checked by the checker."""

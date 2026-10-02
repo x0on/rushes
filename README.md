@@ -36,9 +36,9 @@ never leaves them.
 - It never sends your footage, descriptions or transcripts outside your own
   network.
 - It never installs new scripts or pages on your server until you approve them.
-  The one exception is the helper's own copying code, which follows the
-  version kept in the archive. [HOW-IT-WORKS.md](HOW-IT-WORKS.md#updates)
-  says how.
+  The one exception is the helper's own copying code, which updates itself,
+  but only to a release signed by the Rushes author.
+  [HOW-IT-WORKS.md](HOW-IT-WORKS.md#updates) says how.
 
 ## Status
 

@@ -446,7 +446,7 @@ async function act(name, btn) {
     if (!sure(btn, ASK.import, 'act:import')) return;
     const was = btn.textContent; btn.disabled = true; btn.textContent = 'Rebuilding search…';
     try {
-      const r = await (await fetch('import.php?part=web&force=1', { signal: AbortSignal.timeout(900000) })).json();
+      const r = await (await fetch('import.php?part=web&force=1', { method: 'POST', signal: AbortSignal.timeout(900000) })).json();
       btn.textContent = r.state === 'retrying' ? 'Kept the old search — ' + (r.error || 'try again')
                       : r.state === 'updating' ? 'Already rebuilding — give it a minute' : 'Search is up to date ✓';
     } catch (e) { btn.textContent = 'Could not reach the archive'; }

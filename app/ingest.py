@@ -31,7 +31,7 @@ Same shape as everything else: preview, look, apply, log, undo.
 """
 
 import argparse, errno, hashlib, json, os, platform, re, shutil, socket, subprocess, sys, threading, time, unicodedata
-import urllib.parse, urllib.request
+import importlib.util, urllib.parse, urllib.request
 from collections import defaultdict
 from pathlib import Path
 try:
@@ -1950,6 +1950,9 @@ def trim_own_log(limit=5_000_000, keep=1_000_000):
         pass
 
 
+HELPER_FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
+HERE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def update_self():
     """Stay the same as the helper on the archive. Checked between steps,
     never during a copy; after an update it restarts itself in place, so a
@@ -1966,10 +1969,10 @@ def update_self():
             want = json.loads(r.read().decode("utf-8", "replace"))
     except Exception:
         return
-    here = os.path.dirname(os.path.abspath(__file__))
+    here = HERE_DIR
     stale = {}
     for f, h in (want or {}).items():
-        if f not in ("ingest.py", "transfer_state.py", "analyze.py") or not h:
+        if f not in HELPER_FILES or not h:
             continue
         try: mine = hashlib.sha256(open(os.path.join(here, f), "rb").read()).hexdigest()
         except OSError: mine = ""
@@ -1986,6 +1989,24 @@ def update_self():
                 return                           # changed while downloading: next time
             compile(data, f, "exec")             # a broken file never goes in
             got[f] = data
+        # Signed, or nothing: the whole set, as it will be after this update,
+        # must be what release.sig lists, signed with the Rushes release key.
+        # Checked with the release.py already here, never the one downloaded.
+        if os.path.isfile(os.path.join(here, "release.py")):
+            with urllib.request.urlopen(NAS_URL + "/db/helper.php?code=release.sig", timeout=30) as r:
+                sig = r.read().decode("utf-8", "replace")
+            spec = importlib.util.spec_from_file_location("rushes_release", os.path.join(here, "release.py"))
+            release = importlib.util.module_from_spec(spec); spec.loader.exec_module(release)
+            after = {f: got.get(f) or Path(here, f).read_bytes()
+                     for f in HELPER_FILES if f in got or os.path.isfile(os.path.join(here, f))}
+            try:
+                release.check(after, sig)
+            except ValueError as e:
+                print(f"\n{time.strftime('%H:%M:%S')}  ! a new version of the helper is on the archive, but it is not "
+                      f"a signed release ({e}) — not installed; this version carries on")
+                return
+        else:
+            print("  (this version predates signed releases: the update brings the check with it)")
         for f, data in got.items():
             with open(os.path.join(here, f + ".new"), "wb") as fh:
                 fh.write(data)

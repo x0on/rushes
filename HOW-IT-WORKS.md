@@ -128,6 +128,8 @@ is the folder the archive machine's web server serves.
   - `video-stalls.txt` and `video-tripped.txt` (the breaker);
   - `exposed.txt` (the daily private-file check);
   - `archive-path.txt` (where the archive is, for the runner);
+  - `release.py` (installed like the runner's scripts) and, for the built-in
+    helper, `helper-code/` (the checked copy it runs from);
   - `db-copy.sqlite` and `db-copied` (the daily database copy; the copy is
     written beside the catalogue, wherever `archive.database` puts it);
   - `db-damaged.txt`;
@@ -152,8 +154,8 @@ is the folder the archive machine's web server serves.
   - `proxy-test/` (the last proxy test);
   - `gpu-test.txt`;
   - `scripts/` and `deploy/` (updates waiting for approval);
-  - the helper's own code (`ingest.py`, `transfer_state.py`, `analyze.py`) and
-    `Rushes Helper.zip`.
+  - the helper's own code (`ingest.py`, `transfer_state.py`, `analyze.py`,
+    `release.py`), its signature `release.sig`, and `Rushes Helper.zip`.
 - Inside every copied folder:
   - an `ascmhl/` folder (the copy proof);
   - `Where this came from.txt`.
@@ -981,8 +983,9 @@ app cannot open its own window, the page opens in the browser instead.
 2. **Installing:**
    - it copies itself into `~/Applications` (replacing an older copy, and removing
      macOS's "downloaded from the internet" mark);
-   - it downloads the helper's code from Rushes, checking each file's
-     fingerprint;
+   - it downloads the helper's code from Rushes, and installs it only if every
+     file is the one listed in a release signed with the Rushes release key
+     (checked with the `release.py` inside the app);
    - it sets up the background service.
 3. **Full Disk Access.** It shows where to turn it on, and moves on by itself
    when it is on. **Later** leaves it for another time.
@@ -1228,39 +1231,53 @@ Rushes does not look for updates on a timer. They only exist when a person puts
 them in `_rushes`, so it looks only after **Check now**, Try again, an install,
 or when it has no list yet.
 
-**The helper's own code** (`ingest.py`, `transfer_state.py`, `analyze.py`) does
-*not* wait for approval once Rushes has listed it:
+**The helper's own code** (`ingest.py`, `transfer_state.py`, `analyze.py`,
+`release.py`) does not wait for a person, because it is **signed** instead:
 
-- Put the new files in `_rushes`, and press **Check now** so Rushes lists their
-  fingerprints.
+- A release is the four files plus `release.sig`: their fingerprints, signed
+  with the Rushes release key (Ed25519). That key stays on its owner's computer;
+  `release.py` holds its public half. A release is signed with
+  `python3 release.py sign <folder> <key file>` (DEVELOPING.md).
+- Put the four files and `release.sig` in `_rushes`, and press **Check now** so
+  Rushes lists their fingerprints.
 - Once an hour, between jobs and never while describing, the helper asks Rushes
-  for that list. If a file differs from its own, it downloads it from Rushes.
-  It checks the download against the fingerprint and checks that it is valid
-  Python, replaces its files, and restarts itself.
-- It only ever asks your Rushes server, never the internet.
-- The download is plain http and not signed. Whoever controls your Rushes server,
-  or your network, can therefore change what runs on the helper's computer.
-- In built-in mode, the runner starts the helper directly from `_rushes`, with
-  full rights.
-- When Rushes Helper is first set up, it downloads the same files the same way,
-  and installs nothing until Rushes lists a fingerprint for each.
-
-Signed updates are on the [roadmap](ROADMAP.md).
+  for that list. If a file differs from its own, it downloads it from Rushes,
+  checks it against the fingerprint and that it is valid Python, then fetches
+  `release.sig` and checks, with the `release.py` it already has (never the
+  one downloaded), that the whole set as it will be is exactly the signed
+  release. Only then does it replace its files and restart. Otherwise it says
+  "not a signed release" and carries on with the version it has.
+- It only ever asks your Rushes server, never the internet. The download is
+  plain http, but a change made on the way, on the Rushes server or on the
+  share, without the key, is refused.
+- A helper older than signed releases takes the first signed release without
+  checking it (it has no `release.py` yet); every update after that is checked.
+- **The built-in helper** runs with full rights, so the runner starts it only
+  from a signed release: it copies the files from `_rushes` into the web
+  folder, checks the copy with the `release.py` installed there (an approved
+  script, like `runner.sh`), and runs that copy. If the check fails, it does
+  not start, and Setup and the job log say why.
+- When Rushes Helper is first set up, it downloads the same files and checks
+  them the same way, with the `release.py` inside the app.
 
 **The Rushes Helper app itself** (its window, Python and launcher) is not
 updated by Rushes. A new version is downloaded from Setup and opened.
 
 - The Terminal command in Setup (`curl … ?install | sh`) downloads the new app
-  from Rushes without checking a fingerprint, deletes the old app, puts the new
-  one in its place, saves the Rushes address, and opens it. It does not stop the
-  helper already running.
+  from Rushes and unpacks it aside. It checks that the app's signature is intact
+  (`codesign --verify`) and that it was signed with the Rushes author's
+  certificate (its fingerprint is written in `db/helper.php`). Only then does it
+  delete the old app, put the new one in its place, save the Rushes address, and
+  open it. It does not stop the helper already running.
 - An app signed with the same certificate keeps its Full Disk Access and Local
   Network permissions.
 
 **In the code:** `runner.sh` (`survey()`, `page_ok()`, the `update-scripts`
 job), `db/helper.php` (`check-updates`, `scripts`, `?hash`, `?code`,
 `?install`), `db/config.php` (`waiting_read()`), `db/state.php` (the card),
-`ingest.py` (`update_self()`), `mac/rushes_helper.py` (`fetch_files()`).
+`ingest.py` (`update_self()`), `mac/rushes_helper.py` (`fetch_files()`),
+`release.py` (`check()`, `read_sig()`, `verify()`), `runner.sh` (the built-in
+helper's start, `copyhelper()`), `db/helper.php` (`?install`, `APP_CERT_SHA256`).
 
 ---
 
@@ -1359,6 +1376,13 @@ its switches. What it reports is checked:
     own web server for the catalogue, its copy, the work list and the
     refused-helper list.
   - If any comes back, Overview says in red which ones, and how to fix it.
+- **Only Rushes' own pages can press its buttons.** A browser says which page a
+  request comes from. Any POST that says it comes from another website is
+  refused before anything reads it, with or without a password, so a page
+  elsewhere cannot make your browser pause the helper, ingest a card or change a
+  pull. Scripts and the helper, which say nothing, are not affected. Rebuild
+  search, the one action a link could start, only answers a POST from a browser.
+  Sessions use `SameSite=Lax` cookies.
 - **The runner checks every job again,** whatever the page already checked. A
   folder that would climb out of the archive (`..`) is refused. The holding
   folder for duplicates may be any folder inside the archive.
@@ -1370,8 +1394,9 @@ its switches. What it reports is checked:
 
 - The pages use plain http, not https, so passwords cross the network
   unencrypted.
-- There is no protection against another website making your browser press a
-  button (no CSRF tokens). Sessions use `SameSite=Lax` cookies.
+- Rushes does not check that the address a browser used is one of its own: a
+  website that makes its own name point at your Rushes (DNS rebinding) is not
+  stopped by the same-site check below.
 - Anyone who can write to the web share can change the runner, which runs with
   full rights. Give write access to the web share to the administrator only
   (INSTALL.md).
@@ -1380,7 +1405,8 @@ All of these are on the [roadmap](ROADMAP.md#known-problems). To use Rushes from
 outside the office, connect through a VPN. Do not put it on the internet.
 
 **In the code:** `db/auth.php`, `.htaccess`, `runner.sh` (the daily self-check,
-job validation), `db/config.php` (`helper_gate()`), `db/landed.php`,
+job validation), `db/config.php` (the same-site check at the top,
+`helper_gate()`), `db/import.php`, `db/landed.php`,
 `db/moved.php`, `db/report.php`, `db/status.php`, `db/state.php` (the cards).
 
 ---
