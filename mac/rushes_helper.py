@@ -111,6 +111,15 @@ def saved_url():
         return ""
 
 
+def app_version():
+    """This app's version: one number for all of Rushes (app/VERSION, in its Info.plist)."""
+    try:
+        with open(os.path.join(APP, "Contents", "Info.plist"), "rb") as f:
+            return plistlib.load(f).get("CFBundleShortVersionString", "?")
+    except (OSError, plistlib.InvalidFileException):
+        return "dev"
+
+
 def watcher_now():
     """What Rushes Watcher says it is doing (rushes_watcher.py, now.json)."""
     return read_json(os.path.join(WDIR, "now.json"))
@@ -1020,7 +1029,7 @@ def menu_state(w):
             items.append({"label": "Try again", "do": "try-again"})
         if up and s.get("pairing") != "this":
             items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
-    items += [{"sep": True}, info(f"Rushes: {s.get('url') or 'not set up'}"),
+    items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}"),
               {"label": "Open Rushes", "do": "open-rushes"}, {"label": "Show the log", "do": "show-log"},
               {"label": "Collect diagnostics", "do": "diagnostics"}, {"label": "Ask for help…", "do": "ask-help"},
               {"label": f"Open {NAME}…", "do": "open-window"}, {"sep": True},

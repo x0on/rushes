@@ -40,7 +40,17 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "1"
+def _version():
+    """The app's version (app/VERSION, written into its Info.plist when built); "dev" when run from the repository."""
+    try:
+        import plistlib
+        with open(os.path.join(os.environ["RUSHES_APP"], "Contents", "Info.plist"), "rb") as f:
+            return plistlib.load(f)["CFBundleShortVersionString"]
+    except Exception:
+        return "dev"
+
+
+VERSION = _version()
 HOME = os.environ.get("RUSHES_WATCHER_HOME") or os.path.expanduser("~/Library/Application Support/Rushes Watcher")
 LOG = os.environ.get("RUSHES_WATCHER_LOG") or os.path.expanduser("~/Library/Logs/Rushes Watcher/watcher.log")
 CONFIG, STATE = os.path.join(HOME, "config.json"), os.path.join(HOME, "state.json")

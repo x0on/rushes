@@ -133,6 +133,16 @@ releases puts the public half printed by `keygen` in `PUBLIC`, in `release.py`.
 `app/release.sig` in the repository is the signature of the last release. Any
 change to one of the four files needs a new signature before it is released.
 
+## Versions
+
+Rushes has one version number for everything: the pages, the helper's code,
+Rushes Helper and Rushes Watcher. It is in `app/VERSION`. It is shown at the
+foot of every Manage page, in each app's menu (and its Get Info in Finder), and
+in the Watcher's reports. Raise it when a version is handed out, and say what
+changed in [CHANGES.md](CHANGES.md): the middle number for something new, the
+last for a fix. 1.0 is when everything listed under Version 1 in the
+[roadmap](ROADMAP.md) is built.
+
 ## Building Rushes Helper and Rushes Watcher
 
 `mac/build.py` builds `mac/out/Rushes Helper.app` and its zip, from Linux or a

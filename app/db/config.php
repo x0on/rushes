@@ -494,6 +494,12 @@ function save_settings(array $s): bool {
 // one plain line it checks again (runner.sh, top). Written when settings are
 // saved, and by the runner's own minute (import.php) if it is missing or out
 // of date.
+// Which Rushes this is: one number for the pages, the helper's code and both apps (VERSION, beside the pages).
+function rushes_version(): string {
+    static $v = null;
+    return $v ??= (trim((string)@file_get_contents(dirname(__DIR__) . '/VERSION')) ?: '?');
+}
+
 function runner_paths(): void {
     $f = web_dir() . '/archive-path.txt'; $want = archive_dir() . "\n";
     if (@file_get_contents($f) !== $want) @file_put_contents($f, $want);

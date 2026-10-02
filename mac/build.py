@@ -28,7 +28,8 @@ APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
 PBS = "cpython-3.12.11+20250918-{}-apple-darwin-install_only_stripped.tar.gz"
 ARCHES = {"arm64": "aarch64", "x86_64": "x86_64"}
-VERSION = "1.0"
+# One number for all of Rushes: the pages, the helper's code and both apps (app/VERSION).
+VERSION = open(os.path.join(HERE, "..", "app", "VERSION")).read().strip()
 RC = shutil.which("rcodesign") or next(os.path.join(r, "rcodesign") for r, _, fs in os.walk(TOP, followlinks=True) if "rcodesign" in fs)
 
 # Parts of Python the helper never uses: the GUI toolkit, tests, the editor,

@@ -29,6 +29,7 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
     <?= $railItem('search',     'Back to search', 'search',   '/db/find.php',           false) ?>
 
     <div class="rail-foot">
+      <span class="note" title="One number for the pages, the helper's code and both apps">Rushes <?= htmlspecialchars(rushes_version()) ?></span>
       <span id="fFiles">&mdash;</span>
       <div class="meter"><i id="fMeter"></i></div>
       <span id="fFree">&mdash;</span>
