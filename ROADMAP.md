@@ -172,9 +172,14 @@ In this order of importance:
    - **Always in sight:** the Watcher, and Rushes Helper too, live as a small
      icon in the menu bar (Mac) or the notification area (Windows). The icon
      says the state at a glance: idle, working, needs you, cannot reach Rushes.
-     Its menu shows what it is doing now, the last few things it did, Pause,
-     and Open (the full window and its log). Nothing works without the icon
-     being there.
+     Its menu, like Tailscale's, holds everything a person changes day to day:
+     the state and what it is doing now (with progress), the last few things it
+     did, every switch (copy, describe, check, reconnect drives, run in the
+     background; for the Watcher, pause watching), the pairing and the Rushes
+     it talks to, Open Rushes, Show the log, Diagnostics, Ask for help, and
+     Quit. Switches act at once and can be changed back; anything that cannot
+     be undone (Remove, pairing another computer) opens the window and asks
+     twice there. Nothing works without the icon being there.
    - Like every Rushes program, it uses little: it only watches and copies, so
      it runs beside Premiere or Resolve on any computer that runs them.
    - Rushes makes each project's folder (New project: department and shoot), in
