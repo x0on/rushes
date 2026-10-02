@@ -55,7 +55,7 @@ $dest = rtrim($dest, '/');
 if (!is_dir($QUEUE)) { @mkdir($QUEUE, 0777, true); }
 
 // Which copy of a duplicate is never kept: written for dedupe.sh from
-// rules.json and Setup → 05 now, so the plan follows what the settings say today.
+// rules.json and Manage → Duplicates now, so the plan follows what the settings say today.
 if (in_array($action, ['plan', 'apply'], true) && dedupe_rules_write() === null) {
     http_response_code(500);
     echo json_encode(['error' => 'could not write dedupe-rules.tsv — is the web folder writable?']);

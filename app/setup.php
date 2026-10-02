@@ -79,19 +79,7 @@ if (($_POST['_save'] ?? '') === '1') {
                         . 'in_place: each drive keeps its files and Rushes indexes them where they are.';
     $s['organise']['shape'] = ($_POST['shape'] ?? '') === 'in_place' ? 'in_place' : 'one_place';
 
-    // Duplicates: this archive's own folders, one name per line. A name is a
-    // folder anywhere in a path, so no slashes; Rushes adds them itself.
-    $names = function (string $field) use (&$bad) {
-        $out = [];
-        foreach (preg_split('/\R/', (string)($_POST[$field] ?? '')) as $n) {
-            $n = trim(preg_replace('/\s+/', ' ', $n));
-            if ($n === '') continue;
-            if (preg_match('#[/\\\\]#', $n) || mb_strlen($n) > 100) { $bad[] = "“{$n}” is not a folder name: no slashes, at most 100 letters."; continue; }
-            if (!in_array($n, $out, true)) $out[] = $n;
-        }
-        return $out;
-    };
-    $s['duplicates'] = ['never_keep' => $names('d_never'), 'card_dumps' => $names('d_cards')];
+    // Duplicates: this archive's own folders are chosen in Manage → Duplicates, where the copies are seen.
 
     // A project resting, and moved aside (projects.php): days without a save. 0 = never moved aside.
     $s['projects']['rest_days']  = max(1, min(365, (int)($_POST['rest_days'] ?? 10)));
@@ -548,29 +536,9 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         </script>
       </div>
 
-      <!-- ══ 05 duplicates ══ -->
-      <?php $dup = $s['duplicates'] ?? []; ?>
-      <div class="grp">
-        <h2><span>05 /</span> Duplicates: which copy stays</h2>
-        <p>The same clip is often on the archive two or three times: once where it belongs, and again in a
-           folder where someone dropped it for a while. When Manage → Duplicates tidies up, one copy stays and
-           the others go to the holding folder (nothing is deleted). Rushes already knows to let go of the
-           copies in the recycle bin and in Premiere's caches. Tell it about this archive's own folders, so
-           the copy that stays is the one in the right place. Both are optional.</p>
-        <label class="f"><span>Folders that are only a stopover</span>
-          <textarea name="d_never" rows="3" placeholder="e.g. TO SORT"><?= $e(implode("\n", $dup['never_keep'] ?? [])) ?></textarea>
-          <small>Folders where files sit for a while: someone's desk folder, a "to sort" folder. When a clip
-            there is also somewhere else, the copy here is the one that goes. One folder name per line.</small></label>
-        <label class="f"><span>Folders of whole cards, copied as they were</span>
-          <textarea name="d_cards" rows="3" placeholder="e.g. CARD DUMPS"><?= $e(implode("\n", $dup['card_dumps'] ?? [])) ?></textarea>
-          <small>Where cards were copied whole, before anyone sorted them. When a clip from one of these is also
-            on your shelf (<?= shelf_name() !== '' ? '<b>' . $e(shelf_name()) . '</b>' : 'chosen in Reorganize' ?>), the shelf copy
-            stays. One folder name per line.</small></label>
-      </div>
-
       <!-- ══ 06 editors' work ══ -->
       <div class="grp">
-        <h2><span>06 /</span> Editors' work</h2>
+        <h2><span>05 /</span> Editors' work</h2>
         <p>Rushes Watcher keeps each editor's Premiere projects in the archive: the files a project uses and what
            the editor exports. Install it once on each editor's computer. The editor keeps working as usual.</p>
         <?php $ws = watchers(); $wurl = rtrim((string)(settings()['archive']['url'] ?? ''), '/'); ?>

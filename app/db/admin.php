@@ -61,6 +61,10 @@ if (isset($_POST['_newpass'])) {
   .hctl .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none }
   .hctl .dot.ok { background: var(--ok) } .hctl .dot.off { background: var(--bad) }
   .hctl .btn { padding: 6px 12px; font-size: 12.5px }
+  .seg { display: inline-flex; gap: 0; flex: none }
+  .seg .btn { border-radius: 0; padding: 6px 12px; font-size: 12.5px } .seg .btn + .btn { margin-left: -1px }
+  .seg .btn:first-child { border-radius: 8px 0 0 8px } .seg .btn:last-child { border-radius: 0 8px 8px 0 }
+  .seg .btn.on { background: var(--accent); color: #fff; border-color: var(--accent) }
   .hctl .note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted) }
   /* switches, as in Rushes Helper's own window: on means it runs */
   .hctl .grp { margin: 4px 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
@@ -188,7 +192,7 @@ if (isset($_POST['_newpass'])) {
                 <option value="oldest">The oldest file (reads every copy's date: slower)</option>
               </select>
               <small>Whatever you pick, copies in the recycle bin, <code>Copied_</code> folders, caches and the
-                folders in Setup &rarr; 05 are never the one kept. Moving uses the plan you looked at, with this choice.</small></label>
+                folders below marked as a stopover are never the one kept. Moving uses the plan you looked at, with this choice.</small></label>
             <div class="btns">
               <button class="btn quiet" data-t="scan">1 &middot; Scan the archive (hours)</button>
               <button class="btn" data-t="plan">2 &middot; Look for duplicates</button>
@@ -196,6 +200,19 @@ if (isset($_POST['_newpass'])) {
               <button class="btn quiet" data-t="undo">Put them back</button>
             </div>
           </div>
+        </div>
+        <!-- Where the copies are: the archive's own folders, asked about here, where it matters. -->
+        <div class="panel" style="margin-top:14px">
+          <header><b>Where the copies are</b> <span class="note" id="dwBuilt"></span></header>
+          <div style="padding:14px 14px 4px">
+            <p class="note" style="margin:0 0 6px">The archive's folders that hold the most duplicate copies. For each one,
+              say what it is, and the copy that stays is the one in the right place:
+              <b>Normal</b>, the usual rules decide; <b>Stopover</b>, files only sit there for a while, so its copy goes
+              when the clip is also somewhere else; <b>Whole cards</b>, cards copied as they were, so the copy on your
+              shelf stays. A change counts from the next <b>2 &middot; Look for duplicates</b>, which shows what it does
+              before anything moves.</p>
+          </div>
+          <div id="dwRows"><div class="empty">Looking&hellip;</div></div>
         </div>
       </section>
 
@@ -351,7 +368,7 @@ foreach (watchers() as $k => $w) {
         <div class="panel" style="margin-top:8px">
           <header><b>Editors' projects</b> <span class="note">as each editor's Rushes Watcher reports them, newest save first</span></header>
 <?php if (!$prj): ?>
-          <div class="empty">No project reported yet. Pair an editor's computer in Setup &rarr; 06 Editors' work, and its projects appear here after their next save.</div>
+          <div class="empty">No project reported yet. Pair an editor's computer in Setup &rarr; Editors' work, and its projects appear here after their next save.</div>
 <?php else: ?>
           <div style="overflow-x:auto"><table class="prep"><thead><tr><th>Project</th><th>Computer</th><th>Last saved</th>
             <th title="files the project uses from outside the archive">From outside</th><th>Missing</th><th>In the archive</th><th>State</th></tr></thead><tbody>
@@ -525,6 +542,7 @@ function show(which) {
   $('repeats').hidden = (which !== 'overview');
   $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
   if (which === 'cache') loadCache();
+  if (which === 'duplicates') loadWhere();
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
 }
 document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
@@ -533,6 +551,39 @@ document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
 $('sideMore').onclick = function () { show('activity'); };
 // The fixed buttons in Duplicates use the same path as everything
 // else: confirm, ask, watch it happen in the side column.
+// Where the copies are: each top folder with what it is, chosen with one press, and said.
+async function loadWhere() {
+  let r;
+  try { r = await (await fetch('dupfolders.php?t=' + Date.now())).json(); } catch (e) { $('dwRows').innerHTML = '<div class="empty">Could not ask the archive.</div>'; return; }
+  if (r.error) { $('dwRows').innerHTML = '<div class="empty">' + esc(r.error) + '</div>'; return; }
+  $('dwBuilt').textContent = r.built ? 'from the look on ' + r.built : '';
+  if (!r.folders.length) { $('dwRows').innerHTML = '<div class="empty">Nothing yet: press 2 · Look for duplicates, and the folders with copies show here.</div>'; return; }
+  const KINDS = [['normal', 'Normal'], ['stopover', 'Stopover'], ['cards', 'Whole cards']];
+  $('dwRows').innerHTML = r.folders.map(function (f) {
+    const n = function (k, one, many) { return k.toLocaleString() + (k === 1 ? one : many); };
+    const what = (f.move ? n(f.move, ' copy', ' copies') + ' would move from here' + (f.bytes >= 1048576 ? ' (' + tb(f.bytes) + ')' : '') : 'nothing would move from here') +
+      ' · ' + n(f.stay || 0, ' copy stays', ' stay') + ' here';
+    return '<div class="row" style="display:flex;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)">' +
+      '<div style="flex:1;min-width:0"><b>' + esc(f.name) + '</b><div class="note">' + esc(what) + '</div></div>' +
+      (f.kind === 'shelf' ? '<span class="note">your shelf (Reorganize)</span>' :
+        '<div class="seg" role="group" aria-label="What ' + esc(f.name) + ' is">' + KINDS.map(function (k) {
+          return '<button type="button" class="btn quiet' + (f.kind === k[0] ? ' on' : '') + '" aria-pressed="' + (f.kind === k[0]) +
+            '" data-dw="' + esc(f.name) + '" data-k="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>') +
+      '</div>';
+  }).join('') + '<p class="note" id="dwSaid" style="margin:8px 14px 12px"></p>';
+  $('dwRows').querySelectorAll('[data-dw]').forEach(function (b) {
+    b.onclick = async function () {
+      b.disabled = true;
+      try {
+        const x = await (await fetch('dupfolders.php', { method: 'POST', body: new URLSearchParams({ folder: b.dataset.dw, kind: b.dataset.k }) })).json();
+        if (x.error) throw new Error(x.error);
+        await loadWhere();
+        $('dwSaid').textContent = b.dataset.dw + ' is now: ' + b.textContent + ' ✓ Press 2 · Look for duplicates to see what that changes; nothing moves until 3.';
+      } catch (e) { b.disabled = false; $('dwSaid').textContent = 'Did not happen: ' + e.message; }
+    };
+  });
+}
+
 document.querySelectorAll('#pane-duplicates [data-t]')
   .forEach(function (b) { b.onclick = function () { act(b.dataset.t, b); }; });
 

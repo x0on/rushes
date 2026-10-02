@@ -607,7 +607,7 @@ class Window:
             rushes_watcher.pair(self.s["url"], code)
             if service_running()[0]:
                 restart_service()
-            self.set(said="Paired ✓ This computer can deliver to Rushes now. Rushes lists it in Setup → 06 Editors' work.")
+            self.set(said="Paired ✓ This computer can deliver to Rushes now. Rushes lists it in Setup → Editors' work.")
             return
         r = rushes(self.s["url"], "/db/pair.php", {"code": code, "host": computer_name()}, timeout=30)
         os.makedirs(os.path.dirname(HELPER_ID), exist_ok=True)
@@ -852,7 +852,7 @@ function draw() {
   case 'all-set':
     b = '<div class="big">✓</div><h2>All set</h2>' +
       (s.watcher ? '<p>Rushes Watcher is set up. It runs in the background, starts when you log in, and its icon is in the menu bar.</p>' +
-        '<p><b>One thing left: pair it with Rushes.</b> In Rushes → Setup → 06 Editors\' work, press Add an editor\'s computer, and type the six numbers on the next screen.</p>'
+        '<p><b>One thing left: pair it with Rushes.</b> In Rushes → Setup → Editors\' work, press Add an editor\'s computer, and type the six numbers on the next screen.</p>'
       : '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
         '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
       '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
@@ -958,11 +958,11 @@ function whome(s) {
       (n.note ? ' · ' + esc(n.note) : '') + '</p></div>' +
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
-    (!s.paired ? '<div class="box"><div class="row"><div class="t"><b>Not paired yet</b><small>It delivers nothing until it is. In Rushes → Setup → 06 Editors\' work, ' +
+    (!s.paired ? '<div class="box"><div class="row"><div class="t"><b>Not paired yet</b><small>It delivers nothing until it is. In Rushes → Setup → Editors\' work, ' +
       'press Add an editor\'s computer, and type the six numbers here. (A code for the helper does not work here, so an editor\'s computer never takes the helper\'s place.)</small></div></div>' +
       '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
       btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>'
-      : '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — Rushes lists this computer in Setup → 06 Editors\' work.</p>') +
+      : '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — Rushes lists this computer in Setup → Editors\' work.</p>') +
     '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here. Its icon goes with it.') +
       sw(!s.paused, ['watch-resume', 'watch-pause'], 'Watch projects', 'Off: it looks at no project; nothing already delivered changes. The menu bar icon has the same switch.', !on) +

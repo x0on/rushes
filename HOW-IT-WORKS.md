@@ -230,7 +230,7 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | `sources` | servers and drives to copy from, with a name for each |
 | `helper.mode`, `helper.label` | built in or external, and the helper computer's name |
 | `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | the folder in the archive the departments live in (the shelf), the departments and their folders, what they are called, and whether Ingest may add one. All set in Reorganize. The shelf has no default: until it is chosen, Ingest and the tidy-up wait. |
-| `duplicates.never_keep`, `duplicates.card_dumps` | this archive's own folders whose copies are never kept, and where whole cards were once copied (Setup → 05). What is true for every archive is in `rules.json → duplicates.never_keep`. |
+| `duplicates.never_keep`, `duplicates.card_dumps` | this archive's own folders whose copies are never kept, and where whole cards were once copied (chosen in Manage → Duplicates, from the folders the copies are in). What is true for every archive is in `rules.json → duplicates.never_keep`. |
 | `organise.shape` | saved by Setup; nothing uses it yet |
 | `limits.disk_stop_free`, `limits.disk_warn_free` | stop copying below this free space (5 TB), and warn below this (8 TB). They override `rules.json`. |
 | `rules.json → conditions` | when Overview warns: runner silent 3 min, a copy stalled 15 min, more than 100 cache files, more than 1 GB in the holding folder |
@@ -761,7 +761,7 @@ every Premiere project they save, with the files it uses and what they export,
 without anyone pressing anything. *Premiere, on a Mac; Final Cut and Resolve
 come later ([roadmap](ROADMAP.md)).*
 
-**One folder per computer.** In Setup → 06 Editors' work, **Add an editor's
+**One folder per computer.** In Setup → Editors' work, **Add an editor's
 computer** asks for a name (the editor's, usually), then gives a six-number code
 with a Copy button; Rushes Watcher on that computer pastes it (**Paste the code
 from Rushes**). The code is the computer's identity. Its folder is made by
@@ -867,7 +867,7 @@ when it was last heard from, and the end of its log. Search has **Deliverables**
 own.
 
 **No Finished button.** A project is ongoing until it is not: after some days
-without a save (10, Setup → 06) it is *resting*, said in Manage and once in the
+without a save (10, Setup → Editors' work) it is *resting*, said in Manage and once in the
 editor's Watcher. Nothing moves. *(Moving a workspace folder aside after 90
 days, `db/projects.php`, applied to a Projects share editors worked on. Projects
 now live on each editor's computer and are kept as copies, so it is off unless
@@ -954,8 +954,10 @@ can be put back.
      - for every archive, from `rules.json`: the recycle bin (1000), `Copied_…`
        folders (400), Premiere's Media Cache (300), doubled extensions in
        capitals such as `.MXF.MXF` (200);
-     - for this archive, from Setup → 05: folders whose copies are never kept
-       (500), and card-dump folders (450).
+     - for this archive, chosen in Manage → Duplicates under **Where the copies
+       are** (the top folders holding the most copies, from the last look, each
+       Normal, Stopover or Whole cards): stopovers, whose copies are never kept
+       (500), and folders of whole cards (450).
    - **Which copy is kept** is chosen above the buttons: the one on the shelf
      (the default; card dumps lose), the card dump (the shelf's copy loses), the
      shortest path, or the oldest file (slower: it reads every copy's date). If

@@ -346,7 +346,7 @@ class Watcher:
             self.hello, self.hello_at = rushes(self.cfg, get={"hello": ""}), time.time()
             if not self.hello.get("folder"):
                 self.hello = None
-                raise RuntimeError("Rushes has no folder for this computer: pair it again (Rushes → Setup → 06)")
+                raise RuntimeError("Rushes has no folder for this computer: pair it again (Rushes → Setup → Editors' work)")
             self.heard()
         archive = archive_mount(self.hello, self.cfg)
         if open_ and time.time() - self.last_scan >= SCAN_EVERY:
@@ -489,7 +489,7 @@ def run(once=False):
     while not cfg.get("id"):
         # Waits, looking at nothing, until it is paired (in its window); said once.
         if once:
-            sys.exit("Not paired yet: in Rushes → Setup → 06 Editors' work, get a code, then\n"
+            sys.exit("Not paired yet: in Rushes → Setup → Editors' work, get a code, then\n"
                      "  python3 rushes_watcher.py pair <rushes address> <code>")
         if not os.path.exists(os.path.join(HOME, "now.json")) or load(os.path.join(HOME, "now.json"), {}).get("state") != "unpaired":
             log("not paired with Rushes yet — open Rushes Watcher to pair it")

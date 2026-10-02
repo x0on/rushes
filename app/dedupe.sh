@@ -25,7 +25,7 @@
 # RULES (dedupe-rules.tsv), which Rushes writes when a plan is asked for:
 # rules.json → duplicates.never_keep for what is true everywhere (the recycle
 # bin, Copied_ folders, Media Cache, doubled extensions), and settings.json →
-# duplicates for this archive's own folders (Setup → 05). One line each:
+# duplicates for this archive's own folders (Manage → Duplicates). One line each:
 #   weight <TAB> contains|matches|card|project|keep <TAB> text   ('keep': never moved)
 # 'card' lines lose when the project copy is kept, 'project' lines (the shelf)
 # when card dumps are kept. The highest total loses; nothing here names a folder.
@@ -86,7 +86,7 @@ awk -F"$TAB" -v ks="$KEEP_SIDE" '{
     printf "  %5d  %s  (%s)\n", $1, $3, w }' "$RULES"
 case "$KEEP_SIDE" in project|card)
     grep -q "${TAB}card${TAB}" "$RULES" || \
-        echo "  (no card-dump folders are set in Setup → 05: neither the shelf's copy nor a card dump is preferred)" ;;
+        echo "  (no folder of whole cards is chosen in Manage → Duplicates: neither the shelf's copy nor a card dump is preferred)" ;;
 esac
 # ---------- KEEP_SIDE=oldest needs modification times ----------
 # Only collected in this mode: it stats every duplicate on disk, which takes a

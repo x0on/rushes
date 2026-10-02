@@ -146,4 +146,20 @@ check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\"
       'a button pressed from another website is refused, even with the password'
 check 'ORIGIN=http://nas.test call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "\"paused\"\|ok\|true"' \
       'the same button from Rushes itself works'
+# Manage → Duplicates: where the copies are, by top folder, and what each folder is (one press)
+A="$ROOT/archive"
+printf '100\t%s\t%s\n200\t%s\t%s\n50\t%s\t%s\n7\t%s\t%s\n' \
+  "$A/ALL CARD/2022/a.mov" "$A/Library/PARKS/a.mov" "$A/ALL CARD/2023/b.mov" "$A/Library/PARKS/b.mov" \
+  "$A/TO SORT/c.mov" "$A/ALL CARD/c.mov" "$A/@Recycle/d.mov" "$A/Library/d.mov" > "$ROOT/app/dedupe-plan.tsv"
+check 'call GET "{}" "{}" db/dupfolders.php | grep -q "sign in"' 'where the copies are: signed in only'
+out=$(SIGNED=1 call GET "{}" "{}" db/dupfolders.php)
+check 'echo "$out" | grep -q "{\"name\":\"ALL CARD\",\"move\":2,\"bytes\":300,\"stay\":1,\"kind\":\"normal\"}" && echo "$out" | grep -q "\"name\":\"Library\",\"move\":0,\"bytes\":0,\"stay\":3,\"kind\":\"shelf\"" && ! echo "$out" | grep -q "@Recycle"' \
+      'it counts, for each top folder, the copies that would move from it and stay in it; the shelf is marked; the recycle bin is not listed'
+SIGNED=1 call POST "{}" "{\"folder\":\"ALL CARD\",\"kind\":\"cards\"}" db/dupfolders.php >/dev/null
+SIGNED=1 call POST "{}" "{\"folder\":\"TO SORT\",\"kind\":\"stopover\"}" db/dupfolders.php >/dev/null
+check 'python3 -c "import json,sys; d=json.load(open(sys.argv[1]))[\"duplicates\"]; sys.exit(d!={\"never_keep\":[\"TO SORT\"],\"card_dumps\":[\"ALL CARD\"]})" "$ROOT/app/settings.json" && grep -q "card	/ALL CARD/" "$ROOT/app/dedupe-rules.tsv" && grep -q "contains	/TO SORT/" "$ROOT/app/dedupe-rules.tsv"' \
+      'one press says what a folder is: saved, and the duplicate rules written again'
+check 'SIGNED=1 call POST "{}" "{\"folder\":\"Library\",\"kind\":\"stopover\"}" db/dupfolders.php | grep -q "your shelf"' 'the shelf cannot be made a stopover'
+SIGNED=1 call POST "{}" "{\"folder\":\"ALL CARD\",\"kind\":\"normal\"}" db/dupfolders.php >/dev/null
+check '! grep -q "ALL CARD" "$ROOT/app/settings.json"' 'and Normal takes it off again'
 echo "Helper tests complete."
