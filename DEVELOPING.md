@@ -51,16 +51,19 @@ docs/                    the public website (GitHub Pages)
 Anything that repeats by itself follows these. Each has a test that breaks
 things on purpose.
 
-1. **Nothing to do, do nothing.** An idle check touches no share and writes
-   nothing.
+1. **Nothing to do, do nothing new.** An idle minute starts no work and copies,
+   moves or describes nothing. What it still does (free space, a heartbeat, a
+   glance at the shares) is listed in HOW-IT-WORKS.
 2. **Every step has a time limit.** A step that cannot finish is abandoned and
    said. On a dying disk a process cannot even be killed, so it is never waited
    on: `v()` in `runner.sh`, `within()` in `ingest.py`.
 3. **Never two at once.** A tick lock and a job lock in the runner, the
    one-helper lock in the helper. A question still stuck is not asked again.
-4. **Failing slows down, then stops.** 20 s, 1 min, 5 min, 15 min, then it stops
-   and says so, until a person presses Try again (the breaker). The one exception
-   is asking Rushes' web page, which harms nothing and keeps asking every 15 min.
+4. **Failing slows down, or stops.** Asking Rushes' pages harms nothing, so it
+   backs off (20 s, 1 min, 5 min, then every 15 min) and never stops. Touching a
+   share that does not answer is abandoned, and after three in a row it stops
+   and says so until a person presses Try again (the breaker: `video-stalls.txt`
+   in the runner, `stall()` and `stopped.txt` in the helper).
 5. **Visible.** Overview → What runs by itself (`$repeats` in `state.php`).
 6. **Pages ask only while someone is looking** (`every()` in `head.php`), never
    read the archive share on a timer, and ask less when it is slow.
@@ -72,8 +75,8 @@ And three that are older than these:
 - **Pages never move files.** They write a job file or a queue line. The runner
   and the helper do the work, and check every field again.
 - **Ask twice on the button.** Anything that starts work, moves files or takes
-  something away asks "Sure?" on the button itself (`sure()` in `head.php`).
-  Never a browser pop-up.
+  something away asks "Sure?" on the button itself, and acts on a second press
+  within about five seconds (`sure()` in `head.php`). Never a browser pop-up.
 
 ## Style
 

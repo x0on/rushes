@@ -60,7 +60,10 @@ happens in HOW-IT-WORKS.
   mode, the runner starts it from `_rushes` with full rights.
 - Anyone who can write to the web share can change the runner (root). This is
   covered in INSTALL.md, but not enforced.
-- The Rushes Helper app does not update itself.
+- The Rushes Helper app does not update itself, and the Terminal install
+  command in Setup downloads it without checking a fingerprint.
+- The pairing ID is a plain-text secret in the web folder, protected only by
+  being a `.php` file that prints nothing.
 
 **Paths and portability**
 
@@ -68,7 +71,9 @@ happens in HOW-IT-WORKS.
   some QNAP tools. The duplicate scan uses a fixed container and volume, and has
   no button.
 - `dedupe.sh` has a few folder names from the first installation written into
-  its rules; they belong in `rules.json`.
+  its rules; they belong in `rules.json`. Which copy to keep (project, card
+  dump, shortest path, oldest) has no control in Manage: it is always the
+  project copy.
 - Settings that nothing reads yet: `organise.shape`, `holding.*`,
   `helper.poll_seconds`, and parts of `rules.json` (`structure`, `duplicates`,
   two conditions). The list of video types for proxies is written in two places
@@ -84,15 +89,30 @@ happens in HOW-IT-WORKS.
   (such as the duplicate scan) delays the catalogue update, the database copy
   and the daily check.
 - Stalls during the database copy are not counted towards the breaker.
-- Card ingests do not show a transfer percentage, only the live status.
+- Card ingests do not show a transfer percentage, only the live status. A card
+  is copied whole, without looking for files already in the archive.
+- A new file list (`manifest.tsv`) replaces the old one before the size check
+  that protects the catalogue, so a bad list stays on disk until the next one
+  (search keeps the old catalogue).
 - `ingest.py --undo` covers only the last run, and is not reachable from the
   pages.
 - Some lists grow for ever: the helper's arrivals table, and several proxy logs.
+  The built-in helper's log is only trimmed when the runner starts it.
+- Ingest's date rules (before 2005, in the future, 1 January) are checked only
+  by the page, not again by `queue.php`.
+- The `cachescan` job lists only Premiere's caches, not every kind in
+  `rules.json`.
+- When the helper's code is missing and Rushes cannot be reached, Rushes
+  Helper's background service tries again every 90 seconds without slowing
+  down.
 
 **Describing**
 
 - Photos get no camera clock and no time of day.
 - Changing only the speech model does not describe files again.
+- A folder counts as described even when some of its files failed, and failed
+  speech is not tried again. They are retried only when the folder is asked for
+  again.
 
 ## Risks
 

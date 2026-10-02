@@ -1,15 +1,16 @@
 # How Rushes works
 
 This is the one document that says everything Rushes does. It covers every
-button, everything that runs by itself, every file it reads or writes, and every
-check that keeps footage safe. It is written in plain words, so you do not need
-to be a programmer to read it.
+page and button, everything that runs by itself, every file it reads, writes
+or deletes, everything it sends over the network, and every check that keeps
+footage safe. It is written in plain words, so you do not need to be a
+programmer to read it.
 
-Each section ends with **In the code**, which names the files and functions that
-do what the section describes. A reader holding this document and the code
-should find a match both ways: nothing in the code that is not here, and nothing
-here that is not in the code. If you find a difference, it is a bug in one of
-the two. Please open an issue.
+Each section ends with **In the code**, which names the files and functions
+that do what the section describes. A reader holding this document and the
+code should find a match both ways: nothing in the code that is not here, and
+nothing here that is not in the code. If you find a difference, it is a bug in
+one of the two. Please open an issue.
 
 Where Rushes falls short of what it should do, this document says so, and the
 [roadmap](ROADMAP.md#known-problems) tracks the fix.
@@ -18,21 +19,24 @@ Where Rushes falls short of what it should do, this document says so, and the
 
 1. [The three parts](#the-three-parts)
 2. [Where things are kept](#where-things-are-kept)
-3. [Finding footage](#finding-footage)
-4. [Bringing footage in](#bringing-footage-in)
-5. [How a file is copied](#how-a-file-is-copied)
-6. [Checking copies later](#checking-copies-later)
-7. [Making footage findable: search, proxies, descriptions](#making-footage-findable)
-8. [Keeping the archive tidy](#keeping-the-archive-tidy)
-9. [What runs by itself](#what-runs-by-itself)
-10. [Stopping things](#stopping-things)
-11. [Updates](#updates)
-12. [Pairing: one helper only](#pairing-one-helper-only)
-13. [Who can do what](#who-can-do-what)
-14. [What leaves your network](#what-leaves-your-network)
-15. [What Rushes deletes](#what-rushes-deletes)
-16. [Rushes' own backups](#rushes-own-backups)
-17. [What could go wrong](#what-could-go-wrong)
+3. [Settings](#settings)
+4. [Finding footage](#finding-footage)
+5. [Bringing footage in](#bringing-footage-in)
+6. [How a file is copied](#how-a-file-is-copied)
+7. [Checking copies later](#checking-copies-later)
+8. [Making footage findable](#making-footage-findable)
+9. [Keeping the archive tidy](#keeping-the-archive-tidy)
+10. [Manage](#manage)
+11. [Rushes Helper on the Mac](#rushes-helper-on-the-mac)
+12. [What runs by itself](#what-runs-by-itself)
+13. [Stopping things](#stopping-things)
+14. [Updates](#updates)
+15. [Pairing: one helper only](#pairing-one-helper-only)
+16. [Who can do what](#who-can-do-what)
+17. [What crosses the network](#what-crosses-the-network)
+18. [What Rushes deletes or moves](#what-rushes-deletes-or-moves)
+19. [Rushes' own backups](#rushes-own-backups)
+20. [What could go wrong](#what-could-go-wrong)
 
 ---
 
@@ -52,13 +56,14 @@ browser:
   a password.
 
 The pages never copy, move or delete footage themselves. They write down what
-was asked and leave the work to the other two parts.
+was asked, as a job file or a line in the helper's work list, and the other
+two parts do the work.
 
 **2. The runner.** A small script on the archive machine (`runner.sh`). The
 machine's scheduler (cron) starts it once a minute, and it runs with full
 rights (as root). It does the jobs the pages ask for, such as making proxies,
 looking for duplicates, measuring space and installing approved updates. It
-also keeps the catalogue up to date.
+also keeps the catalogue up to date and copies the database every day.
 
 **3. The helper.** The program that copies footage (`ingest.py`). It runs
 where it can see both the footage and the archive. That is usually a Mac,
@@ -71,7 +76,7 @@ as it goes.
  browser ──► Rushes pages ──► catalogue (SQLite)
                  │  writes what was asked
                  ▼
-     job files + the queue (in the web folder)
+     job files + the helper's work list (in the web folder)
         │                         │
         ▼                         ▼
      runner (archive machine)   helper (Mac, or built in)
@@ -89,25 +94,138 @@ window and service, `launcher.c` its program, and `build.py` builds it.
 
 ## Where things are kept
 
-| Where | What | Who writes it |
-|---|---|---|
-| **The web folder** (`settings → archive.web`, default `/share/Web`) | the pages, `settings.json` (this installation), `rules.json` (media rules), the catalogue `rushes.sqlite`, the job queue `queue/*.job`, the helper's work list `ingest-queue.tsv`, status files (`*-status.tsv`, `disk.txt`, `job.log`, …) | the pages and the runner |
-| **The archive share** (`settings → archive.local`, default `/share/VIDEO`) | your footage; `PROXIES/` (proxies, same paths as the originals); `_duplicates/` (the holding folder); `_rushes/` (Rushes' records, below) | the helper and the runner, never the pages |
-| `_rushes/` on the archive | `origin/` (a record of every copy and move), `analysis/` (one description per file), `ingest-history.tsv`, `ingest-sections.tsv`, `proof-roots.txt` (folders with copy proofs), `ascmhl-moved/`, `db-copies/` (a week of database copies), `scripts/` and `deploy/` (updates waiting for approval), the helper's own code (`ingest.py`, `transfer_state.py`, `analyze.py`), `Rushes Helper.zip` | the helper and the runner, and you (when you drop an update in) |
-| An `ascmhl/` folder inside each copied folder | the ASC MHL copy proof for the files below it | the helper |
-| `Where this came from.txt` inside each copied folder | a short note: when, from where, by which computer, how many files | the helper |
-| **The helper's computer**, `~/archive-pilot/` | its own notes: progress (`transfer-*.sqlite`), what it finished (`ingest-done.txt`), fingerprints it has already read (`hash-cache.json`), checking progress (`proof.json`), known addresses (`where.json`), network shares (`shares.json`), the pairing ID (`helper-id`), the stop note (`stopped.txt`), the one-helper lock (`helper.lock`) | the helper and the Rushes Helper app |
-| On a Mac: `~/Library/Application Support/Rushes`, `~/Library/Logs/Rushes`, `~/Library/LaunchAgents/org.rushes.helper.plist`, `~/Applications/Rushes Helper.app` | the helper's code, its logs, the background service, the app | Rushes Helper |
+**The web folder** (`settings → archive.web`, by default `/share/Web`). This
+is the folder the archive machine's web server serves.
 
-`settings.json` describes one installation: its paths, address, sources,
-departments and helper. `rules.json` holds what is the same everywhere: kinds
-of media, card folders, caches, limits and themes. The rule is that no code
-decides what a file *is*; that belongs in `rules.json`. A few places still
-break this rule (see the [roadmap](ROADMAP.md#known-problems)).
+- **Rushes' own files:**
+  - the pages;
+  - `settings.json` (this installation) and `rules.json` (media rules);
+  - `adminpass.php` (the password);
+  - `helper-id.php` (the pairing ID);
+  - `rushes.sqlite` (the catalogue, unless `archive.database` puts it
+    elsewhere).
+- **Work waiting:**
+  - `queue/*.job` (jobs for the runner);
+  - `ingest-queue.tsv` (the helper's work list);
+  - `prepare.tsv` (folders to prepare);
+  - `tidy-<id>.tsv` (a tidy-up plan);
+  - `cache-files.txt` (caches to move).
+- **What the runner and helper report:**
+  - `job.log` and `job-status.txt` (the runner);
+  - `runner-alive.txt` (the runner's heartbeat);
+  - `disk.txt` and `tmp-disk.txt` (free space);
+  - `helper-volumes.tsv` (drives the helper sees);
+  - `ingest-status.tsv` and `describe-status.tsv` (the helper's two lanes);
+  - `ingest-history.tsv` and `ingest-sections.tsv` (sent by the helper);
+  - `helper-control.json` (Pause and the other switches);
+  - `waiting.tsv` (updates waiting);
+  - `manifest.tsv` and `index.txt` (every file in the archive);
+  - `copies-summary.json`;
+  - the proxy files (`proxy-*.txt`, `proxy-*.tsv`, `proxy.log`, `proxy-test/`);
+  - the duplicate files (`results_duplicates.txt`, `dedupe-*.tsv`,
+    `verify-result.tsv`, `cache-moves.tsv`);
+  - `video-stalls.txt` and `video-tripped.txt` (the breaker);
+  - `exposed.txt` (the daily private-file check);
+  - `db-copy.sqlite` and `db-copied` (the daily database copy; the copy is
+    written beside the catalogue, wherever `archive.database` puts it);
+  - `db-damaged.txt`;
+  - `helper-refused.tsv`;
+  - `gpu-test.txt`;
+  - built-in helper only: `helper.log`, `helper.pid` and `helper-builtin.txt`.
 
-**In the code:** `db/config.php` (`settings()`, `rules()`, `web_dir()`,
-`archive_dir()`, `limit()`), `db/schema.php` (`DB_PATH`, `db_init()`), and in
-`ingest.py` the constants `HOME`, `STATUS`, `NAS_MOUNT` and `ARCHIVE`.
+**The archive share** (`settings → archive.local`, by default `/share/VIDEO`):
+
+- your footage;
+- `ARCHIVE/` (where copied folders land, until a tidy-up moves them);
+- your departments' folders on the shelf (`organise.shelves`);
+- `PROXIES/` (proxies, with the same paths as the originals);
+- `_duplicates/` (the holding folder);
+- `_rushes/`, holding Rushes' records:
+  - `origin/` (a record of every copy, move and check);
+  - `analysis/` (one description per file, with its stills);
+  - `ingest-history.tsv` and `ingest-sections.tsv`;
+  - `proof-roots.txt` (folders with copy proofs);
+  - `ascmhl-moved/` (proof records whose footage all moved);
+  - `db-copies/` (a week of database copies);
+  - `proxy-test/` (the last proxy test);
+  - `gpu-test.txt`;
+  - `scripts/` and `deploy/` (updates waiting for approval);
+  - the helper's own code (`ingest.py`, `transfer_state.py`, `analyze.py`) and
+    `Rushes Helper.zip`.
+- Inside every copied folder:
+  - an `ascmhl/` folder (the copy proof);
+  - `Where this came from.txt`.
+
+**The helper's computer**, in `~/archive-pilot/`:
+
+- `transfer-*.sqlite`: progress, files still to add to search, everything it
+  copied;
+- `ingest-done.txt`: what it finished;
+- `ingest-listed.txt`: folders it already split;
+- `nas-manifest.tsv`: its copy of the archive's file list;
+- `hash-cache.json`: fingerprints it already read;
+- `ingest-plan.tsv` and `ingest-copied.tsv`: the last run's plan and log;
+- `trace-originals-*.tsv`: originals it listed;
+- `proof.json`: checking progress;
+- `where.json`: addresses for Rushes;
+- `shares.json`: where network shares live;
+- `helper-id`: the pairing ID;
+- `stopped.txt`: present when it stopped by itself;
+- `helper.lock`: one helper per computer.
+
+**On a Mac**, Rushes Helper also uses:
+
+- `~/Applications/Rushes Helper.app`;
+- `~/Library/Application Support/Rushes`: the helper's code and the Rushes
+  address;
+- `~/Library/Logs/Rushes`: `helper.log` and `setup.log`;
+- `~/Library/LaunchAgents/org.rushes.helper.plist`: the background service.
+
+The runner and its scripts use the paths `/share/Web` and `/share/VIDEO`
+directly, whatever the settings say ([known
+problem](ROADMAP.md#known-problems)).
+
+**In the code:**
+
+- `db/config.php`: `settings()`, `web_dir()`, `archive_dir()`, `shelf_dir()`;
+- `db/schema.php`: `DB_PATH`;
+- `ingest.py`: `HOME`, `STATUS`, `NAS_MOUNT` and `ARCHIVE`;
+- `mac/rushes_helper.py`: the constants at the top.
+
+---
+
+## Settings
+
+`settings.json` describes one installation. **Setup** in Manage writes most of
+it. `rules.json` holds what is the same everywhere: kinds of media, card
+folders, caches, limits and the themes for describing. Rushes should never
+decide what a file *is* in its code; that belongs in `rules.json`. A few places
+still do ([known problem](ROADMAP.md#known-problems)).
+
+| Setting | What it changes |
+|---|---|
+| `name` | the name shown on the pages. While the password is still the default, the default is this name in lower case, with everything but letters and digits removed. |
+| `archive.local`, `archive.web`, `archive.url`, `archive.label` | where the archive and the web folder are on the archive machine, and the address people open Rushes at |
+| `archive.as_seen_from_helper` | where the helper's computer sees the archive (e.g. `/Volumes/VIDEO`) |
+| `archive.database` | puts the catalogue outside the web folder |
+| `sources` | servers and drives to copy from, with a name for each |
+| `helper.mode`, `helper.label` | built in or external, and the helper computer's name |
+| `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | where the shelf is, the departments and their folders, what they are called, and whether Ingest may add one |
+| `organise.shape` | saved by Setup; nothing uses it yet |
+| `limits.disk_stop_free`, `limits.disk_warn_free` | stop copying below this free space (5 TB), and warn below this (8 TB). They override `rules.json`. |
+| `rules.json → conditions` | when Overview warns: runner silent 3 min, a copy stalled 15 min, more than 100 cache files, more than 1 GB in the holding folder |
+| `proof.check_every_days` | how often each folder of the archive is read again (90) |
+| `analysis.python`, `analysis.model`, `analysis.whisper` | the Python and the models used for describing. By default, a `venv` and a `qwen3vl8b` folder in `~/archive-pilot` if they exist, otherwise the models by name. |
+
+A few switches are set by environment instead, for testing or unusual setups:
+
+- in the helper: `FLOOR_GB`, `PARANOID`, `NAS_MOUNT`, `ARCHIVE`, `STATUS_DIR`
+  and `VOLUMES_DIR`;
+- in the runner: `RUSHES_URL`, `VLIMIT` and `IMPORT_LIMIT`.
+
+**In the code:** `settings.example.json`, `rules.json`, `db/config.php`
+(`limit()`), `setup.php`, `structure.php`, and in `ingest.py` `setting()` and
+`rule()`.
 
 ---
 
@@ -118,51 +236,68 @@ break this rule (see the [roadmap](ROADMAP.md#known-problems)).
 Type words into Search (the first tab). Every word must appear in the file's
 path, its camera or its reel. Results are grouped by shoot (the folder that
 names the event), not by folder or filename, because that is how people
-remember footage. You can narrow the results to video, photos, audio or
-projects. Files sitting in the holding folder show as "moved aside".
+remember footage.
+
+- Narrow by kind: video, photos, audio, projects, sidecar files, other.
+- **Show 200 more** loads the next results.
+- Files sitting in the holding folder show as "moved aside".
+- Links work: `?q=` opens a search, and `?pull=` makes a pull the current one.
 
 When footage has been described, a panel called **In the footage** shows the
 matching moments: shots whose description, on-screen text, themes or tags
-match, with a still, and lines that were spoken, with their time.
+match, with the still the model looked at, and lines that were spoken, with
+their time.
 
 Click a file to see what it is:
 
 - resolution, frame rate, codec and length;
-- when it was recorded, the camera, timecode and reel (read from the file when
-  its proxy is made);
+- when it was recorded, the camera, timecode and reel (read when its proxy is
+  made);
 - how many copies of it exist and where;
 - whether it has a proxy;
 - the shoot and year;
 - where it lives.
 
-Buttons:
-
-- **Copy path** copies the file's path, written the way your computer sees it.
-- **Add to pull** adds it to the current pull.
+Buttons: **Add to pull**, and **Copy path**, which copies the file's path
+written the way your computer sees it.
 
 The left column has shortcuts (Everything, Archive, Projects, Library). Each one
 adds a word to the search; it does not filter by folder. It also shows your
-last five pulls and your recent searches, which are kept in your browser only.
+last five pulls and recent searches.
+
+Your browser keeps a few things for itself, on your computer only:
+
+- recent searches;
+- the current pull;
+- your name for pulls;
+- how your computer sees the archive;
+- light or dark (the button in the top bar).
 
 **In the code:** `db/find.php` (the page), `db/search.php` (the search),
-`db/analysis.php` (`analysis_search()`), `db/thumb.php` (the stills).
+`db/analysis.php` (`analysis_search()`), `db/thumb.php` (the stills),
+`head.php` (the top bar).
 
 ### Pulls
 
 A pull is a named list of clips, made for handing to an editor.
 
-- **Start one** from Search ("Add to a pull" → name, your name). Every pull has
-  its own link to send.
-- **Order the clips** with ↑ ↓, remove them with ✕, and rename the pull.
-- **Download** in one of three forms, written for the computer doing the
-  downloading. First choose "This is a Mac", "This is a PC" or "Something else",
-  so the paths match how that computer sees the archive.
+- **Start one** from Search ("Add to a pull" → its name, your name). Every pull
+  has its own link to send. **All pulls** lists them.
+- **Order** the clips with ↑ ↓, **remove** them with ✕ (asks twice), and
+  **rename** the pull in place.
+- A clip that is no longer in the archive is struck through and left out of
+  downloads.
+- **Download**, written for the computer doing the downloading. First choose
+  "This is a Mac", "This is a PC" or "Something else", so the paths match how
+  that computer sees the archive.
   - **For Premiere (XML):** a Premiere bin with every clip. Each described shot
-    and each line spoken becomes a marker at its frame, and the first shot's
-    description goes into the clip's Description. Markers need the clip's frame
-    rate, so they appear only for files that have a proxy.
+    and each line spoken becomes a marker at its frame. The first shot's
+    description goes into the clip's Description, and the themes of all its
+    shots into its notes.
+    Markers need the clip's frame rate, which is known once it has a proxy.
   - **List of paths:** a text file.
   - **The files (zip):** up to 1 GB and 1,000 files, stored without compression.
+    It is built in the web folder under a hidden name, and deleted once sent.
 
 Everyone who can open Rushes can see and change every pull. They are the team's
 lists. No password is needed.
@@ -174,31 +309,45 @@ move, rename), `db/pull-export.php` (the three downloads).
 
 ## Bringing footage in
 
+The helper works through its list in this order: cards, then tidy-ups, then
+folder copies, then describing. One thing at a time, with describing running
+beside the rest.
+
 ### A camera card: Ingest
 
-1. Plug the card into the helper's computer. Rushes sees it within about 20
-   seconds, because the helper reports every drive it can see.
-2. In **Ingest**, choose the card, the department (or client, or project), and
-   for each day on the card, what was shot. Rushes builds the destination; nobody
-   types a path:
+1. **Plug the card into the helper's computer.** Rushes shows it in Ingest
+   within a minute or less: the helper looks every 20 s, reports every 20 s, and
+   the page asks every 5 s. The first time, the helper counts the card's files.
+   A card is a drive with a camera's folder at the top: `DCIM`, `PRIVATE`,
+   `CLIPS`, `XDROOT`, `AVCHD`, `CONTENTS` or `M4ROOT`. Other drives are copied
+   through Transfers instead.
+2. **Choose the department** (or client, or project) and, for each day on the
+   card, what was shot. A card's days come from its files' modification times.
+   Rushes builds the destination; nobody types a path:
 
    `<shelf>/<department folder>/<YYYY>/<YYYYMMDD> <what it was>`
 
-   A card holding several days becomes one folder per day.
-3. If the card's clock was never set (dates in 1970 or on 1 January), or the shoot
-   is more than a year old, Rushes asks for the right date.
-4. Press **Start ingest**, then press it again: the button asks "Sure?" and
-   shows where each day will go. Follow the copy in "Moving now".
-   When it has landed, "Find it" opens Search on it.
+   A card holding several days becomes one folder per day. "What it was" loses
+   characters a folder name cannot hold and is cut to 80 characters.
+3. **Check the date.** A date before 2005, in the future, or on 1 January (a
+   clock never set) must be corrected before starting. For a shoot more than a
+   year old, a date field is offered.
+4. **Press Start ingest, then press it again.** The button asks "Sure?" and
+   shows where each day will go. Then follow it in "Moving now". When it has
+   landed, "Find it" opens Search on it. **Queue another source** starts over.
 
-Anyone who can open Rushes can ingest a card, without a password. A new
-department can be added here too, if the archive's administrator allowed that in
-Reorganize. The request is checked twice: by the page, and again by `queue.php`,
-which accepts only a card the helper really reports.
+If no departments have been set up yet, Ingest says so and points to
+Reorganize. Anyone who can open Rushes can ingest a card, without a password.
+A new department can be added here too, if Reorganize allows it.
+
+`queue.php` checks the request again: it accepts only a card the helper really
+reports, and a date that exists. (The date rules above are checked only by the
+page.) The helper checks a third time: it refuses a card it cannot see itself,
+and records "refused".
 
 **In the code:** `ingest.php` (the page), `queue.php` (the `ingest_src`
-branch), and in `ingest.py`, `watch()` (the `ingest` lines) and `main()` (with
-`--into` and `--day`).
+branch), and in `ingest.py`, `watch()`, `main()` (with `--into` and `--day`)
+and `card_size()`.
 
 ### Folders from an old server: Transfers
 
@@ -207,26 +356,30 @@ For bringing over a whole server, folder by folder:
 1. Add the server under **Setup → 03 Where footage comes from**.
 2. **Manage → Transfers** lists its folders ("sections") and what is already in
    the archive.
-3. Tick folders and press **Copy the ticked ones**, then again to confirm.
-   Folders over 1 TB can be **split** into their subfolders, to do in pieces.
+3. Tick folders, then press **Copy the ticked ones** and confirm.
+   - **Tick everything** ticks them all.
+   - Unticking folders that were waiting turns the button into **Clear the
+     list**: those come off the transfer.
+   - Ticking a folder that was skipped un-skips it.
+   - Folders over 1 TB can be **split** into their subfolders (asks twice).
 4. Overview shows the transfer: a percentage, bytes copied and already there,
    folders done, and the folder being copied now. Progress is saved, so it
    survives restarts on both sides.
 
-The folder layout is kept exactly as it was on the server. The first time a
-server is copied into an archive that already has footage from it, the helper
-first **matches earlier copies to their originals** (see below), so nothing is
-copied twice.
+A folder lands at `ARCHIVE/<source name>/<its path on the server>`, keeping the
+server's layout exactly.
 
 **In the code:** `db/admin.php` (`drawMove`, `drawTransfer`), `queue.php` (the
 folder branch), `db/transfers.php` (the saved transfer), `db/transfer.php` (the
-helper reports progress), and in `ingest.py` `watch()`, `sections()` (`--sections`)
-and `trace()`. `transfer_state.py` keeps progress on the helper's computer.
+helper reports progress), and in `ingest.py`, `watch()`, `sections()`
+(`--sections`) and `source_root()`. `transfer_state.py` keeps progress on the
+helper's computer.
 
 ### Matching earlier copies (trace)
 
-An archive often holds copies made before Rushes existed. Before copying from a
-source for the first time, the helper does two things:
+An archive often holds copies made before Rushes existed. If `ARCHIVE` has any
+top folder that is not named after a source, the helper assumes it might. So
+the first time it copies from a source, it first matches what is there:
 
 1. **It lists the originals** on the source, folder by folder. That list is
    kept for 7 days, so a stop part-way costs only the folder it was in.
@@ -235,8 +388,8 @@ source for the first time, the helper does two things:
 
 Each match is written to a record ("copied before the record existed; matched
 by content"). After that, the copy skips those files. Nothing is moved. A Pause
-stops it, and it carries on later. The page shows "step 1 of 2" or "step 2 of 2"
-and how much is left.
+stops it, and it carries on later. Once a source's match has finished, it is not
+run again. The page shows "step 1 of 2" or "step 2 of 2" and how much is left.
 
 **In the code:** `ingest.py`: `needs_trace()`, `trace()`, `trace_paused()`.
 
@@ -244,108 +397,139 @@ and how much is left.
 
 ## How a file is copied
 
-This is the core of Rushes. Every copy, from a card or a server, follows the
-same steps.
+This is the core of Rushes. Cards and folders are copied the same way, except
+where this section says otherwise.
+
+**What is not copied:**
+
+- names starting with a dot;
+- `Thumbs.db` and `desktop.ini`;
+- recycle-bin and system folders (`@Recycle`, `$RECYCLE.BIN`,
+  `System Volume Information`).
 
 **Before copying:**
 
-- **Is the source still there, and the archive?** If either has gone, the
-  folder is marked "blocked" and nothing is marked done.
-- **Is it already in the archive?** First the records are checked: a file
-  Rushes copied before, still there at the same size, is not copied again.
-  Then the list of every file in the archive (by size) is checked. A file whose
-  size appears nowhere is new, and no reading is needed. When the sizes match,
-  Rushes reads the first and last megabyte of both files and compares their
-  fingerprints. With `--paranoid` it reads the whole file instead. Fingerprints
-  are cached, so a second look is almost free.
-- **A source that suddenly looks empty is not believed.** If a folder that held
-  files now shows none, the copy stops, rather than marking it done.
-- **Is there room?** Before starting a folder, the helper checks free space
-  against a floor (5 TB by default, `disk_stop_free`).
+- **Are the source and the archive both there?** If either has gone, the folder
+  is marked "blocked" and nothing is marked done.
+- **A source that suddenly looks empty is not believed** (folders only). If a
+  folder that held files now shows none, the copy stops, rather than marking it
+  done.
+- **Is it already in the archive?** This check is for folders only. A card is
+  copied whole into its new folder.
+  1. First the records: a file Rushes copied before, still there at the same
+     size, is not copied again.
+  2. Then the archive's file list, by size. The helper downloads it from Rushes
+     the first time and keeps that copy. It is not downloaded again unless the
+     helper is run with `--refresh-manifest`; what the helper copied since comes
+     from its own records. A file whose size appears nowhere is new, and nothing
+     needs to be read.
+  3. When the sizes match, Rushes reads the first and last megabyte of both files
+     and compares their fingerprints. With `--paranoid` it reads the whole
+     file. Fingerprints are cached, so a second look is almost free.
+- **Is there room?** Before starting a folder or a card, the helper checks free
+  space against a floor (5 TB by default). An external helper asks Rushes for
+  the free space, because a Mac misreads very large network volumes. If there is
+  not enough, it stops, and looks again every 5 minutes.
 
 **Copying one file:**
 
 1. It is written under a temporary name (`….part`), in 8 MB pieces, while its
-   fingerprint is taken (XXH3-128, or BLAKE2 on a computer without the xxhash
-   library).
+   fingerprint is taken. The fingerprint is XXH3-128, or BLAKE2 on a computer
+   without the `xxhash` library.
 2. It is flushed to disk (fsync), and the date and permissions are copied.
-3. If the original changed while it was being read (size or modification
-   time), the copy is thrown away.
+3. If the original changed while it was being read (size or modification time),
+   the copy is thrown away.
 4. **It is read back from the archive and compared with the original's
    fingerprint.** On a Mac this read skips the computer's cache, so it really
    comes from the disk. Only if they match does the file get its real name.
-5. A file that is already there, with the same name, size and content, counts
-   as "already here". A *different* file with the same name is never
-   overwritten: it is reported as a problem and left alone.
+5. A file already there, with the same name, size and content, counts as
+   "already here". A *different* file with the same name is never overwritten:
+   it is reported as a problem and left alone.
 6. Names are matched whichever way their accents are written (NFC or NFD).
 
-**After each file:** it is added to the search catalogue within seconds, and to
-the transfer's progress.
+**After each file,** it is added to the search catalogue within seconds and to
+the transfer's progress. The list of files still to add survives restarts, and
+is retried every 10 seconds, up to every 5 minutes.
 
 **If something goes wrong:**
 
-- A file that fails is tried once more at the end of its folder. If it fails
+- **A file that fails** is tried once more at the end of its folder. If it fails
   again, it is recorded as "could not be copied", and the rest of the folder
   carries on.
-- If the source or the archive disconnects, or someone presses Pause or Skip,
+- **If the source or the archive disconnects,** or someone presses Pause or Skip,
   the folder stops part-way. It resumes later: files already in place match and
   are not copied again, and a cut-off file was only a `.part` and is redone.
-- A full archive stops the folder at once.
-- A network share that drops is reconnected by the helper. It asks macOS to
-  mount it again, at most every 2 minutes and then every 15, but only when the
-  server answers, so no stream of "problem connecting" windows appears. This
-  can be turned off in Manage and in Rushes Helper.
+- **A full archive** stops the folder at once.
+- **A network share that drops** is reconnected by the helper (on a Mac).
+  - It first checks that the file server answers on its file-sharing port (445).
+    Only then does it ask macOS to mount the share again, using the password
+    saved in the keychain.
+  - It tries every 2 minutes, and after 4 tries every 15.
+  - After 5 tries it says to connect the share in Finder, and to tick
+    "Remember this password".
+  - This can be turned off in Manage and in Rushes Helper.
 
 **What every copy leaves behind:**
 
-- **An origin record** in `_rushes/origin/`. It has one line per file (copied,
-  already here, failed), with where it came from and its size. It is never
-  edited. Rushes reads these records to know what it has done, even after files
-  move.
-- **An ASC MHL generation** in the `ascmhl/` folder of the copied folder. This
-  is the film industry's standard copy proof (it can be checked by Hedge,
-  Silverstack or the ASC's own tool). A stopped copy writes one too, for what
-  landed.
+- **An origin record** in `_rushes/origin/`, one line per file (copied, already
+  here, failed), with where it came from and its size. It is never edited.
+  Rushes reads these records to know what it has done, even after files move.
+- **An ASC MHL generation** in the `ascmhl/` folder of the copied folder. This is
+  the film industry's standard copy proof, which Hedge, Silverstack or the ASC's
+  own tool can check. A stopped copy writes one too, for what landed. It is
+  written only when the fingerprint is XXH3 (the `xxhash` library is present).
 - **`Where this came from.txt`** in the copied folder.
-- A line in `ingest-history.tsv`.
+- A line in `ingest-history.tsv`, which the helper sends to Rushes whole.
+
+**Undo from the command line:** `ingest.py --undo` moves the files the helper's
+*last* run copied into `ARCHIVE` to `ARCHIVE/_rollback/`. Files it copied
+elsewhere, such as a card's, are left where they are. It is not in the pages.
 
 **In the code:** `ingest.py`:
 
-- deciding: `main()`, `load_manifest()`, `load_origins()`, `already_here()`, `digest()`;
+- deciding: `main()`, `walk()`, `load_manifest()`, `load_origins()`,
+  `already_here()`, `digest()`;
 - copying: `bring()` (inside `main()`), `read_back()`;
-- recording: `mhl_copied()`, `mhl_write()`, `Origin`, `leave_a_note()`, `history()`;
-- drives: `free_bytes()`, `Dropped`, `reconnect()`.
+- recording: `mhl_copied()`, `mhl_write()`, `Origin`, `leave_a_note()`,
+  `history()`, `send_file()`;
+- space and drives: `free_bytes()`, `Dropped`, `reachable()`, `reconnect()`;
+- undo: `undo()`.
 
-On the server, `db/landed.php` takes the new files into search.
+`transfer_state.py` keeps the list of files still to add to search. On the
+server, `db/landed.php` takes the new files into search.
 
 ---
 
 ## Checking copies later
 
 When the helper has nothing to copy, it checks, a few minutes at a time. It
-reads only; it never repairs or moves anything. Manage and Rushes Helper each
-have a **Pause checking** switch.
+never repairs or moves footage. All it writes are its own records: copy proofs,
+"check" records, history lines, and the counts it sends to Rushes. Checking needs the `xxhash`
+library, and does nothing without it. Manage and Rushes Helper each have a
+**Pause checking** switch.
 
-1. **Older copies, once.** Copies made before read-back existed are read again
-   beside their originals. Those that match get an ASC MHL record. Those that
-   differ are written in a "check" record and shown in Activity.
-2. **How many copies exist, weekly.** For every file, it asks whether the
-   original it came from is still there at the same size. It compares names and
-   sizes only, and skips sources that are not connected. Overview then shows how
+1. **Older copies.** Copies made before read-back existed, which no copy proof
+   covers yet, are read again beside their originals.
+   - Those that match get an ASC MHL record.
+   - Those that differ are written in a "check" record and shown in Activity.
+   - Originals that cannot be reached now are tried when the list is next
+     rebuilt, at most once a week.
+2. **How many copies exist, weekly.** For every file, it asks whether the original
+   it came from is still there at the same size. It compares names and sizes
+   only, and skips sources that are not connected. Overview then shows how
    much is kept twice, warns when files exist only in the archive, and each file
    shows its copies.
 3. **The whole archive, every 90 days per folder.** Every file with a copy proof
    is read again and compared with its fingerprint, the way backup tools do.
-   Damaged, unreadable or missing files go into a "check" record. The 90 days
-   is a setting (`proof.check_every_days`). When nothing is due, the helper does
-   not look again for six hours.
+   Damaged, unreadable or missing files go into a "check" record. When nothing
+   is due, the helper does not look again for six hours.
 
 The helper decides whether anything is due from its own notes, without looking
 at the archive.
 
-**In the code:** `ingest.py`: `check_due()`, `check_some()`, `_older_todo()`. On
-the server, `db/copies.php` (the counts) and `db/state.php` (the "kept twice"
-tile and card).
+**In the code:** `ingest.py`: `check_due()`, `check_some()`, `_older_todo()`.
+On the server, `db/copies.php` (the counts), `db/state.php` (the card) and
+`db/admin.php` (`drawTiles`, the "kept twice" tile).
 
 ---
 
@@ -354,53 +538,82 @@ tile and card).
 ### The catalogue
 
 The runner keeps a list of every file in the archive with its size
-(`manifest.tsv`). Rushes turns that list into the search catalogue. A new list
-replaces the catalogue only if it is complete: an empty list, or one less than
-half the size of the last, is refused, and the old catalogue stays. Files the
-helper copies are added at once, without waiting for the next list.
+(`manifest.tsv`), and Rushes turns that list into the search catalogue.
 
-The full list is rebuilt when you ask (Manage → Jobs and tools → **Rebuild the
-file list**). After any job that moves files, the runner also rebuilds it by
-itself.
+A new list is refused if it is empty, or, once the catalogue holds more than
+1,000 files, if it is less than half the size of the last. The old catalogue
+then stays. (`manifest.tsv` itself is already replaced by then; [known
+problem](ROADMAP.md#known-problems).)
+
+Files the helper copies are added at once, without waiting for the next list.
+The helper's reports are checked first: a path must be inside the archive, on
+disk, at exactly the size it says.
+
+The full list is rebuilt:
+
+- when you ask: Manage → Jobs and tools → **Rebuild the file list**;
+- by itself, after the runner's jobs that move files: moving duplicates or
+  caches aside or back, and the old layout's undo. A tidy-up is done by the
+  helper, which tells search about each move as it goes.
+
+**Rebuild search** turns the current list into the catalogue again, even if
+search already has it.
 
 **In the code:** `runner.sh` (`build_manifest`, `build_index`, `refresh_state`),
 `db/sync.php` (`sync_search()`), `db/import.php`, `db/landed.php`.
 
 ### Proxies
 
-A proxy is a small H.264 copy of a video, used for describing and, later, for
-playing in search. Proxies are made on the archive machine. They are saved in
-`PROXIES/` with the same paths as the originals.
+A proxy is a small H.264 copy of a video, with AAC sound. It is used for
+describing and, later, for playing in search. Proxies are made on the archive
+machine, for `mxf`, `mov`, `mp4`, `avi`, `mts`, `m4v`, `braw` and `r3d` files.
+They are saved in `PROXIES/` with the same paths as the originals, and owned by
+the same user as their original.
 
-- **Settings:** Manage → Describe → Proxy settings. You can choose 720p or
-  1080p, at 4 or 6 Mbit/s on the video chip, or made in software (higher
-  quality, slower). Nothing below 4 Mbit/s is offered. The default is 720p at
-  4 Mbit/s.
-- **Test before choosing:** "Test proxy settings…" lets you pick a clip. Rushes
-  makes a 20-second sample with each setting and shows stills side by side. The
-  samples stay in `_rushes/proxy-test` until the next test.
-- **The video chip:** Rushes uses it when it can. Kinds of file the chip cannot
-  read are learnt, and go straight to the processor next time.
-  - Proxies are made at low priority.
-  - A proxy is written under a temporary name first.
+- **Settings** (Manage → Describe → Proxy settings): 720p or 1080p, at 4 or 6
+  Mbit/s on the video chip, or made in software (higher quality, slower).
+  Nothing below 4 Mbit/s is offered. The default is 720p at 4 Mbit/s.
+- **Test before choosing.** "Test proxy settings…" lets you pick a clip. Rushes
+  makes a 20-second sample with each setting and shows stills side by side.
+  - The samples stay in `_rushes/proxy-test` on the archive, and the stills in
+    the web folder, until the next test.
+  - The test runs in an ffmpeg container, which can see the archive. Docker
+    downloads the container the first time.
+- **The video chip.** Rushes uses it through the ffmpeg container, when that is
+  already on the machine. Otherwise it uses the NAS's own ffmpeg, which works
+  in software only.
+  - Kinds of file the chip cannot read are learnt, and go straight to the
+    processor next time.
+  - Proxies are made at low priority, and written under a temporary name first.
   - Files changed in the last two hours are left for later (they may still be
-    arriving).
-  - Before starting, Rushes checks there is room for the proxies.
+    arriving). For a folder on the prepare list, they are made by themselves on
+    a run two hours later; otherwise, the next time proxies are made.
+  - Before starting, Rushes checks there is room for 5% of the originals plus
+    2 GB.
+  - A build stops at once on "Permission denied" or "No space left".
 - **Stop proxies** stops at once. The proxy being made is thrown away, and
   finished ones are kept.
 - **Remake proxies** deletes that folder's proxies and makes them again. It is
   refused while proxies are being made, or while the folder is being described.
-- **Test the video chip** (Jobs and tools) measures what the chip can do and
-  writes a report. It makes no files.
+- **Test the video chip** (Jobs and tools) measures what the chip can do, with
+  test encodes and one real clip from the archive.
+  - It writes a report (`gpu-test.txt`) to the web folder and to `_rushes`.
+  - It makes no video files.
+  - It asks Docker for the latest public ffmpeg container each time it runs.
 
 When a proxy is made, the original's details are read and kept: resolution,
 frame rate, codec, length, the camera's clock, timecode, reel, and make and
 model.
 
-**In the code:** `proxy.sh` (planning and making), `runner.sh` (the
-`proxy-test`, `proxy-plan`, `proxy-build`, `proxy-remake`, `proxy-stop` and
-`gpu-test` jobs, and the automatic start), `db/analyze.php` (the buttons),
-`db/prepare.php` (`media_import()`, `media_probe()`).
+**In the code:**
+
+- `proxy.sh` (planning and making);
+- `runner.sh`:
+  - the `proxy-test`, `proxy-plan`, `proxy-build`, `proxy-remake`,
+    `proxy-stop` and `gpu-test` jobs;
+  - the automatic start;
+- `db/analyze.php` (the buttons);
+- `db/prepare.php`: `media_import()`, `media_probe()`, `prepare_advance()`.
 
 ### Describing footage
 
@@ -410,17 +623,20 @@ The helper describes footage with two models that run on its own computer:
   for the picture;
 - **Whisper** (default large-v3-turbo), for speech.
 
-Both are settings (`analysis.model`, `analysis.whisper`, `analysis.python`).
+It describes videos, photos and audio, including HEIC, DNG, MP3 and M4A. It
+skips `_rushes`, `_duplicates`, the recycle bin, NAS thumbnail folders and
+`_media-cache`. A photo gets one look. An audio file gets only speech. For a
+video, the cuts and the sound come from its proxy when there is one.
 
-**What happens to a file:**
+**What happens to a video:**
 
 1. It is cut into shots (PySceneDetect). Shots shorter than a second are joined
    to their neighbour.
 2. For each shot, two stills are taken at 768 px from the **original**. If the
-   original cannot be read, the proxy is used instead. Stills are never taken
-   from the first second of a shot (the first two seconds of a recording,
-   while the camera settles) or its last half second. A very short shot gets
-   one still from its middle.
+   original cannot be read, the proxy is used instead.
+   - Stills are never taken from the first second of a shot (the first two
+     seconds of a recording, while the camera settles), or its last half second.
+   - A very short shot gets one still from its middle.
 3. The model gets both stills together and is asked for:
    - one factual sentence;
    - the text on screen, copied exactly, one entry per line;
@@ -429,47 +645,62 @@ Both are settings (`analysis.model`, `analysis.whisper`, `analysis.python`).
    - indoor or outdoor;
    - the light;
    - the mood;
-   - up to three themes, only from the list in `rules.json`;
+   - up to three themes, only from the list Rushes gives (from `rules.json`,
+     or a list in `analyze.py` if Rushes cannot be reached);
    - a few tags.
 
    It is told to be literal, and not to guess who people are or where this is
    unless it is written in the picture.
 4. An answer that is not valid JSON is repaired if possible, or asked for once
    more. If it still fails, the shot is counted as "could not be read" and the
-   raw answer is kept. A file that cannot be read at all, or that fails part-way,
-   is not recorded, so it is tried again on the next run.
-5. Speech is transcribed in whatever language was spoken. Silence and music
-   are dropped.
+   raw answer is kept.
+5. Speech is transcribed in whatever language was spoken. Stretches Whisper
+   itself rates as probably not speech are dropped. If transcription fails, the
+   file is kept without speech, and is not tried again.
 6. Morning, afternoon, evening or night come from the camera's clock, not from
    the model.
 
 **What it writes:** one description per file in `_rushes/analysis/`. It is
 named by a fingerprint of the file's content (its size plus first and last 4 MB),
-so it survives moves and renames. Next to it is one still per shot. A file
-already described with the same model and question is skipped.
+so it survives moves and renames. Next to it is one still per shot.
+
+- Every place the same footage is seen is added to its description.
+- A file already described with the same vision model and question is skipped.
+- A file that cannot be read at all, or that fails part-way, is not written.
+  The folder still counts as described, so such a file is tried again only when
+  the folder is asked for again ([known problem](ROADMAP.md#known-problems)).
 
 **No face recognition exists in Rushes.** People are only counted, with
 broad age bands.
 
 **Describing has its own lane.** It runs beside copying, one folder and one
 file at a time, with its own **Pause describing** switch (Manage and Rushes
-Helper). Rushes takes the descriptions into search while the helper is
-describing, and once a day otherwise.
+Helper). A folder skipped from Manage is left alone. Rushes takes new
+descriptions into search while the helper is describing, and once a day
+otherwise.
 
-**Preparing folders** (Manage → Describe) puts the two steps in order. You add
-folders to a list, and for each one the archive machine makes the proxies,
-then the helper describes it. One step after the other, by itself, never twice.
-You can reorder the list, start the next folder now, try a folder again, or take
-it off the list. The page shows the time left, measured from real speeds, and
-why any proxy failed.
+**Preparing folders** (Manage → Describe) puts the two steps in order:
+
+1. You add folders to a list (or pick one in Finder). Each one is checked on the
+   archive.
+2. For each folder, the archive machine makes the proxies, then the helper
+   describes it. One step after the other, by itself, never twice.
+3. You can reorder the list (↑ ↓), **Start now**, **Try again**, **Remake
+   proxies** or **Take off the list**. Each asks twice, except ↑ ↓.
+
+The page shows the time left, measured from real speeds, and why any proxy
+failed.
 
 **In the code:**
 
-- `analyze.py`: `shots_of()`, `whole_shots()`, `sample_times()`, `frame()`,
-  `Vision`, `PROMPT`, `tidy()`, `transcribe()`, `fingerprint()`;
+- `analyze.py`: `media_under()`, `shots_of()`, `whole_shots()`,
+  `sample_times()`, `frame()`, `Vision`, `PROMPT`, `tidy()`, `transcribe()`,
+  `fingerprint()`, `themes_from()`;
 - `ingest.py`: `describe_lane()`, `describe_folder()`, `analysis_tools()`;
-- the server: `db/prepare.php` (`prepare_table()`, `prepare_advance()`),
-  `db/analyze.php`, `db/analysis.php` (`analysis_import()`).
+- the server:
+  - `db/prepare.php`: `prepare_table()`, `prepare_advance()`;
+  - `db/analyze.php`;
+  - `db/analysis.php`: `analysis_import()`.
 
 ---
 
@@ -479,41 +710,50 @@ why any proxy failed.
 
 **Manage → Reorganize** holds the plan the archive follows:
 
-- what your top folders are called (departments, clients, projects, or your
-  own word);
-- the list of them;
-- whether new ones may be added at Ingest.
+- what your top folders are called (departments, clients, projects, or your own
+  word);
+- the list of them, each linked to the folder it already has. Writing the plan
+  renames nothing and breaks no Premiere project.
 
-Each department is linked to the folder it already has. Writing the plan
-renames nothing and breaks no Premiere project.
+Building the list:
+
+- Paste a list of names, and Rushes suggests a folder for each by close
+  spelling. It saves nothing until you do.
+- Catch-all names (others, misc, general, various, unsorted, …) and names a
+  folder cannot have are refused.
+- **Folders not in the plan** shows shelf folders no department uses.
+- You choose whether new ones may be added at Ingest.
 
 **The tidy-up** moves footage that was copied into `ARCHIVE` onto the shelf, into
 its department's folder:
 
 - Rushes groups the files by where they came from and suggests a department for
-  each group. You confirm.
+  each group, when a name matches closely enough. You confirm.
 - The helper then moves each file (a rename on the same disk, so it is instant).
   It never moves a file onto one that exists, and never moves anything from a
-  folder still being copied.
+  folder still being copied. A plan that points outside the shelf is refused.
 - Each file's proxy moves with it, and so does its copy proof (a new ASC MHL
   generation where it lands). A record left with no files is moved to
   `_rushes/ascmhl-moved`, never deleted.
-- Search and every pull follow each file to its new place.
-- Folders left empty are removed (see [What Rushes deletes](#what-rushes-deletes)).
+- Search, every pull, and what describing found all follow each file to its new
+  place.
+- Folders left empty are removed.
+- Once started, a tidy-up does not stop for Pause ([known
+  problem](ROADMAP.md#known-problems)).
 
 **Put back** undoes a tidy-up from its record.
 
 **Premiere projects after a tidy-up** (Reorganize → 05):
 
-1. Choose a `.prproj` file. Your browser opens it and sends only its file
-   paths to Rushes. The project itself never leaves your computer.
-2. Rushes answers with where each clip went.
+1. Choose a `.prproj` file. Your browser opens it and sends only its file paths
+   (up to 50,000) to Rushes. The project itself never leaves your computer.
+2. Rushes answers with where each clip went, and lists clips that are missing.
 3. You save a corrected copy of the project. Mac and Windows paths both work.
 
 **In the code:** `structure.php` (the page), `db/tidy.php` (the proposal and
-asking), `db/relink.php` (Premiere paths), `db/moved.php` (search follows), and
-in `ingest.py` `tidy()`, `untidy()`, `move_proxy()`, `mhl_follow()` and
-`clear_out()`.
+asking), `db/relink.php` (Premiere paths), `db/moved.php` (search, pulls and
+descriptions follow), and in `ingest.py` `tidy()`, `untidy()`, `move_proxy()`,
+`mhl_follow()` and `clear_out()`.
 
 ### Duplicates
 
@@ -522,31 +762,36 @@ the holding folder (`_duplicates`). The folder structure is kept, so anything
 can be put back.
 
 1. **The scan** compares every file by content. It is done by Czkawka, a
-   separate duplicate finder running in a container on the archive machine. It
-   takes hours, so it is started by the `scan` job, which has no button. The
-   runner's comments show how to schedule it weekly.
-2. **Look for duplicates** (Manage → Duplicates) works out which copy to keep
-   and shows the plan. It moves nothing. You choose which copy wins:
-   - the project folder over card dumps (the default);
-   - card dumps;
-   - the shortest path;
-   - the oldest file.
-
-   - Some copies always lose, such as `Copied_…` folders, Premiere's Media Cache
-     and doubled extensions like `.MXF.MXF`.
+   separate duplicate finder running in a container on the archive machine.
+   - It takes hours, so it is started by the `scan` job, which has no button
+     ([known problem](ROADMAP.md#known-problems)).
+   - The runner's comments show how to schedule it weekly.
+2. **Look for duplicates** (Manage → Duplicates) works out which copy to keep,
+   and shows the plan. It moves nothing.
+   - The project copy wins over card dumps. The script can also keep card
+     dumps, the shortest path or the oldest file, but Manage has no control for
+     that yet.
+   - "Project" and "card dump" are recognised by folder names written into
+     `dedupe.sh` ([known problem](ROADMAP.md#known-problems)).
+   - Some copies always lose: `Copied_…` folders, Premiere's Media Cache,
+     doubled extensions in capitals (`.MXF.MXF`, `.MOV.MOV`, `.MP4.MP4`), and
+     one more folder name from the first installation.
    - Copies in the recycle bin are never kept and never moved.
    - Numbered image-sequence frames are never moved, even when identical,
      because removing one breaks the sequence.
 3. **Move the copies aside** moves exactly the plan you were shown, as long as
    it was made from the same scan and with the same choice. Otherwise it plans
-   again first. Before moving each file, it checks the file still exists at the
-   size the scan saw, and the copy being kept is there. Every move is written to
-   a log that is added to, never emptied.
+   again first.
+   - Before moving each file, it checks the file still exists at the size the
+     scan saw, and that the copy being kept is there.
+   - Every move is written to a log that is added to, never emptied.
 4. **Put them back** returns every file still in the holding folder.
-5. **Check the holding folder** goes through every file in it. For each, it
-   checks that its twin (the copy kept) is still in the archive at the same
-   size. The answer is SAFE only if every file has its twin. It names the files
-   that do not, and ignores system clutter, saying which rule ignored what.
+5. **Check the holding folder** goes through every file in it.
+   - For each, it checks that its twin (the copy kept) is still in the archive
+     at the same size. The answer is SAFE only if every file has its twin.
+   - It names the files that do not.
+   - It ignores editing caches, the recycle bin, and system clutter, and says
+     which rule ignored what.
 
 Rushes never empties the holding folder. Emptying it is your step, after the
 check says SAFE.
@@ -558,20 +803,21 @@ jobs), `dedupe.sh`, `verify.sh`.
 
 Editing software scatters caches through the archive: Premiere's `.pek`, `.cfa`
 and `.ims` files, Capture One's cache folders, and others. They are listed in
-`rules.json`. All of them are rebuilt from the originals on demand.
+`rules.json`, and all of them are rebuilt from the originals on demand.
 
-**Manage → Cache** shows how much there is and gives examples. It counts from
-the catalogue, so it takes a second rather than a sweep of the archive. Things
-that look like clutter but are not (such as Premiere's Auto-Save, an edit's
-only rescue after a crash) are shown as "left alone" and never moved.
+**Manage → Cache** shows how much there is, with examples. It counts from the
+catalogue, so it takes a second rather than a sweep of the archive. Things that
+look like clutter but are not (such as Premiere's Auto-Save, an edit's only
+rescue after a crash) are shown as "left alone" and are never on the move list.
 
-- **Move them out** moves them into the holding folder. It never takes anything
+- **Move them out** moves them into `_duplicates/_media-cache/`, keeping their
+  paths. Every move is written to `cache-moves.tsv`. It never takes anything
   from the recycle bin (that would undelete it) or from the holding folder
   itself.
 - **Put them back** returns every cache file still in the holding folder.
 
 **In the code:** `db/junk.php` (the list), `runner.sh` (the `cachescan`,
-`cacheclean` and `cache-undo` jobs), and `db/config.php` (`cache_groups()`,
+`cacheclean` and `cache-undo` jobs), `db/config.php` (`cache_groups()`,
 `cache_sql()`).
 
 ### The old date-based layout
@@ -582,20 +828,191 @@ put back. **In the code:** `organize.sh`.
 
 ---
 
+## Manage
+
+Manage is behind the password. Its left column has these panes: Overview,
+Transfers, Duplicates, Cache, Describe, Reorganize, Activity, Jobs and tools,
+and Setup, plus **Sign out**.
+
+### Overview
+
+**Tiles:**
+
+- **In the archive:** files and size.
+- **Free space:** warns at 80% full, alarms at 90%.
+- **Kept twice:** how much has a second copy.
+- One tile for each thing that needs you. Pressing it is the button.
+
+**Cards** say what is true right now, in plain words, with a button when there
+is something to do:
+
+| Card | When |
+|---|---|
+| The helper machine cannot see the footage any more | a copy is blocked because its source is gone |
+| A copy stopped part-way | the helper was copying and has said nothing for 15 minutes |
+| The NAS is not picking up jobs | the runner has been silent for 3 minutes |
+| The archive is full enough to stop copying, or Running low on space | free space is below the floor, or below the warning |
+| Search needs a check, will update again, is updating, or is ready to index | the catalogue's state. The last one has **Build the first file list**. |
+| N cache files are taking up … | more than 100 cache files (**Move them out**) |
+| … is waiting in the holding folder | more than 1 GB there, as last measured (after a job that moves files, or the `holding` job). **Check it is safe**, or "safe" once checked. |
+| Moving the old server over: d of n folders | a server's folders are listed but not all copied |
+| The helper is not running | a transfer is waiting and the helper has gone quiet |
+| Rushes stopped reaching the VIDEO share by itself | the breaker tripped (**Try again**) |
+| Anyone on your network can download … | the daily private-file check found something |
+| The database did not pass its daily check | the daily check failed |
+| A helper that is not the paired one asked for work | in the last hour |
+| N updates are waiting to be installed, or Installing … | updates in `_rushes`, with the start of each fingerprint (**Install it**) |
+| The system scratch space is N% full | `/tmp` is 80% full or more |
+| N files now exist only in the archive | the weekly copy count found originals gone |
+| Everything is in order | nothing else is true |
+
+**Below the cards:**
+
+- **The helper row:** which computer, how it runs, when it was last heard from,
+  and its switches (see [Stopping things](#stopping-things)).
+- **The transfer:** progress, and what is moving now.
+- **What runs by itself:** five rows (the runner, reaching VIDEO, looking for
+  updates, the database copy, the helper), each with how often it runs, when it
+  last ran, and whether it stopped. Updates have **Check now**.
+
+**Activity** (a side column, and its own pane) lists what happened, newest
+first, and shows the runner's raw log.
+
+### Jobs and tools
+
+Buttons for running things by hand, each asking twice:
+
+- Rebuild the file list;
+- Rebuild search;
+- Check the holding folder;
+- Measure free space;
+- Plan proxies (counts what is missing, makes nothing);
+- Test the video chip.
+
+Below them: **Admin password**, to change it. It needs the current password,
+and the new one must be at least 4 characters.
+
+A few jobs exist only for scripts and have no button: `reindex`, `holding`
+(measures the holding folder), `cachescan` (lists Premiere's `.pek`, `.cfa` and
+`.ims` files only, replacing the list Manage → Cache made), `scan`,
+`organize-undo`, and checking one folder or file in the holding folder. A page
+can start them only when signed in.
+
+### Setup
+
+Each section saves with **Save settings**.
+
+- **01 How media is organised:** bring everything to one place, or leave media
+  on its own drives (saved; not used yet).
+- **02 This archive:**
+  - its name;
+  - where it lives on this machine;
+  - the address people open Rushes at. This is filled in from the address you
+    opened Setup at. If it is a number that can change, Setup says so, tries
+    the machine's own name (`<name>.local`) from your browser, and offers
+    **Use the name**.
+- **03 Where footage comes from:** add a drive or folder (picked from what the
+  archive machine or the helper actually sees, never typed), rename one, or
+  remove one.
+- **04 Helper:**
+  - **built in**, or **external** with its name, and where it sees the archive;
+  - whether it is running, and how many drives it sees;
+  - for external: pairing (see [Pairing](#pairing-one-helper-only)) and how to
+    install Rushes Helper. That means the download button, or a Terminal command
+    to paste (`curl … ?install | sh`) and its remove command. For Windows, a
+    Command Prompt line.
+  - for built in: a warning if the archive machine has no Python.
+
+Opening Setup lists the shares on the archive machine.
+
+**In the code:** `db/admin.php`, `db/rail.php`, `db/state.php`, `setup.php`.
+
+---
+
+## Rushes Helper on the Mac
+
+Rushes Helper is a Mac app with its own Python inside. Opened from Finder, it
+shows one window. Started by macOS in the background, it runs the helper, with
+no window.
+
+**The window** is a page served on this Mac only, behind a random key. If the
+app cannot open its own window, the page opens in the browser instead.
+
+**Setting up**, the first time:
+
+1. **Welcome**, then **Where Rushes is.**
+   - It guesses the address from where the app was downloaded from, or from the
+     clipboard if it holds one.
+   - Its first try at the address makes macOS ask about Local Network. If that
+     is refused, a step explains how to allow it.
+2. **Installing:**
+   - it copies itself into `~/Applications` (replacing an older copy, and removing
+     macOS's "downloaded from the internet" mark);
+   - it downloads the helper's code from Rushes, checking each file's
+     fingerprint;
+   - it sets up the background service.
+3. **Full Disk Access.** It shows where to turn it on, and moves on by itself
+   when it is on. **Later** leaves it for another time.
+4. **All set.**
+
+**Every day after that**, the window shows:
+
+- **The state:** running, paused, stopped, or stopped by itself (with **Try
+  again**).
+- **What it is doing,** from Rushes. If an action did not happen, it says why.
+- **Pairing,** with a box for the six numbers, when this Mac is not the paired
+  one.
+- **Switches:**
+  - Run in the background. Off stays off, even after a restart.
+  - Copy footage.
+  - Describe footage.
+  - Check copies.
+  - Reconnect network drives by itself.
+- **Diagnostics:** one text file on your Desktop, shown in Finder. It holds:
+  versions, the Rushes address, the switches, whether Full Disk Access is on,
+  the names of the drives the Mac sees, the fingerprints of the helper's code,
+  what Rushes says the helper is doing, and the recent logs. It holds no footage,
+  and no passwords are written to it on purpose; read it before sending it to
+  anyone. Nothing is sent.
+- **Ask for help:** saves the diagnostics, and opens a new GitHub issue in your
+  browser.
+- **Support access: None.** There is no way for anyone to connect to this Mac
+  through Rushes Helper.
+- **Show the log** (opens Console), **Open Rushes**, **What it is made of** (the
+  credits) and **Remove…**.
+
+**The background service** starts at login and starts the helper again if it
+stops (macOS waits 30 seconds between tries). If the helper's code is missing, it
+downloads it from Rushes first, checked as in setup; if Rushes cannot be reached,
+it tries again about every 90 seconds. The Mac is kept awake, though not its
+screen, while a copy or describing runs.
+
+Pairing, and Full Disk Access being turned on, restart the background helper at
+once, so it picks up the change. A copy in progress stops, and resumes as after
+any stop.
+
+**In the code:** `mac/rushes_helper.py` (`Window`, `serve()`, `install_service()`,
+`service()`, `guess_url()`, `fetch_files()`, `diagnostics()`, `ask_help()`,
+`pair()`, `stop_service()`), `mac/launcher.c`.
+
+---
+
 ## What runs by itself
 
-Rushes follows six rules for anything that repeats:
+Rushes follows these rules for anything that repeats:
 
-1. **Nothing to do, do nothing.** An idle check touches no share and writes nothing.
+1. **Nothing to do, do nothing new.** An idle minute starts no work, and copies,
+   moves and describes nothing. (It still measures free space, says it is alive,
+   and the helper glances at the top of each network share every 10 minutes.)
 2. **Every step has a time limit.** A step that cannot finish is abandoned and said.
 3. **Never two at once.** If the last run is still busy, the next does not start.
-4. **Failing slows down, then stops.** It waits 20 s, 1 min, 5 min, then 15 min.
-   After that it stops, says so, and waits for a person to press Try again. The
-   one exception is asking Rushes' web page: that harms nothing, so it keeps
-   asking every 15 minutes, and a laptop that leaves the office carries on when
-   it is back.
-5. **Visible.** Overview → **What runs by itself** shows each repeating task,
-   how often it runs, when it last ran, and whether it stopped.
+4. **Failing slows down, or stops.** There are two cases:
+   - **Asking Rushes,** which harms nothing, backs off: 20 s, 1 min, 5 min, then
+     every 15 min. It never stops, so a laptop that leaves the office carries on
+     when it is back.
+   - **Touching a share** that does not answer is abandoned. After three in a row
+     it stops, says so, and waits for a person to press **Try again**.
+5. **Visible.** Overview → What runs by itself, and Activity.
 6. **Pages ask only while someone is looking,** and ask less when the archive is
    slow.
 
@@ -605,86 +1022,112 @@ In this order:
 
 1. **STOP:** if a file called `STOP` is in the web folder, it does nothing at
    all.
-2. It writes the time to `runner-alive.txt`. Overview says "not picking up
-   jobs" if this goes quiet for three minutes.
+2. It writes the time to `runner-alive.txt`.
 3. If the last minute's run is still busy, it stops here.
 4. It reads whether copying is paused, and whether VIDEO has stopped answering.
    Below, "if VIDEO may be read" means neither is true.
-5. If VIDEO may be read, it measures free space (`disk.txt`), within 20 s.
-6. It keeps the machine's scratch space (`/tmp`) at least 256 MB and notes how
-   full it is.
-7. **Built-in helper only:** if it is not running, the runner starts it. It does
-   this only if VIDEO may be read.
+5. If VIDEO may be read, it measures free space (`disk.txt`).
+6. If the machine's scratch space (`/tmp`) is smaller than 256 MB, it mounts it
+   again at 256 MB. It notes how full it is.
+7. It asks its own web server whether the helper is built in. If it is, and is
+   not running, and VIDEO may be read, it starts it. When it starts it, a log
+   over 5 MB is moved to `helper.log.old`.
 8. **Proxies:** if a prepared folder needs proxies, nothing else is being made,
    and VIDEO may be read, it starts making them.
-9. **Updates:** if someone pressed **Check now**, an install just finished, or
-   there is no list yet, and VIDEO may be read, it looks in `_rushes` for
-   waiting updates, within 20 s.
+9. **Updates:** if someone pressed **Check now** or **Try again**, an install
+   just finished, or there is no list yet, and VIDEO may be read, it looks in
+   `_rushes` for waiting updates.
 10. Then, if no job is running (one at a time; a lock left by a run that was
     killed is taken over, and said in the log):
-    - **the jobs** you asked for, in order;
-    - **the catalogue update** (`import.php`). With VIDEO paused or not
-      answering, only what lives in the web folder is updated;
-    - **the database copy** onto VIDEO, if there is a new one (within ten
-      minutes);
-    - **once a day,** a check that private files cannot be downloaded (see
-      [Who can do what](#who-can-do-what)).
+    1. **the jobs** you asked for, in order;
+    2. **the catalogue update,** from the web folder;
+    3. **then, if VIDEO may be read, the look at VIDEO:**
+       - new descriptions into search;
+       - the prepare list's proxy check (each folder's proxies are looked for at
+         most every 10 minutes);
+       - queueing the next folder for proxies or describing;
+    4. **the database copy** onto VIDEO, if there is a new one;
+    5. **once a day,** the private-file check.
 
-**The time limit** works like this. Every automatic touch of VIDEO is started
-in the background and abandoned if it has not answered in 20 seconds. It is
-never waited on: a process stuck on a dying disk cannot even be killed. After
-three in a row, the runner stops touching VIDEO by itself. Overview shows
-"Rushes stopped reaching the VIDEO share by itself", with **Try again**.
+**The time limit** works like this. Every automatic touch of VIDEO above (free
+space, updates, the look at VIDEO, the database copy) is started in the
+background and abandoned if it has not answered in time: 20 seconds, two
+minutes for the look at VIDEO, ten for the database copy. It is never waited
+on, because a process stuck on a dying disk cannot even be killed. After three
+in a row, the runner stops touching VIDEO by itself. Overview shows "Rushes
+stopped reaching the VIDEO share by itself", with **Try again**.
 
-Jobs you ask for (duplicates, proxies, tests, and so on) are not under this
-time limit, and still run while copying is paused.
+Proxies, once started, and the jobs you ask for (duplicates, tests, rebuilds),
+run without this limit, and still run while copying is paused. The one
+exception is installing an update: its copies go through the limit.
 
 ### Rushes, while someone is looking
 
 - The top bar asks every 5 seconds what is happening. Manage asks every 4
   seconds, plus every 10 seconds about describing. Ingest asks every 5 seconds.
 - A hidden tab asks nothing. After a slow or failed answer, the wait doubles,
-  up to a minute, and the top bar says "the archive is slow".
+  up to a minute, and the top bar says "the archive is slow". A question with no
+  answer in 20 seconds is given up.
 - These repeating questions read only the web folder, never the archive share.
   Some things a person opens or presses do read the archive once:
-  - opening Setup (it lists the shares) or Reorganize (it lists the shelf);
+  - opening Setup or Reorganize;
   - opening the tidy-up;
-  - planning a folder;
+  - adding a folder to the prepare list, or reordering it;
+  - Premiere relinking;
   - a still in search;
-  - a zip download.
+  - a zip download;
+  - downloading the helper's code or Rushes Helper.
+
+  And while the helper copies or tidies, Rushes checks each file it reports is
+  really there (every 10 seconds at most), outside the runner's time limit.
 
 ### The helper
 
 | What | How often | Touches the archive? |
 |---|---|---|
-| Asks Rushes for work | every 20 s; if Rushes does not answer, 20 s, 1, 5, then every 15 min | no |
+| Asks Rushes for work, and for the transfer's saved progress | every 20 s; if Rushes does not answer, 20 s, 1, 5, then every 15 min | no |
 | Asks for Pause, Try again now, skip | at most every 5 s while waiting | no |
-| Says what is plugged in (its heartbeat) | every 20 s | no |
+| Says what is plugged in (its heartbeat): the computer's name, its system, its version, whether describing is installed, and every drive it sees with its size, free space and top folders | every 20 s | no |
 | Looks at local drives and cards | every 20 s, not while paused or stopped | local drives only |
 | Looks at network shares (the archive, servers) | every 10 min, within 10 s; never searched for cards | yes, briefly |
 | Is the archive there? Are the sources there? | only when there is work, within 30 s | yes |
 | Remembers where network shares live (for reconnecting) | only when there is work, at most every 5 min | yes |
 | Checking copies | when there is nothing to copy, a few minutes at a time | yes, reading |
 | Describing | when a folder is queued | yes |
+| Sends its status | when it changes, at most every 2 s while working | no |
+| Sends files it copied to search | every 10 s while working, backing off to 5 min | no (Rushes checks each file) |
+| When it starts: sends Rushes its copy history and section list (not while paused or stopped) | once | yes, reading, within 30 s |
 | Looks for a new version of its own code | once an hour, between jobs | no (asks Rushes) |
 | Looks for a new address for Rushes | every 5 min | no |
-| Sends its status | when it changes, at most every 2 s while working | no |
+
+**A new address:** if Setup gives Rushes a new address and that address answers,
+the helper moves to it. It also moves after three failed tries, if another
+address it knows answers. It takes its saved progress with it (renaming its
+`transfer-*.sqlite` files), saves the new address for Rushes Helper, and
+restarts itself.
 
 **Stopped by itself:** if a share does not answer within 30 seconds three times
-in a row, the helper stops touching shares. It says so in Rushes Helper ("Stopped
-by itself", with **Try again**) and on the pages ("helper stopped · press Try
-again"). **Try again now** in Manage also clears it.
+in a row, the helper stops touching shares. It says so in Rushes Helper
+("Stopped by itself", with **Try again**) and on the pages ("helper stopped ·
+press Try again"). **Try again now** in Manage also clears it.
+
+**Rushes Helper's window,** while it is open, asks Rushes three questions 1.5
+seconds after each answer: the switches, the state, and pairing.
 
 **In the code:**
 
 - the runner: `runner.sh`, top to bottom (`v()`, `may_v()`, `survey()`, the job
-  loop, `dbcopy()`);
+  loop, `importv()`, `dbcopy()`);
+- the server: `db/import.php` (its two halves), `db/prepare.php`
+  (`prepare_advance()`);
 - the pages: `head.php` (`every()`, the wrapped `fetch`);
 - the helper, in `ingest.py`:
   - `watch()` (the main loop), `control()`, `wait()`, `backoff()`;
   - `report_forever()`, `look_forever()`, `volumes()`;
   - `within()`, `stall()`, `stopped()`, `check_due()`;
-  - `update_self()`, `learn_where()`, `remember_shares()`.
+  - `update_self()`, `learn_where()`, `rushes_elsewhere()`, `move_to()`,
+    `remember_shares()`;
+- `transfer_state.py` (`flush()`);
 - What runs by itself: `db/state.php` (`$repeats`).
 
 ---
@@ -693,75 +1136,90 @@ again"). **Try again now** in Manage also clears it.
 
 | You want to… | Do this | What it stops |
 |---|---|---|
-| pause copying | Manage → **Pause copying**, or Rushes Helper → Copy footage off | The helper starts nothing new and stops the current folder at its next safe point. While paused, copying touches no share, the runner leaves VIDEO alone, and no drive is looked at. Nothing is lost. |
+| pause copying | Manage → **Pause copying**, or Rushes Helper → Copy footage off | The helper starts nothing new and stops the current folder at its next safe point. While paused, copying touches no share, no drive is looked at, and the runner leaves VIDEO alone. Nothing is lost. |
 | pause describing | **Pause describing** (Manage → Describe, the helper row, or Rushes Helper) | The describing lane only. Files already described are kept. |
 | pause checking | **Pause checking** (Manage or Rushes Helper) | Checking copies only, after the file it is reading. |
 | stop the helper on a Mac | Rushes Helper → **Run in the background** off | It stops now and does not start at the next login. |
 | stop everything on the archive machine | Put a file called `STOP` in the web folder | The runner does nothing at all, every minute, until it is removed. |
-| skip one folder | Overview → **Skip** (offered when a folder has stopped) | That folder is taken out of the transfer and the queue. |
+| skip one folder | Overview → **Skip** (offered when a folder has stopped for 3 minutes) | That folder is taken out of the transfer and the work list. |
 | look again now | **Try again now** | The helper stops waiting and looks again. It also clears "stopped by itself". |
 
-Buttons that start work, move files or take something away ask twice, on the
-button itself. The first press turns it into "Sure? …" and says beside it
-what will happen. A second press within six seconds does it. Rushes never uses
-a browser pop-up. Buttons that only change a setting you can change back (a
-pause, a proxy setting, the order of a list) act on the first press and say
-what they did.
+**How buttons ask.** Buttons that start work, move files or take something
+away ask twice, on the button itself. The first press turns it into "Sure? …"
+and, for most, says beside it what will happen. A second press within about
+five seconds does it. Rushes never uses a browser pop-up.
+
+The helper's switches in Manage ask twice too. Some buttons act on the first
+press because they change only something you can change back: Pause describing
+on the Describe pane, the proxy setting, the order of a list, and in Rushes
+Helper its switches.
 
 **In the code:** `db/helper.php` (the switches), `db/config.php`
-(`helper_control()`), `ingest.py` (`control()`, `watch()`, `describe_lane()`,
-`check_some()`), `runner.sh` (`STOP`, `PAUSED`), `mac/rushes_helper.py`
-(`stop_service()`).
+(`helper_control()`), `head.php` (`sure()`), `db/admin.php` (`drawHelper`),
+`ingest.py` (`control()`, `watch()`, `describe_lane()`, `check_some()`),
+`runner.sh` (`STOP`, `PAUSED`), `mac/rushes_helper.py` (`stop_service()`).
 
 ---
 
 ## Updates
 
-There are three kinds of update, and they work differently.
+There are four kinds of update, and they work differently.
 
 **Scripts the runner uses** (`runner.sh`, `proxy.sh`, …) run with full rights,
 so they always wait for a person:
 
 1. Put the new version in `_rushes/scripts/` on the archive.
 2. Manage → What runs by itself → **Check now**. Within a minute, Overview lists
-   what is waiting, with each file's fingerprint.
-3. Press **Install it**, then **Sure?**. The runner installs exactly the file you
-   approved: it checks the fingerprint of the copy it made, and refuses a file
-   changed since.
+   what is waiting, with the start of each file's fingerprint, so you can check
+   it is the file you put there.
+3. Press **Install it**, then **Sure?**. Everything on the card is installed
+   together. The runner installs exactly the files listed: it checks the
+   fingerprint of each copy it made, and refuses a file changed since.
 
-**Pages** work the same way, through `_rushes/deploy/`. Only `.php`, `.html`,
-`.js`, `.css` and `.json` files are accepted, at the top level or in `db/`. An
-installed page leaves the drop folder.
+**Pages** work the same way, through `_rushes/deploy/`.
+
+- Only `.php`, `.html`, `.js`, `.css` and `.json` files are accepted, plus
+  `favicon.ico` and `apple-touch-icon.png`.
+- They must be at the top level or in `db/`.
+- An installed page leaves the drop folder.
 
 Rushes does not look for updates on a timer. They only exist when a person puts
-them in `_rushes`, so it looks only when you press **Check now**, after an
-install, or when it has no list yet.
+them in `_rushes`, so it looks only after **Check now**, Try again, an install,
+or when it has no list yet.
 
 **The helper's own code** (`ingest.py`, `transfer_state.py`, `analyze.py`) does
-*not* wait for approval:
+*not* wait for approval once Rushes has listed it:
 
+- Put the new files in `_rushes`, and press **Check now** so Rushes lists their
+  fingerprints.
 - Once an hour, between jobs and never while describing, the helper asks Rushes
-  for the fingerprints of the versions in `_rushes`.
-- If they differ from its own, it downloads them from Rushes. It checks each
-  download against its fingerprint and checks that it is valid Python, replaces
-  its files, and restarts itself.
+  for that list. If a file differs from its own, it downloads it from Rushes.
+  It checks the download against the fingerprint and checks that it is valid
+  Python, replaces its files, and restarts itself.
 - It only ever asks your Rushes server, never the internet.
 - The download is plain http and not signed. Whoever controls your Rushes server,
   or your network, can therefore change what runs on the helper's computer.
 - In built-in mode, the runner starts the helper directly from `_rushes`, with
   full rights.
+- When Rushes Helper is first set up, it downloads the same files the same way,
+  and installs nothing until Rushes lists a fingerprint for each.
 
 Signed updates are on the [roadmap](ROADMAP.md).
 
-When Rushes Helper is first set up, it downloads the same three files the same
-way, and checks each against its fingerprint before installing it.
-
 **The Rushes Helper app itself** (its window, Python and launcher) is not
-updated this way. A new version is downloaded from Setup and opened.
+updated by Rushes. A new version is downloaded from Setup and opened.
+
+- The Terminal command in Setup (`curl … ?install | sh`) downloads the new app
+  from Rushes without checking a fingerprint, deletes the old app, puts the new
+  one in its place, saves the Rushes address, and opens it. It does not stop the
+  helper already running.
+- An app signed with the same certificate keeps its Full Disk Access and Local
+  Network permissions.
 
 **In the code:** `runner.sh` (`survey()`, `page_ok()`, the `update-scripts`
-job), `db/helper.php` (`check-updates`, `scripts`, `?hash`, `?code`),
-`db/config.php` (`waiting_read()`), `ingest.py` (`update_self()`).
+job), `db/helper.php` (`check-updates`, `scripts`, `?hash`, `?code`,
+`?install`), `db/config.php` (`waiting_read()`), `db/state.php` (the card),
+`ingest.py` (`update_self()`), `mac/rushes_helper.py` (`fetch_files()`).
 
 ---
 
@@ -772,22 +1230,29 @@ helper is **paired** with Rushes, and only it is given work.
 
 1. Setup → 04 Helper → **Pair a helper** shows six numbers. They work once, for
    ten minutes. Five wrong tries cancel them.
-2. Type them into Rushes Helper on the Mac. Rushes gives that Mac an ID, which
-   it sends with every request from then on.
-3. Any other helper that asks for work, or reports anything, is refused.
-   Overview names it, by computer name and address. A refused helper touches
-   nothing, and asks less and less often.
+2. Type them into Rushes Helper on the Mac. No password is needed: the six
+   numbers are the secret. Rushes gives that Mac an ID, which
+   it sends with every request from then on. The ID is kept on both sides in
+   plain text, in a file the web server never hands out (`helper-id.php`).
+3. Any other helper that asks for work, or reports anything, is refused, and
+   Overview names it by computer name and address.
 
-Pairing another Mac takes the work away from the one paired before. The button
-asks twice. Until a helper is paired, every helper is given work, and Setup
-says so. A helper built into the archive machine counts as paired.
+A refused helper is given no work and copies nothing. It asks less and less
+often. It still looks at its own drives, and still asks for updates and
+addresses.
+
+Pairing another Mac takes the work away from the one paired before (the button
+asks twice). Until a helper is paired, every helper is given work, and Setup
+says so. When Setup says the helper is built in, it asks from the archive
+machine itself, and any request from the machine itself counts as the paired
+helper.
 
 Separately, only one helper can run on one computer at a time.
 
 **In the code:** `db/pair.php`, `db/config.php` (`helper_pairing()`,
 `helper_gate()`, `helper_refused()`), `setup.php` (the box), the doors that call
-`helper_gate()` (`report.php`, `status.php`, `landed.php`, `moved.php`,
-`copies.php`, `transfer.php`, `helper.php?queue`), `ingest.py` (`HELPER_ID`,
+`helper_gate()` (`db/report.php`, `db/status.php`, `db/landed.php`,
+`db/moved.php`, `db/copies.php`, `db/transfer.php`, `db/helper.php?queue`), `ingest.py` (`HELPER_ID`,
 `fetch_queue()`, `only_one()`), `mac/rushes_helper.py` (`pair()`).
 
 ---
@@ -799,44 +1264,66 @@ can do today.
 
 **Anyone who can open Rushes, without a password, can:**
 
-- search, see everything Overview shows (paths, progress, the recent log), and
-  read descriptions and stills;
-- make, change and download pulls, including downloading files as a zip (up to
-  1 GB at a time);
+- search, and read descriptions and stills;
+- see everything Overview's data holds: paths, progress, the runner's recent
+  log, and the command that starts the helper;
+- read every file in the web folder that `.htaccess` does not protect. That
+  includes `settings.json`, `rules.json`, `manifest.tsv` and `index.txt` (every
+  path in the archive), `job.log`, the built-in helper's log, `proxy.log`, the
+  duplicate, cache and proxy lists, `waiting.tsv`, `helper-control.json` and the
+  tidy-up plans;
+- make, change and download pulls, including a zip of the files (up to 1 GB at a
+  time);
 - ingest a card, and add a department at Ingest if that is allowed;
-- while no helper is paired: press the helper's switches (Pause, Try again
-  now, …), and act as a helper.
+- download the helper's code and Rushes Helper;
+- while no helper is paired: press the helper's switches (Pause, Try again now,
+  …), and act as a helper.
 
 **Someone signed in to Manage can also:**
 
 - run jobs (duplicates, proxies, tests, rebuilds);
 - install updates;
 - choose folders to transfer;
-- reorganize;
+- reorganize and relink;
 - change settings;
 - pair a helper;
 - change the password.
 
+A script can do most of this by sending the password with its request
+(`pass`) instead of signing in: jobs, transfers, updates, pairing, tidy-ups and
+relinking. Settings, Reorganize's plan and the password itself need a signed-in
+session. A wrong password, typed at sign-in or sent by a script, waits a
+second.
+
 **The paired helper** gets work and reports what it did. Its own window can press
-its switches.
+its switches. What it reports is checked:
+
+- a copied file must be in the archive, at the size it says;
+- a moved file must have left its old place and be in its new one;
+- reports have size limits and a fixed shape.
 
 **How Rushes protects itself:**
 
-- **The password** starts as the app's name (`rushes`). Until it is changed, the
-  sign-in page says so and Overview shows a warning. A changed password is kept
-  only as a hash, in `adminpass.php`, a file that prints nothing if someone asks
-  the web server for it.
-- **The pairing ID** is kept the same way, in `helper-id.php`.
-- **The catalogue, its daily copy, the work list and the refused-helper list**
-  are protected by `.htaccess`, which tells the web server never to hand them
-  out. Not every web server obeys `.htaccess`, so once a day the runner asks its
-  own web server for them. If any comes back, Overview says in red which ones,
-  and how to fix it.
-- **The settings file and status files** are readable by anyone who can open
-  Rushes. They hold paths and progress, not passwords.
+- **The password.**
+  - It starts as the installation's name in lower case (`rushes`). Until it is
+    changed, the sign-in page says so, and Overview shows a warning.
+  - A changed password is kept only as a hash, in `adminpass.php`, a file that
+    prints nothing if someone asks the web server for it.
+  - Signing in starts a new session, and **Sign out** ends it.
+- **The pairing ID and the pairing code** are kept in `.php` files the same way.
+- **Private files.** The catalogue, its daily copy, the helper's work list, the
+  refused-helper list and a zip being built are protected by `.htaccess`, which
+  tells the web server never to hand them out.
+  - Not every web server obeys `.htaccess`, so once a day the runner asks its
+    own web server for the catalogue, its copy, the work list and the
+    refused-helper list.
+  - If any comes back, Overview says in red which ones, and how to fix it.
 - **The runner checks every job again,** whatever the page already checked. A
-  folder that would climb out of the archive (`..`) is refused.
-- **Pages never touch footage.** They only write down what was asked.
+  folder that would climb out of the archive (`..`) is refused. The holding
+  folder for duplicates may be any folder inside the archive.
+- **Pages never copy, move or delete footage.** They write down what was asked.
+  A few read it: stills, a zip download, and checking that a file the helper
+  reports is there.
 
 **Known limits:**
 
@@ -852,11 +1339,14 @@ All of these are on the [roadmap](ROADMAP.md#known-problems). To use Rushes from
 outside the office, connect through a VPN. Do not put it on the internet.
 
 **In the code:** `db/auth.php`, `.htaccess`, `runner.sh` (the daily self-check,
-job validation), `db/state.php` (the cards).
+job validation), `db/config.php` (`helper_gate()`), `db/landed.php`,
+`db/moved.php`, `db/report.php`, `db/status.php`, `db/state.php` (the cards).
 
 ---
 
-## What leaves your network
+## What crosses the network
+
+**To the internet:**
 
 - **Nothing about your footage.** Footage, descriptions, transcripts and stills
   stay on your machines.
@@ -864,36 +1354,60 @@ job validation), `db/state.php` (the cards).
   the helper's computer, the libraries download it from Hugging Face the first
   time describing runs. The default Whisper model is always fetched by name. No
   footage is sent.
-- **Ask for help** (Rushes Helper) opens a new GitHub issue in your browser.
-  The page's address carries the Rushes Helper version, the macOS version and the
+- **Ask for help** (Rushes Helper) opens a new GitHub issue in your browser. The
+  page's address carries the Rushes Helper version, the macOS version and the
   processor type. The diagnostics file is saved on your Desktop and is *not*
   sent. You read it and decide.
-- **Docker, once,** if you run **Test the video chip**: it downloads a public
-  ffmpeg image.
+- **Docker:** Test the video chip asks Docker for the public ffmpeg container
+  each time it runs. The proxy test downloads it if it is not there yet.
 
-Inside your network:
+**Inside your network, between your machines** (plain http):
 
-- the helper talks to your Rushes server;
-- describing reads the theme list from it;
-- reconnecting a share talks to that file server.
+- **The helper and Rushes:**
+  - work, switches, its heartbeat (see the table above), status, history, files
+    copied, moves and copy counts;
+  - its first look at the archive's file list;
+  - the settings, rules, tidy-up plans and its own code.
+- **Describing** reads the theme list from Rushes.
+- **The runner** asks its own web server (`127.0.0.1`) every minute: whether the
+  helper is built in, and the catalogue update.
+- **Reconnecting a share** knocks on the file server's file-sharing port (445)
+  before asking macOS to mount it.
+- **Setup** may try the archive machine's own name (`<name>.local`) from your
+  browser.
+
+**Only on the Mac, never sent:** to guess the Rushes address during setup,
+Rushes Helper reads the clipboard and where downloaded files came from.
 
 **In the code:** `analyze.py` (`Vision`, `transcribe()`, `themes_from()`),
-`mac/rushes_helper.py` (`ask_help()`, `diagnostics()`), `runner.sh` (`gpu-test`).
+`ingest.py` (`report_forever()`, `load_manifest()`, `reachable()`),
+`mac/rushes_helper.py` (`ask_help()`, `diagnostics()`, `guess_url()`),
+`runner.sh` (`gpu-test`, `proxy-test`), `setup.php`.
 
 ---
 
-## What Rushes deletes
+## What Rushes deletes or moves
 
 Rushes never deletes your footage, the originals or their copies. Duplicates
-and caches are **moved** to the holding folder, and only you empty it. This is
-everything Rushes does delete, and when:
+and caches are **moved** to the holding folder, and only you empty it.
+
+### What it moves
+
+- **Duplicates and caches** into `_duplicates`, and back on **Put them back**.
+- **A tidy-up** moves copied footage onto the shelf, with its proxies, and back
+  on Put back. Copy proofs whose footage all moved go to `_rushes/ascmhl-moved`.
+- **`ingest.py --undo`** moves the last run's copies to `ARCHIVE/_rollback`.
+- **The old layout's undo** puts back what it once moved.
+
+### What it deletes, and when
 
 **On the archive share:**
 
 - **Proxies of one folder,** when you press **Remake proxies**. They are made
   again straight after. This is refused while proxies are being made or the
   folder is being described. It is the only folder Rushes deletes as a whole.
-- **The previous proxy test,** when you run a new one (`_rushes/proxy-test`).
+- **The previous proxy test,** when you run a new one (`_rushes/proxy-test`, and
+  its stills in the web folder).
 - **Unfinished pieces:** a `.part` copy that failed or was interrupted, and a
   proxy that failed or was stopped.
 - **After a tidy-up:**
@@ -905,23 +1419,35 @@ everything Rushes does delete, and when:
 - **A database copy** in `_rushes/db-copies` is replaced by the one made a week
   later on the same weekday.
 
-**In the web folder and on the helper's computer:** Rushes' own temporary and
-status files. Each job file is deleted when it is picked up. The helper's
-downloaded file list is deleted when it looks incomplete. Its list of
-originals is deleted after 7 days. `stopped.txt` is deleted on Try again. Old
-logs are trimmed.
+**In the web folder:**
+
+- each job file, when it is picked up;
+- the old `.adminpass`, once moved into `adminpass.php`;
+- the pairing code once used, and the refused-helper list on pairing;
+- the cached plan, on Remake;
+- a zip once sent, and the holding-folder check's scratch folder;
+- the built-in helper's log, once past 5 MB, replaces the previous old one;
+- the job log is trimmed.
+
+**On the helper's computer:**
+
+- a downloaded file list that looks incomplete;
+- its list of originals after 7 days;
+- `stopped.txt` on Try again.
 
 **On a Mac:**
 
 - Rushes Helper's **Remove** deletes its background service.
-- When Rushes Helper installs, it replaces an older copy of the app in
-  `~/Applications`.
-- The remove command shown in Setup (pasted into Terminal) deletes the app and
-  its service.
+- Setting up replaces an older copy of the app in `~/Applications`, and removes
+  macOS's "downloaded from the internet" mark from it.
+- The Terminal install command deletes the old app before putting the new one
+  in place. The remove command deletes the app and its service.
 
 **In the code:** `runner.sh` (`proxy-remake`, `proxy-test`, `update-scripts`,
 `dbcopy()`), `proxy.sh`, `ingest.py` (`bring()` inside `main()`, `clear_out()`,
-`mhl_follow()`), `mac/rushes_helper.py` (`remove_service()`,
+`mhl_follow()`, `undo()`, `load_manifest()`), `db/auth.php`, `db/pair.php`,
+`db/analyze.php`, `db/pull-export.php`, `verify.sh`, `db/helper.php`
+(`?install`, `?remove`), `mac/rushes_helper.py` (`remove_service()`,
 `copy_to_applications()`).
 
 ---
@@ -951,8 +1477,17 @@ The descriptions (`_rushes/analysis`) and the records (`_rushes/origin`,
 
 ## What could go wrong
 
-The risks (a disk stalling, two helpers, no backup, ransomware, a mistaken delete,
-running out of space, a damaged database, the model inventing things, public
-records) are listed with what was decided and where each stands in the
-[roadmap](ROADMAP.md#risks). This document describes only what Rushes does
-about them, in the sections above.
+The risks are listed in the [roadmap](ROADMAP.md#risks), each with what was
+decided and where it stands:
+
+- a disk stalling;
+- two helpers;
+- no backup;
+- ransomware;
+- a mistaken delete;
+- running out of space;
+- a damaged database;
+- the model inventing things;
+- public records.
+
+This document describes only what Rushes does about them, in the sections above.

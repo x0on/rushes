@@ -32,7 +32,7 @@ never leaves them.
 
 - It never deletes your footage. Duplicates and caches are *moved* to a holding
   folder, and only you empty it. What Rushes does delete is listed, one by one,
-  in [HOW-IT-WORKS.md](HOW-IT-WORKS.md#what-rushes-deletes).
+  in [HOW-IT-WORKS.md](HOW-IT-WORKS.md#what-rushes-deletes-or-moves).
 - It never sends your footage, descriptions or transcripts outside your own
   network.
 - It never installs new scripts or pages on your server until you approve them.
