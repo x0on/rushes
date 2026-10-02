@@ -23,18 +23,19 @@
 # shots broke into blocks. Fewer pixels, twice the bits: clean, still light
 # (about 30 MB a minute).
 
+export WEB=${WEB:-/share/Web} ARCH=${ARCH:-/share/VIDEO}     # from runner.sh (Setup); otherwise the QNAP's
 set -u
 
-SHARE=${SHARE:-/share/VIDEO}
+SHARE=${SHARE:-$ARCH}
 PROXY_ROOT=${PROXY_ROOT:-$SHARE/PROXIES}
-INDEX=${INDEX:-/share/Web/index.txt}
-PLAN=${PLAN:-/share/Web/proxy-plan.tsv}
-LOG=${LOG:-/share/Web/proxy-built.tsv}
+INDEX=${INDEX:-$WEB/index.txt}
+PLAN=${PLAN:-$WEB/proxy-plan.tsv}
+LOG=${LOG:-$WEB/proxy-built.tsv}
 # The setting chosen in Manage → Describe → Proxy settings: height, and Mbit/s
 # on the video chip or "sw" for software (x264: often a better picture than an
 # older chip, at the cost of the processor). Otherwise 720p at 4 on the chip.
 SOFTWARE=0
-if [ -z "${HEIGHT:-}" ] && read -r ph pb < /share/Web/proxy-setting.txt 2>/dev/null; then
+if [ -z "${HEIGHT:-}" ] && read -r ph pb < $WEB/proxy-setting.txt 2>/dev/null; then
     case "$ph:$pb" in
         720:[46]|1080:[46]) HEIGHT=$ph; BITRATE=${pb}M; MAXRATE=$(( pb * 3 / 2 ))M ;;
         720:sw|1080:sw)     HEIGHT=$ph; SOFTWARE=1 ;;
@@ -47,11 +48,11 @@ TAB=$(printf '\t')
 MODE=${1:-plan}
 ONLY=${PROXY_ONLY:-}     # one folder of the archive (e.g. "PARK COLLECTION"), or empty for all of it
 ONLY=${ONLY%/}
-STATE=${STATE:-/share/Web/proxy-status.txt}
-RUNS=${RUNS:-/share/Web/proxy-folders.tsv}   # one line per finished or stopped run, per folder: what Rushes reads to know a folder is ready
-MADE=${MADE:-/share/Web/proxy-made.tsv}      # never emptied: every proxy made, with what the original is (Rushes keeps it in its media ledger)
-SPEED=${SPEED:-/share/Web/proxy-speed.tsv}    # bytes and seconds of each proxy made: how Rushes knows the time left
-FAILS=${FAILS:-/share/Web/proxy-failed.tsv}   # each file that could not be made, and why, in ffmpeg's own words
+STATE=${STATE:-$WEB/proxy-status.txt}
+RUNS=${RUNS:-$WEB/proxy-folders.tsv}   # one line per finished or stopped run, per folder: what Rushes reads to know a folder is ready
+MADE=${MADE:-$WEB/proxy-made.tsv}      # never emptied: every proxy made, with what the original is (Rushes keeps it in its media ledger)
+SPEED=${SPEED:-$WEB/proxy-speed.tsv}    # bytes and seconds of each proxy made: how Rushes knows the time left
+FAILS=${FAILS:-$WEB/proxy-failed.tsv}   # each file that could not be made, and why, in ffmpeg's own words
 RECENT=${RECENT:-7200}   # seconds: a file written this recently may still be arriving; left for the next run
 
 # What the page shows: one small file, rewritten whole, so it is never half-read.
@@ -128,7 +129,7 @@ fi
 # processor reads it and the chip resizes and encodes; software is the last
 # resort. $how says which way it was made. Each try runs in the background so
 # Stop (from Manage) can end it at once.
-ERRF=${ERRF:-/share/Web/proxy-last.err}
+ERRF=${ERRF:-$WEB/proxy-last.err}
 run_ff() { $NICE $FFMPEG -nostdin -loglevel error -y "$@" 2>"$ERRF" & ff=$!; wait "$ff"; r=$?; cat "$ERRF" >> "$LOG.err"; return $r; }
 AUDIO="-c:a aac -b:a 128k -movflags +faststart"
 
@@ -136,7 +137,7 @@ AUDIO="-c:a aac -b:a 128k -movflags +faststart"
 # once and kept: such a file goes straight to the way that works, instead of
 # failing on the chip first every time. A kind is the codec, its profile and
 # its pixel format, read in a moment by the NAS's own ffmpeg (no container).
-CANNOT=${CANNOT:-/share/Web/proxy-chip-cannot.txt}
+CANNOT=${CANNOT:-$WEB/proxy-chip-cannot.txt}
 PEEK=${PEEK:-}
 [ -z "$PEEK" ] && for c in /usr/local/medialibrary/bin/ffmpeg /mnt/ext/opt/medialibrary/bin/ffmpeg /usr/local/bin/ffmpeg; do
     [ -x "$c" ] && PEEK=$c && break

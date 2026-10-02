@@ -127,6 +127,7 @@ is the folder the archive machine's web server serves.
     `verify-result.tsv`, `cache-moves.tsv`);
   - `video-stalls.txt` and `video-tripped.txt` (the breaker);
   - `exposed.txt` (the daily private-file check);
+  - `archive-path.txt` (where the archive is, for the runner);
   - `db-copy.sqlite` and `db-copied` (the daily database copy; the copy is
     written beside the catalogue, wherever `archive.database` puts it);
   - `db-damaged.txt`;
@@ -182,9 +183,13 @@ is the folder the archive machine's web server serves.
 - `~/Library/Logs/Rushes`: `helper.log` and `setup.log`;
 - `~/Library/LaunchAgents/org.rushes.helper.plist`: the background service.
 
-The runner and its scripts use the paths `/share/Web` and `/share/VIDEO`
-directly, whatever the settings say ([known
-problem](ROADMAP.md#known-problems)).
+The runner and its scripts find the web folder as the folder `runner.sh` is
+in (when it holds `settings.json`), and the archive from `archive-path.txt`, one
+line Rushes writes there whenever settings are saved, and every minute if it is
+missing. The runner checks that line again before using it: an absolute path
+of plain letters, digits, dots, dashes and underscores (no spaces), at least
+two folders deep, not a system folder, and a folder that exists. Otherwise it
+uses the QNAP's places, `/share/Web` and `/share/VIDEO`.
 
 **In the code:**
 
@@ -206,7 +211,7 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | Setting | What it changes |
 |---|---|
 | `name` | the name shown on the pages. While the password is still the default, the default is this name in lower case, with everything but letters and digits removed. |
-| `archive.local`, `archive.web`, `archive.url`, `archive.label` | where the archive and the web folder are on the archive machine, and the address people open Rushes at |
+| `archive.local`, `archive.web`, `archive.url`, `archive.label` | where the archive and the web folder are on the archive machine, and the address people open Rushes at. The runner reads `archive.local` from `archive-path.txt` (see [Where things are kept](#where-things-are-kept)). |
 | `archive.as_seen_from_helper` | where the helper's computer sees the archive (e.g. `/Volumes/VIDEO`) |
 | `archive.database` | puts the catalogue outside the web folder |
 | `sources` | servers and drives to copy from, with a name for each |
@@ -343,8 +348,8 @@ been chosen, Ingest says so and points to Reorganize. Anyone who can open Rushes
 A new department can be added here too, if Reorganize allows it.
 
 `queue.php` checks the request again: it accepts only a card the helper really
-reports, and a date that exists. (The date rules above are checked only by the
-page.) The helper checks a third time: it refuses a card it cannot see itself,
+reports, a real date, and not one before 2005 or in the future (the 1 January
+warning is the page's only). The helper checks a third time: it refuses a card it cannot see itself,
 and records "refused".
 
 **In the code:** `ingest.php` (the page), `queue.php` (the `ingest_src`
@@ -666,7 +671,9 @@ video, the cuts and the sound come from its proxy when there is one.
    raw answer is kept.
 5. Speech is transcribed in whatever language was spoken. Stretches Whisper
    itself rates as probably not speech are dropped. If transcription fails, the
-   file is kept without speech, and is not tried again.
+   file is kept without speech and marked, and the next time the folder is
+   described only its speech is tried again. Choosing a different speech model
+   transcribes again, the same way, every file that had speech.
 6. Morning, afternoon, evening or night come from the camera's clock, not from
    the model.
 
@@ -677,8 +684,10 @@ so it survives moves and renames. Next to it is one still per shot.
 - Every place the same footage is seen is added to its description.
 - A file already described with the same vision model and question is skipped.
 - A file that cannot be read at all, or that fails part-way, is not written.
-  The folder still counts as described, so such a file is tried again only when
-  the folder is asked for again ([known problem](ROADMAP.md#known-problems)).
+  A folder where some files could not be described is tried again half an hour
+  later, only those files, up to three times in all. After that it counts as
+  described; asking for the folder again tries once more. The tries are noted in
+  `describe-tries.json` on the helper's computer.
 
 **No face recognition exists in Rushes.** People are only counted, with
 broad age bands.
@@ -776,8 +785,11 @@ can be put back.
 
 1. **The scan** compares every file by content. It is done by Czkawka, a
    separate duplicate finder running in a container on the archive machine.
-   - It takes hours, so it is started by the `scan` job, which has no button
-     ([known problem](ROADMAP.md#known-problems)).
+   - **Scan the archive** (Manage → Duplicates) starts it, after asking twice.
+     It takes hours, and other jobs wait meanwhile (the upkeep does not).
+   - It needs a container called `czkawka` with the archive mounted as
+     `/storage`; its results are copied out with `docker cp`. Without the
+     container, the job says so and does nothing.
    - The runner's comments show how to schedule it weekly.
 2. **Look for duplicates** (Manage → Duplicates) works out which copy to keep,
    and shows the plan. It moves nothing.
@@ -789,11 +801,11 @@ can be put back.
        capitals such as `.MXF.MXF` (200);
      - for this archive, from Setup → 05: folders whose copies are never kept
        (500), and card-dump folders (450).
-   - The project copy (on the shelf) wins over a card dump. If no card-dump
-     folders are set, neither side is preferred, and the plan says so. Between
-     equal weights, the shorter path wins. The script can also keep card dumps,
-     the shortest path or the oldest file, but Manage has no control for that
-     yet.
+   - **Which copy is kept** is chosen above the buttons: the one on the shelf
+     (the default; card dumps lose), the card dump (the shelf's copy loses), the
+     shortest path, or the oldest file (slower: it reads every copy's date). If
+     no card-dump folders are set, the first two prefer neither side, and the
+     plan says so. Between equal weights, the shorter path wins.
    - Copies in the recycle bin are never kept and never moved.
    - Numbered image-sequence frames are never moved, even when identical,
      because removing one breaks the sequence.
@@ -836,8 +848,8 @@ rescue after a crash) are shown as "left alone" and are never on the move list.
   itself.
 - **Put them back** returns every cache file still in the holding folder.
 
-**In the code:** `db/junk.php` (the list), `runner.sh` (the `cachescan`,
-`cacheclean` and `cache-undo` jobs), `db/config.php` (`cache_groups()`,
+**In the code:** `db/junk.php` (the list), `runner.sh` (the `cacheclean` and
+`cache-undo` jobs), `db/config.php` (`cache_groups()`,
 `cache_sql()`).
 
 ### The old date-based layout
@@ -913,10 +925,8 @@ Below them: **Admin password**, to change it. It needs the current password,
 and the new one must be at least 4 characters.
 
 A few jobs exist only for scripts and have no button: `reindex`, `holding`
-(measures the holding folder), `cachescan` (lists Premiere's `.pek`, `.cfa` and
-`.ims` files only, replacing the list Manage → Cache made), `scan`,
-`organize-undo`, and checking one folder or file in the holding folder. A page
-can start them only when signed in.
+(measures the holding folder), `organize-undo`, and checking one folder or file
+in the holding folder. A page can start them only when signed in.
 
 ### Setup
 
@@ -1007,7 +1017,7 @@ app cannot open its own window, the page opens in the browser instead.
 **The background service** starts at login and starts the helper again if it
 stops (macOS waits 30 seconds between tries). If the helper's code is missing, it
 downloads it from Rushes first, checked as in setup; if Rushes cannot be reached,
-it tries again about every 90 seconds. The Mac is kept awake, though not its
+it tries again after 1 minute, then 5, then every 15. The Mac is kept awake, though not its
 screen, while a copy or describing runs.
 
 Pairing, and Full Disk Access being turned on, restart the background helper at
@@ -1424,6 +1434,8 @@ and caches are **moved** to the holding folder, and only you empty it.
 
 ### What it moves
 
+- **A file list that looks incomplete** (less than half the last one) is kept
+  aside as `manifest-rejected.tsv`; the last list stays.
 - **Duplicates and caches** into `_duplicates`, and back on **Put them back**.
 - **A tidy-up** moves copied footage onto the shelf, with its proxies, and back
   on Put back. Copy proofs whose footage all moved go to `_rushes/ascmhl-moved`.

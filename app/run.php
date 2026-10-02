@@ -10,7 +10,7 @@
 header('Content-Type: application/json');
 
 
-$allowed = ['plan', 'apply', 'undo', 'reindex', 'cachescan', 'cacheclean', 'df',
+$allowed = ['plan', 'apply', 'undo', 'reindex', 'cacheclean', 'df',
             // the old date-based layout: only its undo is left (see organize.sh)
             'organize-undo', 'scan', 'manifest', 'holding',
             'cache-undo', 'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test', 'proxy-remake', 'reset-breaker'];
@@ -18,7 +18,7 @@ $allowed = ['plan', 'apply', 'undo', 'reindex', 'cachescan', 'cacheclean', 'df',
 $action    = $_POST['action']    ?? '';
 $pass      = $_POST['pass']      ?? '';
 $keep_side = $_POST['keep_side'] ?? 'project';
-$dest      = $_POST['dest']      ?? '/share/VIDEO/_duplicates';
+$dest      = $_POST['dest']      ?? archive_dir() . '/_duplicates';
 $stills    = ($_POST['stills'] ?? '0') === '1' ? '1' : '0';
 $exclude   = preg_replace('/[^A-Za-z0-9 ,_.\/-]/', '', $_POST['exclude'] ?? '');
 // letters of any language (Fútbol, Año), digits, and a few marks; the runner checks again
@@ -45,8 +45,8 @@ if (!in_array($keep_side, ['project', 'card', 'short', 'oldest'], true)) {
 }
 
 // destination must stay inside the video share
-if (strpos($dest, '/share/VIDEO/') !== 0 || strpos($dest, '..') !== false) {
-    $dest = '/share/VIDEO/_duplicates';
+if (strpos($dest, archive_dir() . '/') !== 0 || strpos($dest, '..') !== false) {
+    $dest = archive_dir() . '/_duplicates';
 }
 $dest = rtrim($dest, '/');
 

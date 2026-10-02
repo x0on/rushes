@@ -11,8 +11,9 @@
 # undo stays, so anything that version moved can still be put back from its
 # log. The old code is in the project's history (git log -- app/organize.sh).
 
+export WEB=${WEB:-/share/Web} ARCH=${ARCH:-/share/VIDEO}     # from runner.sh (Setup); otherwise the QNAP's
 set -u
-LOG=${LOG:-/share/Web/organize-moves.tsv}
+LOG=${LOG:-$WEB/organize-moves.tsv}
 TAB=$(printf '\t')
 
 [ "${1:-}" = "--undo" ] || { echo "only --undo is left: see the top of this file"; exit 1; }

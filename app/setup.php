@@ -99,6 +99,7 @@ if (($_POST['_save'] ?? '') === '1') {
         // Beside, then rename: a half-written settings file takes every page down.
         $json = json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if (@file_put_contents("$file.new", $json . "\n") !== false && @rename("$file.new", $file)) {
+            settings(true); runner_paths();             // the runner reads where the archive is from its own line
             header('Location: /setup.php?saved=1'); exit;
         }
         @unlink("$file.new");

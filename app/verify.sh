@@ -11,12 +11,13 @@
 #
 # Writes a verdict the page can render. The log is a byproduct, not the answer.
 
+export WEB=${WEB:-/share/Web} ARCH=${ARCH:-/share/VIDEO}     # from runner.sh (Setup); otherwise the QNAP's
 set -u
 
-PLAN=${PLAN:-/share/Web/dedupe-plan.tsv}      # bytes, moved-from, kept
-MOVES=${MOVES:-/share/Web/dedupe-moves.tsv}   # moved-from, moved-to
-OUT=${OUT:-/share/Web/verify-result.tsv}      # what the page reads
-HOLD=${HOLD:-/share/VIDEO/_duplicates}
+PLAN=${PLAN:-$WEB/dedupe-plan.tsv}      # bytes, moved-from, kept
+MOVES=${MOVES:-$WEB/dedupe-moves.tsv}   # moved-from, moved-to
+OUT=${OUT:-$WEB/verify-result.tsv}      # what the page reads
+HOLD=${HOLD:-$ARCH/_duplicates}
 TAB=$(printf '\t')
 QUERY=${1:-}
 
@@ -38,7 +39,7 @@ fi
 # Scratch files on the archive disk, not /tmp: on a QNAP /tmp is a 64 MB RAM
 # disk shared with the system, and these lists alone can fill it. Removed when
 # this finishes, however it finishes.
-T=/share/Web/.verify-scratch
+T=$WEB/.verify-scratch
 mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT INT TERM
 LIST=$T/verify.list

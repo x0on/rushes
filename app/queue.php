@@ -78,6 +78,10 @@ if (isset($_POST['ingest_src'])) {
     $date = (string)($_POST['date'] ?? '');
     if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $date, $m) || !checkdate((int)$m[2], (int)$m[3], (int)$m[1]))
         bail(400, 'The date is not a date.');
+    // The same rule as the page: before 2005 or in the future is a camera clock
+    // that was wrong, never a shoot date. (A day's slack for time zones.)
+    if ($date < '2005-01-01' || $date > date('Y-m-d', time() + 86400))
+        bail(400, 'That date cannot be right (before 2005, or in the future). Correct it on the card\'s day.');
 
     // What it was becomes a folder name, so it loses anything a folder name
     // cannot hold on a Mac, on Windows, or on the NAS.

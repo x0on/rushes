@@ -460,9 +460,21 @@ function guess_links(array $names, array $folders): array {
 function save_settings(array $s): bool {
     $file = __DIR__ . '/../settings.json';
     $json = json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if (@file_put_contents("$file.new", $json . "\n") !== false && @rename("$file.new", $file)) return true;
+    if (@file_put_contents("$file.new", $json . "\n") !== false && @rename("$file.new", $file)) {
+        settings(true); runner_paths();
+        return true;
+    }
     @unlink("$file.new");
     return false;
+}
+
+// The runner is a shell script and cannot read JSON: where the archive is, as
+// one plain line it checks again (runner.sh, top). Written when settings are
+// saved, and by the runner's own minute (import.php) if it is missing or out
+// of date.
+function runner_paths(): void {
+    $f = web_dir() . '/archive-path.txt'; $want = archive_dir() . "\n";
+    if (@file_get_contents($f) !== $want) @file_put_contents($f, $want);
 }
 
 // What this installation calls its top folders — Departments here, Clients or

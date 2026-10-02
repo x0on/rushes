@@ -131,6 +131,27 @@ run
 [ "$(wc -c < "$W/helper.log")" -le 1000000 ] && tail -1 "$W/helper.log" | grep -q "the newest line" && ok "a log past 5 MB keeps its newest 1 MB" || no "helper.log not trimmed"
 [ "$(wc -l < "$W/proxy-folders.tsv")" = 3 ] && grep -q "	89999$" "$W/proxy-folders.tsv" && ok "the proxy runs list keeps each folder's last run" || no "proxy-folders: $(wc -l < "$W/proxy-folders.tsv")"
 
+# where the archive is comes from Setup (archive-path.txt), checked: a system
+# folder, or one that does not exist, falls back to the QNAP's
+rm -f "$V/ingest.py"; echo 'print(1)' > "$V/ingest.py"           # a plain file again (the stalls above made it a pipe)
+A2=$(mktemp -d "$HERE/tests/.archive-XXXXXX"); mkdir -p "$A2/_rushes"; echo 'print(2)' > "$A2/_rushes/ingest.py"
+echo "$A2" > "$W/archive-path.txt"; touch "$W/survey-now"; run
+grep -q "^helperfile	ingest.py	$(sha256sum "$A2/_rushes/ingest.py" | cut -d' ' -f1)$" "$W/waiting.tsv" \
+  && ok "the archive's place comes from Setup: the runner looks there" || no "archive-path.txt not followed"
+for bad in /etc "$A2/../x" "/nowhere/at/all" "$A2 x"; do
+    echo "$bad" > "$W/archive-path.txt"; touch "$W/survey-now"; run
+    grep -q "^helperfile	ingest.py	$(sha256sum "$V/ingest.py" | cut -d' ' -f1)$" "$W/waiting.tsv" || no "a bad archive path was followed: $bad"
+done
+ok "a system folder, .., a missing folder or a space in the path: the QNAP's place instead"
+rm -rf "$A2" "$W/archive-path.txt"
+
+# a new file list less than half the last one is a share that answered partly: the last list stays
+awk 'BEGIN { for (i = 0; i < 3000; i++) printf "1\t/share/VIDEO/f%d\n", i }' > "$W/manifest.tsv"
+printf 'ACTION=manifest\n' > "$W/queue/m1.job"; run
+[ "$(wc -l < "$W/manifest.tsv")" = 3000 ] && [ -f "$W/manifest-rejected.tsv" ] && grep -q "kept the last list" "$W/job.log" \
+  && ok "a file list less than half the last one is refused, and said" || no "manifest guard: $(wc -l < "$W/manifest.tsv")"
+rm -f "$W/manifest.tsv" "$W/manifest-rejected.tsv"
+
 # STOP: nothing at all, not even the heartbeat
 rm -f "$W/runner-alive.txt"; touch "$W/STOP"; run
 [ ! -e "$W/runner-alive.txt" ] && ok "STOP: the runner does nothing" || no "ran despite STOP"

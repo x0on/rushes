@@ -37,6 +37,7 @@ if ($web) try { $result['media'] = media_import(); } catch (Throwable $e) { $res
 // Folders being prepared: start the next proxies, or queue the next describing.
 if ($video) try { $result['prepare'] = prepare_advance(); } catch (Throwable $e) { $result['prepare'] = ['error' => $e->getMessage()]; }
 // Once a day: the database checked, and a good one copied (HOW-IT-WORKS.md → Rushes' own backups).
+if ($web) runner_paths();                       // where the archive is, for the runner (config.php)
 if ($web) try { $result['db_copy'] = db_daily_copy(); } catch (Throwable $e) { $result['db_copy'] = ['error' => $e->getMessage()]; }
 if (isset($result['error'])) http_response_code(503);
 echo json_encode($result);

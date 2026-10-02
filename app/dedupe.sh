@@ -34,15 +34,16 @@
 # Safety: a file moves only if it still exists, its size matches the scan, and
 # the copy being kept is present on disk right now.
 
+export WEB=${WEB:-/share/Web} ARCH=${ARCH:-/share/VIDEO}     # from runner.sh (Setup); otherwise the QNAP's
 set -u
 
-RESULTS=${RESULTS:-/share/Web/results_duplicates.txt}
-SHARE=/share/VIDEO
+RESULTS=${RESULTS:-$WEB/results_duplicates.txt}
+SHARE=$ARCH
 DEST=${DEST:-$SHARE/_duplicates}
-PLAN=${PLAN:-/share/Web/dedupe-plan.tsv}
-LOG=${LOG:-/share/Web/dedupe-moves.tsv}
-MTIMES=${MTIMES:-/share/Web/dedupe-mtimes.txt}
-RULES=${RULES:-/share/Web/dedupe-rules.tsv}
+PLAN=${PLAN:-$WEB/dedupe-plan.tsv}
+LOG=${LOG:-$WEB/dedupe-moves.tsv}
+MTIMES=${MTIMES:-$WEB/dedupe-mtimes.txt}
+RULES=${RULES:-$WEB/dedupe-rules.tsv}
 KEEP_SIDE=${KEEP_SIDE:-project}
 TAB=$(printf '\t')
 
@@ -91,7 +92,7 @@ grep -q "${TAB}card${TAB}" "$RULES" || [ "$KEEP_SIDE" != project ] || \
 # alone and skips this entirely.
 if [ "$KEEP_SIDE" = "oldest" ]; then
     echo "reading modification times (this is the slow part, a few minutes)..."
-    awk '/^"/ { p = $0; gsub(/"/, "", p); sub("^/storage/", "/share/VIDEO/", p); print p }' \
+    awk '/^"/ { p = $0; gsub(/"/, "", p); sub("^/storage/", ENVIRON["ARCH"] "/", p); print p }' \
         "$RESULTS" | sort -u > "$MTIMES.paths"
     # xargs batches the stat calls: one process per few thousand files, not per file
     : > "$MTIMES"
@@ -145,7 +146,7 @@ function flush(   i, best) {
 /^---- Size/ { flush(); split($0, a, "[()]"); bytes = a[2] + 0; n = 0; seq = 0; next }
 /^"/ {
     p = $0; gsub(/"/, "", p)
-    sub("^/storage/", "/share/VIDEO/", p)
+    sub("^/storage/", ENVIRON["ARCH"] "/", p)
     # image-sequence frame: leave the whole group alone
     # busybox awk has no {n,} intervals, so the counts are spelled out.
     # A frame number is 3+ digits starting with 0 (001, 0006) or 5+ digits;

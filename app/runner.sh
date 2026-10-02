@@ -19,12 +19,28 @@
 # create a folder or file named STOP) and the runner does nothing at all, every
 # minute, until it is removed. For a disk rebuild, or anything else where the
 # archive machine must be left alone. Checked before anything else is touched.
-[ -e /share/Web/STOP ] && exit 0
+# Where things are. The web folder is the one this script lives in when it
+# holds settings.json; otherwise the QNAP's. The archive comes from Setup, via
+# archive-path.txt (written by Rushes when settings are saved), checked here:
+# an absolute path of plain characters, at least two folders deep, never a
+# system folder, and a folder that exists. Anything else: the QNAP's.
+WEB=/share/Web
+d=$(dirname "$0"); case "$d" in /*) [ -f "$d/settings.json" ] && WEB=$d ;; esac
+ARCH=$(head -1 "$WEB/archive-path.txt" 2>/dev/null)
+case "$ARCH" in
+    *[!A-Za-z0-9._/-]*|*..*|/etc*|/usr*|/bin*|/sbin*|/lib*|/proc*|/sys*|/dev*|/root*|/boot*|/var/lib*|/tmp*) ARCH= ;;
+    /?*/?*) [ -d "$ARCH" ] || ARCH= ;;
+    *) ARCH= ;;
+esac
+[ -n "$ARCH" ] || ARCH=/share/VIDEO
+export WEB ARCH
 
-Q=/share/Web/queue
-LOG=/share/Web/job.log
+[ -e $WEB/STOP ] && exit 0
+
+Q=$WEB/queue
+LOG=$WEB/job.log
 log() { printf '%s\n' "$*" >> "$LOG"; }     # one line into the job log
-STATUS=/share/Web/job-status.txt
+STATUS=$WEB/job-status.txt
 LOCKDIR=/tmp/.archive-runner.lock
 
 mkdir -p "$Q"
@@ -32,7 +48,7 @@ mkdir -p "$Q"
 # Heartbeat first, before the lock, so it keeps ticking even while a long job
 # holds it. Without this the page cannot tell a busy runner from a dead one —
 # which is exactly how a broken cron went unnoticed for forty minutes.
-date '+%s' > /share/Web/runner-alive.txt
+date '+%s' > $WEB/runner-alive.txt
 
 # One minute's work at a time. If last minute's run is still stuck (a disk that
 # stops answering holds a read for minutes), this one does nothing rather than
@@ -50,7 +66,7 @@ trap 'rm -rf "$TICK"' EXIT INT TERM
 # written to VIDEO by itself — no status mirrored, no page deployed, no proxies
 # started. Only what someone asks for in Manage still runs.
 PAUSED=0
-grep -q '"paused":true' /share/Web/helper-control.json 2>/dev/null && PAUSED=1
+grep -q '"paused":true' $WEB/helper-control.json 2>/dev/null && PAUSED=1
 
 # ── reaching VIDEO: with a time limit, and a breaker ────────────────────────
 # Every step that reads or writes the VIDEO share goes through v(). It starts
@@ -60,8 +76,8 @@ grep -q '"paused":true' /share/Web/helper-control.json 2>/dev/null && PAUSED=1
 # trips: nothing touches VIDEO by itself until a person presses Try again in
 # Manage (which removes video-tripped.txt). A minute with no stall resets the count.
 VLIMIT=${VLIMIT:-20}
-VSTALL=/share/Web/video-stalls.txt
-VTRIP=/share/Web/video-tripped.txt
+VSTALL=$WEB/video-stalls.txt
+VTRIP=$WEB/video-tripped.txt
 VOK=1; [ -f "$VTRIP" ] && VOK=0
 v() {
     "$@" & vp=$!
@@ -83,7 +99,7 @@ VSTALLED=0
 # Whether this minute may reach VIDEO by itself: not paused, not tripped, not stuck.
 may_v() { [ "$PAUSED" = 0 ] && [ "$VOK" = 1 ]; }
 
-may_v && v sh -c 'df -P /share/VIDEO | tail -1 > /share/Web/disk.txt'
+may_v && v sh -c 'df -P $ARCH | tail -1 > $WEB/disk.txt'
 
 # /tmp on a QNAP is a 64 MB RAM disk shared with the system. Give it room (it
 # only uses memory for what is actually in it), and say how full it is.
@@ -91,7 +107,7 @@ tmp_kb=$(df -Pk /tmp | awk 'NR==2 {print $2}')
 if [ -n "$tmp_kb" ] && [ "$tmp_kb" -lt 262144 ]; then
     mount -o remount,size=256M /tmp 2>/dev/null && echo "$(date '+%Y-%m-%d %H:%M:%S')  gave /tmp 256 MB (it had $((tmp_kb / 1024)) MB)" >> "$LOG"
 fi
-df -P /tmp | tail -1 > /share/Web/tmp-disk.txt
+df -P /tmp | tail -1 > $WEB/tmp-disk.txt
 
 # The built-in helper: when Setup says the helper runs on this machine, keep
 # it running. Started again within a minute if it stops; its output goes to
@@ -99,21 +115,21 @@ df -P /tmp | tail -1 > /share/Web/tmp-disk.txt
 RUSHES="${RUSHES_URL:-http://127.0.0.1}"
 if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "yes" ]; then
     PY=$(command -v python3 2>/dev/null)
-    pid=$(cat /share/Web/helper.pid 2>/dev/null)
+    pid=$(cat $WEB/helper.pid 2>/dev/null)
     if [ -z "$PY" ]; then
-        echo "no-python" > /share/Web/helper-builtin.txt
+        echo "no-python" > $WEB/helper-builtin.txt
     elif [ -n "$pid" ] && grep -q ingest.py "/proc/$pid/cmdline" 2>/dev/null; then
         # that number really is the helper (a number can be given to another program later)
-        echo "running" > /share/Web/helper-builtin.txt
+        echo "running" > $WEB/helper-builtin.txt
     elif ! may_v; then
         # Paused, or VIDEO stopped answering: the helper lives on VIDEO, so it
         # is not started from there now. It starts again after Resume / Try again.
-        echo "waiting" > /share/Web/helper-builtin.txt
+        echo "waiting" > $WEB/helper-builtin.txt
     else
-        [ -f /share/Web/helper.log ] && [ "$(wc -c < /share/Web/helper.log)" -gt 5000000 ] && mv /share/Web/helper.log /share/Web/helper.log.old
-        RUSHES_LOG=/share/Web/helper.log "$PY" -u /share/VIDEO/_rushes/ingest.py --watch --url "$RUSHES" --service >> /share/Web/helper.log 2>&1 &
-        echo $! > /share/Web/helper.pid
-        echo "started" > /share/Web/helper-builtin.txt
+        [ -f $WEB/helper.log ] && [ "$(wc -c < $WEB/helper.log)" -gt 5000000 ] && mv $WEB/helper.log $WEB/helper.log.old
+        RUSHES_LOG=$WEB/helper.log "$PY" -u $ARCH/_rushes/ingest.py --watch --url "$RUSHES" --service >> $WEB/helper.log 2>&1 &
+        echo $! > $WEB/helper.pid
+        echo "started" > $WEB/helper-builtin.txt
         echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper" >> "$LOG"
     fi
 fi
@@ -127,14 +143,14 @@ fi
 # No nohup here: the NAS's shell does not have it (it failed with "nohup: command
 # not found" every minute), and a job started from cron keeps running after the
 # runner ends anyway. Input from /dev/null so nothing waits on a terminal.
-proxy_alive() { pid=$(cat /share/Web/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
-NEXT=$(head -1 /share/Web/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+\200-\377-' | cut -c1-200)
+proxy_alive() { pid=$(cat $WEB/proxy.pid 2>/dev/null); [ -n "$pid" ] && grep -q proxy.sh "/proc/$pid/cmdline" 2>/dev/null; }
+NEXT=$(head -1 $WEB/proxy-next.txt 2>/dev/null | tr -cd 'A-Za-z0-9 _./&(),+\200-\377-' | cut -c1-200)
 case "$NEXT" in *..*) NEXT="" ;; esac
 if [ -n "$NEXT" ] && may_v; then
     if ! proxy_alive; then
-        rm -f /share/Web/proxy-next.txt
-        PROXY_ONLY="$NEXT" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
-        echo $! > /share/Web/proxy.pid
+        rm -f $WEB/proxy-next.txt
+        PROXY_ONLY="$NEXT" sh $WEB/proxy.sh --build < /dev/null >> $WEB/proxy.log 2>&1 &
+        echo $! > $WEB/proxy.pid
         echo "$(date '+%Y-%m-%d %H:%M:%S')  making proxies for $NEXT" >> "$LOG"
     fi
 fi
@@ -144,7 +160,7 @@ fi
 # these extensions, only files, and only one folder deep (db/): this folder is
 # writable by anyone who can write to the share, so nothing in it is put in
 # place without an admin's approval (below).
-DROP=/share/VIDEO/_rushes/deploy
+DROP=$ARCH/_rushes/deploy
 # ── what is waiting to be installed ─────────────────────────────────────────
 # Updated scripts (_rushes/scripts) and pages (_rushes/deploy) are never put in
 # place by themselves: a page runs on this machine's web server and a script as
@@ -159,31 +175,31 @@ page_ok() {      # only these, only one folder deep, only db/
     return 1
 }
 survey() {
-    out=/share/Web/waiting.tsv.new; : > "$out"
-    for f in /share/VIDEO/_rushes/scripts/*.sh; do
+    out=$WEB/waiting.tsv.new; : > "$out"
+    for f in $ARCH/_rushes/scripts/*.sh; do
         [ -f "$f" ] || continue; n=${f##*/}
         case "$n" in *[!a-z0-9.-]*|.*) continue ;; esac
-        h=$(sha256sum "$f" | cut -d' ' -f1); have=$(sha256sum "/share/Web/$n" 2>/dev/null | cut -d' ' -f1)
+        h=$(sha256sum "$f" | cut -d' ' -f1); have=$(sha256sum "$WEB/$n" 2>/dev/null | cut -d' ' -f1)
         [ "$h" != "$have" ] && printf 'script\t%s\t%s\t%s\n' "$n" "$h" "$(stat -c %Y "$f")" >> "$out"
     done
     [ -d "$DROP" ] && find "$DROP" -type f 2>/dev/null | while read -r f; do
         rel=${f#$DROP/}; page_ok "$rel" || continue
         printf 'page\t%s\t%s\t%s\n' "$rel" "$(sha256sum "$f" | cut -d' ' -f1)" "$(stat -c %Y "$f")" >> "$out"
     done
-    printf 'helper\t%s\n' "$(sha256sum /share/VIDEO/_rushes/ingest.py 2>/dev/null | cut -c1-12)" >> "$out"
+    printf 'helper\t%s\n' "$(sha256sum $ARCH/_rushes/ingest.py 2>/dev/null | cut -c1-12)" >> "$out"
     # the helper's own files, whole fingerprints: helpers ask for these to update
     # themselves (helper.php?hash), so that question never reads VIDEO
     for n in ingest.py transfer_state.py analyze.py; do
-        [ -f "/share/VIDEO/_rushes/$n" ] && printf 'helperfile\t%s\t%s\n' "$n" "$(sha256sum "/share/VIDEO/_rushes/$n" | cut -d' ' -f1)" >> "$out"
+        [ -f "$ARCH/_rushes/$n" ] && printf 'helperfile\t%s\t%s\n' "$n" "$(sha256sum "$ARCH/_rushes/$n" | cut -d' ' -f1)" >> "$out"
     done
-    mv "$out" /share/Web/waiting.tsv
+    mv "$out" $WEB/waiting.tsv
 }
 # New versions of Rushes' own files are looked for only when asked: Manage →
 # "Check for updates" (survey-now), right after an install, or when there is
 # no list yet. They only ever arrive because a person put them in _rushes, so
 # looking on a timer would read VIDEO for nothing.
-if may_v && { [ ! -f /share/Web/waiting.tsv ] || [ -f /share/Web/survey-now ]; }; then
-    rm -f /share/Web/survey-now
+if may_v && { [ ! -f $WEB/waiting.tsv ] || [ -f $WEB/survey-now ]; }; then
+    rm -f $WEB/survey-now
     v survey
 fi
 
@@ -215,13 +231,13 @@ upkeep() {
     # that are needed for undo, or that Rushes reads from where it left off,
     # are not here: dedupe-moves.tsv, cache-moves.tsv, proxy-made.tsv.)
     for f in helper.log proxy.log proxy-built.tsv proxy-built.tsv.err proxy-speed.tsv proxy-failed.tsv; do
-        f=/share/Web/$f
+        f=$WEB/$f
         [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 5000000 ] || continue
         tail -c 1000000 "$f" | sed 1d > "$f.tmp" && cat "$f.tmp" > "$f"; rm -f "$f.tmp"
         log "$(date '+%Y-%m-%d %H:%M:%S')  trimmed $(basename "$f") to its newest 1 MB"
     done
     # One line per proxy run, per folder: only each folder's last one is read.
-    f=/share/Web/proxy-folders.tsv
+    f=$WEB/proxy-folders.tsv
     if [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 1000000 ]; then
         awk -F'\t' '{ if (!($1 in last)) order[++n] = $1; last[$1] = $0 }
                      END { for (i = 1; i <= n; i++) print last[order[i]] }' "$f" > "$f.tmp" && cat "$f.tmp" > "$f"; rm -f "$f.tmp"
@@ -237,10 +253,10 @@ upkeep() {
     IMP_URL="${RUSHES_URL:-http://127.0.0.1}/db/import.php"
     if command -v curl >/dev/null 2>&1; then
         SYNC=$(curl --silent --show-error --fail --max-time 3600 "$IMP_URL?part=web" 2>&1)
-        importv() { curl --silent --show-error --fail --max-time 110 "$IMP_URL?part=video" > /share/Web/import-video.out 2>&1; }
+        importv() { curl --silent --show-error --fail --max-time 110 "$IMP_URL?part=video" > $WEB/import-video.out 2>&1; }
         if may_v; then
             VL0=$VLIMIT; VLIMIT=${IMPORT_LIMIT:-120}
-            v importv && SYNC="$SYNC $(cat /share/Web/import-video.out 2>/dev/null)"
+            v importv && SYNC="$SYNC $(cat $WEB/import-video.out 2>/dev/null)"
             VLIMIT=$VL0
         fi
     elif command -v wget >/dev/null 2>&1; then
@@ -259,19 +275,19 @@ upkeep() {
     # it checks out); here that copy goes onto VIDEO, one per weekday, so a week of
     # them sits in _rushes/db-copies. Time-limited like every touch of VIDEO, with
     # room for a big file: ten minutes.
-    DBC=$(head -1 /share/Web/db-copy.path 2>/dev/null)
-    case "$DBC" in /*/db-copy.sqlite) ;; *) DBC=/share/Web/db-copy.sqlite ;; esac
+    DBC=$(head -1 $WEB/db-copy.path 2>/dev/null)
+    case "$DBC" in /*/db-copy.sqlite) ;; *) DBC=$WEB/db-copy.sqlite ;; esac
     # A function, not "sh -c" with the path written into it: the path comes from a
     # file PHP writes, and must never be read as shell code by this root script.
     dbcopy() {
-        mkdir -p /share/VIDEO/_rushes/db-copies \
-            && cp "$DBC" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" \
-            && mv -f "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite.part" "/share/VIDEO/_rushes/db-copies/rushes-$DAY.sqlite"
+        mkdir -p $ARCH/_rushes/db-copies \
+            && cp "$DBC" "$ARCH/_rushes/db-copies/rushes-$DAY.sqlite.part" \
+            && mv -f "$ARCH/_rushes/db-copies/rushes-$DAY.sqlite.part" "$ARCH/_rushes/db-copies/rushes-$DAY.sqlite"
     }
-    if [ -f "$DBC" ] && { [ ! -f /share/Web/db-copied ] || [ "$DBC" -nt /share/Web/db-copied ]; } && may_v; then
+    if [ -f "$DBC" ] && { [ ! -f $WEB/db-copied ] || [ "$DBC" -nt $WEB/db-copied ]; } && may_v; then
         DAY=$(date +%a); VL0=$VLIMIT; VLIMIT=600
         if v dbcopy; then
-            touch /share/Web/db-copied
+            touch $WEB/db-copied
             log "$(date '+%Y-%m-%d %H:%M:%S')  database copied to _rushes/db-copies/rushes-$DAY.sqlite"
         fi
         VLIMIT=$VL0
@@ -280,16 +296,16 @@ upkeep() {
     # Can anything private be downloaded? (HOW-IT-WORKS.md → Security.) Once a
     # day, this machine's own web server is asked for the files .htaccess forbids.
     # Any it hands out are listed in exposed.txt, and Overview says so in red.
-    if [ ! -f /share/Web/exposed.txt ] || [ -n "$(find /share/Web/exposed.txt -mmin +1440 2>/dev/null)" ]; then
-        : > /share/Web/exposed.txt.new
+    if [ ! -f $WEB/exposed.txt ] || [ -n "$(find $WEB/exposed.txt -mmin +1440 2>/dev/null)" ]; then
+        : > $WEB/exposed.txt.new
         if command -v curl >/dev/null 2>&1; then
             for f in rushes.sqlite db-copy.sqlite ingest-queue.tsv helper-refused.tsv; do
-                [ -f "/share/Web/$f" ] || continue
+                [ -f "$WEB/$f" ] || continue
                 code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "${RUSHES_URL:-http://127.0.0.1}/$f" 2>/dev/null)
-                [ "$code" = 200 ] && echo "$f" >> /share/Web/exposed.txt.new
+                [ "$code" = 200 ] && echo "$f" >> $WEB/exposed.txt.new
             done
         fi
-        mv -f /share/Web/exposed.txt.new /share/Web/exposed.txt
+        mv -f $WEB/exposed.txt.new $WEB/exposed.txt
     fi
 }
 upkeep_once() {
@@ -314,20 +330,20 @@ trap 'rm -rf "$LOCKDIR"; [ "$(cat "$MAINT/pid" 2>/dev/null)" = "$$" ] && rm -rf 
 # nothing. An empty manifest is worse than none: it tells the Mac the archive
 # is empty and every file is new. Try the fast way, check it worked, fall back.
 build_manifest() {
-    M=/share/Web/manifest.tsv.new
-    date +%s > /share/Web/manifest-started.txt.new
+    M=$WEB/manifest.tsv.new
+    date +%s > $WEB/manifest-started.txt.new
     T=$(printf '\t')
-    if find -L /share/VIDEO -type f -not -path '*/@Recycle/*' \
+    if find -L $ARCH -type f -not -path '*/@Recycle/*' \
         -printf '%s\t%p\n' > "$M" 2>/dev/null && [ -s "$M" ]; then
         method='find -printf'
-    elif find -L /share/VIDEO -type f -not -path '*/@Recycle/*' \
+    elif find -L $ARCH -type f -not -path '*/@Recycle/*' \
         -exec stat -c "%s${T}%n" {} + > "$M" 2>/dev/null && [ -s "$M" ]; then
         method='find -exec stat'
     else
         # Check the walk and every stat; a partial inventory must not replace
         # the last complete snapshot just because it contains some rows.
-        P=/share/Web/manifest-paths.tmp
-        find -L /share/VIDEO -type f -not -path '*/@Recycle/*' > "$P" 2>/dev/null || return 1
+        P=$WEB/manifest-paths.tmp
+        find -L $ARCH -type f -not -path '*/@Recycle/*' > "$P" 2>/dev/null || return 1
         failed=0
         : > "$M"
         while IFS= read -r f; do
@@ -338,8 +354,17 @@ build_manifest() {
         [ "$failed" -eq 0 ] && [ -s "$M" ] || return 1
         method='stat per file'
     fi
-    mv /share/Web/manifest-started.txt.new /share/Web/manifest-started.txt
-    mv "$M" /share/Web/manifest.tsv
+    # The same guard as the search catalogue's (sync.php): a list less than half
+    # the size of the last one is a share that answered partly, not an archive
+    # that lost half its files. The last list stays; the new one is kept aside.
+    old=$(wc -l < $WEB/manifest.tsv 2>/dev/null || echo 0); new=$(wc -l < "$M")
+    if [ "$old" -gt 1000 ] && [ "$new" -lt $((old / 2)) ]; then
+        mv -f "$M" $WEB/manifest-rejected.tsv; rm -f $WEB/manifest-started.txt.new
+        echo "refused: $new files listed where the last list had $old — kept the last list (the new one is manifest-rejected.tsv)"
+        return 1
+    fi
+    mv $WEB/manifest-started.txt.new $WEB/manifest-started.txt
+    mv "$M" $WEB/manifest.tsv
     echo "$method"
 }
 
@@ -352,20 +377,20 @@ build_manifest() {
 # list comes out short, the old one stays and the log says so, rather than
 # leaving someone with a search that silently finds nothing.
 build_index() {
-    m=$(build_manifest) || { echo "File scan interrupted; keeping the previous inventory" >> "$LOG"; return 1; }
-    n=$(wc -l < /share/Web/manifest.tsv)
+    m=$(build_manifest) || { echo "File list not replaced (${m:-the scan was interrupted}); keeping the previous one" >> "$LOG"; return 1; }
+    n=$(wc -l < $WEB/manifest.tsv)
     if [ "$n" -lt 1000 ]; then
         echo "  file list came back with only $n files — keeping the old search index" >> "$LOG"
         echo "  (the archive should have hundreds of thousands; something is wrong)" >> "$LOG"
         return 1
     fi
-    cut -f2 /share/Web/manifest.tsv > /share/Web/index.txt.new
-    i=$(wc -l < /share/Web/index.txt.new)
+    cut -f2 $WEB/manifest.tsv > $WEB/index.txt.new
+    i=$(wc -l < $WEB/index.txt.new)
     if [ "$i" -eq "$n" ]; then
-        mv /share/Web/index.txt.new /share/Web/index.txt
+        mv $WEB/index.txt.new $WEB/index.txt
         echo "  file list and search index: $n files, one pass (via $m)" >> "$LOG"
     else
-        rm -f /share/Web/index.txt.new
+        rm -f $WEB/index.txt.new
         echo "  index came out $i lines from a $n line list — kept the old one" >> "$LOG"
         return 1
     fi
@@ -391,9 +416,9 @@ refresh_state() {
     echo "" >> "$LOG"
     echo "re-reading the share after the job..." >> "$LOG"
     build_index
-    du -sk /share/VIDEO/_duplicates 2>/dev/null | cut -f1 > /share/Web/holding-kb.txt
-    df -P /share/VIDEO | tail -1 > /share/Web/disk.txt
-    echo "  free space: $(df -h /share/VIDEO | tail -1 | awk '{print $4}')" >> "$LOG"
+    du -sk $ARCH/_duplicates 2>/dev/null | cut -f1 > $WEB/holding-kb.txt
+    df -P $ARCH | tail -1 > $WEB/disk.txt
+    echo "  free space: $(df -h $ARCH | tail -1 | awk '{print $4}')" >> "$LOG"
 }
 
 for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
@@ -419,8 +444,8 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
     QUERY=$(printf '%s' "$QUERY" | tr -cd 'A-Za-z0-9 _./&(),+\200-\377-' | cut -c1-200)
     case "$QUERY" in *..*) log "  refused a folder with .. in it"; QUERY=""; ACTION=refused ;; esac
     case "$DEST" in
-        /share/VIDEO/*) case "$DEST" in *..*) DEST=/share/VIDEO/_duplicates ;; esac ;;
-        *) DEST=/share/VIDEO/_duplicates ;;
+        $ARCH/*) case "$DEST" in *..*) DEST=$ARCH/_duplicates ;; esac ;;
+        *) DEST=$ARCH/_duplicates ;;
     esac
 
     echo "running: $ACTION" > "$STATUS"
@@ -433,35 +458,26 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
 
     case "$ACTION" in
         plan)
-            KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh /share/Web/dedupe.sh >> "$LOG" 2>&1
+            KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh $WEB/dedupe.sh >> "$LOG" 2>&1
             ;;
         apply)
-            KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh /share/Web/dedupe.sh --apply >> "$LOG" 2>&1
+            KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh $WEB/dedupe.sh --apply >> "$LOG" 2>&1
             refresh_state
             ;;
         undo)
-            sh /share/Web/dedupe.sh --undo >> "$LOG" 2>&1
+            sh $WEB/dedupe.sh --undo >> "$LOG" 2>&1
             refresh_state
             ;;
         organize-undo)
-            sh /share/Web/organize.sh --undo >> "$LOG" 2>&1
+            sh $WEB/organize.sh --undo >> "$LOG" 2>&1
             refresh_state
             ;;
         reindex)
             echo "walking the share once — file list and search index together" >> "$LOG"
             build_index
             ;;
-        cachescan)
-            echo "scanning for Premiere cache files..." >> "$LOG"
-            # not inside the holding folder (already moved) or the recycle bin
-            find -L /share/VIDEO/ \( -iname '*.pek' -o -iname '*.cfa' -o -iname '*.ims' \) -type f 2>/dev/null \
-                | grep -v -e '/@Recycle/' -e '^/share/VIDEO/_duplicates/' > /share/Web/cache-files.txt
-            echo "$(wc -l < /share/Web/cache-files.txt) cache files" >> "$LOG"
-            while IFS= read -r f; do stat -c %s "$f" 2>/dev/null; done < /share/Web/cache-files.txt \
-                | awk '{b += $1} END {printf "%.1f GB\n", b / 1073741824}' >> "$LOG"
-            ;;
         cacheclean)
-            echo "moving cache files to /share/VIDEO/_duplicates/_media-cache ..." >> "$LOG"
+            echo "moving cache files to $ARCH/_duplicates/_media-cache ..." >> "$LOG"
             n=0
             # cache-moves.tsv grows (never emptied here), so "cache-undo" can put
             # back everything still in the holding folder, from every clean-up
@@ -469,15 +485,15 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 [ -f "$f" ] || continue
                 # Never from the recycle bin (that would undelete it) or from the
                 # holding folder itself, whichever list this came from.
-                case "$f" in /share/VIDEO/*) ;; *) continue ;; esac
-                case "$f" in */@Recycle/*|/share/VIDEO/_duplicates/*|*/../*) continue ;; esac
-                rel=${f#/share/VIDEO/}
-                d="/share/VIDEO/_duplicates/_media-cache/$rel"
+                case "$f" in $ARCH/*) ;; *) continue ;; esac
+                case "$f" in */@Recycle/*|$ARCH/_duplicates/*|*/../*) continue ;; esac
+                rel=${f#$ARCH/}
+                d="$ARCH/_duplicates/_media-cache/$rel"
                 if mkdir -p "$(dirname "$d")" && mv -n "$f" "$d"; then
-                    printf '%s\t%s\n' "$f" "$d" >> /share/Web/cache-moves.tsv
+                    printf '%s\t%s\n' "$f" "$d" >> $WEB/cache-moves.tsv
                     n=$((n + 1))
                 fi
-            done < /share/Web/cache-files.txt
+            done < $WEB/cache-files.txt
             echo "moved $n cache files" >> "$LOG"
             refresh_state
             ;;
@@ -485,10 +501,10 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             # Every cache file still in the holding folder goes back where it was.
             echo "putting cache files back from the holding folder ..." >> "$LOG"
             n=0
-            [ -f /share/Web/cache-moves.tsv ] && while IFS="$(printf '\t')" read -r src dst; do
+            [ -f $WEB/cache-moves.tsv ] && while IFS="$(printf '\t')" read -r src dst; do
                 [ -f "$dst" ] && [ ! -e "$src" ] || continue
                 mkdir -p "$(dirname "$src")" && mv -n "$dst" "$src" && n=$((n + 1))
-            done < /share/Web/cache-moves.tsv
+            done < $WEB/cache-moves.tsv
             echo "put back $n cache files" >> "$LOG"
             refresh_state
             ;;
@@ -499,13 +515,13 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             # so 58 files called DJI_0002.MOV is normal and means nothing.
             # With QUERY set, explains one file instead of checking all of them.
             if [ -n "$QUERY" ]; then
-                sh /share/Web/verify.sh "$QUERY" >> "$LOG" 2>&1
+                sh $WEB/verify.sh "$QUERY" >> "$LOG" 2>&1
             else
-                sh /share/Web/verify.sh >> "$LOG" 2>&1
+                sh $WEB/verify.sh >> "$LOG" 2>&1
             fi
             ;;
         df)
-            df -h /share/VIDEO >> "$LOG" 2>&1
+            df -h $ARCH >> "$LOG" 2>&1
             ;;
         gpu-test)
             [ -n "$DOCKER" ] || echo "Container Station's docker was not found, so the container part of this test cannot run." >> "$LOG"
@@ -515,7 +531,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             # (linuxserver/ffmpeg) with each of Intel's two drivers — i965 for
             # chips from before 2015, iHD for newer — and software for comparison.
             # The result also goes to the VIDEO share, where the helper side can read it.
-            out=/share/Web/gpu-test.txt
+            out=$WEB/gpu-test.txt
             SRC="-f lavfi -i testsrc2=size=1920x1080:rate=30:duration=20"
             enc() {
                 lab=$1; shift; t0=$(date +%s)
@@ -554,10 +570,10 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                     case "$path" in */PROXIES/*|*/_rushes/*|*/_duplicates/*|*/@Recycle/*) continue ;; esac
                     case "$path" in *.[mM][pP]4|*.[mM][oO][vV]|*.[mM][xX][fF]|*.[mM][tT][sS]) ;; *) continue ;; esac
                     [ -f "$path" ] && { clip=$path; break; }
-                done < /share/Web/manifest.tsv
+                done < $WEB/manifest.tsv
                 if [ -n "$clip" ]; then
-                    echo "With a real clip: ${clip#/share/VIDEO/}"
-                    echo "  $("$DOCKER" run --rm -v /share/VIDEO:/share/VIDEO:ro linuxserver/ffmpeg -hide_banner -i "$clip" 2>&1 | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
+                    echo "With a real clip: ${clip#$ARCH/}"
+                    echo "  $("$DOCKER" run --rm -v $ARCH:$ARCH:ro linuxserver/ffmpeg -hide_banner -i "$clip" 2>&1 | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
                     busy() { awk '/^cpu /{print $2+$3+$4+$7+$8, $2+$3+$4+$5+$6+$7+$8}' /proc/stat; }
                     real() {
                         lab=$1; shift; set -- $(busy) "$@"; b0=$1; t0=$2; shift 2; s0=$(date +%s)
@@ -565,7 +581,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                             set -- $(busy); echo "  $lab: WORKS — 30 s of footage in $(( $(date +%s) - s0 )) s, processor $(( 100 * ($1 - b0) / ($2 - t0 + 1) ))% busy"
                         else echo "  $lab: does not work — $(printf '%s' "$msg" | tail -2 | tr '\n' ' ' | cut -c1-200)"; fi
                     }
-                    RUN="$DOCKER run --rm -v /share/VIDEO:/share/VIDEO:ro"
+                    RUN="$DOCKER run --rm -v $ARCH:$ARCH:ro"
                     real "all on the chip (read, resize, encode)" $RUN --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=i965 linuxserver/ffmpeg \
                         -hide_banner -loglevel error -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi \
                         -ss 5 -t 30 -i "$clip" -vf scale_vaapi=w=-2:h=1080 -c:v h264_vaapi -b:v 2M -an -f null -
@@ -578,7 +594,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                     echo "With a real clip: none found in the file list"
                 fi
             } > "$out" 2>&1
-            cp "$out" /share/VIDEO/_rushes/gpu-test.txt 2>/dev/null
+            cp "$out" $ARCH/_rushes/gpu-test.txt 2>/dev/null
             cat "$out" >> "$LOG"
             ;;
         proxy-test)
@@ -589,9 +605,9 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             # original, at the same moment) — to look at before a whole folder
             # is made. Changes nothing else. QUERY: a clip, or a folder (its
             # biggest video, usually the longest).
-            out=/share/Web/proxy-test.txt
-            T=/share/VIDEO/_rushes/proxy-test
-            src="/share/VIDEO/$QUERY"
+            out=$WEB/proxy-test.txt
+            T=$ARCH/_rushes/proxy-test
+            src="$ARCH/$QUERY"
             clip=""
             if [ -f "$src" ]; then clip=$src
             elif [ -d "$src" ]; then
@@ -599,19 +615,19 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                        | while IFS= read -r f; do printf '%s\t%s\n' "$(stat -c %s "$f" 2>/dev/null || echo 0)" "$f"; done \
                        | sort -rn | head -1 | cut -f2-)
             fi
-            D="$DOCKER run --rm --cpu-shares 256 -v /share/VIDEO:/share/VIDEO --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=i965 --entrypoint /usr/local/bin/ffmpeg linuxserver/ffmpeg -hide_banner -nostdin -y"
+            D="$DOCKER run --rm --cpu-shares 256 -v $ARCH:$ARCH --device /dev/dri:/dev/dri -e LIBVA_DRIVER_NAME=i965 --entrypoint /usr/local/bin/ffmpeg linuxserver/ffmpeg -hide_banner -nostdin -y"
             {
                 echo "Proxy settings test · $(date '+%Y-%m-%d %H:%M')"
                 if [ -z "$DOCKER" ]; then echo "Container Station's docker was not found, so nothing could be made."
                 elif [ -z "$clip" ]; then echo "No video found at ${QUERY:-(nothing chosen)}."
                 else
                     mkdir -p "$T" && rm -f "$T"/*
-                    W=/share/Web/proxy-test; mkdir -p "$W" && rm -f "$W"/*     # the stills again, for the page to show side by side
+                    W=$WEB/proxy-test; mkdir -p "$W" && rm -f "$W"/*     # the stills again, for the page to show side by side
                     name=$(basename "$clip"); name=${name%.*}
                     info=$($D -i "$clip" 2>&1)
                     dur=$(printf '%s' "$info" | sed -n 's/.*Duration: \([0-9]*\):\([0-9]*\):\([0-9]*\).*/\1 \2 \3/p' | head -1 | awk '{print $1*3600+$2*60+$3}')
                     at=$(( ${dur:-0} > 45 ? ${dur:-0} * 3 / 10 : 0 ))       # 30% in: past the start, where the camera settles
-                    echo "clip: ${clip#/share/VIDEO/}"
+                    echo "clip: ${clip#$ARCH/}"
                     echo "  $(printf '%s' "$info" | grep -m1 'Video:' | sed 's/^ *//' | cut -c1-150)"
                     echo "20 seconds from ${at}s, each setting made on the video chip (the way proxies are made):"
                     $D -loglevel error -ss $(( at + 10 )) -i "$clip" -frames:v 1 -q:v 2 "$T/$name - 0 original - still.jpg" 2>/dev/null
@@ -637,15 +653,15 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                             echo "  ${h}p in software: $(( $(stat -c %s "$o") * 3 / 1000000 )) MB a minute · made in $(( $(date +%s) - t0 )) s"
                         fi
                     done
-                    chown -R "$(stat -c %u:%g /share/VIDEO)" "$T" 2>/dev/null
+                    chown -R "$(stat -c %u:%g $ARCH)" "$T" 2>/dev/null
                     echo "Look at them in _rushes/proxy-test on VIDEO: each clip, and a still from each at the same moment."
-                    [ -f /share/Web/proxy.pid ] && echo "(Proxies were being made meanwhile, so the times are slower than on a quiet chip.)"
+                    [ -f $WEB/proxy.pid ] && echo "(Proxies were being made meanwhile, so the times are slower than on a quiet chip.)"
                 fi
             } > "$out" 2>&1
             cat "$out" >> "$LOG"
             ;;
         proxy-plan)
-            PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh >> "$LOG" 2>&1
+            PROXY_ONLY="$QUERY" sh $WEB/proxy.sh >> "$LOG" 2>&1
             ;;
         proxy-build)
             # Hours to days, so in the background: the runner stays free for
@@ -654,8 +670,8 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             if proxy_alive; then
                 echo "proxies are already being made (process $pid, detail in proxy.log)" >> "$LOG"
             else
-                PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
-                echo $! > /share/Web/proxy.pid
+                PROXY_ONLY="$QUERY" sh $WEB/proxy.sh --build < /dev/null >> $WEB/proxy.log 2>&1 &
+                echo $! > $WEB/proxy.pid
                 echo "making proxies in the background: progress in Manage → Describe, detail in proxy.log" >> "$LOG"
             fi
             ;;
@@ -668,16 +684,16 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             *)
                 if proxy_alive; then
                     echo "  not remade: proxies are being made right now (process $pid)" >> "$LOG"
-                elif [ -d "/share/VIDEO/PROXIES/$QUERY" ]; then
-                    n=$(find "/share/VIDEO/PROXIES/$QUERY" -type f -name '*.mp4' | wc -l)
-                    rm -rf "/share/VIDEO/PROXIES/$QUERY"
+                elif [ -d "$ARCH/PROXIES/$QUERY" ]; then
+                    n=$(find "$ARCH/PROXIES/$QUERY" -type f -name '*.mp4' | wc -l)
+                    rm -rf "$ARCH/PROXIES/$QUERY"
                     echo "  threw away $n proxies of $QUERY — making them again with the setting in use" >> "$LOG"
-                    PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
-                    echo $! > /share/Web/proxy.pid
+                    PROXY_ONLY="$QUERY" sh $WEB/proxy.sh --build < /dev/null >> $WEB/proxy.log 2>&1 &
+                    echo $! > $WEB/proxy.pid
                 else
                     echo "  $QUERY has no proxies to remake — making them" >> "$LOG"
-                    PROXY_ONLY="$QUERY" sh /share/Web/proxy.sh --build < /dev/null >> /share/Web/proxy.log 2>&1 &
-                    echo $! > /share/Web/proxy.pid
+                    PROXY_ONLY="$QUERY" sh $WEB/proxy.sh --build < /dev/null >> $WEB/proxy.log 2>&1 &
+                    echo $! > $WEB/proxy.pid
                 fi ;;
             esac
             ;;
@@ -690,40 +706,45 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             ;;
         holding)
             # how much sits in the holding folder — what emptying it would give back
-            du -sk /share/VIDEO/_duplicates 2>/dev/null | cut -f1 > /share/Web/holding-kb.txt
-            echo "holding folder: $(du -sh /share/VIDEO/_duplicates 2>/dev/null | cut -f1)" >> "$LOG"
+            du -sk $ARCH/_duplicates 2>/dev/null | cut -f1 > $WEB/holding-kb.txt
+            echo "holding folder: $(du -sh $ARCH/_duplicates 2>/dev/null | cut -f1)" >> "$LOG"
             ;;
         manifest)
             # size + path for every file, so the Mac can decide what is already
             # here without reading 1.2M files over SMB. Minutes, locally.
             echo "walking the share once — file list and search index together" >> "$LOG"
             build_index
-            n=$(wc -l < /share/Web/manifest.tsv)
+            n=$(wc -l < $WEB/manifest.tsv)
             if [ "$n" -lt 1000 ]; then
                 echo "PROBLEM: far too few. Do not run the Mac against this." >> "$LOG"
                 echo "  what find printed:" >> "$LOG"
-                echo "    /share/VIDEO is: $(ls -ld /share/VIDEO 2>&1)" >> "$LOG"
-                echo "    it really points at: $(readlink -f /share/VIDEO 2>&1)" >> "$LOG"
+                echo "    $ARCH is: $(ls -ld $ARCH 2>&1)" >> "$LOG"
+                echo "    it really points at: $(readlink -f $ARCH 2>&1)" >> "$LOG"
                 echo "    top level there:" >> "$LOG"
-                find -L /share/VIDEO -maxdepth 1 >> "$LOG" 2>&1
+                find -L $ARCH -maxdepth 1 >> "$LOG" 2>&1
             fi
             ;;
         scan)
-            # Czkawka's CLI lives in the same container as its GUI. /share/VIDEO is
-            # mounted there as /storage, and /config is the volume we already read
-            # results from. Hours for 41 TB — the lock keeps other jobs waiting.
-            echo "hashing the whole share — this takes hours" >> "$LOG"
-            "$DOCKER" exec czkawka czkawka_cli dup \
-                -d /storage \
-                -e /storage/_duplicates -e /storage/@Recycle \
-                -f /config/results_duplicates.txt > /share/Web/scan-output.txt 2>&1
-            tail -5 /share/Web/scan-output.txt >> "$LOG"
-            CZK=/share/CACHEDEV1_DATA/Container/container-station-data/lib/docker/volumes/b01e685a5288fd37726297cc5c5c7501933c0e441cea07d9527a7a14c01ead5c/_data/results_duplicates.txt
-            if [ -f "$CZK" ]; then
-                cp "$CZK" /share/Web/results_duplicates.txt
-                echo "scan done: $(grep -c '^\"' /share/Web/results_duplicates.txt) duplicate files listed" >> "$LOG"
+            # Czkawka (a duplicate finder) runs in a container called czkawka,
+            # with the archive mounted as /storage (INSTALL.md). Its results are
+            # copied out of the container with docker cp, wherever Docker keeps
+            # them. Hours for a big archive; other jobs wait (the upkeep does not).
+            if [ -z "$DOCKER" ] || ! "$DOCKER" inspect czkawka >/dev/null 2>&1; then
+                echo "no container called czkawka on this machine — see INSTALL.md → Duplicates" >> "$LOG"
             else
-                echo "scan finished but no results file at $CZK" >> "$LOG"
+                echo "hashing the whole share — this takes hours" >> "$LOG"
+                "$DOCKER" exec czkawka czkawka_cli dup \
+                    -d /storage \
+                    -e /storage/_duplicates -e /storage/@Recycle \
+                    -f /config/results_duplicates.txt > $WEB/scan-output.txt 2>&1
+                tail -5 $WEB/scan-output.txt >> "$LOG"
+                if "$DOCKER" cp czkawka:/config/results_duplicates.txt $WEB/results_duplicates.txt.new 2>> "$LOG"; then
+                    mv -f $WEB/results_duplicates.txt.new $WEB/results_duplicates.txt
+                    echo "scan done: $(grep -c '^\"' $WEB/results_duplicates.txt) duplicate files listed" >> "$LOG"
+                else
+                    rm -f $WEB/results_duplicates.txt.new
+                    echo "scan finished but its results could not be copied out of the container" >> "$LOG"
+                fi
             fi
             ;;
         update-scripts)
@@ -736,31 +757,31 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
                 name=${s%%:*}; want=${s#*:}
                 case "$name" in *[!a-z0-9.-]*|.*|*/*|"") echo "  refused $name (not a script name)" >> "$LOG"; continue ;; esac
                 case "$name" in *.sh) ;; *) echo "  refused $name (not a .sh)" >> "$LOG"; continue ;; esac
-                tmp="/share/Web/.$name.new"
-                if ! v cp "/share/VIDEO/_rushes/scripts/$name" "$tmp" || [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
+                tmp="$WEB/.$name.new"
+                if ! v cp "$ARCH/_rushes/scripts/$name" "$tmp" || [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
                     rm -f "$tmp"; echo "  refused $name: it changed after it was approved (or could not be read)" >> "$LOG"; continue
                 fi
                 # renamed into place: a script that is running keeps its old copy
-                chmod 755 "$tmp" && mv "$tmp" "/share/Web/$name" && echo "  installed $name" >> "$LOG" || echo "  could not install $name" >> "$LOG"
+                chmod 755 "$tmp" && mv "$tmp" "$WEB/$name" && echo "  installed $name" >> "$LOG" || echo "  could not install $name" >> "$LOG"
             done
             for s in $PAGES; do
                 rel=${s%%:*}; want=${s#*:}
                 page_ok "$rel" || { echo "  refused page $rel (not a page Rushes has)" >> "$LOG"; continue; }
-                mkdir -p "/share/Web/$(dirname "$rel")"
-                tmp="/share/Web/$rel.new"
+                mkdir -p "$WEB/$(dirname "$rel")"
+                tmp="$WEB/$rel.new"
                 if ! v cp "$DROP/$rel" "$tmp" || [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
                     rm -f "$tmp"; echo "  refused page $rel: it changed after it was approved (or could not be read)" >> "$LOG"; continue
                 fi
-                chmod 644 "$tmp" && mv "$tmp" "/share/Web/$rel" && echo "  installed page $rel" >> "$LOG" \
+                chmod 644 "$tmp" && mv "$tmp" "$WEB/$rel" && echo "  installed page $rel" >> "$LOG" \
                     && v rm -f "$DROP/$rel" || echo "  could not install page $rel" >> "$LOG"
             done
-            touch /share/Web/survey-now          # what is still waiting, looked at again next minute
+            touch $WEB/survey-now          # what is still waiting, looked at again next minute
             ;;
         reset-breaker)
             # Try again (Manage): VIDEO may be reached by itself again.
             rm -f "$VTRIP" "$VSTALL"
             echo "  VIDEO may be reached again — the next minute tries it" >> "$LOG"
-            touch /share/Web/survey-now
+            touch $WEB/survey-now
             ;;
         refused)
             ;;                                   # said above, when it was checked

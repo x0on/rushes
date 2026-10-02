@@ -69,11 +69,9 @@ happens in HOW-IT-WORKS.
 
 **Paths and portability**
 
-- `runner.sh` and its scripts use fixed paths (`/share/Web`, `/share/VIDEO`) and
-  some QNAP tools. The duplicate scan uses a fixed container and volume, and has
-  no button.
-- Which copy of a duplicate to keep (project, card dump, shortest path,
-  oldest) has no control in Manage: it is always the project copy.
+- The runner looks for Docker where a QNAP keeps it, among other places, and
+  INSTALL.md describes a QNAP's scheduler. The archive's path may not contain
+  spaces (the runner refuses it and uses the QNAP's).
 - Settings that nothing reads yet: `organise.shape`, `holding.*`,
   `helper.poll_seconds`, and parts of `rules.json` (`structure`, most of
   `duplicates`, two conditions). The list of video types for proxies is written in two places
@@ -85,30 +83,17 @@ happens in HOW-IT-WORKS.
   (nothing can interrupt a stuck read). It is said after 2 minutes and stops
   the helper after 10, but the stuck file stays stuck until the drive is
   reconnected or the computer restarted.
-- Card ingests do not show a transfer percentage, only the live status. A card
-  is copied whole, without looking for files already in the archive.
-- A new file list (`manifest.tsv`) replaces the old one before the size check
-  that protects the catalogue, so a bad list stays on disk until the next one
-  (search keeps the old catalogue).
+- Card ingests do not show a transfer percentage, only the live status.
 - `ingest.py --undo` covers only the last run, and is not reachable from the
   pages.
 - The media ledger's source (`proxy-made.tsv`) grows by one line per proxy,
   for ever: about 200 bytes each.
-- Ingest's date rules (before 2005, in the future, 1 January) are checked only
-  by the page, not again by `queue.php`.
-- The `cachescan` job lists only Premiere's caches, not every kind in
-  `rules.json`.
-- When the helper's code is missing and Rushes cannot be reached, Rushes
-  Helper's background service tries again every 90 seconds without slowing
-  down.
 
 **Describing**
 
 - Photos get no camera clock and no time of day.
-- Changing only the speech model does not describe files again.
-- A folder counts as described even when some of its files failed, and failed
-  speech is not tried again. They are retried only when the folder is asked for
-  again.
+- Speech is transcribed again for a new speech model only in files that had
+  speech before; a file that had none is not listened to again.
 
 ## Risks
 
@@ -205,6 +190,10 @@ One Rushes, packaged three ways:
   a group, and each organisation decides whose names it records. The face
   model must be free for any use (dlib, or OpenCV's YuNet with SFace), not
   InsightFace, whose models are for non-commercial research only.
+- **A card is copied whole,** even when some of its files are already in the
+  archive. A shoot's folder should hold the whole card, as the camera wrote it:
+  an editor opening it expects every clip, and camera software expects the
+  card's structure. Duplicates finds the copies later.
 - **Never the first frames of a shot:** a camera is still settling when it
   starts.
 - **Ideas taken from established software** (their licenses stay theirs; see

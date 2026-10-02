@@ -167,9 +167,19 @@ if (isset($_POST['_newpass'])) {
             <p class="note" style="margin:0 0 12px">Same content, not same name. Size first,
               then the ends of the file where two sizes collide. Copies move to the holding
               folder &mdash; the space comes back when you empty it, not before.</p>
+            <label class="f" style="max-width:520px;margin:0 0 12px"><span>Which copy is kept</span>
+              <select id="keepSide">
+                <option value="project">The one on the shelf (your projects) &mdash; card dumps lose</option>
+                <option value="card">The card dump &mdash; the shelf's copy loses</option>
+                <option value="short">The shortest path, wherever it is</option>
+                <option value="oldest">The oldest file (reads every copy's date: slower)</option>
+              </select>
+              <small>Whatever you pick, copies in the recycle bin, <code>Copied_</code> folders, caches and the
+                folders in Setup &rarr; 05 are never the one kept. Moving uses the plan you looked at, with this choice.</small></label>
             <div class="btns">
-              <button class="btn" data-t="plan">Look for duplicates</button>
-              <button class="btn quiet" data-t="apply">Move the copies aside</button>
+              <button class="btn quiet" data-t="scan">1 &middot; Scan the archive (hours)</button>
+              <button class="btn" data-t="plan">2 &middot; Look for duplicates</button>
+              <button class="btn quiet" data-t="apply">3 &middot; Move the copies aside</button>
               <button class="btn quiet" data-t="undo">Put them back</button>
             </div>
           </div>
@@ -413,6 +423,7 @@ document.querySelectorAll('#pane-duplicates [data-t]')
 
 // ── asking for work ────────────────────────────────────────────────────────
 const ASK = {
+  scan:     'Read every file in the archive to find the ones that are the same (Czkawka, in its container). Hours for a big archive; other jobs wait meanwhile. Moves nothing.',
   plan:     'Look through the archive for files that are the same file. Moves nothing.',
   apply:    'Move every duplicate copy to the holding folder. Nothing is deleted, and this can be undone.',
   undo:     'Put everything in the holding folder back where it came from.',
@@ -463,8 +474,10 @@ async function act(name, btn) {
   const was = btn.textContent;
   btn.disabled = true; btn.textContent = 'asked…';
   try {
+    const ask = { action: name };
+    if (name === 'plan' || name === 'apply') ask.keep_side = $('keepSide').value;   // run.php checks it again
     const j = await (await fetch('../run.php', { method: 'POST',
-      body: new URLSearchParams({ action: name }) })).json();
+      body: new URLSearchParams(ask) })).json();
     if (j.error) { oops(j.error); btn.disabled = false; btn.textContent = was; return; }
     busy = name;
   } catch (e) {

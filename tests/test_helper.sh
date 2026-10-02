@@ -5,6 +5,7 @@ set -e; [ -n "${DEBUG:-}" ] && set -x
 PHPBIN=${PHPBIN:-php}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=${RUSHES_TEST_TMP:-/tmp}/rushes-helper-$$
+rm -rf "$ROOT"; trap 'rm -rf "$ROOT"' EXIT     # a fixture left by an earlier run is never reused
 mkdir -p "$ROOT/app/db" "$ROOT/archive/_rushes/scripts"
 cp "$HERE"/../app/*.php "$HERE"/../app/*.json "$ROOT/app/" 2>/dev/null || true
 cp "$HERE"/../app/db/*.php "$ROOT/app/db/"
@@ -44,4 +45,13 @@ check 'call GET "{\"control\":\"\"}" | grep -q "\"skip\":\[\"/src/A\"\]"' 'a cop
 check 'call POST "{}" "{\"action\":\"check-updates\"}" | grep -q "sign in" && [ ! -e "$ROOT/app/survey-now" ]' 'Check for updates needs sign-in'
 call POST '{}' '{"action":"check-updates","pass":"rushes"}' >/dev/null
 check '[ -e "$ROOT/app/survey-now" ]' 'Check for updates asks the runner to look'
+# Ingest: the server checks the date again, whatever the page let through
+printf 'at\t%s\nvol\t/Volumes/CARD\tCARD\t1\t1\t1\t0\t1\t1\n' "$(date +%s)" > "$ROOT/app/helper-volumes.tsv"
+S2=$(sed 's/"departments":\[\]/"departments":[{"name":"News","folder":"NEWS"}]/' "$ROOT/app/settings.json"); echo "$S2" > "$ROOT/app/settings.json"
+check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"date\":\"1999-05-01\",\"event\":\"x\"}" queue.php | grep -q "cannot be right"' \
+      'Ingest: a date before 2005 is refused by the server too'
+check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"date\":\"2099-05-01\",\"event\":\"x\"}" queue.php | grep -q "cannot be right"' \
+      'Ingest: a date in the future is refused by the server too'
+check 'call POST "{}" "{\"ingest_src\":\"/Volumes/CARD\",\"dept\":\"News\",\"date\":\"2024-05-01\",\"event\":\"x\"}" queue.php | grep -q "\"queued\"\|ok\|into"' \
+      'Ingest: a real date goes through'
 echo "Helper tests complete."

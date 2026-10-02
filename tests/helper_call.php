@@ -1,7 +1,8 @@
 <?php
-// One request to db/helper.php, as the web server would make it. Used by
-// test_helper.sh, because helper.php ends each answer with exit.
-[$_, $app, $method, $get, $post] = $argv + [null, '', 'GET', '{}', '{}'];
+// One request to db/helper.php (or another door: the 6th argument), as the web
+// server would make it. Used by test_helper.sh, because the doors end each
+// answer with exit.
+[$_, $app, $method, $get, $post, $door] = $argv + [null, '', 'GET', '{}', '{}', 'db/helper.php'];
 if ($method === 'SEED' || $method === 'ITEMS') {        // set up, or look at, a transfer
     require "$app/db/transfers.php"; db_init();
     if ($method === 'SEED') {
@@ -13,4 +14,4 @@ if ($method === 'SEED' || $method === 'ITEMS') {        // set up, or look at, a
 }
 $_SERVER['REQUEST_METHOD'] = $method;
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];
-include "$app/db/helper.php";
+include "$app/$door";

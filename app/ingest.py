@@ -2355,6 +2355,19 @@ def analysis_tools():
     return (py if os.path.exists(py) else ""), model, a.get("whisper", "mlx-community/whisper-large-v3-turbo")
 
 
+DESCRIBE_TRIES = 3
+
+def _describe_tries(save=None):
+    """Folders whose describing left some files out: how many tries so far,
+    and when to try again. Kept on this computer, beside its other notes."""
+    f = HOME / "describe-tries.json"
+    if save is None:
+        try: return json.loads(f.read_text())
+        except (OSError, ValueError): return {}
+    try: f.write_text(json.dumps(save))
+    except OSError: pass
+
+
 def describe_lane(every=20):
     """The describing lane: the queue's describing jobs, one folder at a time,
     beside the copies. Its own Pause (Manage, or Rushes Helper's window)."""
@@ -2373,7 +2386,9 @@ def describe_lane(every=20):
                 done = set(DONE.read_text().splitlines()) if DONE.exists() else set()
             # A folder skipped from Manage is left alone, not started and stopped again every few seconds.
             skip = set(control().get("skip", []))
-            todo = [(p, a) for p, a in jobs if f"analyze {p}{' ' + a if a else ''}" not in done and p not in skip]
+            tries = _describe_tries()
+            todo = [(p, a) for p, a in jobs if f"analyze {p}{' ' + a if a else ''}" not in done and p not in skip
+                    and tries.get(f"analyze {p}{' ' + a if a else ''}", [0, 0])[1] <= time.time()]
             try:
                 todo = within("describe", 30, lambda: [(p, a) for p, a in todo if os.path.exists(p)]) if todo else []
             except Stalled:
@@ -2385,9 +2400,22 @@ def describe_lane(every=20):
             path, asked = todo[0]; said = ""
             print(f"\n=== describing {path} (vision model and speech), beside the copies ===")
             _describing.set()
+            key = f"analyze {path}{' ' + asked if asked else ''}"
             try:
-                if describe_folder(path, asked) == 0:
-                    _mark_done(f"analyze {path}{' ' + asked if asked else ''}")
+                rc = describe_folder(path, asked)
+                if rc == 0:
+                    _mark_done(key)
+                elif rc == 3:
+                    # Some files could not be described. Only those are tried again
+                    # (the rest are kept), half an hour later, up to three times in all.
+                    n = tries.get(key, [0, 0])[0] + 1
+                    if n >= DESCRIBE_TRIES:
+                        print(f"  some files still could not be described after {n} tries — left as they are; asking for the folder again tries once more")
+                        _mark_done(key); tries.pop(key, None)
+                    else:
+                        print(f"  some files could not be described — tried again in 30 minutes ({n} of {DESCRIBE_TRIES})")
+                        tries[key] = [n, time.time() + 1800]
+                    _describe_tries(tries)
             finally:
                 _describing.clear()
             time.sleep(5)
@@ -2449,7 +2477,9 @@ def describe_folder(path, asked=""):
     history("analysed", path, done.get("done", 0) + done.get("already", 0), 0, secs,
             "; ".join(x for x in (f"asked={asked}" if asked else "",
                                   f"{done.get('failed', 0)} could not be described" if done.get("failed") else "") if x))
-    return 0 if rc == 0 and done else 1
+    if rc == 0 and done:
+        return 3 if done.get("failed") else 0     # 3: finished, but some files could not be described
+    return 1
 
 
 def run_self(*args):

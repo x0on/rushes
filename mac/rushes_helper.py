@@ -842,9 +842,19 @@ def service(args):
             fetch_files(url)
             print(f"downloaded {', '.join(missing)} from Rushes")
         except Exception as e:
-            print(f"the helper's files are missing and Rushes cannot be reached ({e}) — trying again shortly")
-            time.sleep(60)
+            # Rule 4: asked less and less, 1 minute, then 5, then every 15
+            # (macOS starts this again 30 s after it ends).
+            n = 0
+            try: n = int(open(os.path.join(DIR, ".fetch-tries")).read())
+            except (OSError, ValueError): pass
+            wait = (60, 300)[n] if n < 2 else 900
+            try: open(os.path.join(DIR, ".fetch-tries"), "w").write(str(n + 1))
+            except OSError: pass
+            print(f"the helper's files are missing and Rushes cannot be reached ({e}) — trying again in {wait // 60} min")
+            time.sleep(wait)
             return 1
+        try: os.remove(os.path.join(DIR, ".fetch-tries"))
+        except OSError: pass
     ingest = os.path.join(DIR, "ingest.py")
     # Its output goes to helper.log, opened for appending, so the helper can
     # keep the file small itself (trim_own_log in ingest.py).

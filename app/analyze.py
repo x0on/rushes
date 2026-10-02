@@ -335,8 +335,26 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
         try:
             old = json.loads(out.read_text())
             if old.get("prompt") == pid and old.get("model") == vision.name:
+                changed = False
                 if str(path) not in old.get("seen_at", []):          # the same footage, somewhere else too
-                    old["seen_at"] = sorted(set(old.get("seen_at", [])) | {str(path)})
+                    old["seen_at"] = sorted(set(old.get("seen_at", [])) | {str(path)}); changed = True
+                # Speech only, again: it failed last time, or a different speech
+                # model is chosen now. The picture's description is kept.
+                if whisper_model and (old.get("speech_failed") or old.get("whisper") not in ("", whisper_model)):
+                    print(f"[{n}/{of}] {path.name} — speech again ({'it failed last time' if old.get('speech_failed') else 'new speech model'})")
+                    say(file=path.name, n=n, of=of, step="speech")
+                    try:
+                        old["speech"] = transcribe(proxy or path, whisper_model)
+                        old["whisper"] = whisper_model; old.pop("speech_failed", None)
+                        result = "done"
+                    except Exception as e:
+                        old["speech_failed"] = str(e)[:200]
+                        print(f"    could not transcribe ({e})")
+                        result = "failed"
+                    tmp = out.with_suffix(".json.new")
+                    tmp.write_text(json.dumps(old, indent=1, ensure_ascii=False)); os.replace(tmp, out)
+                    return result
+                if changed:
                     out.write_text(json.dumps(old, indent=1, ensure_ascii=False))
                 print(f"[{n}/{of}] {path.name} — already described")
                 return "already"
@@ -405,6 +423,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
             rec["speech"] = transcribe(src, whisper_model)
             rec["whisper"] = whisper_model
         except Exception as e:
+            rec["speech_failed"] = str(e)[:200]          # tried again next time, speech only
             print(f"    could not transcribe ({e})")
 
     rec["analysed"] = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -527,6 +546,28 @@ def selftest():
         (arch / "PARKS" / "A001.MXF").write_bytes(b"o"); (prox / "PARKS" / "A001.mp4").write_bytes(b"p")
         assert proxy_of(arch / "PARKS" / "A001.MXF", arch, prox) == prox / "PARKS" / "A001.mp4"
         assert proxy_of(arch / "PARKS" / "B.MXF", arch, prox) is None
+    # speech that failed is tried again, speech only; the picture's description is kept
+    global transcribe, say
+    real, real_say = transcribe, say
+    try:
+        say = lambda **k: None
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "a.mov"; f.write_bytes(b"x" * 100); store = Path(td) / "store"
+            fp = fingerprint(f); out = store / fp[:2] / f"{fp}.json"; out.parent.mkdir(parents=True)
+            vis = type("V", (), {"name": "m"})()
+            out.write_text(json.dumps({"prompt": prompt_id(th), "model": "m", "whisper": "", "seen_at": [str(f)],
+                                       "shots": [{"description": "kept"}], "speech_failed": "boom"}))
+            transcribe = lambda p, m: {"language": "en", "segments": [{"start": 0, "end": 1, "text": "hi"}]}
+            assert analyse(f, store, vis, "w", th, False, 1, 1) == "done"
+            r = json.loads(out.read_text())
+            assert r["speech"]["segments"][0]["text"] == "hi" and "speech_failed" not in r and r["shots"][0]["description"] == "kept"
+            assert analyse(f, store, vis, "w", th, False, 1, 1) == "already"            # nothing left to do
+            def boom(p, m): raise RuntimeError("no")
+            transcribe = boom
+            assert analyse(f, store, vis, "w2", th, False, 1, 1) == "failed"           # new speech model, failed: said
+            assert json.loads(out.read_text())["speech_failed"] == "no"
+    finally:
+        transcribe, say = real, real_say
     print("analyze: all checks pass")
     return 0
 
