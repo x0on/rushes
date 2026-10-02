@@ -417,7 +417,8 @@ const ASK = {
   apply:    'Move every duplicate copy to the holding folder. Nothing is deleted, and this can be undone.',
   undo:     'Put everything in the holding folder back where it came from.',
   'organize-undo':  'Put back the files the old date-based layout moved.',
-  import:   'Rebuild search from the file list. About ten seconds.',
+  import:   'Rebuild search from the file list. Seconds to minutes.',
+  'gpu-test': 'Measure what the video chip can do: test encodes and one real clip, a few minutes. Writes a report; makes no video files. Downloads a public ffmpeg container image.',
   'proxy-plan':  'Count the videos that have no proxy yet, and how much there is to read. Makes nothing.',
   'proxy-build': 'Make the missing proxies, in the background on the archive machine. It takes hours to days; stopping and starting again loses nothing.',
   'proxy-stop':  'Stop making proxies. The one being made is thrown away; everything finished is kept.',
@@ -428,11 +429,13 @@ const ASK = {
 
 async function act(name, btn) {
   if (name === 'import') {
-    // Same rebuild the scheduled runner does; the old search keeps working
-    // until the new one is complete. Say how it went, on the button itself.
+    // Same rebuild the scheduled runner does, from the file list in the web
+    // folder; the old search keeps working until the new one is complete.
+    // Say how it went, on the button itself. It may take minutes: waited for.
+    if (!sure(btn, ASK.import, 'act:import')) return;
     const was = btn.textContent; btn.disabled = true; btn.textContent = 'Rebuilding search…';
     try {
-      const r = await (await fetch('import.php')).json();
+      const r = await (await fetch('import.php?part=web', { signal: AbortSignal.timeout(900000) })).json();
       btn.textContent = r.state === 'retrying' ? 'Kept the old search — ' + (r.error || 'try again')
                       : r.state === 'updating' ? 'Already rebuilding — give it a minute' : 'Search is up to date ✓';
     } catch (e) { btn.textContent = 'Could not reach the archive'; }
