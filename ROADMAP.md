@@ -142,6 +142,36 @@ In this order of importance:
    card", and copying to two places at once. *Built: safe to format. To come:
    two places at once.*
 
+5. **Projects in and out** (designed October 2026, not built yet). Editors
+   work as usual; Rushes keeps every project and everything it uses, without
+   anyone pressing anything:
+   - **Three shares.** VIDEO, the archive: read only for people, only Rushes
+     writes. Projects: where editors work. Deliveries: where outside files
+     arrive, for Rushes to take in.
+   - **Rushes Watcher** on each editor's computer notices a project being
+     saved (once it has been quiet a few minutes) and copies the outside files
+     it uses (stock, downloads, graphics, voiceover) into Deliveries. It never
+     touches a project Premiere has open. When the project is closed, it is
+     pointed at the server's copies, and a copy of the project file goes into
+     the archive. It says what it did, every time.
+   - **The project file decides what is kept**, not the folder: only files the
+     project uses are taken in. Previews, renders and caches are left; so is
+     anything else in the folder. Missing files are said at once.
+   - **Where things go.** Reusable material (music, stock footage, sound
+     effects) into a shared library, stored once however many projects use it,
+     and found in Search as the Library. Things made for one project (graphics,
+     titles, voiceover) with that project, beside its shoot.
+   - **No Finished button.** A project is ongoing until it is not: after some
+     days without a save (10, a setting) it is *resting*, its copy in the
+     archive is complete, and Search shows it so. After longer (90, a setting)
+     its workspace folder is moved to the holding folder, said in Rushes and in
+     the editor's Watcher, with **Bring it back**. Nothing is deleted.
+   - Rushes makes each project's folder (New project: department and shoot), in
+     the same shape as the archive. Windows editors when Rushes Watcher exists
+     for Windows.
+   - Later, a Premiere panel (Adobe's UXP): search the archive from inside
+     Premiere, and see what the Watcher brought in.
+
 Later versions:
 
 - camera card structures and RAW as one clip;
@@ -176,6 +206,18 @@ One Rushes, packaged three ways:
    approves one publisher once.
 
 ## Decided, and why
+
+- **Three programs, each with only what its job needs** (October 2026):
+  - **Rushes**, on the server: the pages, the catalogue, the runner.
+  - **Rushes Helper**, on one computer: the archive work. Copies cards and old
+    servers in, describes footage, checks copies. One per archive (pairing).
+  - **Rushes Watcher**, on each editor's computer: watches that editor's
+    projects and copies the outside files they use into Deliveries, never into
+    the archive. No archive code, no describing, no models: what is not
+    installed cannot be misused, and it stays small.
+
+  One repository: the copying and checking code is written once and built into
+  each program that needs it. On a single computer, one build holds all three.
 
 - **Help is in the open; live support is paid, and never unasked.** For
   everyone, help is a GitHub issue with a diagnostics file the person reads
