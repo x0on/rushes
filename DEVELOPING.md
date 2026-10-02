@@ -39,10 +39,11 @@ app/                     everything that is installed
   rules.json             what is the same everywhere: kinds of media, caches, limits, themes
   settings.example.json  what changes per installation
   .htaccess              files the web server must never hand out
-mac/                     Rushes Helper for Mac
-  rushes_helper.py       its window, setup, and background service
-  launcher.c             the app's program: its window, and starting Python
-  build.py               builds and signs the app
+mac/                     Rushes Helper and Rushes Watcher for Mac
+  rushes_helper.py       each app's window, setup, menu bar answers and background service
+  rushes_watcher.py      Rushes Watcher's work: projects in and out
+  launcher.c             the apps' program: the window, the menu bar icon, starting Python
+  build.py               builds and signs either app
 tests/                   all the checks (below)
 docs/                    the public website (GitHub Pages)
 ```
@@ -98,6 +99,7 @@ archive.
 cd tests
 python3 -m unittest test_transfer          # the helper: copying, proof, pause, stalls, pairing
 python3 -m unittest test_watcher           # Rushes Watcher and the helper, end to end: save, deliver, quit, repoint
+python3 -m unittest test_menu              # the menu bar icon's answers, for both apps
 busybox sh test_runner.sh                  # the runner, on a pretend archive, on its bad days
 php test_server.php                        # the catalogue, imports, plans, pulls, passwords
 php test_pages.php                         # what Overview says
@@ -131,10 +133,11 @@ releases puts the public half printed by `keygen` in `PUBLIC`, in `release.py`.
 `app/release.sig` in the repository is the signature of the last release. Any
 change to one of the four files needs a new signature before it is released.
 
-## Building Rushes Helper
+## Building Rushes Helper and Rushes Watcher
 
 `mac/build.py` builds `mac/out/Rushes Helper.app` and its zip, from Linux or a
-Mac. It needs:
+Mac; `mac/build.py watcher` builds `Rushes Watcher.app` the same way. Put each
+zip on the archive in `_rushes`, where Setup offers them for download. It needs:
 
 - the two `python-build-standalone` archives (Python 3.12 for arm64 and x86_64)
   next to `build.py`;

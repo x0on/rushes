@@ -145,8 +145,10 @@ In this order of importance:
 5. **Projects in and out** (designed October 2026). *Built: Rushes' side
    (pairing editors' computers, their door, the projects list in Manage, the
    stock library in Search), the helper taking deliveries in, and the core of
-   Rushes Watcher (Premiere, on a Mac). To come: Rushes Watcher as an app, the
-   menu bar icons, resting and moving aside, Final Cut and Resolve.* Editors
+   Rushes Watcher (Premiere, on a Mac), Rushes Watcher as its own app, and the
+   menu bar icon for both apps (built and signed; to be tried on a Mac). To
+   come: resting and moving aside, one combined app for a single computer,
+   Final Cut and Resolve.* Editors
    work as usual; Rushes keeps every project and everything it uses, without
    anyone pressing anything:
    - **Three shares.** VIDEO, the archive: read only for people, only Rushes
@@ -191,6 +193,11 @@ In this order of importance:
      for Windows.
    - Later, a Premiere panel (Adobe's UXP): search the archive from inside
      Premiere, and see what the Watcher brought in.
+   - Later: two editors in one project at once (Premiere's shared projects and
+     project locking). For now, a project is pointed at the archive when the
+     editing program is quit on the computer that saved it: one project, one
+     editor at a time. Resolve keeps projects in a database, which needs its
+     own way in.
 
 Later versions:
 

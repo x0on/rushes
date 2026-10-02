@@ -1120,8 +1120,44 @@ Opening Setup lists the shares on the archive machine.
 ## Rushes Helper on the Mac
 
 Rushes Helper is a Mac app with its own Python inside. Opened from Finder, it
-shows one window. Started by macOS in the background, it runs the helper, with
-no window.
+shows one window. Started by macOS in the background, it runs the helper, and
+shows its icon in the menu bar. Rushes Watcher, for editors' computers, is
+built the same way from the same launcher and window (`mac/build.py watcher`),
+and carries only its own work (`rushes_watcher.py`); neither app carries the
+other.
+
+### Always in sight: the menu bar icon
+
+While either app works, its icon is in the menu bar, the way Tailscale's is.
+**No icon, nothing running:** if the Mac cannot show the icon, the work is
+stopped, and its log says why (it tries again in 10 minutes).
+
+- **The icon says the state at a glance:** a film strip when idle, turning
+  arrows when the helper is working (an eye when the Watcher is watching, an
+  arrow up while it copies to Deliveries), a pause sign when paused, a warning
+  when it needs you (stopped by itself, not paired), and a crossed signal when
+  it cannot reach Rushes. Its tooltip says the same in words.
+- **The menu** shows what it is doing now (with how far), the last few lines it
+  wrote, and **every switch someone changes day to day**: for the helper, Copy
+  footage, Describe footage, Check copies, Reconnect network drives (ticked when
+  on; they are Rushes' switches, so they wait while Rushes cannot be reached);
+  for the Watcher, Watch projects. A switch acts at once and is turned back the
+  same way; what it did is said at the top of the menu.
+- Then the Rushes it talks to, **Open Rushes**, **Show the log**, **Collect
+  diagnostics**, **Ask for help…**, and **Open Rushes Helper…** (or Watcher):
+  the window, for anything that cannot be undone. Remove, and pairing, are only
+  there, and the window asks twice.
+- **Quit** stops it, like turning off Run in the background: it stays off,
+  also after a restart, until it is turned on in its window.
+- The menu is drawn by the launcher (`launcher.c`) from what a second Python
+  process says, on this Mac only (127.0.0.1, behind a random key). It asks that
+  process every 3 seconds; that process asks Rushes only when the menu is
+  opened, and otherwise every 30 seconds, for the icon. The Watcher's state is
+  on the Mac itself (`now.json`), so its icon asks Rushes nothing.
+- Opening the app from Finder while it runs opens its window, as an instance of
+  its own.
+
+### The window
 
 **The window** is a page served on this Mac only, behind a random key. If the
 app cannot open its own window, the page opens in the browser instead.

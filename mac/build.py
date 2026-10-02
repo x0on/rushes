@@ -1,8 +1,13 @@
 # Rushes — Media Management Software, by Alejandro Renteria.
 # Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
-"""Builds Rushes Helper.app and its zip, from Linux.
+"""Builds Rushes Helper.app or Rushes Watcher.app, and its zip, from Linux.
 
-  python3 mac/build.py   ->  mac/out/Rushes Helper.zip  (put it on the archive as _rushes/Rushes Helper.zip)
+  python3 mac/build.py           ->  mac/out/Rushes Helper.zip   (put it on the archive as _rushes/Rushes Helper.zip)
+  python3 mac/build.py watcher   ->  mac/out/Rushes Watcher.zip  (for each editor's computer)
+
+Two apps from one launcher and one front (rushes_helper.py); each carries only
+its own work: the helper's comes from Rushes (signed releases), the Watcher's
+(rushes_watcher.py) is inside it. Neither carries the other.
 
 Runs on Linux or a Mac. Needs, next to this file or on the PATH:
   - the two python-build-standalone "install_only_stripped" tarballs named in PBS below
@@ -16,7 +21,10 @@ import os, plistlib, shutil, struct, subprocess, sys, tarfile, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = HERE
 OUT = os.path.join(TOP, "out")
-APP = os.path.join(OUT, "Rushes Helper.app")
+WATCHER = sys.argv[1:] == ["watcher"]
+NAME = "Rushes Watcher" if WATCHER else "Rushes Helper"
+BUNDLE = "org.rushes.watcher" if WATCHER else "org.rushes.helper"
+APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
 PBS = "cpython-3.12.11+20250918-{}-apple-darwin-install_only_stripped.tar.gz"
 ARCHES = {"arm64": "aarch64", "x86_64": "x86_64"}
@@ -47,7 +55,7 @@ def fat(parts, dest):
     os.chmod(dest, 0o755)
 
 
-shutil.rmtree(OUT, ignore_errors=True)
+shutil.rmtree(APP, ignore_errors=True)        # the other app, built before, stays
 os.makedirs(os.path.join(C, "MacOS")); os.makedirs(os.path.join(C, "Resources"))
 
 # ── the launcher, for both chips ────────────────────────────────────────────
@@ -57,7 +65,7 @@ for a, z in ARCHES.items():
     run(sys.executable, "-m", "ziglang", "cc", "-target", f"{z}-macos.11.0", "-Os", "-Wl,-headerpad,0x1000",
         "-o", exe, os.path.join(HERE, "launcher.c"))
     parts.append((a, exe))
-fat(parts, os.path.join(C, "MacOS", "Rushes Helper"))
+fat(parts, os.path.join(C, "MacOS", NAME))
 for _, p in parts:
     os.remove(p)
 
@@ -83,7 +91,7 @@ for a, z in ARCHES.items():
     # Python packages the helper uses beyond Python itself, as ready-made wheels
     # for this chip, next to this file (pip download --only-binary=:all:
     # --platform macosx_11_0_arm64 / macosx_10_9_x86_64 --python-version 3.12 xxhash).
-    for w in os.listdir(TOP):
+    for w in [] if WATCHER else os.listdir(TOP):            # the Watcher needs nothing beyond Python
         if w.endswith(".whl") and ("-cp312-" in w) and ({"arm64": "arm64", "x86_64": "x86_64"}[a] in w or "universal2" in w):
             with zipfile.ZipFile(os.path.join(TOP, w)) as zf:
                 zf.extractall(site)
@@ -98,26 +106,31 @@ for a, z in ARCHES.items():
 
 # ── the rest of the app ─────────────────────────────────────────────────────
 shutil.copy(os.path.join(HERE, "rushes_helper.py"), os.path.join(C, "Resources"))
-# Checks that the helper's code it downloads is a signed release (app/release.py).
-shutil.copy(os.path.join(HERE, "..", "app", "release.py"), os.path.join(C, "Resources"))
+if WATCHER:
+    shutil.copy(os.path.join(HERE, "rushes_watcher.py"), os.path.join(C, "Resources"))
+else:
+    # Checks that the helper's code it downloads is a signed release (app/release.py).
+    shutil.copy(os.path.join(HERE, "..", "app", "release.py"), os.path.join(C, "Resources"))
 shutil.copy(os.path.join(HERE, "AppIcon.icns"), os.path.join(C, "Resources"))
 # What Rushes is made of, and whose each part is: shown in the app's window.
 shutil.copy(os.path.join(HERE, "..", "CREDITS.md") if os.path.exists(os.path.join(HERE, "..", "CREDITS.md"))
             else os.path.join(HERE, "CREDITS.md"), os.path.join(C, "Resources"))
 with open(os.path.join(C, "Info.plist"), "wb") as f:
     plistlib.dump({
-        "CFBundleIdentifier": "org.rushes.helper",
-        "CFBundleName": "Rushes Helper", "CFBundleDisplayName": "Rushes Helper",
-        "CFBundleExecutable": "Rushes Helper", "CFBundleIconFile": "AppIcon",
+        "CFBundleIdentifier": BUNDLE,
+        "CFBundleName": NAME, "CFBundleDisplayName": NAME,
+        "CFBundleExecutable": NAME, "CFBundleIconFile": "AppIcon",
         "CFBundlePackageType": "APPL", "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
         "LSMinimumSystemVersion": "11.0",
-        "LSUIElement": True,                     # no Dock icon in the background; the window adds one while open
+        "LSUIElement": True,                     # no Dock icon in the background (its icon is in the menu bar); the window adds one while open
         # The window shows a page this app serves on this computer only (127.0.0.1).
         "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
         # Without this line macOS refuses local-network connections without asking ("No route to host").
-        "NSLocalNetworkUsageDescription": "Rushes Helper talks to Rushes on your network: it asks what to copy "
-                                          "and reports what it is doing.",
+        "NSLocalNetworkUsageDescription": ("Rushes Watcher talks to Rushes on your network: it says which files your "
+                                           "projects use, and what it is doing." if WATCHER else
+                                           "Rushes Helper talks to Rushes on your network: it asks what to copy "
+                                           "and reports what it is doing."),
         "NSHumanReadableCopyright": "Rushes Media Management Software · by Alejandro Renteria · source available, github.com/x0on/rushes",
     }, f)
 
@@ -128,12 +141,12 @@ with open(os.path.join(C, "Info.plist"), "wb") as f:
 # one. Without them: ad hoc, which is nobody, and a new identity every build.
 KEY, CERT = os.environ.get("RUSHES_SIGN_KEY"), os.environ.get("RUSHES_SIGN_CERT")
 run(RC, "sign", *(["--pem-file", KEY, "--pem-file", CERT] if KEY and CERT else []), APP)
-info = subprocess.run([RC, "print-signature-info", os.path.join(C, "MacOS", "Rushes Helper")], capture_output=True, text=True).stdout
-# both chips signed as org.rushes.helper, each sealing the Info.plist and the resources
-assert info.count("identifier: org.rushes.helper") == 2 and info.count("Resources (3)") == 2, info[:2000]
+info = subprocess.run([RC, "print-signature-info", os.path.join(C, "MacOS", NAME)], capture_output=True, text=True).stdout
+# both chips signed as the app, each sealing the Info.plist and the resources
+assert info.count(f"identifier: {BUNDLE}") == 2 and info.count("Resources (3)") == 2, info[:2000]
 if KEY and CERT:
     assert "Alejandro Renteria" in info, "signed, but not with the author's certificate"
 print("signed by:", "the author's certificate" if KEY and CERT else "nobody (ad hoc)")
-z = os.path.join(OUT, "Rushes Helper.zip")
-run("zip", "-qry", z, "Rushes Helper.app", cwd=OUT)
+z = os.path.join(OUT, NAME + ".zip")
+run("zip", "-qry", z, NAME + ".app", cwd=OUT)
 print(f"\n{z}: {os.path.getsize(z) / 1e6:.1f} MB")

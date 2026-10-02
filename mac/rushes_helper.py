@@ -1,6 +1,11 @@
 # Rushes — Media Management Software, by Alejandro Renteria.
 # Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
-"""Rushes Helper — the Mac app around the helper.
+"""Rushes Helper and Rushes Watcher — the Mac app around each.
+
+One file, two apps (mac/build.py helper|watcher): the app's name, which the
+launcher passes on, says which one this is. Rushes Helper copies footage into
+the archive; Rushes Watcher, on each editor's computer, keeps projects and
+what they use (rushes_watcher.py does the work).
 
 Opened from Finder, it shows one window that stays open from start to end:
 the first time, setup as steps (where Rushes is, the background service, the
@@ -31,10 +36,15 @@ import urllib.request
 APP = os.environ.get("RUSHES_APP") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HOME = os.path.expanduser("~")
 DIR = os.path.join(HOME, "Library", "Application Support", "Rushes")
-LOGS = os.path.join(HOME, "Library", "Logs", "Rushes")
-LABEL = "org.rushes.helper"
+NAME = os.environ.get("RUSHES_NAME") or ("Rushes Watcher" if "Rushes Watcher" in APP else "Rushes Helper")
+WATCHER = NAME == "Rushes Watcher"
+LOGS = os.path.join(HOME, "Library", "Logs", "Rushes Watcher" if WATCHER else "Rushes")
+LABEL = "org.rushes.watcher" if WATCHER else "org.rushes.helper"
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
-HOMEAPP = os.path.join(HOME, "Applications", "Rushes Helper.app")
+HOMEAPP = os.path.join(HOME, "Applications", NAME + ".app")
+WORKLOG = os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")      # what the work itself says
+# Rushes Watcher's own notes: its pairing (config.json), what it is doing (now.json), Pause watching (paused)
+WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
 FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 # The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
@@ -84,11 +94,26 @@ def service_running():
     return r.returncode == 0, int(m.group(1)) if m else 0
 
 
+def read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def saved_url():
     try:
+        if WATCHER:
+            return read_json(os.path.join(WDIR, "config.json")).get("url", "")
         return open(os.path.join(DIR, "url")).read().strip()
-    except OSError:
+    except (OSError, ValueError):
         return ""
+
+
+def watcher_now():
+    """What Rushes Watcher says it is doing (rushes_watcher.py, now.json)."""
+    return read_json(os.path.join(WDIR, "now.json"))
 
 
 def reachable(url):
@@ -124,7 +149,7 @@ def guess_url():
     downloads = os.path.join(HOME, "Downloads")
     try:
         for p in [APP] + [os.path.join(downloads, f) for f in sorted(os.listdir(downloads) if os.path.isdir(downloads) else [])
-                          if f.startswith("Rushes Helper")]:
+                          if f.startswith(NAME)]:
             u = from_where(p)
             if u:
                 return u
@@ -186,14 +211,16 @@ def install_service(url):
     os.makedirs(LOGS, exist_ok=True)
     plist = {
         "Label": LABEL,
-        "ProgramArguments": [os.path.join(HOMEAPP, "Contents", "MacOS", "Rushes Helper"),
-                             "--watch", "--url", url, "--service"],
-        # Login Items shows it as Rushes Helper, with the icon, instead of a bare program.
+        "ProgramArguments": [os.path.join(HOMEAPP, "Contents", "MacOS", NAME)]
+                            + (["--service"] if WATCHER else ["--watch", "--url", url, "--service"]),
+        # Login Items shows it by the app's name, with the icon, instead of a bare program.
         "AssociatedBundleIdentifiers": [LABEL],
         "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 30,
-        "ProcessType": "Background",
-        "StandardOutPath": os.path.join(LOGS, "helper.log"),
-        "StandardErrorPath": os.path.join(LOGS, "helper.log"),
+        "ProcessType": "Interactive",            # it shows its icon in the menu bar: never out of sight
+        "LimitLoadToSessionType": "Aqua",        # only while someone is logged in to see it
+        # The Watcher writes its own log; what reaches here is only what Python says when it fails.
+        "StandardOutPath": os.path.join(LOGS, "service.out" if WATCHER else "helper.log"),
+        "StandardErrorPath": os.path.join(LOGS, "service.out" if WATCHER else "helper.log"),
     }
     with open(PLIST + ".new", "wb") as f:
         plistlib.dump(plist, f)
@@ -285,7 +312,7 @@ def rushes(url, path, data=None):
 def log_tail(n=12):
     """The helper's own words, newest last: what it did lately."""
     try:
-        with open(os.path.join(LOGS, "helper.log"), "rb") as f:
+        with open(WORKLOG, "rb") as f:
             f.seek(0, 2); f.seek(max(0, f.tell() - 16000))
             lines = f.read().decode("utf-8", "replace").splitlines()
     except OSError:
@@ -311,27 +338,31 @@ def diagnostics(url):
     except (OSError, plistlib.InvalidFileException):
         ver = "?"
     add("Rushes diagnostics", time.strftime("%Y-%m-%d %H:%M:%S"))
-    add("What this is", "written by Rushes Helper when you pressed Collect diagnostics; nothing was sent anywhere")
-    add("Rushes Helper", f"{ver} · {APP}")
+    add("What this is", f"written by {NAME} when you pressed Collect diagnostics; nothing was sent anywhere")
+    add(NAME, f"{ver} · {APP}")
     add("macOS", f"{platform.mac_ver()[0]} · {platform.machine()}")
     add("Rushes server", url or "(not set up)")
     loaded, pid = service_running()
     add("Running in the background", f"yes (process {pid})" if loaded else "no")
     add("Full Disk Access", "yes" if has_full_disk_access() else "no")
-    for f in FILES + ("analyze.py",):
+    for f in () if WATCHER else FILES:
         try: add(f, hashlib.sha256(open(os.path.join(DIR, f), "rb").read()).hexdigest()[:12])
         except OSError: add(f, "missing")
     try: add("Drives connected", ", ".join(sorted(os.listdir("/Volumes"))))
     except OSError: pass
-    add("Rushes' switches for this helper")
-    try: lines.append(json.dumps(rushes(url, "/db/helper.php?control"), indent=1))
-    except Exception as e: lines.append(f"(Rushes did not answer: {e})")
-    add("What the helper is doing, as Rushes sees it")
-    try:
-        st = rushes(url, "/db/state.php")
-        lines.append(json.dumps({k: st.get(k) for k in ("copy", "helper", "transfer", "conditions")}, indent=1, ensure_ascii=False))
-    except Exception as e: lines.append(f"(Rushes did not answer: {e})")
-    for name, n in (("helper.log", 300), ("setup.log", 80)):
+    if WATCHER:
+        add("What it says it is doing", json.dumps(watcher_now(), ensure_ascii=False))
+        add("Watching paused", "yes" if os.path.exists(os.path.join(WDIR, "paused")) else "no")
+    if not WATCHER:
+        add("Rushes' switches for this helper")
+        try: lines.append(json.dumps(rushes(url, "/db/helper.php?control"), indent=1))
+        except Exception as e: lines.append(f"(Rushes did not answer: {e})")
+        add("What the helper is doing, as Rushes sees it")
+        try:
+            st = rushes(url, "/db/state.php")
+            lines.append(json.dumps({k: st.get(k) for k in ("copy", "helper", "transfer", "conditions")}, indent=1, ensure_ascii=False))
+        except Exception as e: lines.append(f"(Rushes did not answer: {e})")
+    for name, n in ((os.path.basename(WORKLOG), 300), ("setup.log", 80)):
         add(f"The last {n} lines of {name}")
         try:
             with open(os.path.join(LOGS, name), "rb") as f:
@@ -371,13 +402,21 @@ class Window:
     def state(self):
         with self.lock:
             s = dict(self.s)
+        s.update(name=NAME, watcher=WATCHER)
         if s["step"] == "home":
             s.update(self.home())
         return s
 
     def home(self):
         loaded, pid = service_running()
-        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": os.path.join(LOGS, "helper.log")}
+        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": WORKLOG}
+        if WATCHER:
+            # Everything is on this computer: what it says it is doing, and its switch.
+            n = watcher_now()
+            paired = bool(read_json(os.path.join(WDIR, "config.json")).get("id"))
+            h.update(now=n, paired=paired, paused=os.path.exists(os.path.join(WDIR, "paused")),
+                     rushes=n.get("state") != "offline", rushes_why=n.get("note", ""))
+            return h
         try:
             with open(STOPPED) as f:
                 h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
@@ -438,9 +477,26 @@ class Window:
         elif do == "later":
             self.set(step="later")
         elif do == "open-rushes":
-            subprocess.run(["open", s["url"] + "/db/admin.php"])
+            subprocess.run(["open", s["url"] + ("/db/admin.php#projects" if WATCHER else "/db/admin.php")])
         elif do == "show-log":
-            subprocess.run(["open", "-a", "Console", os.path.join(LOGS, "helper.log")])
+            subprocess.run(["open", "-a", "Console", WORKLOG])
+        elif do == "open-window":
+            subprocess.run(["open", "-n", APP])          # its window, as an instance of its own
+        elif do == "quit":
+            # From the menu bar: like turning off Run in the background. It stays
+            # off, also after a restart, until it is turned on in its window.
+            log("quit from the menu bar")
+            stop_service()
+        elif do in ("watch-pause", "watch-resume") and WATCHER:
+            p = os.path.join(WDIR, "paused")
+            if do == "watch-pause":
+                os.makedirs(WDIR, exist_ok=True); open(p, "w").close()
+                self.set(said="Watching paused ✓ It looks at no project until you turn it on again. Nothing already delivered changes.")
+            else:
+                try: os.remove(p)
+                except OSError: pass
+                self.set(said="Watching ✓ Projects saved from now on are kept again.")
+            log(f"switch: {do}")
         elif do == "remove":
             self.set(step="remove")
         elif do == "remove-yes":
@@ -475,6 +531,14 @@ class Window:
     def pair(self, code):
         """The code Rushes → Setup shows, for this Mac's ID. The background
         helper restarts to send it; the one paired before is refused from now."""
+        if WATCHER:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import rushes_watcher                        # the one beside this file, inside the signed app
+            rushes_watcher.pair(self.s["url"], code)
+            if service_running()[0]:
+                restart_service()
+            self.set(said="Paired ✓ This computer can deliver to Rushes now. Rushes lists it in Setup → 06 Editors' work.")
+            return
         r = rushes(self.s["url"], "/db/pair.php", {"code": code, "host": computer_name()})
         os.makedirs(os.path.dirname(HELPER_ID), exist_ok=True)
         with open(HELPER_ID + ".new", "w") as f:
@@ -496,14 +560,14 @@ class Window:
         except (OSError, plistlib.InvalidFileException):
             ver = "?"
         body = ("**What happened**\n\n\n**What I expected**\n\n\n"
-                f"Rushes Helper {ver} · macOS {platform.mac_ver()[0]} · {platform.machine()}\n\n"
-                "Diagnostics: Rushes Helper saved them on my Desktop. (Read the file first — issues are public — "
+                f"{NAME} {ver} · macOS {platform.mac_ver()[0]} · {platform.machine()}\n\n"
+                f"Diagnostics: {NAME} saved them on my Desktop. (Read the file first — issues are public — "
                 "and drag it here only if nothing in it is private.)")
         subprocess.run(["open", "https://github.com/x0on/rushes/issues/new?" +
                         urllib.parse.urlencode({"title": "Help: ", "body": body})])
         self.set(said="A new GitHub issue is open in your browser, and " + os.path.basename(out) +
                  " is on your Desktop. Issues are public: read the file before you attach it. The issue page's address "
-                 "carries this Rushes Helper's version, the macOS version and the processor type; nothing else was sent.")
+                 f"carries this {NAME}'s version, the macOS version and the processor type; nothing else was sent.")
 
     def switch(self, do):
         r = rushes(self.s["url"], "/db/helper.php", {"action": do})
@@ -523,7 +587,7 @@ class Window:
     def check(self, url):
         ok, why, blocked = reachable(url)
         if blocked:
-            log(f"macOS refused the connection to {url}: Local Network is off for Rushes Helper")
+            log(f"macOS refused the connection to {url}: Local Network is off for {NAME}")
             self.set(step="network"); return
         if not ok:
             log(f"could not reach {url}: {why}")
@@ -540,10 +604,19 @@ class Window:
                 self.s["done"] = self.s["done"] + [line]
         err = copy_to_applications()
         if err:
-            raise RuntimeError("Could not copy Rushes Helper into Applications in your home folder: " + err)
-        did("Rushes Helper is in Applications, in your home folder")
-        fetch_files(url)
-        did("Downloaded the helper from Rushes")
+            raise RuntimeError(f"Could not copy {NAME} into Applications in your home folder: " + err)
+        did(f"{NAME} is in Applications, in your home folder")
+        if WATCHER:
+            # Its code is inside the app; only where Rushes is, kept for it (paired in its window, next).
+            os.makedirs(WDIR, exist_ok=True)
+            cfg = read_json(os.path.join(WDIR, "config.json"))
+            cfg["url"] = url
+            with open(os.path.join(WDIR, "config.json.new"), "w") as f:
+                json.dump(cfg, f)
+            os.replace(os.path.join(WDIR, "config.json.new"), os.path.join(WDIR, "config.json"))
+        else:
+            fetch_files(url)
+            did("Downloaded the helper from Rushes")
         if not install_service(url):
             raise RuntimeError("macOS would not start the background service. The detail is in ~/Library/Logs/Rushes/setup.log")
         did("Background service installed and started — it starts by itself when you log in")
@@ -672,13 +745,17 @@ function draw() {
   const err = s.error ? '<p class="err">' + esc(s.error) + '</p>' : '';
   switch (s.step) {
   case 'welcome':
-    b = '<h2>Set up Rushes Helper</h2>' +
-      '<p>Rushes Helper copies footage into your Rushes archive in the background, and Rushes → Manage shows everything it does.</p>' +
-      '<p>It carries its own copy of Python — the free, open-source programming language the helper is written in. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.</p>' +
+    b = '<h2>Set up Rushes Helper</h2>' + (s.watcher
+      ? '<p>Rushes Watcher keeps every project you save on the Projects share, and everything it uses, in your Rushes archive, without you pressing anything. ' +
+        'It only reads your projects, and copies the files they use from outside the archive (music, stock, downloads, graphics, voiceover) for Rushes to take in. ' +
+        'When you quit Premiere, it points each project you saved at the archive\'s copies, after keeping a backup of it beside it.</p>' +
+        '<p>Its icon in the menu bar shows what it is doing, with its switches. While it runs, the icon is there.</p>'
+      : '<p>Rushes Helper copies footage into your Rushes archive in the background, and Rushes → Manage shows everything it does.</p>') +
+      '<p>It carries its own copy of Python — the free, open-source programming language it is written in. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.</p>' +
       '<p>Setting up takes a minute, in this window: where Rushes is, and two permissions from macOS — to talk to your network (press Allow when macOS asks), and one switch in System Settings. The last step tells you when everything is done.</p>';
     f = btn('Cancel', 'done') + btn('Set up', 'start', true); break;
   case 'address':
-    b = '<h2>Where is Rushes?</h2><p>The address you open Rushes at in the browser. Setup → 04 Helper in Rushes shows it, with a Copy button.</p>' +
+    b = '<h2>Where is Rushes?</h2><p>The address you open Rushes at in the browser. Rushes → Setup shows it, with a Copy button.</p>' +
       '<input id="url" placeholder="http://" value="' + esc(typed != null ? typed : s.url) + '">' +
       '<p class="muted" style="margin-top:10px">If macOS asks whether Rushes Helper may find and connect to devices on your local network, press Allow.</p>' + err + busy;
     f = btn('Cancel', 'done') + btn('Next', 'address', true, !!s.busy); break;
@@ -693,7 +770,8 @@ function draw() {
     f = s.error ? btn('Try again', 'retry', true) : ''; break;
   case 'fda':
     b = '<h2>One switch left: Full Disk Access</h2>' +
-      '<p>macOS keeps apps away from network drives and other disks until you allow it. Rushes Helper needs that to read footage from the source and write it into the archive — nothing more.</p>' +
+      '<p>macOS keeps apps away from network drives and other disks until you allow it. ' + (s.watcher ? 'Rushes Watcher needs that to read your projects on the Projects share and the files they use, and to copy them to Deliveries — nothing more.'
+        : 'Rushes Helper needs that to read footage from the source and write it into the archive — nothing more.') + '</p>' +
       '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows Rushes Helper. Turn Rushes Helper on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).</p>' +
       '<p class="muted">If System Settings opens somewhere else, type Full Disk Access into its search field, top left.</p>' +
       (s.waiting ? '<div class="box"><span class="spin"></span>Waiting for the switch … this window moves on by itself the moment it is on.</div>' : '');
@@ -703,16 +781,20 @@ function draw() {
     f = btn('Done', 'done', true); break;
   case 'all-set':
     b = '<div class="big">✓</div><h2>All set</h2>' +
-      '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
-      '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>' +
+      (s.watcher ? '<p>Rushes Watcher is set up. It runs in the background, starts when you log in, and its icon is in the menu bar.</p>' +
+        '<p><b>One thing left: pair it with Rushes.</b> In Rushes → Setup → 06 Editors\' work, press Add an editor\'s computer, and type the six numbers on the next screen.</p>'
+      : '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
+        '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
       '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
-    f = btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
-  case 'home': b = home(s); f = '<span class="left">' + btn('Remove…', 'remove') + '</span>' + btn('Show the log', 'show-log') + btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
+    f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
+  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + btn('Remove…', 'remove') + '</span>' + btn('Show the log', 'show-log') + btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
   case 'remove':
     b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
   case 'removed':
-    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag Rushes Helper from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ~/archive-pilot (its progress and pairing), ~/Library/Application Support/Rushes and ~/Library/Logs/Rushes.</p>';
+    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag Rushes Helper from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ' +
+      (s.watcher ? '~/Library/Application Support/Rushes Watcher (its pairing and what it delivered) and ~/Library/Logs/Rushes Watcher. Projects keep their “Rushes backups” folders.'
+        : '~/archive-pilot (its progress and pairing), ~/Library/Application Support/Rushes and ~/Library/Logs/Rushes.') + '</p>';
     f = btn('Done', 'done', true); break;
   }
   if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left"><button data-credits="1">What it is made of</button> ')
@@ -785,6 +867,40 @@ function home(s) {
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }
+// Rushes Watcher on this computer: everything it shows is on this computer.
+const WATCHING = {idle: 'Idle — no editing program open', watching: 'Watching — an editing program is open', delivering: 'Copying a project\'s files to Deliveries',
+  pointing: 'Pointing projects at the archive', offline: 'Cannot reach Rushes', unpaired: 'Not paired with Rushes yet', paused: 'Paused'};
+function whome(s) {
+  const n = s.now || {}, on = s.running;
+  const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
+    : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but it looks at no project.'
+    : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
+  const sw = (on_, ids, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
+    '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? ids[1] : ids[0]) + '"' + (dis ? ' disabled' : '') + '></button></div>';
+  return '<h2>Rushes Watcher on this Mac</h2><div class="box">' + state + '</div>' +
+    '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div><p><b>' + esc(WATCHING[n.state] || n.state || 'Starting') + '</b>' +
+      (n.note ? ' · ' + esc(n.note) : '') + '</p></div>' +
+    (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
+    (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
+    (!s.paired ? '<div class="box"><div class="row"><div class="t"><b>Not paired yet</b><small>It delivers nothing until it is. In Rushes → Setup → 06 Editors\' work, ' +
+      'press Add an editor\'s computer, and type the six numbers here. (A code for the helper does not work here, so an editor\'s computer never takes the helper\'s place.)</small></div></div>' +
+      '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
+      btn('Pair', 'pair', true, !!s.busy) + '</div></div>'
+      : '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — Rushes lists this computer in Setup → 06 Editors\' work.</p>') +
+    '<div class="box">' +
+      sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here. Its icon goes with it.') +
+      sw(!s.paused, ['watch-resume', 'watch-pause'], 'Watch projects', 'Off: it looks at no project; nothing already delivered changes. The menu bar icon has the same switch.', !on) +
+    '</div>' +
+    '<div class="box">' +
+      '<div class="row"><div class="t">Diagnostics<small>Versions, switches and what it said lately, in one text file on your Desktop, to read before you send it to anyone. Nothing is sent.</small></div>' +
+        btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Ask for help<small>Opens a new issue for Rushes on GitHub, where help is asked for in the open. Issues are public: read the diagnostics before you attach them.</small></div>' +
+        btn('Ask for help', 'ask-help', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Support access<small>None. There is no way for anyone to connect to this Mac through Rushes Watcher.</small></div></div>' +
+    '</div>' +
+    '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
+      esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
+}
 // Asks again 1.5 s after each answer, never while the last question is still out.
 let polling = false;
 async function poll() {
@@ -816,7 +932,7 @@ def serve(port, key):
 
         def do_GET(self):
             if self.path == f"/{key}/":
-                return self._send(200, PAGE, "text/html")
+                return self._send(200, PAGE.replace("Rushes Helper", NAME), "text/html")
             if self.path == f"/{key}/credits":
                 try:
                     return self._send(200, open(os.path.join(APP, "Contents", "Resources", "CREDITS.md"), "rb").read(), "text/plain")
@@ -845,8 +961,127 @@ def serve(port, key):
     return 0
 
 
-# ── run by macOS: the helper itself ─────────────────────────────────────────
+# ── the menu bar icon: what it says, and what its choices do ────────────────
+# The launcher draws the icon and the menu (launcher.c); this answers it, on
+# this computer only, behind the same kind of random key as the window. The
+# menu holds every switch someone changes day to day, as Tailscale's does:
+# each acts at once and can be turned back. What cannot be undone (Remove,
+# pairing) is in the window, which asks twice.
+PHASE = {"copying": "Copying", "looking": "Looking for new footage", "waiting": "Waiting — nothing queued",
+         "tracing": "Matching earlier copies", "analysing": "Describing footage", "tidying": "Tidying up",
+         "delivering": "Taking in an editor's delivery", "paused": "Paused from Manage", "blocked": "Stopped: needs you",
+         "done": "Finished", "stopped": "Stopped", "proving": "Checking copies (reading only)"}
+WATCHING = {"idle": "Idle — no editing program open", "watching": "Watching — an editing program is open",
+            "delivering": "Copying a project's files to Deliveries", "pointing": "Pointing projects at the archive",
+            "paused": "Paused — it looks at no project", "offline": "Cannot reach Rushes",
+            "unpaired": "Not paired with Rushes yet"}
+
+
+def menu_state(w):
+    s = dict(w.s); s.update(w.home())
+    info = lambda t: {"label": t}
+    items, lately = [], [l[-80:] for l in (s.get("log") or [])[-4:]]
+    said = s.get("said") if time.time() - w.said_at < 30 else ""
+    if WATCHER:
+        n = s.get("now") or {}
+        st = "paused" if s.get("paused") else ("unpaired" if not s.get("paired") else n.get("state") or "idle")
+        icon = {"paused": "pause.circle", "unpaired": "exclamationmark.triangle", "offline": "wifi.exclamationmark",
+                "watching": "eye", "delivering": "arrow.up.circle", "pointing": "arrow.triangle.branch"}.get(st, "film")
+        head = WATCHING.get(st, st) + (f" · {n['note']}" if n.get("note") and st not in ("idle", "paused") else "")
+        items += [info(head)] + ([info("✓ " + said)] if said else []) + [{"sep": True}, info("Lately:")]
+        items += [info("   " + l) for l in lately] or [info("   nothing yet")]
+        items += [{"sep": True},
+                  {"label": "Watch projects", "do": "watch-resume" if s.get("paused") else "watch-pause", "on": not s.get("paused")}]
+        if not s.get("paired"):
+            items.append({"label": f"Pair with Rushes… (in the window)", "do": "open-window"})
+    else:
+        n, up = s.get("now") or {}, s.get("rushes")
+        busy = n.get("phase") in ("copying", "looking", "tracing", "analysing", "tidying", "delivering", "proving")
+        icon = ("exclamationmark.triangle" if s.get("stopped") or n.get("phase") == "blocked" else "wifi.exclamationmark" if not up
+                else "pause.circle" if s.get("paused") else "arrow.triangle.2.circlepath" if busy else "film")
+        head = (f"Stopped by itself — {s['stopped']}" if s.get("stopped") else f"Cannot reach Rushes ({s.get('rushes_why', '')})" if not up
+                else "Paused — copying starts nothing new" if s.get("paused") else
+                PHASE.get(n.get("phase"), n.get("phase") or "Waiting — nothing queued")
+                + (f" · {os.path.basename(n['source'].rstrip('/'))}" if n.get("source") else "")
+                + (f" · {n.get('copied', 0):,} of {n['of']:,}" if n.get("of") else ""))
+        items += [info(head)]
+        d = s.get("describing") or {}
+        if d.get("phase") == "analysing":
+            items.append(info(f"Describing {d.get('label', '')}" + (f" · {d.get('n')} of {d.get('of')}" if d.get("of") else "")))
+        if said: items.append(info("✓ " + said))
+        items += [{"sep": True}, info("Lately:")] + ([info("   " + l) for l in lately] or [info("   nothing yet")]) + [{"sep": True}]
+        # a switch: ticked when on; choosing it turns it the other way (Rushes keeps these, so not while unreachable)
+        sw = lambda label, on_, ids: dict({"label": label, "on": bool(on_)}, **({"do": ids[1] if on_ else ids[0]} if up else {}))
+        items += [sw("Copy footage", not s.get("paused"), ("resume", "pause")),
+                  sw("Describe footage", not s.get("describe_paused"), ("describe-resume", "describe-pause")),
+                  sw("Check copies", not s.get("check_paused"), ("check-resume", "check-pause")),
+                  sw("Reconnect network drives", not s.get("no_reconnect"), ("reconnect-on", "reconnect-off"))]
+        if s.get("stopped"):
+            items.append({"label": "Try again", "do": "try-again"})
+        if up and s.get("pairing") != "this":
+            items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
+    items += [{"sep": True}, info(f"Rushes: {s.get('url') or 'not set up'}"),
+              {"label": "Open Rushes", "do": "open-rushes"}, {"label": "Show the log", "do": "show-log"},
+              {"label": "Collect diagnostics", "do": "diagnostics"}, {"label": "Ask for help…", "do": "ask-help"},
+              {"label": f"Open {NAME}…", "do": "open-window"}, {"sep": True},
+              {"label": f"Quit {NAME}", "do": "quit"}]
+    return {"icon": icon, "tip": f"{NAME} — {head}", "items": items}
+
+
+def menu(port, key):
+    w = Window()
+    w.said_at = 0
+    seen = {"said": ""}
+    cache = {"at": 0.0, "m": None}
+    lock = threading.Lock()
+
+    def fresh(force=False):
+        with lock:
+            # Asked of Rushes when the menu is opened, and otherwise every 30 s for the icon.
+            if force or time.time() - cache["at"] > 30:
+                if w.s.get("said") != seen["said"]:
+                    seen["said"] = w.s.get("said"); w.said_at = time.time()
+                try: cache["m"] = menu_state(w)
+                except Exception as e:
+                    cache["m"] = {"icon": "exclamationmark.triangle", "tip": f"{NAME}: {e}",
+                                  "items": [{"label": f"Could not read its state ({e})"}, {"sep": True},
+                                            {"label": f"Open {NAME}…", "do": "open-window"}, {"label": f"Quit {NAME}", "do": "quit"}]}
+                cache["at"] = time.time()
+            return cache["m"]
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            u = urllib.parse.urlsplit(self.path)
+            if u.path == f"/{key}/menu":
+                body = json.dumps(fresh(force="fresh" in u.query and time.time() - cache["at"] > 2)).encode()
+            elif u.path == f"/{key}/do":
+                a = urllib.parse.parse_qs(u.query).get("a", [""])[0]
+                log(f"menu: {a}")
+                w.act(a, {})
+                time.sleep(0.3)                                    # most choices answer at once
+                cache["at"] = 0
+                body = b"{}"
+            else:
+                self.send_response(404); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), H)
+    srv.daemon_threads = True
+    srv.serve_forever()
+
+
+# ── run by macOS: the work itself ───────────────────────────────────────────
 def service(args):
+    if WATCHER:
+        # Its code is the one inside this signed app; nothing is downloaded.
+        os.execv(sys.executable, [sys.executable, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "rushes_watcher.py"), "run"])
     # The helper checks its own updates with the release.py beside it. One
     # installed before signed releases has none: it gets the one inside this
     # app (which macOS checks is signed), never one downloaded.
@@ -896,6 +1131,9 @@ if __name__ == "__main__":
     if "--window" in a:
         i = a.index("--window")
         sys.exit(serve(int(a[i + 1]), a[i + 2]))
+    if "--menu" in a:
+        i = a.index("--menu")
+        sys.exit(menu(int(a[i + 1]), a[i + 2]))
     if "--service" in a or "--watch" in a:
         sys.exit(service(a))
-    print("Rushes Helper: open it from Finder to see its window.")
+    print(f"{NAME}: open it from Finder to see its window.")

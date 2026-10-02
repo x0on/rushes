@@ -25,6 +25,7 @@ check 'echo "$out" | grep -q "URL='"'"'http://nas.test'"'"'" && echo "$out" | gr
 check 'call GET "{\"install\":\"\"}" | grep -q "^CERT=[0-9a-f]\{64\}$" && call GET "{\"install\":\"\"}" | grep -q "extract-certificates"' \
       'and opens it only if it is signed with the Rushes author'"'"'s certificate'
 check 'call GET "{\"app\":\"\"}" | grep -q "not on the archive yet"' 'no app on the archive: says so'
+check 'call GET "{\"app\":\"watcher\"}" | grep -q "Rushes Watcher for Mac is not on the archive yet"' 'and Rushes Watcher, for editors'"'"' computers, the same way'
 printf 'PK-fake' > "$ROOT/archive/_rushes/Rushes Helper.zip"
 check 'call GET "{\"app\":\"\"}" | grep -q "PK-fake"' 'the app is served from the archive'
 check 'call GET "{\"remove\":\"\"}" | grep -q "launchctl bootout"' 'remove script takes it off again'

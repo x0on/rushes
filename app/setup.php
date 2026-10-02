@@ -598,6 +598,9 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['host']) ?>">Remove</button>
           </div>
         <?php endforeach; ?>
+        <p class="note" style="margin:8px 0 4px">On the editor's computer: open Rushes in the browser, come to this page,
+          <a href="/db/helper.php?app=watcher">download Rushes Watcher</a>, open it and follow its window. When it asks
+          for six numbers, press the button below here and type them there.</p>
         <p style="margin:8px 0"><button type="button" class="btn" id="wPair">Add an editor's computer</button> <span id="wSaid"></span></p>
         <script>
         (function () {

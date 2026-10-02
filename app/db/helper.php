@@ -59,11 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // name, which keeps working when its number changes.
     if (isset($_GET['where'])) out(['url' => rtrim((string)(settings()['archive']['url'] ?? ''), '/'), 'name' => name_url()]);
     if (isset($_GET['app'])) {
-        // Built by mac/build.py and put next to the helper on the archive.
-        $z = archive_dir() . '/_rushes/Rushes Helper.zip';
-        if (!is_readable($z)) bail(404, 'Rushes Helper for Mac is not on the archive yet (_rushes/Rushes Helper.zip).');
+        // Built by mac/build.py and put next to the helper on the archive:
+        // Rushes Helper, or (?app=watcher) Rushes Watcher for editors' computers.
+        $n = $_GET['app'] === 'watcher' ? 'Rushes Watcher' : 'Rushes Helper';
+        $z = archive_dir() . "/_rushes/$n.zip";
+        if (!is_readable($z)) bail(404, "$n for Mac is not on the archive yet (_rushes/$n.zip).");
         header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="Rushes Helper.zip"');
+        header("Content-Disposition: attachment; filename=\"$n.zip\"");
         header('Content-Length: ' . filesize($z));
         header('Cache-Control: no-store');
         readfile($z); exit;

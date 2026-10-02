@@ -99,6 +99,12 @@ def save(path, data):
     os.replace(path + ".new", path)
 
 
+def say_now(state, note=""):
+    """What it is doing, for its icon and its window (rushes_helper.py reads it)."""
+    try: save(os.path.join(HOME, "now.json"), {"state": state, "note": note, "at": int(time.time())})
+    except OSError: pass
+
+
 # ── Rushes ──────────────────────────────────────────────────────────────────
 def rushes(cfg, get=None, post=None, path="/db/watcher.php", timeout=15):
     url = cfg["url"].rstrip("/") + path + ("?" + urllib.parse.urlencode(get) if get else "")
@@ -280,7 +286,8 @@ class Watcher:
         self.cfg, self.state = cfg, load(STATE, {"projects": {}})
         self.hello, self.hello_at, self.last_scan, self.since, self.said, self.now = None, 0, 0, 0, 0, ""
 
-    def report(self, state, force=False):
+    def report(self, state, force=False, note=""):
+        say_now(state, note)
         if not force and state == self.now and time.time() - self.said < 300:
             return
         self.now, self.said = state, time.time()
@@ -308,7 +315,7 @@ class Watcher:
             log("editing program closed — pointing its projects at the archive")
             for p in [p for p, s in self.state["projects"].items() if s.get("touched")]:
                 self.close(p, where_)
-        self.report("watching" if open_ else "idle")
+        self.report("watching" if open_ else "idle", note=", ".join(open_))
 
     def look(self, where_):
         if not where_["projects"] or not os.path.isdir(where_["projects"]):
@@ -346,6 +353,7 @@ class Watcher:
             if s["delivered"].get(f) != [st.st_size, int(st.st_mtime)]:
                 new.append((f, kind_of(f)))
         if new:
+            say_now("delivering", f"{len(new)} file(s) used by {os.path.basename(p)}")
             try:
                 batch = deliver(self.cfg, self.hello, where_, rel, shoot, new)
                 for f, _ in new:
@@ -367,6 +375,7 @@ class Watcher:
     def close(self, p, where_):
         """The project, pointed at the archive's copies (a backup first), and a copy into the archive."""
         s, rel = self.state["projects"][p], os.path.relpath(p, where_["projects"]).replace(os.sep, "/")
+        say_now("pointing", os.path.basename(p))
         try:
             got = rushes(self.cfg, get={"where": "", "project": rel}).get("files") or {}
             before = os.stat(p).st_mtime
@@ -397,9 +406,15 @@ class Watcher:
 
 def run(once=False):
     cfg = load(CONFIG, {})
-    if not cfg.get("id"):
-        sys.exit("Not paired yet: in Rushes → Setup → Editors' computers, get a code, then\n"
-                 "  python3 rushes_watcher.py pair <rushes address> <code>")
+    while not cfg.get("id"):
+        # Waits, looking at nothing, until it is paired (in its window); said once.
+        if once:
+            sys.exit("Not paired yet: in Rushes → Setup → 06 Editors' work, get a code, then\n"
+                     "  python3 rushes_watcher.py pair <rushes address> <code>")
+        if not os.path.exists(os.path.join(HOME, "now.json")) or load(os.path.join(HOME, "now.json"), {}).get("state") != "unpaired":
+            log("not paired with Rushes yet — open Rushes Watcher to pair it")
+        say_now("unpaired")
+        time.sleep(30); cfg = load(CONFIG, {})
     w, fails = Watcher(cfg), 0
     log(f"Rushes Watcher {VERSION} started, for Rushes at {cfg['url']}")
     while True:
@@ -407,11 +422,13 @@ def run(once=False):
             w.tick(); fails = 0
         except Exception as e:                         # Rushes not answering: asked less and less (rule 4)
             fails += 1
+            later = min(EVERY * 2 ** fails, 900)
             if fails in (1, 3, 10):
-                log(f"! cannot reach Rushes ({e}) — asking again in {min(EVERY * 2 ** fails, 900) // 60 or 1} min")
+                log(f"! cannot reach Rushes ({e}) — asking again in {later // 60 or 1} min")
+            say_now("offline", f"asking again in {later // 60 or 1} min")
             w.hello = None
             if once: raise
-            time.sleep(min(EVERY * 2 ** fails, 900)); continue
+            time.sleep(later); continue
         if once: return w
         time.sleep(EVERY)
 
