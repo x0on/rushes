@@ -1144,6 +1144,15 @@ While either app works, its icon is in the menu bar, the way Tailscale's is.
 **No icon, nothing running:** if the Mac cannot show the icon, the work is
 stopped, and its log says why (it tries again in 10 minutes).
 
+**One icon, however many Rushes apps a Mac runs.** A Mac that is both the
+helper and an editor's computer runs Rushes Helper and Rushes Watcher, each
+doing its own work, but the menu bar has one Rushes icon: the Helper's, with a
+section for each app (RUSHES HELPER, RUSHES WATCHER), each with its own state
+and switches, Open Rushes once, and **Quit Rushes Helper and Rushes Watcher**.
+The Watcher hides its own icon while the Helper runs, and shows it again if the
+Helper stops, so there is always exactly one. (Rushes itself on a Mac, later,
+joins the same menu as a third section.)
+
 - **The icon says the state at a glance:** a film strip when idle, turning
   arrows when the helper is working (an eye when the Watcher is watching, an
   arrow up while it sends to Rushes), a pause sign when paused, a warning

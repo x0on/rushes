@@ -78,6 +78,31 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(got["icon"], "exclamationmark.triangle")
         self.assertTrue(any(i.get("do") == "open-window" and "Pair" in i["label"] for i in got["items"]))
 
+    def test_one_icon_for_both_apps_on_one_mac(self):
+        """Helper and Watcher on the same Mac: the Helper draws the one icon, with a section for the
+        Watcher whose choices reach the Watcher; the Watcher hides its own."""
+        both = m_ok = lambda m: patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 0, "pid = 42", ""))
+        w = front("Rushes Watcher", self.home)
+        with patch.dict(os.environ, {"HOME": str(self.home)}), both(w):
+            got = serve(w)("menu?fresh=1")
+        self.assertIs(got.get("hide"), True)
+        h = front("Rushes Helper", self.home)
+        with patch.dict(os.environ, {"HOME": str(self.home)}), both(h):
+            ask = serve(h)
+            got = ask("menu?fresh=1")
+            self.assertTrue(plain(got), got)
+            self.assertNotIn("hide", got)
+            labels = [i.get("label") for i in got["items"]]
+            self.assertEqual(labels[0], "RUSHES HELPER")
+            self.assertIn("RUSHES WATCHER", labels)
+            sw = next(i for i in got["items"] if i.get("label") == "Watch projects")
+            self.assertEqual(sw["do"], "watcher-watch-pause")
+            self.assertEqual(sum(1 for i in got["items"] if i.get("do") == "open-rushes"), 1)
+            self.assertEqual(got["items"][-1], {"label": "Quit Rushes Helper and Rushes Watcher", "do": "quit-all"})
+            with patch.object(h.role("Rushes Watcher")[0], "launchctl", return_value=h.subprocess.CompletedProcess([], 0, "pid = 42", "")):
+                ask("do?a=watcher-watch-pause")                # chosen in the Helper's menu: done by the Watcher
+            self.assertTrue((self.home / "Library/Application Support/Rushes Watcher/paused").exists())
+
     def test_helper_without_rushes(self):
         m = front("Rushes Helper", self.home)
         with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")):

@@ -1053,7 +1053,70 @@ WATCHING = {"idle": "Idle — no editing program open", "watching": "Watching �
             "unpaired": "Not paired with Rushes yet"}
 
 
+# ── one Rushes icon on a Mac ────────────────────────────────────────────────
+# A Mac can run more than one Rushes app (Rushes Helper, Rushes Watcher; Rushes
+# itself, later): each does its own work, but the menu bar has one Rushes icon.
+# The first of them that runs draws it, with a section for each other one; the
+# others hide theirs. Quit one and the next draws it, so there is always one.
+ROLES = ("Rushes Helper", "Rushes Watcher")
+_label = lambda n: "org.rushes.watcher" if n == "Rushes Watcher" else "org.rushes.helper"
+_running = {"at": 0.0, "names": [NAME]}
+def running_roles():
+    """The Rushes apps running in the background on this Mac, in ROLES order (macOS asked at most every 20 s)."""
+    if time.time() - _running["at"] > 20:
+        _running.update(at=time.time(), names=[n for n in ROLES if n == NAME or
+                                               launchctl("print", f"gui/{UID}/{_label(n)}").returncode == 0])
+    return _running["names"]
+
+
+_roles = {}
+def role(name):
+    """Another Rushes app's menu, from this same file as that app reads it: its name decides its folders."""
+    if name not in _roles:
+        import importlib.util
+        app = f"/Applications/{name}.app"
+        try:      # where that app really is: its background service says
+            with open(os.path.join(HOME, "Library", "LaunchAgents", _label(name) + ".plist"), "rb") as f:
+                app = os.path.abspath(os.path.join(plistlib.load(f)["ProgramArguments"][0], "..", "..", ".."))
+        except Exception:
+            pass
+        was = {k: os.environ.get(k) for k in ("RUSHES_NAME", "RUSHES_APP")}
+        os.environ.update(RUSHES_NAME=name, RUSHES_APP=app)
+        try:
+            spec = importlib.util.spec_from_file_location("rushes_role_" + name.split()[-1].lower(), os.path.abspath(__file__))
+            m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+        finally:
+            for k, v in was.items():
+                if v is None: os.environ.pop(k, None)
+                else: os.environ[k] = v
+        w = m.Window(); w.said_at = 0
+        _roles[name] = (m, w)
+    return _roles[name]
+
+
 def menu_state(w):
+    me = own_menu(w)
+    names = running_roles()
+    if names[0] != NAME:
+        me["hide"] = True                 # another Rushes app draws the one icon, with this one in it
+        return me
+    others = [n for n in names if n != NAME]
+    if not others:
+        return me
+    items = [{"label": NAME.upper()}] + me["items"][:-2]       # all but the last line and its Quit
+    for n in others:
+        m, ow = role(n)
+        o = m.own_menu(ow); tag = n.split()[-1].lower() + "-"
+        items += [{"sep": True}, {"label": n.upper()}]
+        items += [dict(i, do=tag + i["do"]) if "do" in i else i for i in o["items"][:-2]
+                  if i.get("do") not in ("open-rushes", "ask-help")]        # those once, in the first section
+        if o["state"] == "attention" and me["state"] != "attention":
+            me.update(state="attention", tip=o["tip"])
+    me["items"] = items + [{"sep": True}, {"label": "Quit " + " and ".join(names), "do": "quit-all"}]
+    return me
+
+
+def own_menu(w):
     s = dict(w.s); s.update(w.home())
     info = lambda t: {"label": t}
     items, lately = [], [l[-80:] for l in (s.get("log") or [])[-4:]]
@@ -1142,7 +1205,16 @@ def menu(port, key):
             elif u.path == f"/{key}/do":
                 a = urllib.parse.parse_qs(u.query).get("a", [""])[0]
                 log(f"menu: {a}")
-                w.act(a, {})
+                other = next((n for n in ROLES if n != NAME and a.startswith(n.split()[-1].lower() + "-")), None)
+                if a == "quit-all":                                # every Rushes app on this Mac, as one
+                    for n in running_roles():
+                        if n != NAME: role(n)[1].act("quit", {})
+                    w.act("quit", {})
+                elif other:                                        # a choice in another app's section
+                    ow = role(other)[1]; ow.act(a[len(other.split()[-1]) + 1:], {}); ow.said_at = time.time()
+                else:
+                    w.act(a, {})
+                _running["at"] = 0
                 time.sleep(0.3)                                    # most choices answer at once
                 cache["at"] = 0
                 body = b"{}"

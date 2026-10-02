@@ -209,6 +209,9 @@ typedef struct { double w, h; } Size;
 static void refresh(id self, SEL cmd, id d) {
     (void)self; (void)cmd;
     id button = m0(status_, "button");
+    // One Rushes icon on a Mac: when another Rushes app draws it (with this one in its menu), this one hides.
+    id hide = d ? m1(d, "objectForKey:", str("hide")) : NULL;
+    mb(status_, "setVisible:", hide && ((signed char (*)(id, SEL))msg)(hide, sel("boolValue")) ? 0 : 1);
     const char *st = d ? utf8(m1(d, "objectForKey:", str("state"))) : "offline";
     if (!logo_ && (logo_ = m1(m0(C("NSBundle"), "mainBundle"), "imageForResource:", str("MenuIcon")))) {
         m0(logo_, "retain"); mb(logo_, "setTemplate:", 1);
