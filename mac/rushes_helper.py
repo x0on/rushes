@@ -94,6 +94,11 @@ def service_running():
     return r.returncode == 0, int(m.group(1)) if m else 0
 
 
+def read_text(path, binary=False):
+    with open(path, "rb" if binary else "r") as f:
+        return f.read()
+
+
 def read_json(path):
     try:
         with open(path) as f:
@@ -307,11 +312,11 @@ def helper_id():
         return ""
 
 
-def rushes(url, path, data=None):
+def rushes(url, path, data=None, timeout=6):
     body = urllib.parse.urlencode(data).encode() if data is not None else None
     req = urllib.request.Request(url.rstrip("/") + path, data=body, headers={"X-Rushes-Helper": helper_id()})
     try:
-        with urllib.request.urlopen(req, timeout=6) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:              # Rushes' own words, when it gives them
         try: raise RuntimeError(json.loads(e.read().decode("utf-8", "replace"))["error"]) from None
@@ -431,6 +436,10 @@ class Window:
                 h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
         except OSError:
             pass
+        # Paired or not is asked first and on its own: the box to type the code
+        # in is shown even when the rest of Rushes is slow to answer.
+        try: h["pairing"] = rushes(self.s["url"], "/db/pair.php", timeout=15).get("pairing", "")
+        except Exception: h["pairing"] = ""              # not known right now: the box stays
         try:
             c = rushes(self.s["url"], "/db/helper.php?control")
             h["paused"], h["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
@@ -439,8 +448,6 @@ class Window:
             st = rushes(self.s["url"], "/db/state.php")
             h["now"] = st.get("copy") or {}
             h["describing"] = ((st.get("helper") or {}).get("describe")) or {}
-            try: h["pairing"] = rushes(self.s["url"], "/db/pair.php").get("pairing", "")
-            except Exception: h["pairing"] = ""          # a Rushes from before pairing
             h["rushes"] = True
         except Exception as e:
             h["rushes"] = False; h["rushes_why"] = str(getattr(e, "reason", e))
@@ -548,7 +555,7 @@ class Window:
                 restart_service()
             self.set(said="Paired ✓ This computer can deliver to Rushes now. Rushes lists it in Setup → 06 Editors' work.")
             return
-        r = rushes(self.s["url"], "/db/pair.php", {"code": code, "host": computer_name()})
+        r = rushes(self.s["url"], "/db/pair.php", {"code": code, "host": computer_name()}, timeout=30)
         os.makedirs(os.path.dirname(HELPER_ID), exist_ok=True)
         with open(HELPER_ID + ".new", "w") as f:
             f.write(r["id"] + "\n")
@@ -842,9 +849,11 @@ function home(s) {
     // what went wrong, said where it happened (a wrong pairing code, a switch Rushes refused, …)
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
-    (s.rushes && s.pairing && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
+    // The place to type the code: always there until this Mac is the paired one.
+    (s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
       (s.pairing === 'other' ? '<b>Rushes is paired with another helper</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
-        : '<b>Not paired yet</b><small>Rushes gives work to any helper on the network until one is paired; two at once would copy over each other. To pair this one, ') +
+        : s.pairing === 'none' ? '<b>Not paired yet</b><small>Rushes gives work to any helper on the network until one is paired; two at once would copy over each other. To pair this one, '
+        : '<b>Pair this Mac</b><small>Rushes did not say whether this Mac is paired (it is slow to answer right now). If Rushes → Setup → 04 says no helper is paired, or names another computer, ') +
       'open Rushes → Setup → Pair a helper and type the six numbers here. The helper paired before is refused from then on.</small></div></div>' +
       '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
       btn('Pair', 'pair', true, !!s.busy) + '</div></div>'
@@ -1027,7 +1036,7 @@ def menu_state(w):
                   sw("Reconnect network drives", not s.get("no_reconnect"), ("reconnect-on", "reconnect-off"))]
         if s.get("stopped"):
             items.append({"label": "Try again", "do": "try-again"})
-        if up and s.get("pairing") != "this":
+        if s.get("pairing") != "this":
             items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
     items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}"),
               {"label": "Open Rushes", "do": "open-rushes"}, {"label": "Show the log", "do": "show-log"},
@@ -1091,10 +1100,30 @@ def service(args):
     if WATCHER:
         # Its code is the one inside this signed app; nothing is downloaded.
         os.execv(sys.executable, [sys.executable, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "rushes_watcher.py"), "run"])
+    here = os.path.dirname(os.path.abspath(__file__))
+    # The helper's code that came inside this app (a signed release, checked
+    # here as any update is) goes in when it is newer than the one installed,
+    # so a new app brings its code with it, even before Rushes can be asked.
+    try:
+        import release
+        sig = read_text(os.path.join(here, "release.sig"))
+        mine = read_text(os.path.join(DIR, "release.sig")) if os.path.exists(os.path.join(DIR, "release.sig")) else ""
+        if release.made_of(sig) > release.made_of(mine):
+            got = {f: read_text(os.path.join(here, f), binary=True) for f in FILES}
+            release.check(got, sig)
+            os.makedirs(DIR, exist_ok=True)
+            for f, data in list(got.items()) + [("release.sig", sig.encode())]:
+                with open(os.path.join(DIR, f + ".new"), "wb") as fh:
+                    fh.write(data)
+                os.replace(os.path.join(DIR, f + ".new"), os.path.join(DIR, f))
+            print(f"installed the helper's code that came with this app (signed {time.strftime('%Y-%m-%d %H:%M', time.localtime(release.made_of(sig)))})")
+    except FileNotFoundError:
+        pass                                             # an app without the code inside: it comes from Rushes
+    except Exception as e:
+        print(f"the helper's code inside this app was not installed ({e}); the one in place is kept")
     # The helper checks its own updates with the release.py beside it. One
     # installed before signed releases has none: it gets the one inside this
     # app (which macOS checks is signed), never one downloaded.
-    here = os.path.dirname(os.path.abspath(__file__))
     if os.path.exists(os.path.join(DIR, "ingest.py")) and not os.path.exists(os.path.join(DIR, "release.py")):
         try: shutil.copy(os.path.join(here, "release.py"), os.path.join(DIR, "release.py"))
         except OSError: pass

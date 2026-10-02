@@ -2,6 +2,7 @@
 # fixture home folder: what the launcher draws, and a switch chosen in it.
 #   cd tests && python3 -m unittest test_menu
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -87,6 +88,40 @@ class MenuTests(unittest.TestCase):
         sw = next(i for i in got["items"] if i.get("label") == "Copy footage")
         self.assertNotIn("do", sw)                       # Rushes keeps these switches: not while it cannot be reached
         self.assertEqual(got["items"][-1], {"label": "Quit Rushes Helper", "do": "quit"})
+
+
+class BundledCodeTests(unittest.TestCase):
+    """A new Rushes Helper brings the helper's code inside it, a signed release,
+    installed when newer than the one in place, never when it is not signed."""
+    def test_installed_when_newer_and_signed(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as t:
+            home, app = Path(t) / "home", Path(t) / "Rushes Helper.app/Contents/Resources"
+            app.mkdir(parents=True); home.mkdir()
+            shutil.copy(HERE.parent / "mac/rushes_helper.py", app)
+            for f in ("ingest.py", "transfer_state.py", "analyze.py", "release.py", "release.sig"):
+                shutil.copy(HERE.parent / "app" / f, app)
+            with patch.dict(os.environ, {"RUSHES_NAME": "Rushes Helper", "HOME": str(home)}):
+                spec = importlib.util.spec_from_file_location("front_bundled", app / "rushes_helper.py")
+                m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+            sys.path.insert(0, str(app))
+            try:
+                with patch.object(m.os, "execv"), patch("sys.stdout", new_callable=io.StringIO) as out:
+                    m.service(["--watch"])
+                self.assertIn("installed the helper's code that came with this app", out.getvalue())
+                for f in ("ingest.py", "release.sig"):
+                    self.assertEqual((Path(m.DIR) / f).read_bytes(), (app / f).read_bytes())
+                with patch.object(m.os, "execv"), patch("sys.stdout", new_callable=io.StringIO) as out:
+                    m.service(["--watch"])                    # the same release again: left as it is
+                self.assertNotIn("installed", out.getvalue())
+                (Path(m.DIR) / "release.sig").write_text("")  # older in place, but the app's copy was changed:
+                (app / "ingest.py").write_bytes(b"print('not signed')")
+                with patch.object(m.os, "execv"), patch("sys.stdout", new_callable=io.StringIO) as out:
+                    m.service(["--watch"])
+                self.assertIn("was not installed", out.getvalue())
+                self.assertNotEqual((Path(m.DIR) / "ingest.py").read_bytes(), b"print('not signed')")
+            finally:
+                sys.path.remove(str(app)); sys.modules.pop("release", None)
 
 
 if __name__ == "__main__":

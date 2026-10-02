@@ -3,6 +3,18 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.9.1 — October 2026
+
+- **Rushes Helper:** the box to type the pairing code is always in its window
+  until this Mac is paired, even when Rushes is slow to answer; pairing waits
+  up to 30 seconds for Rushes.
+- **Rushes Helper brings the helper's code with it** (a signed release),
+  installed when newer than the one in place: a new app works at once, even
+  before Rushes can be asked.
+- **Manage answers fast on a busy archive:** the archive's totals and the
+  holding-folder check are worked out once per catalogue update, not on every
+  look (a rebuilding disk made Overview and the Helper's window time out).
+
 ## 0.9.0 — October 2026
 
 The first numbered version: everything installed on install day.

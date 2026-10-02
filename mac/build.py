@@ -110,8 +110,10 @@ shutil.copy(os.path.join(HERE, "rushes_helper.py"), os.path.join(C, "Resources")
 if WATCHER:
     shutil.copy(os.path.join(HERE, "rushes_watcher.py"), os.path.join(C, "Resources"))
 else:
-    # Checks that the helper's code it downloads is a signed release (app/release.py).
-    shutil.copy(os.path.join(HERE, "..", "app", "release.py"), os.path.join(C, "Resources"))
+    # Checks that the helper's code it downloads is a signed release (app/release.py),
+    # and brings that code with it (installed when newer than the one in place).
+    for f in ("release.py", "ingest.py", "transfer_state.py", "analyze.py", "release.sig"):
+        shutil.copy(os.path.join(HERE, "..", "app", f), os.path.join(C, "Resources"))
 shutil.copy(os.path.join(HERE, "AppIcon.icns"), os.path.join(C, "Resources"))
 # What Rushes is made of, and whose each part is: shown in the app's window.
 shutil.copy(os.path.join(HERE, "..", "CREDITS.md") if os.path.exists(os.path.join(HERE, "..", "CREDITS.md"))

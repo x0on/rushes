@@ -32,7 +32,19 @@ $ago = function (int $t) use ($now): string {
 // ── the archive, in a line ────────────────────────────────────────────────
 $files = (int)meta_get('files_imported', '0');
 $imported = (int)meta_get('imported_at', '0');
-$bytes = $files ? (int)db()->querySingle('SELECT COALESCE(SUM(bytes),0) FROM files') : 0;
+// The totals change only when the catalogue (or the cache rules) do: worked out
+// once then, not on every look. Adding up a million rows each time made every
+// page that asks this wait, and a busy archive (a disk rebuilding) made it time out.
+$sweep = array_map('cache_sql', cache_groups('sweep'));
+$for = $imported . ':' . $files . ':' . md5(implode('|', $sweep));
+$tot = json_decode((string)meta_get('totals', ''), true);
+if (!is_array($tot) || ($tot['for'] ?? '') !== $for) {
+    $j = $sweep ? db()->querySingle("SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM files WHERE " . implode(' OR ', $sweep), true) : null;
+    $tot = ['for' => $for, 'bytes' => $files ? (int)db()->querySingle('SELECT COALESCE(SUM(bytes),0) FROM files') : 0,
+            'junk' => ['n' => (int)($j['n'] ?? 0), 'b' => (int)($j['b'] ?? 0)]];
+    meta_set('totals', json_encode($tot));
+}
+$bytes = $tot['bytes'];
 
 $disk = ['used' => 0, 'free' => 0, 'pct' => 0];
 if (is_readable("$WEB/disk.txt")) {
@@ -144,10 +156,8 @@ if ($sync === 'retrying' && (int)meta_get('search_sync_failures', '0') >= 3) {
         'act' => ['manifest', 'Build the first file list']];
 }
 
-// regenerable junk sitting in the archive
-$sweep = array_map('cache_sql', cache_groups('sweep'));
-$junk = $sweep ? db()->querySingle("SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM files
-    WHERE " . implode(' OR ', $sweep), true) : ['n' => 0, 'b' => 0];
+// regenerable junk sitting in the archive (counted with the totals, above)
+$junk = $tot['junk'];
 if ($junk && $junk['n'] > limit('cache_min_files', 100)) {
     $c[] = ['level' => 'info',
         'tile' => ['lab' => 'Rebuildable cache', 'big' => tb($junk['b']),
@@ -162,9 +172,15 @@ if ($junk && $junk['n'] > limit('cache_min_files', 100)) {
 $hold = (int)@file_get_contents("$WEB/holding-kb.txt") * 1024;
 if ($hold > limit('holding_min_bytes', 1073741824)) {
     $verdict = null;
-    if (is_readable("$WEB/verify-result.tsv"))
-        foreach (file("$WEB/verify-result.tsv") as $l)
-            if (str_starts_with($l, 'VERDICT')) $verdict = trim(explode("\t", $l)[1] ?? '');
+    // read once per new check (the file is large), then remembered
+    $vm = (int)@filemtime("$WEB/verify-result.tsv");
+    $vc = json_decode((string)meta_get('verify_verdict', ''), true);
+    if (is_array($vc) && ($vc['at'] ?? -1) === $vm) $verdict = $vc['verdict'];
+    elseif ($vm && ($fh = @fopen("$WEB/verify-result.tsv", 'r'))) {
+        while (($l = fgets($fh)) !== false) if (str_starts_with($l, 'VERDICT')) $verdict = trim(explode("\t", $l)[1] ?? '');
+        fclose($fh);
+        meta_set('verify_verdict', json_encode(['at' => $vm, 'verdict' => $verdict]));
+    }
     $c[] = ['level' => $verdict === 'SAFE' ? 'good' : 'info',
         'title' => tb($hold) . ' is waiting in the holding folder',
         'body' => $verdict === 'SAFE'
