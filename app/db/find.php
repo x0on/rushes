@@ -131,6 +131,7 @@ require __DIR__ . '/config.php';
     <button class="nav" data-scope="" aria-current="page" title="every file the archive knows about"><span class="ico"><?= icon('everything') ?></span> Everything</button>
     <button class="nav" data-scope="ARCHIVE" title="finished shoots, kept"><span class="ico"><?= icon('archive') ?></span> Archive</button>
     <button class="nav" data-scope="PROJECTS" title="edits and project files"><span class="ico"><?= icon('projects') ?></span> Projects</button>
+    <button class="nav" data-scope="" data-in="deliverables" title="what editors exported into a project's Output folder"><span class="ico"><?= icon('video') ?></span> Deliverables</button>
     <button class="nav" data-scope="" data-in="library" title="the stock library editors share: each file stored once"><span class="ico"><?= icon('library') ?></span> Stock library</button>
     <button class="nav sub" data-scope="" data-in="library/music">Music</button>
     <button class="nav sub" data-scope="" data-in="library/stock">Stock footage</button>

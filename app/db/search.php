@@ -42,6 +42,12 @@ foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
 }
 if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
+// What editors exported into a project's Output folder (Rushes Watcher): the deliverables.
+if (($_GET['in'] ?? '') === 'deliverables' && shelf_name() !== '') {
+    $where[] = "path LIKE ? ESCAPE '\\' AND path LIKE ? ESCAPE '\\'";
+    $esc = fn($s) => str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $s);
+    array_push($args, $esc(rtrim(archive_dir(), '/') . '/' . shelf_name() . '/Projects/') . '%', '%/Output/%');
+}
 // The shared stock library (HOW-IT-WORKS.md → Projects in and out): its own
 // folder of the archive, wherever Setup says it is, so a section of its own.
 if (preg_match('#^library(?:/(music|stock|sfx))?$#', (string)($_GET['in'] ?? ''), $m)) {

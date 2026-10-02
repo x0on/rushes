@@ -816,9 +816,9 @@ function draw() {
   switch (s.step) {
   case 'welcome':
     b = '<h2>Set up Rushes Helper</h2>' + (s.watcher
-      ? '<p>Rushes Watcher keeps every project you save on the Projects share, and everything it uses, in your Rushes archive, without you pressing anything. ' +
-        'It only reads your projects, and copies the files they use from outside the archive (music, stock, downloads, graphics, voiceover) for Rushes to take in. ' +
-        'When you quit Premiere, it points each project you saved at the archive\'s copies, after keeping a backup of it beside it.</p>' +
+      ? '<p>Rushes Watcher keeps every Premiere project you save, wherever you keep it on this Mac, with the files it uses, in your Rushes archive, without you pressing anything. ' +
+        'It sends the files a project uses that the archive does not have yet (music, stock, downloads, graphics, voiceover: only what you imported), and makes an <b>Output</b> folder beside each project: export the finished work there and it is kept too. ' +
+        'When you quit Premiere, a dated copy of each project you saved is kept, pointing at the archive. Your files on this Mac are only read, never moved or changed.</p>' +
         '<p>Its icon in the menu bar shows what it is doing, with its switches. While it runs, the icon is there.</p>'
       : '<p>Rushes Helper copies footage into your Rushes archive in the background, and Rushes → Manage shows everything it does.</p>') +
       '<p>It carries its own copy of Python — the free, open-source programming language it is written in. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.</p>' +
@@ -840,7 +840,7 @@ function draw() {
     f = s.error ? btn('Try again', 'retry', true) : ''; break;
   case 'fda':
     b = '<h2>One switch left: Full Disk Access</h2>' +
-      '<p>macOS keeps apps away from network drives and other disks until you allow it. ' + (s.watcher ? 'Rushes Watcher needs that to read your projects on the Projects share and the files they use, and to copy them to Deliveries — nothing more.'
+      '<p>macOS keeps apps away from network drives and other disks until you allow it. ' + (s.watcher ? 'Rushes Watcher needs that to read your projects and the files they use, wherever they are on this Mac — nothing more.'
         : 'Rushes Helper needs that to read footage from the source and write it into the archive — nothing more.') + '</p>' +
       '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows Rushes Helper. Turn Rushes Helper on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).</p>' +
       '<p class="muted">If System Settings opens somewhere else, type Full Disk Access into its search field, top left.</p>' +
@@ -944,7 +944,7 @@ const upd = s => s.newer ? '<div class="box"><div class="row"><div class="t"><b>
   esc(s.version) + '. The update comes from your Rushes, signed by its author; settings, pairing and permissions stay.</small></div>' +
   btn('Update to ' + s.newer, 'update-app', true, !!s.busy) + '</div></div>' : '';
 // Rushes Watcher on this computer: everything it shows is on this computer.
-const WATCHING = {idle: 'Idle — no editing program open', watching: 'Watching — an editing program is open', delivering: 'Copying a project\'s files to Deliveries',
+const WATCHING = {idle: 'Idle — no editing program open', watching: 'Watching — an editing program is open', delivering: 'Sending a project\'s files to Rushes',
   pointing: 'Pointing projects at the archive', offline: 'Cannot reach Rushes', unpaired: 'Not paired with Rushes yet', paused: 'Paused'};
 function whome(s) {
   const n = s.now || {}, on = s.running;
@@ -1048,7 +1048,7 @@ PHASE = {"copying": "Copying", "looking": "Looking for new footage", "waiting": 
          "delivering": "Taking in an editor's delivery", "paused": "Paused from Manage", "blocked": "Stopped: needs you",
          "done": "Finished", "stopped": "Stopped", "proving": "Checking copies (reading only)"}
 WATCHING = {"idle": "Idle — no editing program open", "watching": "Watching — an editing program is open",
-            "delivering": "Copying a project's files to Deliveries", "pointing": "Pointing projects at the archive",
+            "delivering": "Sending a project's files to Rushes", "pointing": "Keeping projects on the NAS",
             "paused": "Paused — it looks at no project", "offline": "Cannot reach Rushes",
             "unpaired": "Not paired with Rushes yet"}
 

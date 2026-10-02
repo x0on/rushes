@@ -8,7 +8,7 @@ foreach (glob(__DIR__ . '/../app/*.{php,css,json}', GLOB_BRACE) as $f) copy($f, 
 foreach (glob(__DIR__ . '/../app/db/*.php') as $f) copy($f, "$root/app/db/" . basename($f));
 file_put_contents("$root/app/settings.json", json_encode(['archive'=>[
     'web'=>"$root/app", 'local'=>"$root/archive", 'as_seen_from_helper'=>"$root/archive", 'label'=>'VIDEO'],
-    'helper'=>['mode'=>'built_in'], 'organise'=>['shelves'=>'Library', 'departments'=>[['name'=>'Parks','folder'=>'PARKS']]]]));
+    'helper'=>['mode'=>'built_in'], 'projects'=>['aside_days'=>90], 'organise'=>['shelves'=>'Library', 'departments'=>[['name'=>'Parks','folder'=>'PARKS']]]]));
 function check($ok, $what) { if (!$ok) throw new RuntimeException("FAIL $what"); echo "PASS $what\n"; }
 $now = time();
 file_put_contents("$root/app/ingest-status.tsv", "ts\t$now\nphase\tcopying\nsource\t/src/Parks\ncopied\t2\nof\t4\nnew_bytes\t400\ndone_bytes\t200\nrate\t100\neta\t2\nfile\tA001.MXF\n");

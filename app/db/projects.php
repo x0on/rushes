@@ -26,7 +26,7 @@ $LOG   = web_dir() . '/projects-moves.tsv';
 // asleep long enough, kept in the archive, and missing nothing.
 function projects_plan(): array {
     $s = settings()['projects'] ?? [];
-    $days = (int)($s['aside_days'] ?? 90);
+    $days = (int)($s['aside_days'] ?? 0);           // off unless set: editors' projects are copies kept in the archive now
     if ($days <= 0) return [];
     $old = time() - $days * 86400;
     $all = []; $r = db()->query("SELECT path, saved, archived, missing, state, aside_at FROM projects");

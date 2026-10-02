@@ -261,6 +261,9 @@ function dedupe_rules_write(): ?array {
     // with no card-dump folders, neither side is preferred, whichever was chosen.
     if (shelf_name() !== '' && ($d['card_dumps'] ?? []) !== [])
         $lines[] = (int)$w['other_side'] . "\tproject\t/" . shelf_name() . '/';
+    // Editors' projects and the stock library are never moved: archived projects point at them.
+    if (shelf_name() !== '') $lines[] = "0\tkeep\t/" . shelf_name() . '/Projects/';
+    $lines[] = "0\tkeep\t/" . trim($clean(settings()['library']['folder'] ?? 'Stock Library')) . '/';
     $file = web_dir() . '/dedupe-rules.tsv';
     $body = implode("\n", $lines) . "\n";
     if (@file_get_contents($file) === $body) return $lines;
@@ -523,6 +526,7 @@ function shelf_open(): bool {                 // may a new one be added at Inges
 function shelf_name_problem(string $n, array $existing = []): string {
     $one = strtolower(shelf_word());
     if ($n === '') return "Give the new $one a name.";
+    if (strcasecmp($n, 'Projects') === 0) return "“Projects” is where Rushes keeps editors' projects, beside the {$one}s: pick another name.";
     if (preg_match('/^(others?|misc(ellaneous)?|general|various|varios|otros?|unsorted|stuff)$/i', $n))
         return "“{$n}” would be a catch-all. Every shoot belongs to a $one — add the one it belongs to instead.";
     if (preg_match('#[/\\\\:*?"<>|]|\.\.#', $n) || $n[0] === '.') return "“{$n}” becomes a folder name, so it cannot hold / \\ : * ? \" < > | or ..";

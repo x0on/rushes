@@ -321,7 +321,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
 $ago = function (int $t): string { if (!$t) return '—'; $d = time() - $t;
     return $d < 3600 ? max(1, intdiv($d, 60)) . ' min ago' : ($d < 86400 ? intdiv($d, 3600) . ' h ago' : date('Y-m-d', $t)); };
 $restDays  = (int)(settings()['projects']['rest_days'] ?? 10);
-$asideDays = (int)(settings()['projects']['aside_days'] ?? 90);
+$asideDays = (int)(settings()['projects']['aside_days'] ?? 0);   // projects are kept on the NAS now, nothing to move aside by default
 // What the runner moved lately, newest first (projects.php writes it)
 $moves = array_reverse(array_slice(@file(web_dir() . '/projects-moves.tsv', FILE_IGNORE_NEW_LINES) ?: [], -8));
 $prj = []; $r = db()->query('SELECT p.*, (SELECT COUNT(*) FROM delivered d WHERE d.project = p.path) AS taken FROM projects p ORDER BY saved DESC LIMIT 500');

@@ -26,7 +26,7 @@
 # rules.json → duplicates.never_keep for what is true everywhere (the recycle
 # bin, Copied_ folders, Media Cache, doubled extensions), and settings.json →
 # duplicates for this archive's own folders (Setup → 05). One line each:
-#   weight <TAB> contains|matches|card|project <TAB> text
+#   weight <TAB> contains|matches|card|project|keep <TAB> text   ('keep': never moved)
 # 'card' lines lose when the project copy is kept, 'project' lines (the shelf)
 # when card dumps are kept. The highest total loses; nothing here names a folder.
 # Never touched: @Recycle — moving files OUT of it would undelete them.
@@ -107,6 +107,7 @@ awk -v OFS="$TAB" -v keep_side="$KEEP_SIDE" -v mtimes="$MTIMES" -v rules="$RULES
 BEGIN {
     while ((getline line < rules) > 0) {
         if (split(line, f, "\t") < 3) continue
+        if (f[2] == "keep") { nk++; kt[nk] = f[3]; continue }     # never moved: archived projects point at these
         if (f[2] == "card"    && keep_side != "project") continue
         if (f[2] == "project" && keep_side != "card")    continue
         nr++; rw[nr] = f[1] + 0; rk[nr] = f[2]; rt[nr] = f[3]
@@ -127,6 +128,7 @@ function penalty(p,   s, i) {
         if ((rk[i] == "matches") ? (p ~ rt[i]) : (index(p, rt[i]) > 0)) s += rw[i]
     return s
 }
+function kept(p,   i) { for (i = 1; i <= nk; i++) if (index(p, kt[i]) > 0) return 1; return 0 }
 function score(p) {
     # Penalties dominate; within an equal penalty the mode decides.
     if (keep_side == "oldest")
@@ -141,6 +143,7 @@ function flush(   i, best) {
     for (i = 1; i <= n; i++) {
         if (i == best) continue
         if (path[i] ~ /\/@Recycle\//) continue
+        if (kept(path[i])) continue
         print bytes, path[i], path[best]
     }
     n = 0

@@ -26,7 +26,7 @@ foreach (explode("\n", (string)($_POST['files'] ?? '')) as $l) {
     [$orig, $rel, $fp, $kind, $project, $bytes] = $f;
     // inside the archive, really there, at the size the helper says
     if ($rel === '' || str_starts_with($rel, '/') || str_contains($rel, '..') || !is_file("$root/$rel") || filesize("$root/$rel") !== (int)$bytes
-        || !in_array($kind, ['music', 'stock', 'sfx', 'project', 'projectfile'], true)) { $refused[] = $rel; continue; }
+        || !in_array($kind, ['music', 'stock', 'sfx', 'project', 'output', 'projectfile'], true)) { $refused[] = $rel; continue; }
     foreach ([$batch, mb_substr($orig, 0, 1000), $rel, mb_substr($fp, 0, 80), $kind, mb_substr($project, 0, 400), time()] as $i => $v) $put->bindValue($i + 1, $v);
     $put->execute(); $put->reset(); $n++;
     if ($kind === 'projectfile') { $proj->bindValue(1, $rel); $proj->bindValue(2, $project); $proj->execute(); $proj->reset(); }

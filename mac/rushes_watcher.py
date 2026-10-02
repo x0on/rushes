@@ -4,18 +4,25 @@
 
 It keeps a project and everything it uses, without anyone pressing anything:
 
-- **On save.** While an editing program is open, it looks for projects saved
-  on the Projects share. Once one has been quiet a few minutes, it copies the
-  files the project uses from outside the archive (music, stock, downloads,
-  graphics, voiceover) into its own folder of the Deliveries share, and tells
-  Rushes. The helper takes them into the archive. The project is only read.
-- **On close.** When the editing program is quit, each project it saved is
-  pointed at the archive's copies (a backup of the project first, beside it,
-  in "Rushes backups"), and a copy of the project file goes into the archive.
+The editor works wherever he likes (Desktop, Documents, a drive). This
+computer has its own folder on the NAS, Projects/<its name> on the shelf, made
+when it was paired, and each of its projects a folder there.
 
+- **On save.** While an editing program is open, it asks Spotlight which
+  Premiere projects were saved. Once one has been quiet a few minutes, it sends
+  Rushes the files the project uses that the NAS does not have yet (music,
+  stock, downloads, graphics, voiceover: only what was imported into the
+  project, not the rest of a Downloads folder), and makes an Output folder
+  beside the project, for the finished exports.
+- **On close.** When the editing program is quit, a dated copy of each project
+  it saved goes to the NAS, pointing at the NAS's copies of what it uses, and
+  what is new in Output goes with it: the deliverables.
+
+The project and the files on this Mac are only read, never moved or changed
+(the Output folder is the one thing it makes). Files go to Rushes over the
+network, piece by piece; the helper checks each one and puts it in place.
 Every step is written in its log, which the editor can read, and which Rushes
-shows on Manage → Editors' projects. It has no archive code and no models: it
-only reads projects and copies files. Nothing here deletes anything.
+shows on Manage → Editors' projects. Nothing here deletes anything.
 
     python3 rushes_watcher.py pair <rushes address> <six numbers>
     python3 rushes_watcher.py run         (what the app runs; stays open)
@@ -57,9 +64,8 @@ CONFIG, STATE = os.path.join(HOME, "config.json"), os.path.join(HOME, "state.jso
 PAUSED = os.path.join(HOME, "paused")          # the menu's Pause watching (P3); a file, so it outlives a restart
 
 EVERY = 20             # s between looks at which programs are open (on this computer only)
-SCAN_EVERY = 120       # s between looks at the Projects share, only while an editing program is open
-QUIET = 180            # s a saved project must stay unchanged before its files are copied
-SCAN_LIMIT = 60        # s a look at the Projects share may take; then it stops and says so
+SCAN_EVERY = 120       # s between asking Spotlight for saved projects, only while an editing program is open
+QUIET = 180            # s a saved project must stay unchanged before its files are sent
 EDITORS = ("Adobe Premiere Pro", "Final Cut Pro", "DaVinci Resolve")
 AUDIO = {"wav", "mp3", "aif", "aiff", "m4a", "flac", "ogg", "aac"}
 # ponytail: guessed from the path; a menu to correct a file's kind comes with the icon (P3)
@@ -142,12 +148,12 @@ def pair(url, code):
 
 
 # ── where things are, on this computer ──────────────────────────────────────
-def mounts(hello, cfg):
-    """The three shares, as this Mac sees them: /Volumes/<name>, unless the
-    config says otherwise (a share mounted under another name)."""
-    v = cfg.get("volumes") or "/Volumes"
-    return {k: (cfg.get(k) or (os.path.join(v, hello[k]) if hello.get(k) else ""))
-            for k in ("archive", "projects", "deliveries")}
+def archive_mount(hello, cfg):
+    """The archive as this Mac sees it: /Volumes/<name>, unless the config says
+    otherwise (mounted under another name). Files in it are never sent."""
+    if cfg.get("archive"):
+        return cfg["archive"]
+    return os.path.join(cfg.get("volumes") or "/Volumes", hello["archive"]) if hello.get("archive") else ""
 
 
 def inside(p, top):
@@ -163,25 +169,25 @@ def editing():
     return sorted({e for e in EDITORS if e in out})
 
 
-def find_projects(top, cache_rules, limit=SCAN_LIMIT):
-    """Every Premiere project on the Projects share: {path: mtime}. Hidden
-    folders, caches, previews and auto-saves are not looked into.
-    ponytail: a walk of the share each look; FSEvents from the app (P3) when shares grow large."""
-    found, until = {}, time.monotonic() + limit
-    for d, dirs, files in os.walk(top):
-        if time.monotonic() > until:
-            raise TimeoutError(f"looking through {top} took more than {limit} s")
-        dirs[:] = [x for x in dirs if not x.startswith(".") and not skip(os.path.join(d, x) + "/", cache_rules)]
-        for f in files:
-            if f.endswith(".prproj") and not f.startswith("."):
-                p = os.path.join(d, f)
-                try: found[p] = os.stat(p).st_mtime
-                except OSError: pass
+def find_projects(archive, cache_rules):
+    """Every Premiere project on this Mac, wherever the editor keeps it (Desktop,
+    Documents, Downloads, a drive): {path: mtime}. Asked of Spotlight, the
+    index macOS keeps of every file, so nothing is walked through. Not the
+    archive's own copies, auto-saves or caches."""
+    try:
+        out = subprocess.run(["mdfind", 'kMDItemFSName == "*.prproj"'], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError) as e:
+        raise TimeoutError(f"Spotlight did not answer ({e})")
+    found = {}
+    for p in out.splitlines():
+        if p.endswith(".prproj") and not inside(p, archive) and not skip(p, cache_rules) and "/." not in p:
+            try: found[p] = os.stat(p).st_mtime
+            except OSError: pass
     return found
 
 
 def skip(path, cache_rules):
-    """Caches, previews and auto-saves: they rebuild themselves, so they are never delivered."""
+    """Caches, previews and auto-saves: they rebuild themselves, so they are never sent."""
     if any(s in path for s in SKIP_PARTS):
         return True
     ext = path.rsplit(".", 1)[-1].lower() if "." in os.path.basename(path) else ""
@@ -205,7 +211,7 @@ def read_project(path):
 
 
 def files_named(xml):
-    """Every file path the project names (its media, graphics, music …)."""
+    """Every file path the project names: what was imported into it (its bins)."""
     return sorted({html.unescape(t) for t in TEXT.findall(xml) if LOOKS.match(html.unescape(t))})
 
 
@@ -230,64 +236,86 @@ def kind_of(path):
     return "project"
 
 
-def shoot_of(project_rel, where_, hello):
-    """The shoot a project belongs to: its folder on the Projects share has the
-    same shape as the archive, on the shelf or not. '' when none matches."""
-    parts = project_rel.split("/")[:-1]
-    shelf = (hello.get("shelf") or "").strip("/")
-    while parts:
-        rel = "/".join(parts)
-        for cand in ([f"{shelf}/{rel}"] if shelf else []) + [rel]:
-            if where_["archive"] and os.path.isdir(os.path.join(where_["archive"], cand)):
-                return cand
-        parts.pop()
-    return ""
+def shoot_of(files, archive, shelf):
+    """The shoot a project mostly uses, from the archive's own footage it names:
+    <shelf>/<department>/<year>/<shoot>. '' when it uses none."""
+    count = {}
+    for f in files:
+        if inside(f, archive):
+            parts = os.path.relpath(f, archive).split("/")
+            if shelf and parts[0] == shelf and len(parts) > 4 and parts[1] != "Projects":
+                count["/".join(parts[:4])] = count.get("/".join(parts[:4]), 0) + 1
+    return max(count, key=count.get) if count else ""
 
 
-# ── delivering ──────────────────────────────────────────────────────────────
+# ── sending: to Rushes, over the network ────────────────────────────────────
 def plain(name):
     name = re.sub(r"[/\\:\t\n\x00-\x1f]+", "-", name).strip().lstrip(".")
     return name[:200] or "file"
 
 
-def copy_in(src, dest):
-    """Copied with its fingerprint taken on the same read, and stored on the
-    share's disk before it counts. -> 'sha256:<hex>'"""
+def fingerprint(path):
     h = hashlib.sha256()
-    with open(src, "rb") as fi, open(dest + ".part", "wb") as fo:
-        for buf in iter(lambda: fi.read(8 << 20), b""):
-            fo.write(buf); h.update(buf)
-        fo.flush(); os.fsync(fo.fileno())
-    shutil.copystat(src, dest + ".part")
-    os.replace(dest + ".part", dest)
+    with open(path, "rb") as f:
+        for buf in iter(lambda: f.read(8 << 20), b""):
+            h.update(buf)
     return "sha256:" + h.hexdigest()
 
 
-def deliver(cfg, hello, where_, project_rel, shoot, files, project_file=None):
-    """One batch into Deliveries/<key>/<batch>, batch.tsv written last, and
-    Rushes told. files: [(original path, kind)]. -> batch name"""
-    batch = time.strftime("%Y%m%d-%H%M%S") + "-" + hashlib.sha256(project_rel.encode()).hexdigest()[:6]
-    folder = os.path.join(where_["deliveries"], hello["key"], batch)
-    os.makedirs(os.path.join(folder, "files"))
-    lines, used = ["rushes-delivery 1", f"watcher\t{hello['key']}", f"host\t{plain(platform.node().split('.')[0])}",
-                   f"project\t{project_rel}", f"shoot\t{shoot}"], set()
-    for orig, kind in files:
-        name, n = plain(os.path.basename(orig)), 2
+CHUNK = 4 << 20        # each piece well under what a web server takes in one request
+
+
+def upload(cfg, batch, name, path, fp, say=None):
+    """One file to Rushes' inbox for this computer, piece by piece, carrying on
+    from what has arrived already; Rushes keeps it only when it is whole and
+    has the fingerprint taken here."""
+    size = os.path.getsize(path)
+    have = rushes(cfg, get={"upload": "", "batch": batch, "name": name}).get("have", 0)
+    with open(path, "rb") as f:
+        f.seek(have)
+        while True:
+            buf = f.read(CHUNK) if have < size else b""
+            q = urllib.parse.urlencode({"upload": "", "batch": batch, "name": name, "offset": have, "size": size, "fp": fp})
+            req = urllib.request.Request(f"{cfg['url'].rstrip('/')}/db/watcher.php?{q}", data=buf, method="POST",
+                                         headers={"X-Rushes-Watcher": cfg.get("id", ""), "Content-Type": "application/octet-stream"})
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    got = json.loads(r.read().decode("utf-8", "replace"))
+            except urllib.error.HTTPError as e:
+                try: raise RuntimeError(json.loads(e.read().decode("utf-8", "replace"))["error"]) from None
+                except (ValueError, KeyError): raise e from None
+            if got.get("done"):
+                return
+            have = got["have"]
+            if say and size > 50 << 20:
+                say(f"{name}: {have * 100 // size}%")
+
+
+def deliver(cfg, project, shoot, files, project_bytes=None, project_name=""):
+    """One batch: each file sent to Rushes, then its list, so the helper puts
+    them in Projects/<this computer>/<project>/. files: [(path, kind)]. -> batch"""
+    batch = time.strftime("%Y%m%d-%H%M%S") + "-" + os.urandom(3).hex()      # never the same twice, even in one second
+    lines, used = [], set()
+    for path, kind in files:
+        name, n = plain(os.path.basename(path)), 2
         stem, ext = os.path.splitext(name)
         while name in used:
             name = f"{stem} ({n}){ext}"; n += 1
         used.add(name)
-        fp = copy_in(orig, os.path.join(folder, "files", name))
-        lines.append(f"file\t{name}\t{fp}\t{os.path.getsize(os.path.join(folder, 'files', name))}\t{kind}\t{orig}")
-    if project_file:
-        name = plain(os.path.basename(project_file))
-        fp = copy_in(project_file, os.path.join(folder, "files", name))
-        lines.append(f"projectfile\t{name}\t{fp}\t{os.path.getsize(os.path.join(folder, 'files', name))}\t"
-                     + plain(os.path.splitext(os.path.basename(project_file))[0]))
-    with open(os.path.join(folder, "batch.tsv.part"), "w", encoding="utf-8") as f:
-        f.write("\n".join(lines + ["end"]) + "\n")
-    os.replace(os.path.join(folder, "batch.tsv.part"), os.path.join(folder, "batch.tsv"))
-    rushes(cfg, post={"action": "delivered", "batch": batch})
+        fp = fingerprint(path)
+        upload(cfg, batch, name, path, fp, say=lambda m: say_now("delivering", m))
+        lines.append(f"file\t{name}\t{fp}\t{os.path.getsize(path)}\t{kind}\t{path}")
+    if project_bytes is not None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as t:
+            t.write(project_bytes)
+        try:
+            name, fp = plain(project_name), fingerprint(t.name)
+            upload(cfg, batch, name, t.name, fp)
+            lines.append(f"projectfile\t{name}\t{fp}\t{len(project_bytes)}\t{plain(project)}")
+        finally:
+            os.remove(t.name)
+    rushes(cfg, post={"action": "delivered", "batch": batch, "name": project, "shoot": shoot, "lines": "\n".join(lines)})
     return batch
 
 
@@ -316,115 +344,143 @@ class Watcher:
             log(f"{', '.join(open_)} open — watching for saved projects")
         if time.time() - self.hello_at > 3600 or not self.hello:
             self.hello, self.hello_at = rushes(self.cfg, get={"hello": ""}), time.time()
+            if not self.hello.get("folder"):
+                self.hello = None
+                raise RuntimeError("Rushes has no folder for this computer: pair it again (Rushes → Setup → 06)")
             self.heard()
-        where_ = mounts(self.hello, self.cfg)
+        archive = archive_mount(self.hello, self.cfg)
         if open_ and time.time() - self.last_scan >= SCAN_EVERY:
             self.last_scan = time.time()
-            self.look(where_)
+            self.look(archive)
+        # Closed: each project saved while it was open is kept on the NAS, as it is now.
+        pending = [p for p, s in self.state["projects"].items() if s.get("touched")]
         if not open_ and self.since:
             self.since = 0
-            log("editing program closed — pointing its projects at the archive")
-            for p in [p for p, s in self.state["projects"].items() if s.get("touched")]:
-                self.close(p, where_)
+            if pending:
+                log("editing program closed — keeping its projects on the NAS")
+        if not open_:
+            for p in pending:
+                self.close(p, archive)
         self.report("watching" if open_ else "idle", note=", ".join(open_))
 
     def heard(self):
-        """Its projects that Rushes says are resting or moved aside: said in its log, once each."""
+        """Its projects that Rushes says are resting: said in its log, once each."""
         told = self.state.setdefault("told", {})
-        for kind, words in (("resting", "is resting: not saved for a while; nothing moves"),
-                            ("aside", "was moved aside on the Projects share (into _Moved aside), kept in the archive. "
-                                      "Bring it back in Rushes → Manage → Editors' projects")):
-            for p in self.hello.get(kind) or []:
-                if told.get(p) != kind:
-                    log(f"{p} {words}"); told[p] = kind
-        for p in [p for p in told if p not in (self.hello.get("resting") or []) + (self.hello.get("aside") or [])]:
-            del told[p]                                # saved again, or brought back: said again next time
+        for p in self.hello.get("resting") or []:
+            if told.get(p) != "resting":
+                log(f"{p.split('/')[-1]} is resting: not saved for a while; nothing moves"); told[p] = "resting"
+        for p in [p for p in told if p not in (self.hello.get("resting") or [])]:
+            del told[p]                                # saved again: said again next time it rests
         save(STATE, self.state)
 
-    def look(self, where_):
-        if not where_["projects"] or not os.path.isdir(where_["projects"]):
-            return log(f"cannot see the Projects share ({where_['projects'] or 'not set in Rushes'}) — is it connected?")
+    def look(self, archive):
         try:
-            found = find_projects(where_["projects"], self.hello.get("cache") or {})
+            found = find_projects(archive, self.hello.get("cache") or {})
         except (TimeoutError, OSError) as e:
             return log(f"! {e}; looked at again in {SCAN_EVERY // 60} min")
         for p, mtime in found.items():
-            s = self.state["projects"].setdefault(p, {"saved": mtime, "done": 0, "delivered": {}})
+            s = self.state["projects"].setdefault(p, {"saved": mtime, "done": 0, "delivered": {}, "output": {}})
             # saved while an editing program was open here, quiet since, and not handled yet
             if mtime > s["done"] and mtime >= self.since - QUIET and time.time() - mtime >= QUIET:
-                self.saved(p, mtime, where_)
+                self.saved(p, mtime, archive)
         save(STATE, self.state)
 
-    def saved(self, p, mtime, where_):
-        s, rel = self.state["projects"][p], os.path.relpath(p, where_["projects"]).replace(os.sep, "/")
-        try:
-            xml, _ = read_project(p)
-        except (OSError, EOFError, gzip.BadGzipFile) as e:
-            return log(f"! could not read {rel} ({e}); tried again after its next save")
+    def uses(self, p, archive):
+        """What a project uses: from outside the archive (and here), and missing."""
+        xml, zipped = read_project(p)
         cache = self.hello.get("cache") or {}
+        named = files_named(xml)
         outside, missing = [], []
-        for f in files_named(xml):
-            if inside(f, where_["archive"]) or inside(f, where_["deliveries"]) or skip(f, cache) or f.endswith(".prproj"):
+        for f in named:
+            if inside(f, archive) or skip(f, cache) or f.endswith(".prproj"):
                 continue
             (outside if os.path.isfile(f) else missing).append(f)
-        if missing and not outside and not s.get("touched"):
-            s["done"] = mtime                          # another computer's project: its files are there, not here
-            return
-        shoot = shoot_of(rel, where_, self.hello)
-        new = []
-        for f in outside:
-            st = os.stat(f)
-            if s["delivered"].get(f) != [st.st_size, int(st.st_mtime)]:
-                new.append((f, kind_of(f)))
-        if new:
-            say_now("delivering", f"{len(new)} file(s) used by {os.path.basename(p)}")
+        return xml, zipped, named, outside, missing
+
+    def outputs(self, p):
+        """Its Output folder, beside the project: made the first time, so exports always have their place."""
+        out = os.path.join(os.path.dirname(p), "Output")
+        if not os.path.isdir(out):
             try:
-                batch = deliver(self.cfg, self.hello, where_, rel, shoot, new)
-                for f, _ in new:
-                    st = os.stat(f); s["delivered"][f] = [st.st_size, int(st.st_mtime)]
-                log(f"{rel}: {len(new)} file(s) from outside the archive copied to Deliveries ({batch})"
-                    + "".join(f"\n      {k}: {f}" for f, k in new))
+                os.mkdir(out); log(f"made the Output folder beside {os.path.basename(p)}: export the finished work there")
+            except OSError as e:
+                log(f"! could not make the Output folder beside {os.path.basename(p)} ({e})")
+            return []
+        return [os.path.join(out, n) for n in sorted(os.listdir(out))
+                if not n.startswith(".") and os.path.isfile(os.path.join(out, n))]
+
+    def new(self, s, key, files):
+        """The files not sent yet, or changed since (size and time)."""
+        out = []
+        for f in files:
+            st = os.stat(f)
+            if s[key].get(f) != [st.st_size, int(st.st_mtime)]:
+                out.append(f)
+        return out
+
+    def sent(self, s, key, files):
+        for f in files:
+            st = os.stat(f); s[key][f] = [st.st_size, int(st.st_mtime)]
+
+    def saved(self, p, mtime, archive):
+        """Saved and quiet: the files it uses that the NAS does not have yet are sent now, so nothing is lost."""
+        s, name = self.state["projects"][p], os.path.splitext(os.path.basename(p))[0]
+        try:
+            _, _, named, outside, missing = self.uses(p, archive)
+        except (OSError, EOFError, gzip.BadGzipFile) as e:
+            return log(f"! could not read {name} ({e}); tried again after its next save")
+        self.outputs(p)
+        shoot = shoot_of(named, archive, self.hello.get("shelf") or "")
+        new = self.new(s, "delivered", outside)
+        if new:
+            say_now("delivering", f"{len(new)} file(s) used by {name}")
+            try:
+                batch = deliver(self.cfg, name, shoot, [(f, kind_of(f)) for f in new])
+                self.sent(s, "delivered", new)
+                log(f"{name}: {len(new)} file(s) it uses sent to the NAS ({batch})" + "".join(f"\n      {f}" for f in new))
             except Exception as e:
-                return log(f"! {rel}: could not deliver its files ({e}); tried again after its next save")
+                return log(f"! {name}: could not send its files ({e}); tried again after its next save")
         if missing:
-            log(f"! {rel}: {len(missing)} file(s) it uses cannot be found:" + "".join(f"\n      {f}" for f in missing[:20]))
+            log(f"! {name}: {len(missing)} file(s) it uses cannot be found:" + "".join(f"\n      {f}" for f in missing[:20]))
         s.update(done=mtime, saved=mtime, touched=True, shoot=shoot)
         try:
-            rushes(self.cfg, post={"action": "project", "path": rel, "name": os.path.splitext(os.path.basename(p))[0],
-                                   "saved": int(mtime), "files": len(outside) + len(missing), "outside": len(outside),
-                                   "missing": ";".join(os.path.basename(f) for f in missing)[:1900], "shoot": shoot})
+            rushes(self.cfg, post={"action": "project", "name": name, "saved": int(mtime), "files": len(named),
+                                   "outside": len(outside), "missing": ";".join(os.path.basename(f) for f in missing)[:1900],
+                                   "shoot": shoot})
         except Exception as e:
-            log(f"! could not tell Rushes about {rel} ({e})")
+            log(f"! could not tell Rushes about {name} ({e})")
 
-    def close(self, p, where_):
-        """The project, pointed at the archive's copies (a backup first), and a copy into the archive."""
-        s, rel = self.state["projects"][p], os.path.relpath(p, where_["projects"]).replace(os.sep, "/")
-        say_now("pointing", os.path.basename(p))
+    def close(self, p, archive):
+        """The editing program was quit: the project kept on the NAS as it is now,
+        a dated copy pointing at the archive's copies of what it uses, and what is
+        new in Output. The project on this Mac is only read, never changed."""
+        s, name = self.state["projects"][p], os.path.splitext(os.path.basename(p))[0]
+        say_now("delivering", name)
         try:
-            got = rushes(self.cfg, get={"where": "", "project": rel}).get("files") or {}
-            before = os.stat(p).st_mtime
-            xml, zipped = read_project(p)
-            to = {o: os.path.join(where_["archive"], f["rel"]) for o, f in got.items()
-                  if os.path.isfile(os.path.join(where_["archive"], f["rel"]))}
+            xml, zipped, named, outside, missing = self.uses(p, archive)
+            new = self.new(s, "delivered", outside)
+            outs = self.new(s, "output", self.outputs(p))
+            if new or outs:
+                batch = deliver(self.cfg, name, s.get("shoot", ""), [(f, kind_of(f)) for f in new] + [(f, "output") for f in outs])
+                self.sent(s, "delivered", new); self.sent(s, "output", outs)
+                log(f"{name}: {len(new)} file(s) it uses and {len(outs)} from Output sent to the NAS ({batch})")
+            got = rushes(self.cfg, get={"where": "", "project": name}).get("files") or {}
+            waiting = [f for f in outside if f not in got]
+            if waiting and time.time() - s.get("close_at", time.time()) < 3600:
+                s.setdefault("close_at", time.time())
+                return                                 # its files are still being put in place: the project waits for them
+            to = {o: os.path.join(archive, f["rel"]) for o, f in got.items()}
             fixed, n = repoint(xml, to)
-            if n:
-                keep = os.path.join(os.path.dirname(p), "Rushes backups")
-                os.makedirs(keep, exist_ok=True)
-                backup = os.path.join(keep, f"{os.path.splitext(os.path.basename(p))[0]} {time.strftime('%Y-%m-%d %H%M')}.prproj")
-                shutil.copy2(p, backup)
-                if os.stat(p).st_mtime != before:
-                    return log(f"{rel} was saved again meanwhile — pointed at the archive after its next save")
-                data = fixed.encode("utf-8")
-                with open(p + ".rushes-new", "wb") as f:
-                    f.write(gzip.compress(data) if zipped else data)
-                    f.flush(); os.fsync(f.fileno())
-                os.replace(p + ".rushes-new", p)
-                log(f"{rel}: {n} file(s) now point at the archive's copies; the project as it was is in Rushes backups")
-            batch = deliver(self.cfg, self.hello, where_, rel, s.get("shoot", ""), [], project_file=p)
-            log(f"{rel}: a copy of the project goes into the archive ({batch})")
+            data = fixed.encode("utf-8")
+            batch = deliver(self.cfg, name, s.get("shoot", ""), [], project_bytes=gzip.compress(data) if zipped else data,
+                            project_name=os.path.basename(p))
+            log(f"{name}: a copy of the project is kept on the NAS ({batch}), pointing at the NAS for {n} file(s)"
+                + (f"; {len(waiting)} were not there yet and still point at this Mac" if waiting else "")
+                + ("" if self.outputs(p) else ". Nothing in Output yet: export the finished work into the Output folder beside it"))
             s.update(touched=False, done=os.stat(p).st_mtime)
+            s.pop("close_at", None)
         except Exception as e:
-            log(f"! {rel}: could not be pointed at the archive ({e}); tried again when the editing program is next closed")
+            log(f"! {name}: could not be kept on the NAS ({e}); tried again in a minute")
         save(STATE, self.state)
 
 
@@ -466,6 +522,8 @@ def selftest():
     out, n = repoint(xml, {"/Users/ed/Music/A & B.wav": "/Volumes/VIDEO/Stock Library/Music/A & B.wav"})
     assert n == 1 and ">/Volumes/VIDEO/Stock Library/Music/A &amp; B.wav<" in out
     assert skip("/Users/ed/Adobe Premiere Pro Video Previews/p.mov", {}) and skip("/x/a.pek", {"sweep": [{"ext": ["pek"]}]})
+    assert shoot_of(["/Volumes/VIDEO/S/PARKS/2026/Kite/a.mov", "/Volumes/VIDEO/S/PARKS/2026/Kite/b.mov",
+                     "/Volumes/VIDEO/S/PARKS/2025/Old/c.mov", "/Users/ed/x.wav"], "/Volumes/VIDEO", "S") == "S/PARKS/2026/Kite"
     assert [kind_of(p) for p in ("/d/song.mp3", "/d/SFX/boom.wav", "/d/VO take 2.wav", "/d/Artlist/drone.mov", "/d/title.png")] \
         == ["music", "sfx", "project", "stock", "project"]
     print("watcher: all checks pass")

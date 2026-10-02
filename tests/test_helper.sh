@@ -14,10 +14,10 @@ printf '#!/bin/sh\necho new\n' > "$ROOT/archive/_rushes/scripts/runner.sh"
 printf '#!/bin/sh\necho old\n' > "$ROOT/app/runner.sh"
 cat > "$ROOT/app/settings.json" <<J
 {"name":"Rushes","archive":{"web":"$ROOT/app","local":"$ROOT/archive","as_seen_from_helper":"/Volumes/VIDEO","url":"http://nas.test"},
- "helper":{"mode":"external","label":"workstation"},"organise":{"departments":[],"shelves":"Library"}}
+ "helper":{"mode":"external","label":"workstation"},"limits":{"inbox_free_min":0},"projects":{"aside_days":90},"organise":{"departments":[],"shelves":"Library"}}
 J
 call() { $PHPBIN "$HERE/helper_call.php" "$ROOT/app" "$@" 2>&1; }
-check() { if eval "$1"; then echo "PASS $2"; else echo "FAIL $2"; exit 1; fi; }
+check() { if eval "$1"; then echo "PASS $2"; else echo "FAIL $2"; [ -n "${KEEP:-}" ] && trap - EXIT && echo "$ROOT"; exit 1; fi; }
 
 out=$(call GET '{"install":""}')
 check 'echo "$out" | grep -q "URL='"'"'http://nas.test'"'"'" && echo "$out" | grep -q "helper.php?app" && echo "$out" | grep -q "open \"\$APP\""' \
@@ -80,24 +80,39 @@ check 'call GET "{\"p\":\"$ROOT/archive/x.txt\"}" "{}" db/play.php | grep -q "no
       'only a proxy can be played, never another file'
 check 'call GET "{\"p\":\"/etc/passwd\"}" "{}" db/play.php | grep -q "No proxy"' 'a path the catalogue does not know plays nothing'
 
-# editors' computers: a Watcher pairs with its own code and can only deliver
-code=$(SIGNED=1 call POST "{}" "{\"action\":\"start\",\"role\":\"watcher\"}" db/pair.php | sed 's/.*"code":"\([0-9]*\)".*/\1/')
+# editors' computers: a Watcher pairs with its own code, named in Setup, and can only send its own projects' files
+check 'SIGNED=1 call POST "{}" "{\"action\":\"start\",\"role\":\"watcher\"}" db/pair.php | grep -q "Give the editor"' 'an editor'"'"'s computer is named before its code is made'
+code=$(SIGNED=1 call POST "{}" "{\"action\":\"start\",\"role\":\"watcher\",\"name\":\"Maria\"}" db/pair.php | sed 's/.*"code":"\([0-9]*\)".*/\1/')
 check 'call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\"}" db/pair.php | grep -q "enter it in Rushes Watcher"' 'a Watcher'"'"'s code given to a helper does not make it the helper'
 wid=$(call POST "{}" "{\"code\":\"$code\",\"host\":\"Maria Mac\",\"role\":\"watcher\"}" db/pair.php | sed 's/.*"id":"\([0-9a-f]*\)".*/\1/')
 check '[ ${#wid} = 32 ] && ! grep -q "$wid" "$ROOT/app/watchers.php"' 'an editor'"'"'s computer pairs as a Watcher; Rushes keeps only the fingerprint of its ID'
-check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "\"shelf\":\"Library\""' 'a Watcher asks where things are'
+check 'WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "\"folder\":\"Maria ([0-9a-f]\{4\})\""' 'it learns its own folder in Projects: its name, and the start of its key'
 check 'WATCHER=nope call GET "{\"hello\":\"\"}" "{}" db/watcher.php | grep -q "not a paired Watcher"' 'an unpaired one is refused'
 check 'WATCHER=$wid call GET "{\"queue\":\"\"}" "{}" db/helper.php | grep -q "not the paired helper" || [ ! -s "$ROOT/app/helper-id.php" ]' 'a Watcher is not the helper'
 key=$(WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | sed 's/.*"key":"\([0-9a-f]*\)".*/\1/')
-WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"b1\"}" db/watcher.php >/dev/null
-check 'grep -qx "deliver	$key/b1" "$ROOT/app/ingest-queue.tsv"' 'a delivery is queued for the helper, in that Watcher'"'"'s own folder'
-check 'WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"../x\"}" db/watcher.php | grep -q "not a batch"' 'and nowhere else'
-WATCHER=$wid call POST "{}" "{\"action\":\"project\",\"path\":\"PARKS/2026/20260929 Kite/Kite.prproj\",\"saved\":\"100\",\"files\":\"12\",\"outside\":\"2\"}" db/watcher.php >/dev/null
-check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"PARKS/2026/20260929 Kite/Kite.prproj\"}" "{}" db/watcher.php | grep -q "\"files\":\[\]\|\"files\":{}"' 'a project is known; nothing delivered for it yet'
+folder=$(WATCHER=$wid call GET "{\"hello\":\"\"}" "{}" db/watcher.php | sed 's/.*"folder":"\([^"]*\)".*/\1/')
+# a file, sent in two pieces, carried on from where it stopped, kept only whole and with its fingerprint
+printf 'hello ' > "$ROOT/p1"; printf 'world' > "$ROOT/p2"; fp=sha256:$(printf 'hello world' | sha256sum | cut -d' ' -f1)
+BODY="$ROOT/p1" WATCHER=$wid call POST "{\"upload\":\"\",\"batch\":\"b1\",\"name\":\"song.wav\",\"offset\":\"0\",\"size\":\"11\",\"fp\":\"$fp\"}" "{}" db/watcher.php >/dev/null
+check 'WATCHER=$wid call GET "{\"upload\":\"\",\"batch\":\"b1\",\"name\":\"song.wav\"}" "{}" db/watcher.php | grep -q "\"have\":6,\"done\":false"' 'Rushes says how much of a file has arrived, so it carries on from there'
+check 'BODY="$ROOT/p2" WATCHER=$wid call POST "{\"upload\":\"\",\"batch\":\"b1\",\"name\":\"song.wav\",\"offset\":\"0\",\"size\":\"11\",\"fp\":\"$fp\"}" "{}" db/watcher.php | grep -q "not the next piece"' 'a piece out of order is refused'
+check 'BODY="$ROOT/p2" WATCHER=$wid call POST "{\"upload\":\"\",\"batch\":\"b1\",\"name\":\"song.wav\",\"offset\":\"6\",\"size\":\"11\",\"fp\":\"$fp\"}" "{}" db/watcher.php | grep -q "\"done\":true" && [ "$(cat "$ROOT/app/inbox/$key/b1/files/song.wav")" = "hello world" ]' 'the last piece completes it, checked against its fingerprint'
+printf 'xx' > "$ROOT/p3"
+check 'BODY="$ROOT/p3" WATCHER=$wid call POST "{\"upload\":\"\",\"batch\":\"b1\",\"name\":\"bad.wav\",\"offset\":\"0\",\"size\":\"2\",\"fp\":\"$fp\"}" "{}" db/watcher.php | grep -q "arrived different" && [ ! -e "$ROOT/app/inbox/$key/b1/files/bad.wav" ] && [ ! -e "$ROOT/app/inbox/$key/b1/files/bad.wav.part" ]' 'a file that arrives different is not kept'
+check 'BODY="$ROOT/p3" WATCHER=$wid call POST "{\"upload\":\"\",\"batch\":\"../x\",\"name\":\"a\",\"offset\":\"0\",\"size\":\"2\",\"fp\":\"$fp\"}" "{}" db/watcher.php | grep -q "not a batch"' 'and only in its own inbox'
+check '[ -f "$ROOT/app/inbox/.htaccess" ]' 'the inbox is never handed out by the web server'
+check 'WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"b1\",\"name\":\"Kite\",\"lines\":\"file\tmissing.wav\t$fp\t11\tmusic\t/Users/m/missing.wav\"}" db/watcher.php | grep -q "not arrived whole"' 'a batch listing a file that has not arrived is refused'
+WATCHER=$wid call POST "{}" "{\"action\":\"delivered\",\"batch\":\"b1\",\"name\":\"Kite\",\"lines\":\"file\tsong.wav\t$fp\t11\tmusic\t/Users/m/song.wav\"}" db/watcher.php >/dev/null
+check 'grep -qx "deliver	$key/b1" "$ROOT/app/ingest-queue.tsv" && grep -qx "folder	$folder" "$ROOT/app/inbox/$key/b1/batch.tsv" && grep -qx "project	$folder/Kite" "$ROOT/app/inbox/$key/b1/batch.tsv"' 'a complete batch is listed by Rushes (with the computer'"'"'s folder) and queued for the helper'
+check 'call GET "{\"inbox\":\"$key/b1/files/song.wav\"}" | grep -qx "hello world"' 'the helper is given the files from the inbox'
+check 'call GET "{\"inbox\":\"$key/b1/../../settings.json\"}" | grep -q "not in the inbox"' 'and nothing else'
+WATCHER=$wid call POST "{}" "{\"action\":\"project\",\"name\":\"Kite\",\"saved\":\"100\",\"files\":\"12\",\"outside\":\"2\"}" db/watcher.php >/dev/null
+check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"Kite\"}" "{}" db/watcher.php | grep -q "\"files\":\[\]\|\"files\":{}"' 'a project is known; nothing placed for it yet'
 mkdir -p "$ROOT/archive/Stock Library/Music"; printf 'lala' > "$ROOT/archive/Stock Library/Music/song.wav"
-check 'call POST "{}" "{\"batch\":\"$key/b1\",\"files\":\"/Users/m/song.wav\tStock Library/Music/song.wav\tsha256:ab\tmusic\tPARKS/2026/20260929 Kite/Kite.prproj\t4\n/x\t../../etc/passwd\tx\tmusic\tP\t1\"}" db/delivered.php | grep -q "\"recorded\":1,\"refused\":\[\"../../etc/passwd\"\]"' \
+check 'call POST "{}" "{\"batch\":\"$key/b1\",\"files\":\"/Users/m/song.wav\tStock Library/Music/song.wav\tsha256:ab\tmusic\t$folder/Kite\t4\n/x\t../../etc/passwd\tx\tmusic\tP\t1\"}" db/delivered.php | grep -q "\"recorded\":1,\"refused\":\[\"../../etc/passwd\"\]"' \
       'the helper says where a delivered file is now; only a file really inside the archive is taken'
-check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"PARKS/2026/20260929 Kite/Kite.prproj\"}" "{}" db/watcher.php | grep -q "\"/Users/m/song.wav\":{\"rel\":\"Stock Library/Music/song.wav\""' \
+check 'call POST "{}" "{\"action\":\"inbox-done\",\"batch\":\"$key/b1\"}" | grep -q "\"ok\":true" && [ ! -e "$ROOT/app/inbox/$key/b1" ]' 'placed and recorded: the inbox copy goes'
+check 'WATCHER=$wid call GET "{\"where\":\"\",\"project\":\"Kite\"}" "{}" db/watcher.php | grep -q "\"/Users/m/song.wav\":{\"rel\":\"Stock Library/Music/song.wav\""' \
       'and the Watcher learns it, to point the project there'
 # resting and moving aside: Rushes decides which project folders, the runner moves them
 old=$(( $(date +%s) - 100 * 86400 ))

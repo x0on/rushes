@@ -95,16 +95,10 @@ if (($_POST['_save'] ?? '') === '1') {
 
     // Editors' work (06): two shares picked from what this machine has, where
     // the helper finds Deliveries, and the stock library's folder in the archive.
-    $pick('p_proj',   'shares.projects',          $lpath);
-    $pick('p_deliv',  'shares.deliveries',        $lpath);
-    $pick('p_deliv_h','shares.deliveries_helper', $hpath);
     $lib = trim(preg_replace('#[/\\\\:*?"<>|]+#', ' ', (string)($_POST['lib'] ?? '')));
     $s['library']['folder'] = $lib !== '' ? mb_substr($lib, 0, 80) : 'Stock Library';
     // A project resting, and moved aside (projects.php): days without a save. 0 = never moved aside.
     $s['projects']['rest_days']  = max(1, min(365, (int)($_POST['rest_days'] ?? 10)));
-    $s['projects']['aside_days'] = max(0, min(3650, (int)($_POST['aside_days'] ?? 90)));
-    if ($s['projects']['aside_days'] && $s['projects']['aside_days'] < $s['projects']['rest_days'])
-        $bad[] = 'A project can be moved aside only after it is resting: make the second number larger than the first, or 0.';
 
     if ($bad) {
         $said = implode(' ', $bad);
@@ -577,34 +571,12 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
       </div>
 
       <!-- ══ 06 editors' work ══ -->
-      <?php $pProj = s_path('shares.projects'); $pDel = s_path('shares.deliveries'); $pDelH = s_path('shares.deliveries_helper');
-            $shareOpts = function (string $cur) use ($local, $e) {
-                $o = '<option value="">— not set</option>'; $seen = false;
-                foreach ($local as $v) { $seen = $seen || $v['path'] === $cur;
-                    $o .= '<option value="' . $e($v['path']) . '"' . ($v['path'] === $cur ? ' selected' : '') . '>' . $e($v['name']) . ' — ' . $e($v['path']) . '</option>'; }
-                if (!$seen && $cur !== '') $o .= '<option value="' . $e($cur) . '" selected>' . $e($cur) . ' (not visible right now)</option>';
-                return $o;
-            }; ?>
       <div class="grp">
         <h2><span>06 /</span> Editors' work</h2>
-        <p>Editors work on the <b>Projects</b> share and only read the archive. Rushes Watcher, on each
-           editor's computer, copies the files a project uses that are not on the server yet (stock music,
-           downloads, graphics) into the <b>Deliveries</b> share, and Rushes takes them into the archive from
-           there, checked like a card. Editors should be able to write to Projects and Deliveries, and only
-           read the archive.</p>
-        <label class="f"><span>The Projects share, on this machine</span>
-          <select name="p_proj"><?= $shareOpts($pProj) ?></select></label>
-        <label class="f"><span>The Deliveries share, on this machine</span>
-          <select name="p_deliv"><?= $shareOpts($pDel) ?></select></label>
-        <label class="f"><span>Where the helper finds Deliveries</span>
-          <select name="p_deliv_h">
-            <option value="">— not set</option>
-            <?php $seen = false; foreach ($hv['vols'] as $v): $seen = $seen || $v['path'] === $pDelH; ?>
-              <option value="<?= $e($v['path']) ?>" <?= $v['path'] === $pDelH ? 'selected' : '' ?>><?= $e($v['name']) ?></option>
-            <?php endforeach; if (!$seen && $pDelH): ?>
-              <option value="<?= $e($pDelH) ?>" selected><?= $e($pDelH) ?> (not reported right now)</option>
-            <?php endif; ?>
-          </select></label>
+        <p>Editors work wherever they like on their own computer. Rushes Watcher, on each one, keeps every
+           Premiere project they save, with the files it uses and what they export into its <b>Output</b> folder,
+           in <b>Projects</b> on the shelf: one folder per computer, one per project inside it, made by Rushes.
+           Editors only read the archive; the files reach it through Rushes, checked like a card.</p>
         <label class="f"><span>The stock library's folder, in the archive</span>
           <input type="text" name="lib" value="<?= $e(settings()['library']['folder'] ?? 'Stock Library') ?>">
           <small>Music, stock footage and sound effects that projects use are kept here once, in Music,
@@ -613,33 +585,33 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <label class="f"><span>Resting after</span>
           <input type="number" name="rest_days" min="1" max="365" style="width:7em" value="<?= (int)(settings()['projects']['rest_days'] ?? 10) ?>"> days without a save
           <small>Nothing moves: Manage and the editor's Watcher say it, so everyone knows the project is quiet.</small></label>
-        <label class="f"><span>Moved aside after</span>
-          <input type="number" name="aside_days" min="0" max="3650" style="width:7em" value="<?= (int)(settings()['projects']['aside_days'] ?? 90) ?>"> days without a save
-          <small>Its folder on the Projects share goes into “_Moved aside” on the same share, only when every project in it
-            has a copy kept in the archive and nothing it uses is missing. Bring it back, in Manage → Editors' projects,
-            puts it where it was. Nothing is deleted. 0: never moved.</small></label>
-
         <!-- Editors' computers: any number of Rushes Watchers, each paired once, each only able to deliver. -->
         <?php $ws = watchers(); ?>
         <div class="how-h" style="margin-top:14px">Editors' computers</div>
         <?php if (!$ws): ?><p class="note" style="margin:0">None yet.</p><?php endif; ?>
         <?php foreach ($ws as $k => $w): ?>
           <div class="seen ok" style="display:flex;gap:10px;align-items:center">
-            <span>✓ <?= $e($w['host'] ?: 'a computer') ?> &mdash; paired <?= $e(date('j M Y', (int)$w['at'])) ?></span>
+            <span>✓ <b><?= $e($w['name'] ?? ($w['host'] ?: 'a computer')) ?></b> &mdash; <?= $e($w['host'] ?? '') ?>, paired <?= $e(date('j M Y', (int)$w['at'])) ?>
+              <?= !empty($w['folder']) ? '· its folder: <code>Projects/' . $e($w['folder']) . '</code>' : '· <b>pair it again</b> to give it its folder' ?></span>
             <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['host']) ?>">Remove</button>
           </div>
         <?php endforeach; ?>
         <p class="note" style="margin:8px 0 4px">On the editor's computer: open Rushes in the browser, come to this page,
           <a href="/db/helper.php?app=watcher">download Rushes Watcher</a>, open it and follow its window. When it asks
-          for six numbers, press the button below here and type them there.</p>
-        <p style="margin:8px 0"><button type="button" class="btn" id="wPair">Add an editor's computer</button> <span id="wSaid"></span></p>
+          for the code: give the computer a name here (the editor's, usually), press the button, and Copy.</p>
+        <p style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="wName" placeholder="Name, e.g. Maria" maxlength="40" style="width:14em">
+          <button type="button" class="btn" id="wPair">Add an editor's computer</button> <span id="wSaid"></span></p>
         <script>
         (function () {
           var b = document.getElementById('wPair'), said = document.getElementById('wSaid');
           b.onclick = async function () {
             b.disabled = true; b.textContent = 'Asking …';
             try {
-              var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start', role: 'watcher'})})).json();
+              var nm = document.getElementById('wName').value.trim();
+              if (!nm) { said.textContent = 'Give the computer a name first: its folder in Projects carries it.'; document.getElementById('wName').focus();
+                         b.disabled = false; b.textContent = 'Add an editor\'s computer'; return; }
+              var r = await (await fetch('/db/pair.php', {method: 'POST', body: new URLSearchParams({action: 'start', role: 'watcher', name: nm})})).json();
               if (r.error) throw new Error(r.error);
               said.innerHTML = '<span class="code" style="font-size:20px;letter-spacing:3px;padding:4px 10px">' + r.code.slice(0, 3) + ' ' + r.code.slice(3) +
                 '</span> <button type="button" class="ghost" id="wCopy">Copy</button> — then in Rushes Watcher on the editor\'s computer: ' +

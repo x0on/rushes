@@ -1667,17 +1667,17 @@ def _free_name(path):
 
 
 def read_batch(text):
-    """batch.tsv -> dict, or ValueError. The Watcher writes it last and ends it
-    with "end", so a batch still being copied is never taken for a whole one."""
+    """batch.tsv -> dict, or ValueError. Rushes writes it (watcher.php) once
+    every file it lists has arrived whole, and ends it with "end"."""
     lines = text.split("\n")
     while lines and lines[-1] == "":
         lines.pop()
-    if not lines or lines[0] != "rushes-delivery 1" or lines[-1] != "end":
+    if not lines or lines[0] != "rushes-delivery 2" or lines[-1] != "end":
         raise ValueError("batch.tsv is not complete")
-    b = {"watcher": "", "host": "", "project": "", "shoot": "", "name": "", "files": []}
+    b = {"watcher": "", "host": "", "folder": "", "project": "", "shoot": "", "name": "", "files": []}
     for l in lines[1:-1]:
         f = l.split("\t")
-        if f[0] in ("watcher", "host", "project", "shoot") and len(f) == 2:
+        if f[0] in ("watcher", "host", "folder", "project", "shoot") and len(f) == 2:
             b[f[0]] = f[1]; continue
         if f[0] == "file" and len(f) == 6:
             x = {"name": f[1], "fp": f[2], "size": f[3], "kind": f[4], "original": f[5]}
@@ -1688,14 +1688,16 @@ def read_batch(text):
             raise ValueError(f"batch.tsv has a line it should not: {l[:80]}")
         algo, _, hexd = x["fp"].partition(":")
         if (not x["name"] or _plain(x["name"], 255) != x["name"] or not x["size"].isdigit()
-                or x["kind"] not in (*LIBRARY_KINDS, "project", "projectfile")
+                or x["kind"] not in (*LIBRARY_KINDS, "project", "output", "projectfile")
                 or _hasher(algo) is None or not re.fullmatch(r"[0-9a-f]{32,64}", hexd)):
             raise ValueError(f"batch.tsv lists a file it cannot take: {l[:80]}")
         x["size"] = int(x["size"])
         b["files"].append(x)
-    p = b["project"]
-    if not p or p.startswith(("/", "\\")) or ".." in p.replace("\\", "/").split("/"):
-        raise ValueError("batch.tsv does not say which project, inside the Projects share")
+    # <this computer's folder>/<project name>: one folder each, plain names, written by Rushes
+    parts = b["project"].split("/")
+    if not b["folder"] or _plain(b["folder"], 120) != b["folder"] or len(parts) != 2 or parts[0] != b["folder"] \
+            or not parts[1] or _plain(parts[1], 200) != parts[1]:
+        raise ValueError("batch.tsv does not say which computer and project it is for")
     if len({x["name"] for x in b["files"]}) != len(b["files"]):
         raise ValueError("batch.tsv lists the same file twice")
     return b
@@ -1714,41 +1716,50 @@ def _library():
     return idx
 
 
+def _from_inbox(rel, name, dest, size, algo, want):
+    """One file of a batch, from Rushes' inbox to this computer, checked against
+    the fingerprint the Watcher took on the editor's computer. -> the local copy."""
+    fed(name)
+    h = _hasher(algo); n = 0
+    with urllib.request.urlopen(f"{NAS_URL}/db/helper.php?inbox={urllib.parse.quote(rel + '/files/' + name)}", timeout=120) as r, \
+            open(dest, "wb") as out:
+        for buf in iter(lambda: r.read(8 << 20), b""):
+            out.write(buf); h.update(buf); n += len(buf); fed(name)
+    fed()
+    if n != size or h.hexdigest() != want:
+        os.remove(dest)
+        raise OSError("it does not match the fingerprint taken on the editor's computer")
+    return dest
+
+
 def deliver(rel):
     t0 = time.time()
     _mark_done(f"deliver {rel}")               # asked once: a refusal is not retried every 20 s
 
     def refuse(why):
-        print(f"Delivery {rel} not taken in: {why}.\nNothing in the archive changed; the batch is still in Deliveries.")
+        print(f"Delivery {rel} not taken in: {why}.\nNothing in the archive changed; the batch is still in Rushes' inbox.")
         history("refused", f"deliver {rel}", 0, 0, 0, why)
 
-    base = setting("shares.deliveries_helper") or (setting("shares.deliveries") if BUILT_IN else "")
-    if not base:
-        return refuse("Setup does not say where this helper finds the Deliveries share")
     if not re.fullmatch(r"[0-9a-f]{16}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}", rel):
         return refuse("that is not a delivery")
     key = rel.split("/")[0]
-    folder = os.path.join(base, *rel.split("/"))
     try:
-        b = read_batch(Path(folder, "batch.tsv").read_text(encoding="utf-8"))
-    except (OSError, ValueError, UnicodeDecodeError) as e:
-        return refuse(f"its batch.tsv cannot be read ({e})")
+        b = read_batch(_fetch(f"{NAS_URL}/db/helper.php?inbox={urllib.parse.quote(rel)}/batch.tsv", 30))
+    except (OSError, ValueError, urllib.error.URLError) as e:
+        return refuse(f"its list cannot be read ({e})")
     if b["watcher"] != key:
-        return refuse("batch.tsv names another editor's computer than the folder it is in")
+        return refuse("its list names another editor's computer than the one that sent it")
 
-    # Where things go. Made in a project: beside its shoot, in Finished. The
-    # shared stock library: once, in its own folder of the archive.
-    plain_parts = lambda p: [x for x in p.replace("\\", "/").split("/") if x]
-    sh = plain_parts(b["shoot"])
-    if sh and all(_plain(x, 255) == x and x != ".." for x in sh) and os.path.isdir(os.path.join(NAS_MOUNT, *sh)):
-        home = os.path.join(NAS_MOUNT, *sh)
-    elif _shelf():
-        home = _shelf()                          # no shoot known: Finished on the shelf
-    else:
-        return refuse("no shoot is named and no shelf is chosen in Reorganize, so it has nowhere to go")
-    pname = _plain(b["name"] or os.path.splitext(os.path.basename(b["project"].replace("\\", "/")))[0]) or "Project"
-    finished = os.path.join(home, "Finished", pname)
-    lp = plain_parts(setting("library.folder") or "Stock Library")
+    # Where things go: each editor's computer has its folder in Projects on the
+    # shelf, a folder per project in it (the project file, dated, one per close;
+    # Media: the files it uses; Output: what was exported). The shared stock
+    # library: once, in its own folder of the archive.
+    shelf = _shelf()
+    if not shelf:
+        return refuse("no shelf is chosen in Reorganize, so Projects has nowhere to be")
+    pname = b["project"].split("/")[1]
+    proj = os.path.join(shelf, "Projects", b["folder"], pname)
+    lp = [x for x in (setting("library.folder") or "Stock Library").replace("\\", "/").split("/") if x]
     if not lp or any(_plain(x, 255) != x or x == ".." for x in lp):
         return refuse("the stock library's folder in Setup is not a plain folder name")
     lib = os.path.join(NAS_MOUNT, *lp)
@@ -1758,49 +1769,47 @@ def deliver(rel):
     if free is not None and free - need < FLOOR:
         return refuse(f"only {free / 1024 ** 3:.0f} GB free on the archive, and the floor is {FLOOR / 1024 ** 3:.0f} GB")
 
-    print(f"delivery from {b['host'] or key}: {len(b['files'])} file(s) used by {b['project']}")
-    o = Origin("deliver", folder, base, f"delivery {key}", finished)
-    status(phase="delivering", source=b["project"], copied=0, of=len(b["files"]))
+    print(f"from {b['host'] or key} ({b['folder']}): {len(b['files'])} file(s) for {pname}")
+    o = Origin("deliver", f"Rushes' inbox, {rel}", NAS_URL, f"delivery {key}", proj)
+    status(phase="delivering", source=pname, copied=0, of=len(b["files"]))
     index, taken, proofs, mb, why_stopped = _library(), [], defaultdict(list), 0, ""
+    tmp = HOME / "inbox"; tmp.mkdir(parents=True, exist_ok=True)
     for i, x in enumerate(b["files"], 1):
         if control().get("paused") or stopped():
             why_stopped = "paused"; break
-        src = os.path.join(folder, "files", x["name"])
         algo, _, want = x["fp"].partition(":")
         stem, ext = os.path.splitext(x["name"])
         if x["kind"] in LIBRARY_KINDS:
             top = os.path.join(lib, LIBRARY_KINDS[x["kind"]]); dest = os.path.join(top, x["name"])
         elif x["kind"] == "project":
-            top = finished; dest = os.path.join(finished, "Media", x["name"])
+            top = proj; dest = os.path.join(proj, "Media", x["name"])
+        elif x["kind"] == "output":
+            top = proj; dest = os.path.join(proj, "Output", x["name"])
         else:                                      # the project file itself, dated: one per change
-            top = finished; dest = os.path.join(finished, f"{stem} {time.strftime('%Y-%m-%d %H%M')}{ext}")
+            top = proj; dest = os.path.join(proj, f"{stem} {time.strftime('%Y-%m-%d %H%M')}{ext}")
+        local = None
         try:
-            if not os.path.isfile(src) or os.path.getsize(src) != x["size"]:
-                raise OSError("it is not in the batch at the size batch.tsv says")
-            # Already in the archive? The same music in ten projects is stored once.
+            # Already in the archive? The same music in ten projects is stored once,
+            # and the same file is not taken twice for one project.
             same = lambda p: os.path.isfile(p) and os.path.getsize(p) == x["size"] and _fingerprint_of(p, algo) == want
             have = None
             if x["kind"] in LIBRARY_KINDS and x["fp"] in index and same(os.path.join(NAS_MOUNT, index[x["fp"]][0])):
                 have = os.path.join(NAS_MOUNT, index[x["fp"]][0])
-            elif x["kind"] == "projectfile" and os.path.isdir(finished):
-                older = sorted((os.path.join(finished, n) for n in os.listdir(finished)
+            elif x["kind"] == "projectfile" and os.path.isdir(proj):
+                older = sorted((os.path.join(proj, n) for n in os.listdir(proj)
                                 if n.startswith(stem + " ") and n.endswith(ext)), key=os.path.getmtime)
                 if older and same(older[-1]):
                     have = older[-1]              # unchanged since the last one kept
             elif same(dest):
                 have = dest
             if have:
-                if _fingerprint_of(src, algo) != want:
-                    raise OSError("it does not match the fingerprint taken on the editor's computer")
-                o.add("already", src, have, x["size"], x["original"]); dest = have
+                o.add("already", x["original"] or x["name"], have, x["size"], "")
+                dest = have
             else:
+                local = _from_inbox(rel, x["name"], str(tmp / ("part-" + x["fp"][-16:])), x["size"], algo, want)
                 dest = _free_name(dest)
-                also = _hasher(algo)
-                hexd, used = copy_verified(src, dest, x["size"], also=also)
-                if also.hexdigest() != want:
-                    os.remove(dest)
-                    raise OSError("it does not match the fingerprint taken on the editor's computer (changed on the way?)")
-                o.add("copied", src, dest, x["size"], x["original"]); mb += x["size"]
+                hexd, used = copy_verified(local, dest, x["size"])
+                o.add("copied", x["original"] or x["name"], dest, x["size"], x["kind"]); mb += x["size"]
                 if used == "xxh128":
                     proofs[top].append((dest, x["size"], hexd))
                 if x["kind"] in LIBRARY_KINDS:
@@ -1809,22 +1818,26 @@ def deliver(rel):
                         f.write(f"{x['fp']}\t{r}\t{x['size']}\n")
                     index[x["fp"]] = (r, x["size"])
             taken.append((x, dest))
-        except OSError as e:
-            o.add("failed", src, dest, x["size"], str(e))
+        except (OSError, urllib.error.URLError) as e:
+            o.add("failed", x["original"] or x["name"], dest, x["size"], str(e))
             print(f"  ! {x['name']}: {e}")
-        status(phase="delivering", source=b["project"], copied=i, of=len(b["files"]))
+        finally:
+            if local:
+                try: os.remove(local)
+                except OSError: pass
+        status(phase="delivering", source=pname, copied=i, of=len(b["files"]))
     for top, files in proofs.items():
-        mhl_copied(top, files, o, f"{b['host'] or key}, for {b['project']}")
+        mhl_copied(top, files, o, f"{b['host'] or key}, for {pname}")
     o.close()
     if why_stopped:
         _unmark_done(f"deliver {rel}")          # carries on when work resumes; what is in already is found there
         print(f"  stopped part-way ({why_stopped}) — the rest is taken in when work resumes")
-        status(phase="stopped", source=b["project"], copied=len(taken), of=len(b["files"]))
+        status(phase="stopped", source=pname, copied=len(taken), of=len(b["files"]))
         return
 
-    # Rushes learns where each file is now, so the Watcher can point the project at it.
+    # Rushes learns where each file is now (Search, and the archived project's links).
     told = False
-    rows = "\n".join(f"{x['original'] or b['project']}\t{os.path.relpath(d, NAS_MOUNT).replace(os.sep, '/')}"
+    rows = "\n".join(f"{x['original'] or x['name']}\t{os.path.relpath(d, NAS_MOUNT).replace(os.sep, '/')}"
                      f"\t{x['fp']}\t{x['kind']}\t{b['project']}\t{x['size']}" for x, d in taken)
     try:
         body = urllib.parse.urlencode({"batch": rel, "files": rows}).encode()
@@ -1836,24 +1849,20 @@ def deliver(rel):
     except Exception as e:
         print(f"  ! could not tell Rushes where the files are ({e})")
     failed = len(b["files"]) - len(taken)
-    # The delivery copies go only when every one of them is safe in the archive
-    # and Rushes knows where: otherwise the whole batch stays, for a person to see.
+    # Rushes' inbox copy goes only when every file is safe in the archive and
+    # Rushes knows where: otherwise the whole batch stays, for a person to see.
     if told and not failed:
-        for x in b["files"]:
-            try: os.remove(os.path.join(folder, "files", x["name"]))
-            except OSError: pass
-        for p in (os.path.join(folder, "batch.tsv"),):
-            try: os.remove(p)
-            except OSError: pass
-        for d in (os.path.join(folder, "files"), folder):
-            try: os.rmdir(d)
-            except OSError: pass
+        try:
+            body = urllib.parse.urlencode({"action": "inbox-done", "batch": rel}).encode()
+            urllib.request.urlopen(NAS_URL + "/db/helper.php", data=body, timeout=30).close()
+        except Exception as e:
+            print(f"  ! the batch stays in Rushes' inbox for now ({e})")
     note = (f"{o.n['copied']} copied, {o.n['already']} already in the archive"
-            + (f", {failed} could not be taken in — the batch is left in Deliveries" if failed else "")
-            + ("" if told else ", Rushes was not told where they are — the batch is left in Deliveries"))
+            + (f", {failed} could not be taken in — the batch is left in Rushes' inbox" if failed else "")
+            + ("" if told else ", Rushes was not told where they are — the batch is left in Rushes' inbox"))
     print(f"  {note}\n  record: _rushes/origin/{o.path.name}")
     history("delivered", rel, len(taken), mb, time.time() - t0, note)
-    status(phase="done", source=b["project"], copied=len(taken), of=len(b["files"]), failed=failed)
+    status(phase="done", source=pname, copied=len(taken), of=len(b["files"]), failed=failed)
 
 
 _looked = [[], 0.0]        # the latest look at what is plugged in here, and when

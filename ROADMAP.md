@@ -147,34 +147,33 @@ In this order of importance:
    stock library in Search), the helper taking deliveries in, and the core of
    Rushes Watcher (Premiere, on a Mac), Rushes Watcher as its own app, the
    menu bar icon for both apps (built and signed; to be tried on a Mac), and
-   resting and moving aside with Bring it back. To come: one combined app for a
+   resting; editors' work kept per computer (0.10). To come: one combined app for a
    single computer, Final Cut and Resolve.* Editors
    work as usual; Rushes keeps every project and everything it uses, without
    anyone pressing anything:
-   - **Three shares.** VIDEO, the archive: read only for people, only Rushes
-     writes. Projects: where editors work. Deliveries: where outside files
-     arrive, for Rushes to take in.
-   - **Rushes Watcher** on each editor's computer notices a project being
-     saved (once it has been quiet a few minutes) and copies the outside files
-     it uses (stock, downloads, graphics, voiceover) into Deliveries. It never
-     touches a project Premiere has open. When the project is closed, it is
-     pointed at the server's copies, and a copy of the project file goes into
-     the archive. It says what it did, every time, and keeps a log the editor
-     can read in it (and Rushes shows the same, per project): every file
-     brought in, every project pointed at the server, every project resting or
-     moved aside, and anything it could not do.
+   - **One folder per editor's computer.** VIDEO, the archive, stays read
+     only for people; only Rushes writes it. Beside the departments, Rushes
+     keeps `Projects/<computer> (<id>)/<project>/` with dated copies of the
+     project, `Media/` and `Output/`. The only thing chosen is the computer's
+     name, when it is paired. No shares to pick, none editors write to.
+   - **Rushes Watcher** on each editor's computer finds Premiere projects
+     wherever they are saved (Spotlight), and, once a project has been quiet a
+     few minutes, sends Rushes the outside files it uses, over the network.
+     When Premiere is quit, it sends what is new in the project's Output
+     folder (made beside each project) and a dated copy of the project
+     pointed at the archive's copies. The editor's own files are only read,
+     never moved or changed. It says what it did, every time, and keeps a log
+     the editor can read in it (and Rushes shows the same, per project).
    - **The project file decides what is kept**, not the folder: only files the
      project uses are taken in. Previews, renders and caches are left; so is
-     anything else in the folder. Missing files are said at once.
+     anything else in Downloads. Missing files are said at once.
    - **Where things go.** Reusable material (music, stock footage, sound
      effects) into a shared library, stored once however many projects use it,
-     and found in Search as the Library. Things made for one project (graphics,
-     titles, voiceover) with that project, beside its shoot.
+     and found in Search as the Library. Things made for the project into its
+     `Media/`; exports into `Output/`, found in Search as Deliverables.
    - **No Finished button.** A project is ongoing until it is not: after some
-     days without a save (10, a setting) it is *resting*, its copy in the
-     archive is complete, and Search shows it so. After longer (90, a setting)
-     its workspace folder is moved to the holding folder, said in Rushes and in
-     the editor's Watcher, with **Bring it back**. Nothing is deleted.
+     days without a save (10, a setting) it is *resting*, said in Rushes and in
+     the editor's Watcher. Nothing is moved or deleted.
    - **Always in sight:** the Watcher, and Rushes Helper too, live as a small
      icon in the menu bar (Mac) or the notification area (Windows). The icon
      says the state at a glance: idle, working, needs you, cannot reach Rushes.
@@ -239,7 +238,7 @@ One Rushes, packaged three ways:
   - **Rushes Helper**, on one computer: the archive work. Copies cards and old
     servers in, describes footage, checks copies. One per archive (pairing).
   - **Rushes Watcher**, on each editor's computer: watches that editor's
-    projects and copies the outside files they use into Deliveries, never into
+    projects and sends the outside files they use to Rushes, never writing
     the archive. No archive code, no describing, no models: what is not
     installed cannot be misused, and it stays small.
 

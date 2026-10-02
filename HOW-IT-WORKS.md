@@ -756,126 +756,119 @@ failed.
 
 ## Projects in and out
 
-Editors work as usual. Rushes keeps every project and everything it uses,
-without anyone pressing anything. *Built: Rushes' side, the helper's, Rushes
-Watcher (`mac/rushes_watcher.py`, Premiere projects, on a Mac) with its app and
-menu bar icon, and resting and moving aside. Final Cut and Resolve come later
-([roadmap](ROADMAP.md)).*
+Editors work as usual, wherever they like on their own computer. Rushes keeps
+every Premiere project they save, with the files it uses and what they export,
+without anyone pressing anything. *Premiere, on a Mac; Final Cut and Resolve
+come later ([roadmap](ROADMAP.md)).*
 
-**Three shares.** VIDEO, the archive: people only read it; only Rushes writes.
-Projects: where editors work. Deliveries: where outside files arrive for Rushes
-to take in. Each editor's computer writes only in its own folder of Deliveries,
-named by its key. Setup → 06 Editors' work says where each share is, how the
-helper sees Deliveries, and the stock library's folder.
+**One folder per computer.** In Setup → 06 Editors' work, **Add an editor's
+computer** asks for a name (the editor's, usually), then gives a six-number code
+with a Copy button; Rushes Watcher on that computer pastes it (**Paste the code
+from Rushes**). The code is the computer's identity. Its folder is made by
+Rushes, on the shelf, beside the departments, named by the name and the start of
+its key, so two "Maria"s never share one:
 
-**Rushes Watcher** runs on each editor's computer, paired with Rushes by a code
-from Setup → 06 Editors' work (a code for the helper is refused there, and a
-Watcher's code is refused by Rushes Helper, so an editor's computer can never
-take the helper's place). It follows the rules every Rushes program does:
+```
+<shelf>/Projects/Maria (a1b2)/
+  Kite Festival/                            one folder per project (the project file's name)
+    Kite Festival 2026-10-02 1530.prproj    a dated copy at each close, pointing at the archive
+    Media/                                  the files the project uses, from outside the archive
+    Output/                                 what was exported into Output: the deliverables
+```
+
+Nobody chooses a share, and editors need no share they can write to: the
+archive stays read-only for people, and only Rushes writes it. `Projects` cannot
+be a department's name, and Duplicates never moves anything in it (nor in the
+stock library): archived projects point at those files.
+
+**Rushes Watcher** runs on each editor's computer. It follows the rules every
+Rushes program does:
 
 - **Idle reads nothing.** While no editing program is open, it only asks this
   computer which programs are open, every 20 seconds, and tells Rushes it is
   there every 5 minutes.
-- **While Premiere is open,** every 2 minutes it looks through the Projects
-  share for projects (within a minute; past that it stops and says so),
-  leaving out hidden folders, caches, previews, auto-saves and its own backups.
-- **A project saved here,** unchanged for 3 minutes, is read (only read) for
-  the files it uses. Files in the archive are left; caches and previews too.
-  The rest are *from outside*: copied to Deliveries (below), unless already
-  delivered unchanged. Files it cannot find are said in its log and in Rushes.
-  A project whose outside files are all missing here is another computer's,
-  and is left to that computer's Watcher.
+- **While Premiere is open,** every 2 minutes it asks Spotlight (the index
+  macOS keeps of every file) which Premiere projects were saved, wherever they
+  are: Desktop, Documents, a drive. Nothing is walked through. The archive's
+  own copies, auto-saves and caches are left out.
+- **A project saved, then quiet for 3 minutes,** is read (only read) for the
+  files it names: what was imported into it, not the rest of a Downloads
+  folder. Files already in the archive are left where they are; caches and
+  previews too. The rest are sent to Rushes now, so nothing is lost if the
+  laptop is, unless already sent unchanged. Files it cannot find are said in
+  its log and in Rushes. It makes an **Output** folder beside the project the
+  first time, so exports always have their place.
 - **Which kind:** guessed from the file: sound effects (`sfx`, `foley` in its
   path), voiceover (`vo`, `narration`: made for the project), other audio is
   music, video from a stock site's folder is stock, the rest is made for the
   project.
-- **When Premiere is quit,** each project it saved is pointed at the archive's
-  copies: a backup of the project as it was goes first into `Rushes backups`
-  beside it; the project is changed only if nobody saved it meanwhile, and is
-  written whole under another name, then put in place. Then a copy of the
-  project file is delivered into the archive. *A project open on another
-  computer at that moment is not known to it: one project, one editor at a
-  time.*
+- **When Premiere is quit,** for each project saved: what is new in Output is
+  sent, then a dated copy of the project, rewritten in memory to point at the
+  archive's copies of what it uses (once the helper has placed them; after an
+  hour, as far as they are). **The editor's own project and files are only
+  read, never moved or changed**: the Output folder is the one thing it makes.
+  If nothing is in Output, the log says so.
 - Its log (`~/Library/Logs/Rushes Watcher/watcher.log`) says every step, and its
   last 40 lines go to Rushes with each report. If Rushes does not answer, it
   asks less and less, up to every 15 minutes.
 
-**A delivery.** When an editor saves (and the project has been quiet a few
-minutes), the Watcher copies the files the project uses from outside the
-archive into `Deliveries/<its key>/<batch>/files/`, fingerprints each one on the
-editor's computer, and writes `batch.tsv` last:
+**Sending.** Files go to Rushes over the network, into this computer's inbox
+in the web folder (`inbox/<its key>/<batch>/`, never handed out by the web
+server), in pieces of 4 MB, each request well under what a web server takes. A
+file that stopped part-way carries on from what arrived. The last piece is
+checked: kept only if it is the size and the SHA-256 fingerprint taken on the
+editor's computer. Rushes refuses a file when the server has less than 20 GB
+free beyond it (`limits.inbox_free_min`). When every file of a batch has
+arrived, the Watcher sends its list, and Rushes writes the batch's
+`batch.tsv` itself (who sent it, and its folder, are Rushes' own words), then
+queues `deliver <key>/<batch>` for the helper, after cards and tidy-ups:
 
 ```
-rushes-delivery 1
+rushes-delivery 2
 watcher     <its key>
 host        <the computer's name>
-project     <the project, inside the Projects share>
-shoot       <its shoot folder in the archive, or empty>
-file        <name>  <algo:fingerprint>  <bytes>  <music|stock|sfx|project>  <where it was>
-projectfile <name>  <algo:fingerprint>  <bytes>  <project name>
+folder      <its folder in Projects>
+project     <its folder>/<project name>
+shoot       <the shoot the project mostly uses, from the archive's footage it names, or empty>
+file        <name>  <sha256:…>  <bytes>  <music|stock|sfx|project|output>  <where it was>
+projectfile <name>  <sha256:…>  <bytes>  <project name>
 end
 ```
 
-A `batch.tsv` without `end` is a batch still being copied, and is refused. The
-Watcher then tells Rushes (`db/watcher.php`), which queues `deliver <key>/<batch>`
-for the helper, after cards and tidy-ups.
-
-**Taking it in.** The helper (`ingest.py --deliver`) reads `batch.tsv`, refuses
-the whole batch if it names another computer, a path that climbs out, or a file
-it cannot check, and then, file by file:
+**Taking it in.** The helper (`ingest.py --deliver`) reads `batch.tsv` from
+Rushes, refuses the whole batch if it names another computer, another
+computer's folder, or a file it cannot check, then, file by file, fetches it
+from the inbox, checks it again against its fingerprint, and puts it in place
+[the careful way](#how-a-file-is-copied):
 
 - **Music, stock footage, sound effects** go into the stock library,
-  `<library folder>/Music`, `/Stock footage`, `/Sound effects`. Each is stored
-  once: `_rushes/library.tsv` lists every fingerprint, and the same file
-  delivered again, under any name, for any project, points at the copy already
-  there.
-- **Things made for one project** go beside its shoot:
-  `<shoot>/Finished/<project>/Media/`. With no shoot named, `Finished` on the
-  shelf.
-- **The project file** goes in `<shoot>/Finished/<project>/` as
-  `<name> <date time>.prproj`, one per change: unchanged since the last one,
-  nothing new is kept.
+  `<library folder>/Music`, `/Stock footage`, `/Sound effects`, stored once:
+  `_rushes/library.tsv` lists every fingerprint, and the same file again,
+  under any name, for any project, points at the copy already there.
+- **Things made for the project** go into `Projects/<computer>/<project>/Media/`;
+  **exports** into its `Output/`; **the project file** beside them, dated, one
+  per change (unchanged since the last one kept, nothing new is kept).
 - A file of the same name already there gets ` (2)`; nothing is written over.
 
-Each file is copied [the careful way](#how-a-file-is-copied), and its
-fingerprint is taken on the same read and compared with the one taken on the
-editor's computer: a file that changed on its way is not taken. Every file is
-in the run's origin record (`_rushes/origin/… deliver.tsv`), with where it was
-on the editor's computer, and in a copy proof. Pause stops it at the next file;
-it carries on from there.
-
-Then the helper tells Rushes where each file is now (`db/delivered.php`, which
-takes only files really inside the archive, at the size said), and the Watcher
-asks (`?where`) to point the project at the server's copies when it is closed.
-**Only when every file of the batch is safe in the archive and Rushes has
-recorded it** is the batch removed from Deliveries. Otherwise the whole batch
-stays, and Activity says why.
+Every file is in the run's origin record and in a copy proof. Pause stops it at
+the next file; it carries on from there. Then the helper tells Rushes where
+each file is now (`db/delivered.php`, which takes only files really inside the
+archive, at the size said), and **only then** is the batch removed from the
+inbox. Otherwise the whole batch stays, and Activity says why.
 
 **Seeing it.** Manage → Editors' projects lists every project the Watchers
 report: its computer, last save, files from outside, files missing, what is in
-the archive, and its state, with why it will or will not be moved aside, and
-when. Below, each editor's computer: what it is doing, when it was
-last heard from, and the end of its log, the same lines the editor sees. Search
-has the stock library as its own section: Music, Stock footage, Sound effects.
+the archive, and its state. Below, each editor's computer: what it is doing,
+when it was last heard from, and the end of its log. Search has **Deliverables**
+(everything in Output folders) and the **Stock library** as sections of their
+own.
 
-**No Finished button.** A project is ongoing until it is not:
-
-- **Resting:** not saved for 10 days (Setup → 06). Nothing moves. Manage says
-  it, and so does the editor's Watcher, in its log, once.
-- **Moved aside:** not saved for 90 days (Setup → 06; 0 for never). Its folder
-  on the Projects share goes into `_Moved aside` on the same share, at the same
-  path inside it: a rename, so nothing is copied and nothing is deleted. Only
-  when **every** project in that folder has slept that long, has a copy of the
-  project kept in the archive, and has no file missing; otherwise it stays, and
-  Manage says why. A folder at the top of the share is never moved. Rushes
-  decides (`db/projects.php`, which only the runner can ask); the runner moves,
-  once a day, never over anything already there, and not while paused. Each move
-  is in the job log and on Manage → Editors' projects, and the editor's Watcher
-  says it in its log. The Watcher never looks inside `_Moved aside`.
-- **Bring it back** (Manage → Editors' projects, asked twice on the button)
-  puts the folder back where it was within a minute, even while paused, never
-  over a folder that has taken its place. A folder brought back is left in its
-  place for another 90 days.
+**No Finished button.** A project is ongoing until it is not: after some days
+without a save (10, Setup → 06) it is *resting*, said in Manage and once in the
+editor's Watcher. Nothing moves. *(Moving a workspace folder aside after 90
+days, `db/projects.php`, applied to a Projects share editors worked on. Projects
+now live on each editor's computer and are kept as copies, so it is off unless
+`projects.aside_days` is set.)*
 
 ## Keeping the archive tidy
 
@@ -1153,7 +1146,7 @@ stopped, and its log says why (it tries again in 10 minutes).
 
 - **The icon says the state at a glance:** a film strip when idle, turning
   arrows when the helper is working (an eye when the Watcher is watching, an
-  arrow up while it copies to Deliveries), a pause sign when paused, a warning
+  arrow up while it sends to Rushes), a pause sign when paused, a warning
   when it needs you (stopped by itself, not paired), and a crossed signal when
   it cannot reach Rushes. Its tooltip says the same in words.
 - **The menu** shows what it is doing now (with how far), the last few lines it
@@ -1733,11 +1726,8 @@ and caches are **moved** to the holding folder, and only you empty it.
     added to the same note where the files went, or moved there.
 - **An approved page** in `_rushes/deploy`, once it is installed.
 
-**On the Deliveries share:**
+**In the archive:**
 
-- **A delivery,** once every file in it is in the archive, checked against the
-  fingerprint taken on the editor's computer, and recorded by Rushes. Nothing
-  else there, and never part of a batch.
 - **A database copy** in `_rushes/db-copies` is replaced by the one made a week
   later on the same weekday.
 
@@ -1746,6 +1736,9 @@ and caches are **moved** to the holding folder, and only you empty it.
 - each job file, when it is picked up;
 - the old `.adminpass`, once moved into `adminpass.php`;
 - the pairing code once used, and the refused-helper list on pairing;
+- a batch an editor's computer sent (`inbox/`), once every file in it is in
+  the archive, checked against the fingerprint taken on the editor's computer,
+  and recorded by Rushes; a piece of a file that turned out wrong;
 - the cached plan, on Remake;
 - a zip once sent, and the holding-folder check's scratch folder;
 - logs that only grow, once past 5 MB, keep their newest 1 MB: the built-in

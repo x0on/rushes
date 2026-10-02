@@ -28,7 +28,11 @@ if ($act === 'start') {
     if (!may_act((string)($_POST['pass'] ?? ''))) said(403, ['error' => 'sign in first']);
     $code = sprintf('%06d', random_int(0, 999999));
     $role = ($_POST['role'] ?? '') === 'watcher' ? 'watcher' : 'helper';
-    if (!php_keep($C, ['hash' => hash('sha256', $code), 'until' => time() + 600, 'tries' => 0, 'role' => $role]))
+    // An editor's computer is named here, once: its folder in Projects carries the name.
+    $name = trim(preg_replace('/[\/\\:*?"<>|\x00-\x1f]+/u', ' ', (string)($_POST['name'] ?? '')));
+    if ($role === 'watcher' && ($name === '' || $name[0] === '.' || mb_strlen($name) > 40))
+        said(400, ['error' => 'Give the editor\'s computer a name first (it names its folder in Projects).']);
+    if (!php_keep($C, ['hash' => hash('sha256', $code), 'until' => time() + 600, 'tries' => 0, 'role' => $role, 'name' => $name]))
         said(500, ['error' => 'Could not save the code — is the web folder writable?']);
     said(200, ['code' => $code, 'until' => time() + 600]);
 }
@@ -63,9 +67,11 @@ $host = substr(preg_replace('/[^\p{L}\p{N} ._\'’-]/u', '', (string)($_POST['ho
 $id = bin2hex(random_bytes(16));
 if (($c['role'] ?? 'helper') === 'watcher') {
     // an editor's computer: one more Watcher, kept by the fingerprint of its ID
-    $w = watchers(); $w[hash('sha256', $id)] = ['host' => $host, 'at' => time()];
+    // its folder: the name, and the start of its key so two "Maria"s never share one
+    $h = hash('sha256', $id); $name = (string)($c['name'] ?? '') ?: ($host ?: 'Editor');
+    $w = watchers(); $w[$h] = ['host' => $host, 'name' => $name, 'folder' => "$name (" . substr($h, 0, 4) . ')', 'at' => time()];
     if (!php_keep(watchers_file(), $w)) said(500, ['error' => 'Could not save the pairing — is the web folder writable?']);
-    said(200, ['id' => $id, 'host' => $host, 'role' => 'watcher']);
+    said(200, ['id' => $id, 'host' => $host, 'name' => $name, 'folder' => $w[$h]['folder'], 'role' => 'watcher']);
 }
 if (!php_keep(helper_id_file(), ['id' => $id, 'host' => $host, 'at' => time()]))
     said(500, ['error' => 'Could not save the pairing — is the web folder writable?']);

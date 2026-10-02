@@ -581,67 +581,6 @@ class ProofTests(unittest.TestCase):
             m.update_self()
             self.assertEqual(len(asked), 1)                               # and not again
 
-    def test_a_delivery_lands_once_in_the_right_places_and_only_then_leaves(self):
-        import hashlib
-        m = self.mod
-        key = 'ab12cd34ef567890'
-        deliv = self.root / 'Deliveries'
-        (self.archive / 'Shelf' / '2024 Parks').mkdir(parents=True)
-        m.SETTINGS = dict(m.SETTINGS, shares={'deliveries_helper': str(deliv)}, organise={'shelves': 'Shelf'})
-        def batch(name, files, shoot='Shelf/2024 Parks', end=True):
-            d = deliv / key / name; (d / 'files').mkdir(parents=True)
-            lines = ['rushes-delivery 1', f'watcher\t{key}', 'host\tedit-1', 'project\tParks/Cut.prproj', f'shoot\t{shoot}']
-            for n, data, kind in files:
-                (d / 'files' / n).write_bytes(data)
-                fp = 'sha256:' + hashlib.sha256(data).hexdigest()
-                lines.append(f'projectfile\t{n}\t{fp}\t{len(data)}\tCut' if kind == 'projectfile'
-                             else f'file\t{n}\t{fp}\t{len(data)}\t{kind}\t/Users/ed/Downloads/{n}')
-            (d / 'batch.tsv').write_text('\n'.join(lines + (['end'] if end else [])) + '\n')
-            return d
-        self.posted = []
-        def post(url, data=None, timeout=None):
-            from urllib.parse import parse_qs
-            q = parse_qs(data.decode()) if data else {}
-            self.posted.append((url, q))
-            return io.BytesIO(json.dumps({'recorded': len(q.get('files', [''])[0].splitlines()), 'refused': []}).encode())
-        def run(name):
-            with patch.object(m, 'control', return_value={}), patch.object(m, 'stopped', return_value=''), \
-                 patch.object(m, '_push'), patch.object(m, 'send_file'), patch.object(m, 'free_bytes', return_value=None), \
-                 patch('urllib.request.urlopen', side_effect=post), patch('sys.stdout', new_callable=io.StringIO):
-                m.deliver(f'{key}/{name}')
-        b1 = batch('b1', [('song.wav', b'la' * 50, 'music'), ('render.mov', b'r' * 70, 'project'), ('Cut.prproj', b'<p/>', 'projectfile')])
-        run('b1')
-        lib, fin = self.archive / 'Stock Library' / 'Music', self.archive / 'Shelf' / '2024 Parks' / 'Finished' / 'Cut'
-        self.assertEqual((lib / 'song.wav').read_bytes(), b'la' * 50)
-        self.assertEqual((fin / 'Media' / 'render.mov').read_bytes(), b'r' * 70)
-        self.assertEqual(len(list(fin.glob('Cut *.prproj'))), 1)
-        self.assertFalse(b1.exists())                                     # safe in the archive and recorded: the delivery copy goes
-        rows = self.posted[-1][1]['files'][0].splitlines()
-        self.assertIn('/Users/ed/Downloads/song.wav\tStock Library/Music/song.wav', rows[0])
-        self.assertEqual(self.posted[-1][1]['batch'], [f'{key}/b1'])
-        # the same music again, under another name, and an unchanged project: nothing stored twice
-        batch('b2', [('song copy.wav', b'la' * 50, 'music'), ('Cut.prproj', b'<p/>', 'projectfile')])
-        run('b2')
-        self.assertEqual(sorted(p.name for p in lib.iterdir()), ['ascmhl', 'song.wav'] if (lib / 'ascmhl').exists() else ['song.wav'])
-        self.assertEqual(len(list(fin.glob('Cut *.prproj'))), 1)
-        self.assertIn('Stock Library/Music/song.wav', self.posted[-1][1]['files'][0])
-        # a file that is not what the editor's computer fingerprinted: not taken, and the batch stays
-        b3 = batch('b3', [('hit.wav', b'boom', 'sfx')])
-        (b3 / 'files' / 'hit.wav').write_bytes(b'bang')
-        run('b3')
-        self.assertFalse((self.archive / 'Stock Library' / 'Sound effects' / 'hit.wav').exists())
-        self.assertTrue((b3 / 'batch.tsv').exists())
-        # half-written (no "end"), or in another computer's folder: refused whole
-        batch('b4', [('x.wav', b'x', 'music')], end=False)
-        run('b4')
-        hist = (m.STATUS / 'ingest-history.tsv').read_text()
-        self.assertIn(f'refused\tdeliver {key}/b4', hist)
-        self.assertIn(f'delivered\t{key}/b1\t3', hist)
-        with self.assertRaises(ValueError):
-            m.read_batch('rushes-delivery 1\nproject\t../../etc\nend\n')
-        with self.assertRaises(ValueError):
-            m.read_batch('rushes-delivery 1\nproject\tP\nfile\t../x\tsha256:' + '0' * 64 + '\t1\tmusic\t/x\nend\n')
-
     def test_copies_are_counted_where_each_file_came_from(self):
         m = self.mod
         for n in ('kept.mov', 'gone.mov'): (self.source / n).write_bytes(b'k' * 5)

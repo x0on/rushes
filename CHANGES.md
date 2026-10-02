@@ -3,6 +3,21 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.10.0 — October 2026
+
+- **Editors' work, kept per computer.** Editors save Premiere projects
+  wherever they like. Rushes Watcher finds them (Spotlight) and sends Rushes
+  the files they use, over the network, in checked pieces; when Premiere is
+  quit, a dated copy of each project, pointed at the archive's copies, and
+  what is new in its **Output** folder (made beside the project). Rushes keeps
+  them in `Projects/<computer>/<project>/` beside the departments. Nothing on
+  the editor's computer is moved or changed.
+- **Only a name is chosen:** Setup → 06 asks the computer's name when pairing.
+  The Projects and Deliveries shares are gone; editors write nowhere in the
+  archive.
+- **Deliverables in Search:** everything in Output folders, as its own section.
+- Duplicates never moves anything in Projects or the stock library.
+
 ## 0.9.3 — October 2026
 
 - **Updates of the apps only when you say so.** No app updates by itself any
