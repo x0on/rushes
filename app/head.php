@@ -15,7 +15,7 @@ $NAV = $NAV ?? '';
   .tab-i { display: inline-flex; align-items: center; gap: 7px }
   .tab-i svg { width: 15px; height: 15px; flex: none }
   .topbar .pulse { padding-right: 14px; border-right: 1px solid var(--line-soft) }
-  .topbar .slow { font-size: 12px; color: var(--warn, #b26a00) }
+  .topbar .slow { font-size: 12px; color: var(--warn, #b26a00); white-space: nowrap }
 </style>
 <?php $iv = substr(md5(favicon_href()), 0, 8); ?>
 <link rel="icon" type="image/png" sizes="64x64" href="/icon.php?v=<?= $iv ?>">
@@ -56,7 +56,11 @@ $NAV = $NAV ?? '';
         slowest[id] = wait > ms ? wait : 0;
         var w = Math.max.apply(null, Object.keys(slowest).map(function (k) { return slowest[k]; }));
         var el = document.getElementById('hSlow');
-        if (el) { el.hidden = !w; el.textContent = 'the archive is slow, asking every ' + Math.round(w / 1000) + ' s'; }
+        if (el) {                                   // on a phone, the short form; the whole sentence on a long press
+          var say = 'the archive is slow, asking every ' + Math.round(w / 1000) + ' s';
+          el.hidden = !w; el.title = say;
+          el.textContent = window.matchMedia('(max-width: 640px)').matches ? 'slow · ' + Math.round(w / 1000) + ' s' : say;
+        }
         timer = setTimeout(tick, wait);
       });
     }

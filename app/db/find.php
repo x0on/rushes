@@ -153,7 +153,7 @@ require __DIR__ . '/config.php';
       <div class="q">
         <span class="mag" aria-hidden="true"><?= icon('search', 1.9) ?></span>
         <input id="q" autofocus autocomplete="off" aria-label="Search the archive"
-               placeholder="a name, a folder, an event &mdash; every word must match">
+               placeholder="a name, a folder, an event" title="Every word you type must match">
       </div>
       <div class="chips" id="chips"></div>
       <div class="statline"><span id="stat">Start typing.</span>
