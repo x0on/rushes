@@ -253,12 +253,20 @@ if (!$hist2 && is_readable("$WEB/ingest-history.tsv"))
 
 // Cards asked for, and whether each has landed. A card is known by where it is
 // going, because the same card path comes back every week with a new shoot.
+// A landed card also says how many files could not be copied (the helper's
+// history note): only with none is it safe to format (ingest.php).
+$cardFailed = [];
+foreach (@file("$WEB/ingest-history.tsv") ?: [] as $l) {
+    $f = explode("\t", rtrim($l, "\n"));
+    if (count($f) >= 5 && $f[1] === 'copied')
+        $cardFailed[$f[2]] = preg_match('/^(\d+) could not be copied/', $f[6] ?? '', $m) ? (int)$m[1] : 0;
+}
 $ingests = [];
 foreach (@file("$WEB/ingest-queue.tsv") ?: [] as $l) {
     $f = explode("\t", rtrim($l, "\n"));
     if (($f[0] ?? '') !== 'ingest' || count($f) < 3) continue;
     $ingests[] = ['src' => $f[1], 'into' => $f[2], 'name' => basename($f[2]),
-                  'state' => isset($hist2[$f[2]]) ? 'done' : 'queued'];
+                  'state' => isset($hist2[$f[2]]) ? 'done' : 'queued', 'failed' => $cardFailed[$f[2]] ?? 0];
 }
 
 // what has landed, one row per folder, newest first — the right-hand column

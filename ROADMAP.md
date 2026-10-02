@@ -139,7 +139,8 @@ In this order of importance:
    (FCPXML). Pulls, markers and relinking for all three. *Built for all three;
    to be tried in Final Cut and Resolve.*
 4. **Card offload you can trust:** a clear "verified — safe to format this
-   card", and copying to two places at once.
+   card", and copying to two places at once. *Built: safe to format. To come:
+   two places at once.*
 
 Later versions:
 

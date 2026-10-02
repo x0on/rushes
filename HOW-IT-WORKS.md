@@ -359,6 +359,12 @@ beside the rest.
 4. **Press Start ingest, then press it again.** The button asks "Sure?" and
    shows where each day will go. Then follow it in "Moving now". When it has
    landed, "Find it" opens Search on it. **Queue another source** starts over.
+5. **Safe to format?** When every folder a card went into has landed, Ingest
+   says so for the card, plainly: **safe to format** (every file is on the
+   archive, read back from its disk and checked against the card) or **do not
+   format it yet** (how many files could not be copied; they are in the record,
+   and queueing the card again tries them). It never says safe while anything is
+   still copying or any file failed.
 
 If no departments have been set up yet, or the folder they live in has not
 been chosen, Ingest says so and points to Reorganize. Anyone who can open Rushes can ingest a card, without a password.

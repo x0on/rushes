@@ -409,6 +409,22 @@ function paintJobs() {
         '<a class="btn quiet" href="/db/find.php?q=' + encodeURIComponent(words) + '">Find it</a>'));
     }
   });
+  // A card is safe to format only when every folder it went into has landed,
+  // every file read back from the archive and checked, and none could not be
+  // copied. Said plainly either way, never left to be guessed.
+  const cards = {};
+  (S.ingests || []).forEach(function (x) { (cards[x.src] = cards[x.src] || []).push(x); });
+  Object.keys(cards).forEach(function (src) {
+    const all = cards[src], name = src.split('/').pop() || src;
+    if (!all.every(function (x) { return x.state === 'done'; })) return;
+    const failed = all.reduce(function (n, x) { return n + (x.failed || 0); }, 0);
+    out.push(failed
+      ? row(ICONS.card, name + ' — do not format it yet', failed + ' file' + (failed === 1 ? '' : 's') +
+            ' could not be copied. They are listed in the record; queue the card again to try them.', 'bad', null, '',
+            '<span class="pill stop">keep the card</span>')
+      : row(ICONS.done, name + ' — safe to format', 'Every file is on the archive, read back from its disk and checked against the card.',
+            '', 100, '', '<span class="pill check">verified</span>'));
+  });
   // The folder being copied is also still 'queued' in the list; show it once.
   const now = c && (c.phase === 'copying' || c.phase === 'blocked') ? c.source : '';
   (S.sections || []).filter(function (x) {
