@@ -295,7 +295,6 @@ class Watcher:
     def __init__(self, cfg):
         self.cfg, self.state = cfg, load(STATE, {"projects": {}})
         self.hello, self.hello_at, self.last_scan, self.since, self.said, self.now = None, 0, 0, 0, 0, ""
-        self.app_checked = 0 if os.environ.get("RUSHES_APP", "").endswith(".app") else float("inf")
 
     def report(self, state, force=False, note=""):
         say_now(state, note)
@@ -322,16 +321,6 @@ class Watcher:
         if open_ and time.time() - self.last_scan >= SCAN_EVERY:
             self.last_scan = time.time()
             self.look(where_)
-        if not open_ and not self.since and time.time() - self.app_checked > 3600:    # never before closed projects are pointed at the archive
-            # Idle: the app kept at Rushes' version (release.py → app_update), at most once an hour.
-            self.app_checked = time.time()
-            try:
-                import release
-                release.app_update(self.cfg["url"], os.environ.get("RUSHES_APP", ""), say=log)
-            except ImportError:
-                pass                                     # run from the repository, not the app
-            except Exception as e:
-                log(f"! the app was not updated: {e} — this version carries on")
         if not open_ and self.since:
             self.since = 0
             log("editing program closed — pointing its projects at the archive")

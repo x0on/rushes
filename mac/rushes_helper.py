@@ -45,6 +45,8 @@ HOMEAPP = os.path.join(HOME, "Applications", NAME + ".app")
 WORKLOG = os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")      # what the work itself says
 # Rushes Watcher's own notes: its pairing (config.json), what it is doing (now.json), Pause watching (paused)
 WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
+# When Rushes was last asked for a newer app, and its answer (once a week, or Check for updates)
+UPCHECK = os.path.join(WDIR if WATCHER else DIR, "update-check.json")
 FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 # The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
@@ -421,18 +423,38 @@ class Window:
             s.update(self.home())
         return s
 
-    def newer(self):
-        """A newer Rushes Helper (or Watcher) on Rushes: asked at most every 10 minutes, and
-        only for the copy in Applications, which is the one the background service runs."""
-        if time.time() - getattr(self, "_newer_at", 0) > 600:
-            self._newer_at = time.time()
+    def newer(self, now=False):
+        """A newer Rushes Helper (or Watcher) on Rushes, offered, never installed by
+        itself: the person decides. Rushes is asked once a week (remembered on
+        this computer), or at once with Check for updates. Only for the copy in
+        Applications, which is the one the background service runs."""
+        c = read_json(UPCHECK)
+        if now or time.time() - c.get("at", 0) > 7 * 86400:
+            c["at"] = time.time()                        # a failed question waits a week too, unless asked
             try:
                 import release
                 same = os.path.realpath(APP) == os.path.realpath(HOMEAPP)
-                self._newer = release.app_update(self.s["url"], APP, check_only=True) if same and hasattr(release, "app_update") else ""
-            except Exception:
-                self._newer = getattr(self, "_newer", "")
-        return getattr(self, "_newer", "")
+                c["newer"] = release.app_update(self.s["url"], APP, check_only=True) if same else ""
+            except Exception as e:
+                if now: raise
+            try:
+                os.makedirs(os.path.dirname(UPCHECK), exist_ok=True)
+                with open(UPCHECK + ".new", "w") as f:
+                    json.dump(c, f)
+                os.replace(UPCHECK + ".new", UPCHECK)
+            except OSError:
+                pass
+        v = c.get("newer", "")
+        try:
+            import release
+            return v if v and release.version_tuple(v) > release.version_tuple(app_version()) else ""
+        except ImportError:
+            return ""
+
+    def check_updates(self):
+        v = self.newer(now=True)
+        self.set(said=f"Rushes {v} is ready. Update to {v} when you choose: nothing changes until you do." if v
+                 else f"Up to date: {NAME} {app_version()} is the same version as Rushes.")
 
     def update_app(self):
         import release
@@ -553,6 +575,8 @@ class Window:
             else:
                 self.set(error="")
                 self.run("Pairing with Rushes …", lambda: self.pair(clip.replace(" ", "")))
+        elif do == "check-updates":
+            self.run("Asking Rushes …", self.check_updates)
         elif do == "update-app":
             self.run(f"Updating {NAME} …", self.update_app)
         elif do == "back-home":
@@ -911,7 +935,7 @@ function home(s) {
         'Help happens in the open, on GitHub, with what you choose to share.</small></div></div>' +
     '</div>' +
     '<p class="muted" style="font-size:12.5px">Updates: the helper keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) +
-      ', never anywhere else), checking once an hour and only between jobs. This app itself is updated by downloading a new one from Setup. Nothing else can reach this Mac through it.</p>' +
+      ', never anywhere else), between jobs, when Rushes says it has changed. This app itself updates only when you press Update (the menu bar icon says when there is one). Nothing else can reach this Mac through it.</p>' +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }
@@ -1073,8 +1097,8 @@ def menu_state(w):
         if s.get("pairing") != "this":
             items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
     items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}")]
-    if s.get("newer"):
-        items.append({"label": f"Update to {s['newer']}", "do": "update-app"})
+    items.append({"label": f"Update to {s['newer']}", "do": "update-app"} if s.get("newer")
+                 else {"label": "Check for updates", "do": "check-updates"})
     items += [
               {"label": "Open Rushes", "do": "open-rushes"}, {"label": "Show the log", "do": "show-log"},
               {"label": "Collect diagnostics", "do": "diagnostics"}, {"label": "Ask for help…", "do": "ask-help"},

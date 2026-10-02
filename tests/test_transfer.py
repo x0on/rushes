@@ -569,6 +569,18 @@ class ProofTests(unittest.TestCase):
         self.posted = getattr(self, 'posted', []) + [(url, parse_qs(data.decode()) if data else {})]
         return io.BytesIO(b'{}')
 
+    def test_new_code_is_looked_for_only_when_rushes_says_it_changed(self):
+        m = self.mod
+        asked = []
+        fake = lambda url, timeout=None: asked.append(url) or io.BytesIO(b"{}")
+        with patch("urllib.request.urlopen", side_effect=fake):
+            m._code_mark[:] = ["a1", "a1"]; m.update_self()
+            self.assertEqual(asked, [])                                   # the same mark: nothing asked
+            m._code_mark[:] = ["b2", "a1"]; m.update_self()
+            self.assertEqual(len(asked), 1)                               # changed: asked once
+            m.update_self()
+            self.assertEqual(len(asked), 1)                               # and not again
+
     def test_a_delivery_lands_once_in_the_right_places_and_only_then_leaves(self):
         import hashlib
         m = self.mod

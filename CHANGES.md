@@ -3,6 +3,16 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.9.3 — October 2026
+
+- **Updates of the apps only when you say so.** No app updates by itself any
+  more: once a week it asks Rushes whether there is a newer one (or at once,
+  **Check for updates** in its menu), and offers **Update to …**; nothing
+  changes until it is pressed.
+- **No asking on a timer for the helper's code:** every answer Rushes gives to
+  the helper's queue question carries a mark of the helper's code, and the
+  helper looks for new code only when that mark changes.
+
 ## 0.9.2 — October 2026
 
 - **The apps update themselves from Rushes.** When Rushes is a newer version,

@@ -2001,7 +2001,9 @@ QUEUE_URL = NAS_URL + "/db/helper.php?queue"
 def fetch_queue(timeout=15):
     """The work, from Rushes. Only the paired helper is given it (403 otherwise)."""
     try:
-        return _fetch(QUEUE_URL, timeout)
+        with urllib.request.urlopen(QUEUE_URL, timeout=timeout) as r:
+            _code_mark[0] = (getattr(r, "headers", None) or {}).get("X-Rushes-Code")
+            return r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         if e.code != 400:
             raise
@@ -2226,6 +2228,9 @@ def only_one():
 
 
 _checked = [0.0]
+# What Rushes says its helper code is (a mark on every answer to the queue
+# question, which is asked anyway), and the mark this helper last checked.
+_code_mark = [None, None]
 
 def trim_own_log(limit=5_000_000, keep=1_000_000):
     """When this program's output goes to a log file (RUSHES_LOG: the Mac's
@@ -2253,11 +2258,17 @@ def update_self():
     never during a copy; after an update it restarts itself in place, so a
     change to the archive's copy reaches every computer without anyone
     touching it. A half-downloaded or broken file is never put in place."""
-    # Once an hour: a new version only exists after someone installs one in
-    # Rushes (Manage → Check for updates → Install it), so asking more often
-    # gains nothing. The question reads Rushes' own list, not the disks.
-    if time.time() - _checked[0] < 3600 or _describing.is_set():
+    # Only when Rushes' list of the helper's code has changed: every answer to
+    # the queue question (asked anyway) carries a mark of it, so there is no
+    # asking on a timer. A Rushes without the mark: once a day.
+    if _describing.is_set():
         return                        # a restart would cut a folder being described in half: later
+    if _code_mark[0]:
+        if _code_mark[0] == _code_mark[1]:
+            return
+        _code_mark[1] = _code_mark[0]
+    elif time.time() - _checked[0] < 86400:
+        return
     _checked[0] = time.time()
     try:
         with urllib.request.urlopen(NAS_URL + "/db/helper.php?hash", timeout=10) as r:
@@ -2274,7 +2285,6 @@ def update_self():
         if mine != h:
             stale[f] = h
     if not stale:
-        _app_update()
         return
     try:
         got = {}
@@ -2320,23 +2330,6 @@ def update_self():
     print(f"\n{time.strftime('%H:%M:%S')}  a new version of the helper is on the archive — updated, restarting …")
     sys.stdout.flush()
     os.execv(sys.executable, [sys.executable, "-u"] + [a for a in sys.argv if a != "-u"])
-
-def _app_update():
-    """The app around this helper (Rushes Helper) is kept at Rushes' version
-    too, checked the same way, at the same moments (release.py → app_update)."""
-    app = os.environ.get("RUSHES_APP", "")
-    if sys.platform != "darwin" or not app.endswith(".app") or not os.path.isfile(os.path.join(HERE_DIR, "release.py")):
-        return
-    try:
-        spec = importlib.util.spec_from_file_location("rushes_release", os.path.join(HERE_DIR, "release.py"))
-        release = importlib.util.module_from_spec(spec); spec.loader.exec_module(release)
-        if not hasattr(release, "app_update"):
-            return                                       # an older release.py: the next update brings it
-        release.app_update(NAS_URL, app, say=lambda m: print(f"\n{time.strftime('%H:%M:%S')}  {m}"))
-    except Exception as e:
-        print(f"\n{time.strftime('%H:%M:%S')}  ! the app was not updated: {e} — this version carries on")
-    sys.stdout.flush()
-
 
 # Stop before the archive is full, not after. A copy that dies at 100% leaves
 # the NAS with no room to write anything at all — including its own logs and

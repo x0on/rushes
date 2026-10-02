@@ -108,6 +108,25 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn({"label": "Update to 0.9.2", "do": "update-app"}, got["items"])
         self.assertEqual(got["state"], "offline")
 
+    def test_rushes_is_asked_once_a_week_and_nothing_installs_by_itself(self):
+        home = Path(tempfile.mkdtemp())
+        m = front("Rushes Helper", home)
+        sys.path.insert(0, str(HERE.parent / "app")); import release
+        asked = []
+        with patch.object(release, "app_update", side_effect=lambda *a, **k: asked.append(k) or "0.9.3"), \
+             patch.object(m, "app_version", return_value="0.9.2"), patch.object(m.os.path, "realpath", side_effect=lambda p: "same"):
+            w = m.Window(); w.s["url"] = "http://rushes.test"
+            self.assertEqual(w.newer(), "0.9.3")
+            self.assertEqual(w.newer(), "0.9.3")
+            self.assertEqual(len(asked), 1)                              # remembered for a week
+            self.assertEqual(asked[0].get("check_only"), True)           # asked, never installed
+            w.newer(now=True)
+            self.assertEqual(len(asked), 2)                              # Check for updates: at once
+        with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")), \
+             patch.object(m.Window, "newer", return_value=""):
+            got = serve(m)("menu?fresh=1")
+        self.assertIn({"label": "Check for updates", "do": "check-updates"}, got["items"])
+
 
 class BundledCodeTests(unittest.TestCase):
     """A new Rushes Helper brings the helper's code inside it, a signed release,

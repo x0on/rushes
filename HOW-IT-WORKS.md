@@ -1349,7 +1349,7 @@ exception is installing an update: its copies go through the limit.
 | Sends its status | when it changes, at most every 2 s while working | no |
 | Sends files it copied to search | every 10 s while working, backing off to 5 min | no (Rushes checks each file) |
 | When it starts: sends Rushes its copy history and section list (not while paused or stopped) | once | yes, reading, within 30 s |
-| Looks for a new version of its own code | once an hour, between jobs | no (asks Rushes) |
+| Looks for a new version of its own code | when Rushes' answer about the queue says it changed, between jobs | no (asks Rushes) |
 | Looks for a new address for Rushes | every 5 min | no |
 
 **A new address:** if Setup gives Rushes a new address and that address answers,
@@ -1450,8 +1450,9 @@ or when it has no list yet.
   `python3 release.py sign <folder> <key file>` (DEVELOPING.md).
 - Put the four files and `release.sig` in `_rushes`, and press **Check now** so
   Rushes lists their fingerprints.
-- Once an hour, between jobs and never while describing, the helper asks Rushes
-  for that list. If a file differs from its own, it downloads it from Rushes,
+- When that list changes, between jobs and never while describing, the helper
+  asks Rushes for it. It knows without asking: every answer to the question it
+  asks anyway (what to do next) carries a mark of the list (`X-Rushes-Code`). If a file differs from its own, it downloads it from Rushes,
   checks it against the fingerprint and that it is valid Python, then fetches
   `release.sig` and checks, with the `release.py` it already has (never the
   one downloaded), that the whole set as it will be is exactly the signed
@@ -1481,11 +1482,11 @@ the launcher) update from Rushes too, since 0.9.2. Rushes has one version
 number for everything (`app/VERSION`), so when Rushes is newer than an app, the
 app on the archive (`_rushes/Rushes Helper.zip`, `Rushes Watcher.zip`) is too.
 
-- **When:** by itself, between jobs, at most once an hour (the helper when it
-  checks its code; the Watcher when no editing program is open, and never
-  before projects just closed are pointed at the archive). At once with
-  **Update to …** in the menu bar or the window, which appears when there is
-  one.
+- **Only when the person says so.** An app never updates itself. Once a week
+  it asks Rushes whether there is a newer version (remembered on the Mac, so a
+  restart does not ask again), or at once with **Check for updates** in its
+  menu. When there is one, the menu and the window offer **Update to …**;
+  nothing changes until it is pressed.
 - **How** (`release.py` → `app_update`): the new app is downloaded from Rushes
   and unpacked aside. It is taken only if it is that version, the same app, its
   signature is intact (`codesign --verify --deep --strict`) and it is signed with
