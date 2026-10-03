@@ -25,6 +25,10 @@ transfer_select(['/src/Parks'], ['/src/Parks'=>[4,400]]);
 $_SERVER['REQUEST_METHOD'] = 'GET';
 ob_start(); include "$root/app/db/state.php"; $s = json_decode(ob_get_clean(), true);
 check(is_array($s), 'state.php answers with JSON');
+check(dept_folder('Parks') === 'Parks', 'a link to a folder not on the shelf is not used: the new folder takes the proper name');
+mkdir("$root/archive/Library/PARKS", 0777, true);
+check(dept_folder('Parks') === 'PARKS', 'a link to a folder on the shelf is used as it is');
+rmdir("$root/archive/Library/PARKS");
 // The NAS's disks, from the runner's copy of /proc/mdstat: a rebuild is said at the top, in its own numbers.
 $sys13 = "md13 : active raid1 sdh4[32] sda4[0]\n      458880 blocks super 1.0 [32/8] [UUUUUUUU________________________]\n";
 $r = raid_said("md1 : active raid5 sdh3[8] sda3[0]\n      54613148160 blocks super 1.0 level 5, 512k chunk, algorithm 2 [8/7] [UUUUUU_U]\n"

@@ -426,8 +426,14 @@ function departments(): array {
     return array_values(array_filter(settings()['organise']['departments'] ?? [],
         fn($d) => is_array($d) && trim($d['name'] ?? '') !== ''));
 }
+// A link counts only while its folder is on the shelf: one left from an older
+// shelf (001 VIDEO's misspelt POLICE DEPARTMNET, say) would otherwise make a new
+// folder with the old name. The link still tells the tidy-up where things came from.
 function dept_folder(string $name): ?string {
-    foreach (departments() as $d) if ($d['name'] === $name) return ($d['folder'] ?? '') !== '' ? $d['folder'] : $d['name'];
+    foreach (departments() as $d) if ($d['name'] === $name) {
+        $f = $d['folder'] ?? '';
+        return $f !== '' && is_dir(shelf_dir() . '/' . $f) ? $f : $d['name'];
+    }
     return null;
 }
 function dept_of_folder(string $folder): ?string {

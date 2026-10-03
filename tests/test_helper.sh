@@ -147,6 +147,7 @@ check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\"
 check 'ORIGIN=http://nas.test call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "\"paused\"\|ok\|true"' \
       'the same button from Rushes itself works'
 # Upload from a phone (db/upload.php): whole files, in checked pieces, into a shoot folder like a card
+mkdir -p "$ROOT/archive/Library/PARKS"   # a linked folder is used only while it is on the shelf
 python3 -c "import json,sys; p=sys.argv[1]; s=json.load(open(p)); s['organise']['departments']=[{'name':'Parks','folder':'PARKS'}]; json.dump(s,open(p,'w'))" "$ROOT/app/settings.json"
 U='db/upload.php'
 check 'call POST "{}" "{\"action\":\"start\",\"dept\":\"Parks\",\"event\":\"Kite\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"a.mov\\\",\\\"size\\\":11}]\"}" $U | grep -q "Say who you are"' 'an upload says who brings it'
@@ -170,7 +171,7 @@ check 'call GET "{\"state\":\"\",\"batch\":\"$ub\"}" "{}" $U | grep -q "\"state\
 check 'call POST "{}" "{\"action\":\"inbox-done\",\"batch\":\"phone/$ub\"}" | grep -q "\"ok\":true" && [ ! -e "$ROOT/app/inbox/phone/$ub" ]' 'once placed, its inbox copy goes'
 # The archive itself as the shelf ("/"): departments, and Projects, straight at its top
 python3 -c "import json,sys; p=sys.argv[1]; s=json.load(open(p)); s['organise']['shelves']='/'; json.dump(s,open(p,'w'))" "$ROOT/app/settings.json"
-check 'call POST "{}" "{\"action\":\"start\",\"uploader\":\"Maria\",\"dept\":\"Parks\",\"event\":\"Kite\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"a.mov\\\",\\\"size\\\":11}]\"}" $U | grep -q "\"into\":\"PARKS/2026/20261002 Kite\""' 'with the archive itself as the shelf, a shoot goes straight into its department at the top'
+check 'call POST "{}" "{\"action\":\"start\",\"uploader\":\"Maria\",\"dept\":\"Parks\",\"event\":\"Kite\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"a.mov\\\",\\\"size\\\":11}]\"}" $U | grep -q "\"into\":\"Parks/2026/20261002 Kite\""' 'with the archive itself as the shelf, a shoot goes straight into its department at the top, named properly (PARKS from the old shelf is not up there)'
 python3 -c "import json,sys; p=sys.argv[1]; s=json.load(open(p)); s['organise']['shelves']='Library'; json.dump(s,open(p,'w'))" "$ROOT/app/settings.json"
 
 # Manage → Duplicates: where the copies are, by top folder, and what each folder is (one press)

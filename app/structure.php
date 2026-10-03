@@ -32,13 +32,6 @@ if (($_POST['_kind'] ?? '') === '1') {
         $s['organise']['kind'] = ['one' => $one, 'many' => $many];
         $s['organise']['shelves'] = $shelfPick;
         $s['organise']['add_at_ingest'] = ($_POST['open'] ?? '') === '1';
-        // A link points at a folder in the old shelf. On a new shelf it would make
-        // a new folder with the old name (typos and all): go back to the name instead.
-        $dir = $shelfPick === '/' ? archive_dir() : archive_dir() . '/' . $shelfPick;
-        $s['organise']['departments'] ??= [];
-        foreach ($s['organise']['departments'] as &$d)
-            if (is_array($d) && ($d['folder'] ?? '') !== '' && !is_dir($dir . '/' . $d['folder'])) $d['folder'] = '';
-        unset($d);
         if (save_settings($s)) { header('Location: /structure.php?saved=kind'); exit; }
         $bad[] = 'Could not write settings.json — is the web folder writable?';
     }

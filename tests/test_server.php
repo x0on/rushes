@@ -240,18 +240,4 @@ $r = $find(['in' => 'library']); $r2 = $find(['in' => 'library/sfx']); $r3 = $fi
 check($r['total'] === 1 && $r['rows'][0]['name'] === 'song.wav' && $r2['total'] === 0 && $r3['total'] === 1,
       'Search: the stock library is its own section, and a shoot with "Library" in its name is not in it');
 $_GET = [];
-// Last, because the page ends the script: moving the shelf to the archive's top
-// drops links to folders that are not up there, so no new folder copies an old typo.
-copy(__DIR__ . '/../app/structure.php', web_dir() . "/structure.php");
-@mkdir(archive_dir() . "/Parks");
-$st = settings(); $st['organise']['departments'] = [['name' => 'Parks', 'folder' => 'Parks'], ['name' => 'Police Department', 'folder' => 'POLICE DEPARTMNET']];
-save_settings($st);
-register_shutdown_function(function ()  {
-    $d = json_decode(file_get_contents(web_dir() . "/settings.json"), true)['organise'];
-    check($d['shelves'] === '/' && $d['departments'][0]['folder'] === 'Parks' && $d['departments'][1]['folder'] === '',
-          'Reorganize: a new top keeps links to folders there and drops the rest (no typo copied)');
-    echo "Server tests complete.\n";
-});
-session_begin(); $_SESSION['rushes_in'] = 1;
-$_SERVER['REQUEST_METHOD'] = 'POST'; $_POST = ['_kind' => '1', 'kind' => 'Departments', 'shelves' => '/', 'open' => '0'];
-include web_dir() . "/structure.php";
+echo "Server tests complete. Fixture: $root\n";
