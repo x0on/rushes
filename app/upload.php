@@ -204,11 +204,22 @@ $('go').onclick = async function () {
     $('tsaid').textContent = size(sent) + ' of ' + size(total) + (rate ? ' · ' + size(rate) + '/s · about ' + Math.ceil((total - sent) / rate / 60) + ' min left' : '');
   };
   try {
-    say('Starting…');
-    const s = await ask('/db/upload.php', { method: 'POST', body: new URLSearchParams({ action: 'start', uploader: $('who').value.trim(),
-      dept: $('dept').value, event: $('event').value.trim(), date: $('date').value,
-      files: JSON.stringify(picked.map(function (f) { return { name: f.name, size: f.size, mtime: Math.floor((f.lastModified || 0) / 1000) }; })) }) });
-    if (s.error) throw new Error(s.error);
+    // The same files for the same shoot again (after a dropped connection, or a closed page):
+    // the same upload, carried on from what already arrived, never sent twice.
+    const sig = JSON.stringify([$('dept').value, $('event').value.trim(), $('date').value, picked.map(function (f) { return [f.name, f.size]; })]);
+    let s = null;
+    try { const was = JSON.parse(store.get('rushes-upload') || 'null'); if (was && was.sig === sig) s = was; } catch (e) {}
+    if (s) { const st = await ask('/db/upload.php?state&batch=' + s.batch);           // already taken in, or gone: a new one
+             if (st.error || st.state === 'placed' || st.state === 'refused') s = null; }
+    if (s) say('Carrying on with the upload you started…');
+    else {
+      say('Starting…');
+      s = await ask('/db/upload.php', { method: 'POST', body: new URLSearchParams({ action: 'start', uploader: $('who').value.trim(),
+        dept: $('dept').value, event: $('event').value.trim(), date: $('date').value,
+        files: JSON.stringify(picked.map(function (f) { return { name: f.name, size: f.size, mtime: Math.floor((f.lastModified || 0) / 1000) }; })) }) });
+      if (s.error) throw new Error(s.error);
+      store.set('rushes-upload', JSON.stringify({ sig: sig, batch: s.batch, into: s.into }));
+    }
     for (let i = 0; i < picked.length; i++) {
       const f = picked[i], bar = $('f' + i).querySelector('.bar i'), q = 'batch=' + s.batch + '&name=' + encodeURIComponent(f.name);
       let have = (await ask('/db/upload.php?have&' + q)).have || 0; sent += have;
@@ -224,6 +235,7 @@ $('go').onclick = async function () {
     }
     const fin = await ask('/db/upload.php', { method: 'POST', body: new URLSearchParams({ action: 'finish', batch: s.batch }) });
     if (fin.error) throw new Error(fin.error);
+    store.set('rushes-upload', null);
     say('All ' + picked.length + ' arrived whole ✓ Now the helper puts them in the archive, checked again, like a card.');
     receipt(s.batch, fin);
   } catch (e) {
