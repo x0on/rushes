@@ -154,6 +154,12 @@ window.__sha256 = sha256;            // for the page's own check, below, and the
 // ── what is chosen ──────────────────────────────────────────────────────────
 let picked = [], running = false;
 $('who').value = store.get('rushes-uploader') || '';
+// Safari can restart a page (short of memory, often while the iPhone prepares a big
+// video from Photos): the form comes back as it was, and an upload that was cut off
+// says how to carry on. A page cannot keep the chosen files; choosing them again resumes.
+['dept', 'event', 'date'].forEach(function (i) { const v = store.get('rushes-up-' + i); if (v && !$(i).value) $(i).value = v; });
+if (store.get('rushes-upload')) setTimeout(function () {
+  say('An upload was cut off. Choose the same files again and press Upload: it carries on from what already arrived.', true); }, 0);
 $('choose').onclick = function () { $('files').click(); };
 const day = function (t) { const d = new Date(t); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
 // An iPhone that converted a file on the way out leaves a sign of it in the name.
@@ -176,7 +182,8 @@ function ready() {
   const ok = picked.length && $('who').value.trim() && $('dept').value && $('event').value.trim() && $('date').value;
   $('go').disabled = !ok || running;
 }
-['who', 'dept', 'event', 'date'].forEach(function (i) { $(i).oninput = ready; $(i).onchange = ready; });
+['who', 'dept', 'event', 'date'].forEach(function (i) {
+  $(i).oninput = $(i).onchange = function () { store.set(i === 'who' ? 'rushes-uploader' : 'rushes-up-' + i, $(i).value); ready(); }; });
 
 // ── sending ─────────────────────────────────────────────────────────────────
 const say = function (t, bad) { $('said').textContent = t; $('said').className = 'said' + (bad ? ' bad' : ''); };
@@ -236,7 +243,7 @@ $('go').onclick = async function () {
     }
     const fin = await ask('/db/upload.php', { method: 'POST', body: new URLSearchParams({ action: 'finish', batch: s.batch }) });
     if (fin.error) throw new Error(fin.error);
-    store.set('rushes-upload', null);
+    store.set('rushes-upload', null); store.set('rushes-up-event', null); store.set('rushes-up-date', null);   // the next shoot starts fresh
     say('All ' + picked.length + ' arrived whole ✓ Now the helper puts them in the archive, checked again, like a card.');
     receipt(s.batch, fin);
   } catch (e) {
