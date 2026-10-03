@@ -283,6 +283,19 @@ One Rushes, packaged three ways:
   looks in the laptop's own cache folders too (Premiere's Media Cache lives
   there by default), and adds the render folders of Final Cut and Resolve to
   `rules.json` once real drives show their names.
+  What it does with them, on the Mac app (the person's own drives, nobody
+  else's work on them):
+  - **Caches are deleted**, after the list and sizes are shown and one press
+    of a button; what went is recorded. They rebuild from the originals, and
+    moving them aside would free nothing. The `keep` list (auto-saves,
+    project backups) is never touched.
+  - **Duplicates are moved, never deleted**: into a holding folder on the same
+    drive (a move within a drive is instant), only after both copies are read
+    in full and match. They stay there until the person is sure and empties
+    it; Rushes reminds them how much is waiting, and since when.
+  - **Copies on different drives are not clutter**: often they are the only
+    backup. Rushes shows them as "on 2 drives" and leaves them alone.
+  - **Footage itself is never deleted**, here or anywhere.
   Drives are known by their own ID, not their name: an unplugged drive stays
   searchable, and Rushes says which drive to plug in. Between drives, a move
   is a copy that is checked; the original stays for the person to delete.
