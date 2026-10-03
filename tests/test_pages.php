@@ -25,6 +25,14 @@ transfer_select(['/src/Parks'], ['/src/Parks'=>[4,400]]);
 $_SERVER['REQUEST_METHOD'] = 'GET';
 ob_start(); include "$root/app/db/state.php"; $s = json_decode(ob_get_clean(), true);
 check(is_array($s), 'state.php answers with JSON');
+// The NAS's disks, from the runner's copy of /proc/mdstat: a rebuild is said at the top, in its own numbers.
+$sys13 = "md13 : active raid1 sdh4[32] sda4[0]\n      458880 blocks super 1.0 [32/8] [UUUUUUUU________________________]\n";
+$r = raid_said("md1 : active raid5 sdh3[8] sda3[0]\n      54613148160 blocks super 1.0 level 5, 512k chunk, algorithm 2 [8/7] [UUUUUU_U]\n"
+    . "      [====>......]  recovery = 23.4% (1827001234/7801878272) finish=536.2min speed=186000K/sec\n" . $sys13);
+check($r && str_contains($r['title'], 'rebuilding its disks: 23.4% done, about 8.9 hours left') && str_contains($r['body'], '182 MB/s'), 'a rebuilding RAID is said at the top, in the system\'s own numbers');
+$r = raid_said("md1 : active raid5 sdh3[8] sda3[0]\n      54613148160 blocks [8/7] [UUUUUU_U]\n" . $sys13);
+check($r && $r['title'] === 'A disk is missing from the NAS (md1)', 'a data array missing a disk is said');
+check(raid_said("md1 : active raid5 sdh3[8] sda3[0]\n      54613148160 blocks [8/8] [UUUUUUUU]\n" . $sys13) === null, 'a healthy one says nothing, and the system arrays\' empty slots are not a missing disk');
 check(count($s['repeats'] ?? []) === 5 && $s['repeats'][0][0] === 'The runner on the archive machine', 'Overview lists what runs by itself (rule 5)');
 check($s['copy']['phase'] === 'copying' && $s['copy']['rate'] === 100 && $s['copy']['file'] === 'A001.MXF', 'live helper detail comes through');
 check($s['transfer'] && $s['transfer']['folders'] === 1, 'the saved transfer comes through beside it');

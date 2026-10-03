@@ -10,6 +10,9 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   files whole and unchanged, in checked pieces that carry on after a dropped
   connection; then the helper puts them in the archive like a card. A receipt
   at the end, to send to yourself.
+- **The NAS's disks on Overview:** a RAID rebuilding (how far, how long left,
+  from the system's own numbers) or missing a disk is said at the top; the
+  runner reads it once a minute (/proc/mdstat), with what each turn costs.
 
 ## 0.10.2 — October 2026
 

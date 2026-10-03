@@ -67,7 +67,7 @@ echo $$ > "$TICK/pid"
 # What one minute's turn costs the machine, said in the web folder (Manage shows
 # it): the machine's load (1, 5, 15 min) and how long this turn took.
 T0=$(date +%s)
-trap 'printf "%s\t%s\t%s\n" "$(date +%s)" "$(cut -d" " -f1-3 /proc/loadavg 2>/dev/null)" "$(( $(date +%s) - T0 ))" > $WEB/load.txt; rm -rf "$TICK"' EXIT
+trap 'rm -rf "$TICK"' EXIT
 trap 'exit 130' INT TERM          # stopped: leave (the EXIT trap tidies up), never carry on
 
 # Paused from Manage (Pause copying): paused is paused. Nothing is read from or
@@ -233,6 +233,11 @@ if may_v && { [ ! -f $WEB/waiting.tsv ] || [ -f $WEB/survey-now ]; }; then
 fi
 
 
+# What this turn cost the machine (load, seconds), and how its disks are: a
+# RAID that is rebuilding or missing a disk, from the system's own account
+# (/proc/mdstat, read only). Manage shows both.
+printf '%s\t%s\t%s\n' "$(date +%s)" "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)" "$(( $(date +%s) - T0 ))" > $WEB/load.txt
+[ -r /proc/mdstat ] && grep -E '^md|\[[U_]+\]|recovery|resync|reshape|check' /proc/mdstat > $WEB/raid.txt.new 2>/dev/null && mv -f $WEB/raid.txt.new $WEB/raid.txt
 rm -rf "$TICK"; trap - EXIT INT TERM       # this minute's share work is done; long jobs have their own lock
 # ponytail: mkdir is the portable atomic lock (busybox has no flock). The
 # number inside lets a lock left by a run that was killed be taken over,

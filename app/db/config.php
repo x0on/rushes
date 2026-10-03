@@ -649,3 +649,35 @@ function helper_refused(): array {
     }
     return array_values($out);
 }
+
+
+// The NAS's disks, from a copy of /proc/mdstat (raid.txt, by the runner): the
+// Overview card for a RAID rebuilding or missing a disk, or null when all is well.
+// Only the data arrays (raid5, raid6, raid10) count: a QNAP's own system
+// arrays are raid1 across 32 slots, mostly empty by design.
+function raid_said(string $mdstat): ?array {
+    $raid = []; $md = '';
+    foreach (explode("\n", $mdstat) as $l) {
+        if (preg_match('/^(md\d+)\s*:/', $l, $m)) { $md = preg_match('/\braid(5|6|10)\b/', $l) ? $m[1] : ''; continue; }
+        if ($md === '') continue;
+        $raid[$md] ??= [];
+        if (preg_match('/\[(\d+)\/(\d+)\]\s*\[([U_]+)\]/', $l, $m) && (int)$m[2] < (int)$m[1]) $raid[$md]['missing'] = (int)$m[1] - (int)$m[2];
+        if (preg_match('/(recovery|resync|reshape|check)\s*=\s*([\d.]+)%.*?finish=([\d.]+)min(?:.*?speed=(\d+)K)?/', $l, $m))
+            $raid[$md] += ['what' => $m[1], 'pct' => (float)$m[2], 'mins' => (float)$m[3], 'speed' => (int)($m[4] ?? 0)];
+    }
+    $busy = array_filter($raid, fn($r) => isset($r['pct']));
+    if ($busy) {
+        uasort($busy, fn($a, $b) => $b['mins'] <=> $a['mins']);
+        $r = reset($busy); $md = key($busy);
+        $left = $r['mins'] >= 90 ? round($r['mins'] / 60, 1) . ' hours' : round($r['mins']) . ' minutes';
+        return ['level' => 'warn', 'title' => 'The NAS is ' . ($r['what'] === 'check' ? 'checking' : 'rebuilding') . " its disks: {$r['pct']}% done, about $left left",
+            'body' => "The system's own numbers ($md" . ($r['speed'] ? ', ' . round($r['speed'] / 1024) . ' MB/s' : '') . '). '
+                    . 'Until it finishes there is no spare: keep copying and the heavy jobs paused, and the disks for the rebuild.',
+            'act' => null, 'help' => null];
+    }
+    if ($missing = array_filter($raid, fn($r) => !empty($r['missing'])))
+        return ['level' => 'bad', 'title' => 'A disk is missing from the NAS (' . implode(', ', array_keys($missing)) . ')',
+            'body' => 'The RAID runs without its spare: one more disk lost and the volume is lost. Replace the disk (Storage & Snapshots); the rebuild shows here.',
+            'act' => null, 'help' => null];
+    return null;
+}

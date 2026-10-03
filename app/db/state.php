@@ -109,6 +109,9 @@ if (!$transferOpen && ($mac['phase'] ?? '') === 'blocked') {
         'act' => null, 'help' => 'Is the watcher still running on the Mac?'];
 }
 
+// The NAS's own disks (raid.txt, written by the runner from /proc/mdstat each
+// minute): a RAID rebuilding, or one missing a disk, is said at the top.
+if (($rc = raid_said((string)@file_get_contents("$WEB/raid.txt"))) && $now - (int)@filemtime("$WEB/raid.txt") < 600) $c[] = $rc;
 $stopped = file_exists("$WEB/STOP");
 if ($stopped) {
     $c[] = ['level' => 'warn', 'title' => 'The runner is stopped',
