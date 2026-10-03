@@ -3216,9 +3216,12 @@ def main():
                 raise OSError("its match in the archive is not there any more")
             kind, note = "already", "not copied — this is where it already is"
         elif os.path.exists(dest):
-            # A file of that name already there counts only if it is the same file.
-            mine = digest(src, full=PARANOID)
-            if os.path.getsize(dest) != size or mine is None or mine != digest(dest, full=PARANOID):
+            # A file of that name already there counts only if it is the same file,
+            # read in full: it may not be Rushes' copy (one dragged in Finder can be
+            # whole at both ends and broken in the middle). Rare: the plan already
+            # leaves out what the archive has.
+            mine = digest(src, full=True)
+            if os.path.getsize(dest) != size or mine is None or mine != digest(dest, full=True):
                 raise OSError("a different file with this name is already there — left untouched")
             kind, note = "already", "there from an earlier run"
         else:

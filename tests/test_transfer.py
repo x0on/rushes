@@ -193,6 +193,16 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(self.reports[-1]['done_bytes'], 0)
         self.assertEqual((self.dest / 'a.mov').read_bytes(), b'old')
 
+    def test_a_file_already_there_is_read_in_full_before_it_counts(self):
+        # Same name, same size, same ends, a different middle: a broken copy made
+        # by something else. Not "already there".
+        self.mod.HEAD_TAIL = 4
+        (self.source / 'a.mov').write_bytes(b'aaaaXbbbb')
+        self.dest.mkdir(); (self.dest / 'a.mov').write_bytes(b'aaaaYbbbb')
+        with patch.object(self.mod.time, 'sleep'): self.run_copy()
+        self.assertEqual(self.reports[-1]['failed'], 1)
+        self.assertEqual((self.dest / 'a.mov').read_bytes(), b'aaaaYbbbb')
+
     def test_missing_source_never_becomes_a_completed_empty_job(self):
         self.source.rmdir()
         self.run_copy()
