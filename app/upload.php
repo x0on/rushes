@@ -52,9 +52,10 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
     with its date, checked piece by piece, nothing changed or made smaller.</p>
 
 <?php if (!$depts): ?>
-  <div class="card"><h2>First, the archive needs its <?= $e(strtolower(shelf_word(true))) ?></h2>
-    <p class="tip">Before anything comes in, Rushes needs to know the <?= $e(strtolower(shelf_word(true))) ?> and the
-      folder they live in (Manage → Reorganize, by the admin). Until then there is nowhere to put a shoot.</p></div>
+  <div class="card"><h2>First, one choice by the admin</h2>
+    <p class="tip"><?= departments() ? 'The ' . $e(strtolower(shelf_word(true))) . ' are there; what is missing is which folder of the archive they live in. Rushes never guesses where footage goes, so someone with the admin password picks it once' : 'Rushes needs the list of ' . $e(strtolower(shelf_word(true))) . ', and the folder of the archive they live in, picked once by someone with the admin password' ?>
+      (Reorganize → 00). It moves nothing and takes a minute.</p>
+    <p style="margin:12px 0 0"><a class="btn" href="/structure.php">Open Reorganize</a></p></div>
 <?php else: ?>
   <section class="card" id="s1">
     <h2><span>01 /</span> Who you are</h2>
