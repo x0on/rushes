@@ -310,7 +310,7 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
   label.f:last-child { margin-bottom: 0 }
   label.f > span { display: block; font-size: 11px; text-transform: uppercase;
                    letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 0 0 5px }
-  input[type=text], select {
+  input[type=text], input[type=date], select {
     width: 100%; padding: 9px 11px; font: 13.5px var(--font); color: var(--fg);
     border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg) }
 
