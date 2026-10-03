@@ -45,6 +45,27 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 - Rushes Helper for Windows.
 - Live support for organisations with a commercial license (see
   [Decided](#decided-and-why)).
+- **Send out, to approved destinations** (designed October 2026). For footage
+  that has to leave fast, such as a shoot for the press that a station needs tonight.
+  - **Destinations, set once by the admin** in Setup: a station's FTP or SFTP,
+    a shared Google Drive or Dropbox folder. The address, login and folder are
+    kept on the server, behind the Manage password, never shown again.
+  - **One tick where the footage comes in** (Ingest or Upload): "Also send to…
+    Channel 10 newsroom". The files go into the archive as always, and a copy
+    goes out to that destination. The same **Send to…** sits on a receipt, a
+    pull, and a folder in Search, with **Sure?** on the button: it leaves the
+    building.
+  - **The server sends, not a person's computer:** rclone (free, open source;
+    FTP, SFTP, Google Drive, Dropbox, OneDrive, S3…), with progress shown and a
+    line in the ledger's "Out": what, to where, by whom, when.
+  - **Who hears about it:** the person who sent it gets an email with where the
+    files are (on a Drive or Dropbox, a share link; on an FTP, its folder), to
+    forward to the station, sent from one mail account Rushes uses (set in
+    Setup). With no mail account set, the same message is shown with Copy and
+    Send to myself. People give their email the way they give their name:
+    typed, remembered on their phone, no accounts.
+  - **IT sees the design first:** it is the one place footage leaves the
+    network by itself.
 
 ## Known problems
 
