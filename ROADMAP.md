@@ -234,7 +234,7 @@ One Rushes, packaged three ways:
 | | Mac | Server | Windows |
 |---|---|---|---|
 | For | one editor or a small team | a team, on a NAS or Linux server | a Windows PC or server |
-| Pages | bundled in the app | in a container | bundled in the installer |
+| Pages | in the app's own window; nothing on the network | in a container | bundled in the installer |
 | Jobs | a background service | in the container | a Windows service |
 | The helper | built in | built in, plus Rushes Helper on workstations | built in, plus Rushes Helper on workstations |
 
@@ -257,9 +257,9 @@ One Rushes, packaged three ways:
    icon in Resource Monitor, so what Rushes costs the machine is plain to see.
    Not before the editors' projects are tried end to end.
    Reaching Rushes from elsewhere, on a phone too, is any VPN's job: Rushes
-   names one easy option in its guide (INSTALL.md) and bundles none. When
-   Rushes runs on a Mac or Windows computer, its pages listen on the network,
-   not only on that computer, so a VPN reaches them.
+   names one easy option in its guide (INSTALL.md) and bundles none. The Mac
+   app is the exception: it is for one person on one computer, so its pages
+   listen on nothing and no phone or VPN reaches them.
    On a Mac, Rushes Helper and Rushes Watcher come as a disk image (.dmg)
    with the app beside an Applications folder to drag it onto, as Mac apps
    usually do, not a zip. Installing is once per computer, by the person or by
@@ -268,6 +268,18 @@ One Rushes, packaged three ways:
    After that, updates come from Rushes, when the person presses Update.
 
 ## Decided, and why
+
+- **On a Mac, Rushes is a Mac app, not a web service** (October 2026). One
+  person, one laptop, drives that come and go: an icon in the Dock and a
+  window, with the same pages inside it, made by the app and shown only in
+  its own window. No browser, no address, no password, nothing listening on
+  the network, no phone. The same pages as the server's, never a second set
+  of screens, so a fix to one is a fix to both. Built in the order that risks
+  least: catalogue and search (reads only), then describing, then a
+  duplicates report, then reorganizing (the only part that moves files).
+  Drives are known by their own ID, not their name: an unplugged drive stays
+  searchable, and Rushes says which drive to plug in. Between drives, a move
+  is a copy that is checked; the original stays for the person to delete.
 
 - **Three programs, each with only what its job needs** (October 2026):
   - **Rushes**, on the server: the pages, the catalogue, the runner.
