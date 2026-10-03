@@ -8,7 +8,7 @@
 // card. At the end, a receipt: what went where, to keep or send to yourself.
 $NAV = 'upload';
 require __DIR__ . '/db/config.php';
-$depts = shelf_name() === '' ? [] : array_column(departments(), 'name');
+$depts = !shelf_chosen() ? [] : array_column(departments(), 'name');
 $S = settings();
 $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
 ?><!doctype html>

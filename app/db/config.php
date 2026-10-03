@@ -224,12 +224,20 @@ function icon(string $name, float $w = 1.7): string {
 // The folder inside the archive that departments live on, chosen in
 // Reorganize → 00. No default: a guessed name would file footage somewhere
 // nobody chose. Until it is chosen, Ingest and the tidy-up refuse.
+// "/" is the archive itself: departments and Projects straight at its top, the
+// tidiest shape. shelf_name() is then '' (no folder in between); shelf_chosen()
+// says whether anything was chosen at all.
+function shelf_chosen(): bool { return trim((string)(settings()['organise']['shelves'] ?? '')) !== ''; }
+function shelf_is_top(): bool { return trim((string)(settings()['organise']['shelves'] ?? '')) === '/'; }
 function shelf_name(): string {
     return trim(str_replace(['/', '\\', "\0"], '', (string)(settings()['organise']['shelves'] ?? '')));
 }
 function shelf_dir(): string {
+    if (shelf_is_top()) return archive_dir();
     return archive_dir() . '/' . (shelf_name() !== '' ? shelf_name() : '.no-shelf-chosen');
 }
+// The shelf as the start of a path inside the archive: '' at the top, "NAME/" otherwise.
+function shelf_rel(): string { return shelf_name() === '' ? '' : shelf_name() . '/'; }
 // The folders at the top of the archive that could be the shelf: not Rushes'
 // own (_rushes, _duplicates), not ARCHIVE (copies land there) or PROXIES.
 function shelf_choices(): array {
@@ -259,10 +267,10 @@ function dedupe_rules_write(): ?array {
     foreach ($d['card_dumps'] ?? [] as $f) if (($f = $clean($f)) !== '') $lines[] = (int)$w['other_side'] . "\tcard\t/$f/";
     // The shelf loses only where card dumps are set, and card dumps were chosen to win:
     // with no card-dump folders, neither side is preferred, whichever was chosen.
-    if (shelf_name() !== '' && ($d['card_dumps'] ?? []) !== [])
+    if (shelf_name() !== '' && ($d['card_dumps'] ?? []) !== [])      // at the archive's top, the shelf is everything: no side to prefer
         $lines[] = (int)$w['other_side'] . "\tproject\t/" . shelf_name() . '/';
     // Editors' projects and the stock library (in Projects) are never moved: archived projects point at them.
-    if (shelf_name() !== '') $lines[] = "0\tkeep\t/" . shelf_name() . '/Projects/';
+    if (shelf_chosen()) $lines[] = "0\tkeep\t/" . shelf_rel() . 'Projects/';
     $file = web_dir() . '/dedupe-rules.tsv';
     $body = implode("\n", $lines) . "\n";
     if (@file_get_contents($file) === $body) return $lines;
@@ -429,7 +437,8 @@ function dept_of_folder(string $folder): ?string {
 // The folders already on the shelf, whatever the plan says.
 function shelf_folders(): array {
     $out = [];
-    foreach (@scandir(shelf_dir()) ?: [] as $f) if ($f[0] !== '.' && $f[0] !== '@' && is_dir(shelf_dir() . "/$f")) $out[] = $f;
+    foreach (@scandir(shelf_dir()) ?: [] as $f)
+        if (!preg_match('/^[._@#$]/', $f) && !(shelf_is_top() && in_array($f, ['ARCHIVE', 'PROXIES', 'Projects'], true)) && is_dir(shelf_dir() . "/$f")) $out[] = $f;
     sort($out);
     return $out;
 }

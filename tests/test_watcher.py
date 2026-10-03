@@ -227,6 +227,13 @@ class EndToEnd(unittest.TestCase):
             self.watcher.tick()
         look.assert_not_called()
 
+    def test_the_shoot_a_project_uses_with_departments_at_the_top(self):
+        m = self.w
+        a = "/Volumes/VIDEO"
+        files = [f"{a}/PARKS/2026/20261002 Kite/A001.MXF", f"{a}/PARKS/2026/20261002 Kite/A002.MXF", f"{a}/Projects/Maria (a1b2)/x.wav"]
+        self.assertEqual(m.shoot_of(files, a, "/"), "PARKS/2026/20261002 Kite")
+        self.assertEqual(m.shoot_of([f"{a}/001 VIDEO/PARKS/2026/20261002 Kite/A001.MXF"], a, "001 VIDEO"), "001 VIDEO/PARKS/2026/20261002 Kite")
+
     def test_selftest(self):
         with patch("sys.stdout", new_callable=io.StringIO):
             self.assertEqual(self.w.selftest(), 0)

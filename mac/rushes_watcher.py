@@ -243,8 +243,9 @@ def shoot_of(files, archive, shelf):
     for f in files:
         if inside(f, archive):
             parts = os.path.relpath(f, archive).split("/")
-            if shelf and parts[0] == shelf and len(parts) > 4 and parts[1] != "Projects":
-                count["/".join(parts[:4])] = count.get("/".join(parts[:4]), 0) + 1
+            b = 0 if shelf == "/" else 1 if shelf and parts[0] == shelf else -1      # "/": departments at the top
+            if b >= 0 and len(parts) > b + 3 and parts[b] != "Projects":
+                k = "/".join(parts[:b + 3]); count[k] = count.get(k, 0) + 1
     return max(count, key=count.get) if count else ""
 
 

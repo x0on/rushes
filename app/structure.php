@@ -26,7 +26,7 @@ if (($_POST['_kind'] ?? '') === '1') {
     }
     $shelfPick = (string)($_POST['shelves'] ?? '');
     if ($one === '' || preg_match('#[<>/\\]#', $one . $many)) $bad[] = 'Type the word you use — one and many, e.g. Show / Shows.';
-    elseif (!in_array($shelfPick, shelf_choices(), true)) $bad[] = 'Pick the folder they live in, from the list.';
+    elseif ($shelfPick !== '/' && !in_array($shelfPick, shelf_choices(), true)) $bad[] = 'Pick the folder they live in, from the list.';
     else {
         $s = settings();
         $s['organise']['kind'] = ['one' => $one, 'many' => $many];
@@ -198,7 +198,8 @@ $opts = function (string $cur) use ($folders, $e) {
 
       <p style="margin:18px 0 8px;color:var(--fg);font-size:13px"><b>Which folder in <?= $e(settings()['archive']['label'] ?? 'the archive') ?> they live in</b></p>
       <label class="f"><select name="shelves">
-        <?php if (shelf_name() === ''): ?><option value="">— pick one (Ingest and the tidy-up wait for this)</option><?php endif; ?>
+        <?php if (!shelf_chosen()): ?><option value="">— pick one (Ingest and the tidy-up wait for this)</option><?php endif; ?>
+        <option value="/" <?= shelf_is_top() ? 'selected' : '' ?>><?= $e(settings()['archive']['label'] ?? 'The archive') ?> itself: <?= $e(strtolower($MANY)) ?> straight at the top</option>
         <?php foreach (shelf_choices() as $f): ?>
           <option value="<?= $e($f) ?>" <?= $f === shelf_name() ? 'selected' : '' ?>><?= $e($f) ?></option>
         <?php endforeach; ?>
@@ -226,7 +227,7 @@ $opts = function (string $cur) use ($folders, $e) {
     </script>
 
     <?php if ($said === 'kind'): ?>
-      <div class="banner ok"><div class="txt">Saved. Rushes now says &ldquo;<?= $e($MANY) ?>&rdquo;, they live in <?= $e(shelf_name()) ?>, and <?= shelf_open() ? 'anyone can add one at Ingest' : 'only the admin adds them, here' ?>.</div></div>
+      <div class="banner ok"><div class="txt">Saved. Rushes now says &ldquo;<?= $e($MANY) ?>&rdquo;, they live in <?= $e(shelf_is_top() ? (settings()['archive']['label'] ?? 'the archive') . ' itself' : shelf_name()) ?>, and <?= shelf_open() ? 'anyone can add one at Ingest' : 'only the admin adds them, here' ?>.</div></div>
     <?php elseif ($said === 'ok'): ?>
       <div class="banner ok"><div class="txt">Saved. Ingest offers exactly this list from now on. Nothing on disk was moved.</div></div>
     <?php elseif ($bad): ?>

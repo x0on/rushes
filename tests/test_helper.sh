@@ -168,6 +168,10 @@ check 'call GET "{\"state\":\"\",\"batch\":\"$ub\"}" "{}" $U | grep -q "\"state\
 printf '2026-10-02 20:00\tuploaded\tphone/%s\t1\t11\t3\tby Maria into Library/PARKS/2026/20261002 Kite Fest\n' "$ub" >> "$ROOT/app/ingest-history.tsv"
 check 'call GET "{\"state\":\"\",\"batch\":\"$ub\"}" "{}" $U | grep -q "\"state\":\"placed\""' 'and hears when it is in the archive'
 check 'call POST "{}" "{\"action\":\"inbox-done\",\"batch\":\"phone/$ub\"}" | grep -q "\"ok\":true" && [ ! -e "$ROOT/app/inbox/phone/$ub" ]' 'once placed, its inbox copy goes'
+# The archive itself as the shelf ("/"): departments, and Projects, straight at its top
+python3 -c "import json,sys; p=sys.argv[1]; s=json.load(open(p)); s['organise']['shelves']='/'; json.dump(s,open(p,'w'))" "$ROOT/app/settings.json"
+check 'call POST "{}" "{\"action\":\"start\",\"uploader\":\"Maria\",\"dept\":\"Parks\",\"event\":\"Kite\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"a.mov\\\",\\\"size\\\":11}]\"}" $U | grep -q "\"into\":\"PARKS/2026/20261002 Kite\""' 'with the archive itself as the shelf, a shoot goes straight into its department at the top'
+python3 -c "import json,sys; p=sys.argv[1]; s=json.load(open(p)); s['organise']['shelves']='Library'; json.dump(s,open(p,'w'))" "$ROOT/app/settings.json"
 
 # Manage → Duplicates: where the copies are, by top folder, and what each folder is (one press)
 A="$ROOT/archive"

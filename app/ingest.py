@@ -1371,7 +1371,10 @@ def _fetch(url, timeout=30):
 
 def _shelf():
     """The shelf chosen in Reorganize, or None: there is no default to guess."""
-    name = (setting("organise.shelves") or "").strip("/\\")
+    raw = (setting("organise.shelves") or "").strip()
+    if raw == "/":
+        return NAS_MOUNT                            # the archive itself: departments at its top
+    name = raw.strip("/\\")
     return os.path.join(NAS_MOUNT, name) if name else None
 
 

@@ -34,7 +34,7 @@ function sync_search(bool $force = false): array {
             $c = classify($path); $dept = null;
             if (str_starts_with($path, shelf_dir() . '/')) {
                 $folder = explode('/', substr($path, strlen(shelf_dir())+1))[0];
-                $dept = dept_of_folder($folder) ?? $folder;
+                $dept = dept_of_folder($folder) ?? (shelf_is_top() ? null : $folder);   // at the top, only the plan's folders are departments
             }
             foreach ([$path,$c['name'],$c['ext'],$c['kind'],(int)$size,$dept,$c['year'],$c['event'],$c['why'],$cutoff] as $i=>$v)
                 $ins->bindValue($i+1, $v, is_int($v) ? SQLITE3_INTEGER : ($v === null ? SQLITE3_NULL : SQLITE3_TEXT));

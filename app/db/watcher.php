@@ -43,7 +43,7 @@ if (isset($_GET['hello'])) {
         // The archive as each editor's computer mounts it (on a Mac, /Volumes/<name>):
         // files already in it are never sent again, and archived projects point there.
         'archive'    => basename(archive_dir()),
-        'shelf'      => shelf_name(),
+        'shelf'      => shelf_is_top() ? '/' : shelf_name(),    // '/': departments at the archive's top
         'cache'      => rules()['cache'] ?? [],
     ]);
 }

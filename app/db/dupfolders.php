@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $n = trim((string)($_POST['folder'] ?? '')); $k = (string)($_POST['kind'] ?? '');
     if ($n === '' || preg_match('#[/\\\\]#', $n) || mb_strlen($n) > 100 || !in_array($k, ['normal', 'stopover', 'cards'], true))
         dup_said(400, ['error' => 'Not a folder and what it is.']);
-    if ($n === shelf_name()) dup_said(400, ['error' => 'That is your shelf: its copies are the ones that stay.']);
+    if ($n === shelf_name() || (shelf_is_top() && ($n === 'Projects' || dept_of_folder($n) !== null))) dup_said(400, ['error' => 'That is your shelf: its copies are the ones that stay.']);
     $nk = array_values(array_diff($d['never_keep'] ?? [], [$n])); $cd = array_values(array_diff($d['card_dumps'] ?? [], [$n]));
     if ($k === 'stopover') $nk[] = $n; elseif ($k === 'cards') $cd[] = $n;
     $s['duplicates'] = ['never_keep' => $nk, 'card_dumps' => $cd];
@@ -68,7 +68,7 @@ if (!is_array($c) || ($c['at'] ?? -1) !== $at) {
 $rows = $c['rows']; $have = array_column($rows, 'name');
 foreach (array_merge($d['never_keep'] ?? [], $d['card_dumps'] ?? []) as $n)
     if (!in_array($n, $have, true)) $rows[] = ['name' => $n, 'move' => 0, 'bytes' => 0, 'stay' => 0];
-foreach ($rows as &$r) $r['kind'] = $r['name'] === shelf_name() ? 'shelf' : $kind_of($r['name']);
+foreach ($rows as &$r) $r['kind'] = ($r['name'] === shelf_name() || (shelf_is_top() && ($r['name'] === 'Projects' || dept_of_folder($r['name']) !== null))) ? 'shelf' : $kind_of($r['name']);
 // when that look was made: the plan's own note says (the file's date changes when it is copied)
 $built = (string)(json_decode((string)@file_get_contents("$plan.meta"), true)['built'] ?? '');
 // That plan already carried out (moved, with Move the copies aside): the numbers are what moved, not what would.

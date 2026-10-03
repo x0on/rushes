@@ -80,7 +80,7 @@ if (isset($_POST['ingest_src'])) {
         settings(true);
         $_POST['dept'] = $added = $new;
     }
-    if (shelf_name() === '') bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Manage → Reorganize → 00.');
+    if (!shelf_chosen()) bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Manage → Reorganize → 00.');
     $folder = dept_folder((string)($_POST['dept'] ?? ''));
     if ($folder === null) bail(400, 'Pick a ' . strtolower(shelf_word()) . ' from the list.');
 

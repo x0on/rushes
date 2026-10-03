@@ -99,7 +99,7 @@ $act = (string)($_POST['action'] ?? '');
 if ($act === 'start') {
     $who = mb_substr($clean($_POST['uploader'] ?? ''), 0, 60);
     if ($who === '') up_said(400, ['error' => 'Say who you are: your name goes with the files.']);
-    if (shelf_name() === '') up_said(400, ['error' => 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Manage → Reorganize → 00.']);
+    if (!shelf_chosen()) up_said(400, ['error' => 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Manage → Reorganize → 00.']);
     $folder = dept_folder((string)($_POST['dept'] ?? ''));
     if ($folder === null) up_said(400, ['error' => 'Pick a ' . strtolower(shelf_word()) . ' from the list.']);
     $date = (string)($_POST['date'] ?? '');
