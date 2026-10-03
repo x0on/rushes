@@ -9,6 +9,7 @@
 $NAV = 'upload';
 require __DIR__ . '/db/config.php';
 $depts = !shelf_chosen() ? [] : array_column(departments(), 'name');
+natcasesort($depts);                        // A to Z: found by name, whatever order they were added in
 $S = settings();
 $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
 ?><!doctype html>
@@ -26,7 +27,7 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
   .card > h2 span { color: var(--muted); font-weight: 500; margin-right: 4px }
   .f { display: block; margin: 0 0 12px } .f > span { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px }
   .f input, .f select { width: 100%; font-size: 16px }        /* 16 px: an iPhone does not zoom in on it */
-  .f input[type=date] { color-scheme: light dark; min-height: 44px }
+  .f input[type=date] { color-scheme: light dark; min-height: 44px; box-sizing: border-box; display: block; max-width: 100%; -webkit-appearance: none; text-align: left }
   .pick { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
   .tip { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 10px 0 0 }
   .tip b { color: var(--fg) }

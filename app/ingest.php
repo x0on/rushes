@@ -18,6 +18,7 @@ $shelf = shelf_dir();
 // No shelf chosen yet (Reorganize → 00): nowhere to put a shoot, so the
 // set-up card below shows instead of the form.
 $depts = !shelf_chosen() ? [] : array_column(departments(), 'name');
+natcasesort($depts); $depts = array_values($depts);   // A to Z: found by name, whatever order they were added in
 $deptFolder = [];
 foreach ($depts as $d) $deptFolder[$d] = dept_folder($d);
 $S      = settings();
