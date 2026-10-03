@@ -130,7 +130,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   <?php $m = function (string $label, string $href, string $go = '') {
       return '<a href="' . $href . '"' . ($go !== '' ? ' data-go="' . $go . '"' : '') . '>' . $label . '</a>'; }; ?>
   <h2>Find and bring in</h2>
-  <?= $m('Search', '/db/find.php') ?><?= $m('Ingest', '/ingest.php') ?>
+  <?= $m('Search', '/db/find.php') ?><?= $m('Upload from this phone', '/upload.php') ?><?= $m('Ingest a card', '/ingest.php') ?>
   <h2>Manage the archive</h2>
   <?= $m('Overview', '/db/admin.php#overview', 'overview') ?><?= $m('Transfers', '/db/admin.php#transfers', 'transfers') ?>
   <?= $m('Duplicates', '/db/admin.php#duplicates', 'duplicates') ?><?= $m('Cache', '/db/admin.php#cache', 'cache') ?>
@@ -155,8 +155,9 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   function where() {
     var t = (title && title.textContent) || document.title.split(' · ')[0];
     here.textContent = t;
-    menu.querySelectorAll('a').forEach(function (a) {
-      if (a.textContent === t) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    menu.querySelectorAll('a').forEach(function (a) {   // this page; on Manage, its section
+      var cur = a.getAttribute('href').split('#')[0] === location.pathname && (!a.dataset.go || a.textContent === t);
+      if (cur) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
   }
   function open(yes) { menu.hidden = !yes; btn.setAttribute('aria-expanded', yes); document.documentElement.classList.toggle('mnav-open', yes); }

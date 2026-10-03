@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.11.0 — October 2026
+
+- **Upload from a phone:** photos and video straight into a shoot folder, the way
+  a card goes in: your name, the department, what it was and the day; the
+  files whole and unchanged, in checked pieces that carry on after a dropped
+  connection; then the helper puts them in the archive like a card. A receipt
+  at the end, to send to yourself.
+
 ## 0.10.2 — October 2026
 
 - **Duplicates asks about folders where it matters:** Manage → Duplicates lists

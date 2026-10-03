@@ -146,6 +146,29 @@ check 'ORIGIN=http://evil.example call POST "{}" "{\"action\":\"pause\",\"pass\"
       'a button pressed from another website is refused, even with the password'
 check 'ORIGIN=http://nas.test call POST "{}" "{\"action\":\"pause\",\"pass\":\"rushes\"}" | grep -q "\"paused\"\|ok\|true"' \
       'the same button from Rushes itself works'
+# Upload from a phone (db/upload.php): whole files, in checked pieces, into a shoot folder like a card
+python3 -c "import json,sys; p=sys.argv[1]; s=json.load(open(p)); s['organise']['departments']=[{'name':'Parks','folder':'PARKS'}]; json.dump(s,open(p,'w'))" "$ROOT/app/settings.json"
+U='db/upload.php'
+check 'call POST "{}" "{\"action\":\"start\",\"dept\":\"Parks\",\"event\":\"Kite\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"a.mov\\\",\\\"size\\\":11}]\"}" $U | grep -q "Say who you are"' 'an upload says who brings it'
+check 'call POST "{}" "{\"action\":\"start\",\"uploader\":\"Maria\",\"dept\":\"Nowhere\",\"event\":\"Kite\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"a.mov\\\",\\\"size\\\":11}]\"}" $U | grep -q "from the list"' 'only into a department of the plan'
+out=$(call POST "{}" "{\"action\":\"start\",\"uploader\":\"Maria\",\"dept\":\"Parks\",\"event\":\"Kite / Fest\",\"date\":\"2026-10-02\",\"files\":\"[{\\\"name\\\":\\\"IMG_1.MOV\\\",\\\"size\\\":11,\\\"mtime\\\":1790000000}]\"}" $U)
+ub=$(echo "$out" | sed 's/.*"batch":"\([^"]*\)".*/\1/')
+check 'echo "$out" | grep -q "\"into\":\"Library/PARKS/2026/20261002 Kite Fest\"" && [ -f "$ROOT/app/inbox/phone/$ub/meta.json" ]' 'it is given the shoot folder Rushes works out, the way a card is'
+printf 'hello ' > "$ROOT/q1"; printf 'world' > "$ROOT/q2"
+h1=$(sha256sum "$ROOT/q1" | cut -d" " -f1); h2=$(sha256sum "$ROOT/q2" | cut -d" " -f1)
+check 'BODY="$ROOT/q1" PIECE=$h2 call POST "{\"piece\":\"\",\"batch\":\"$ub\",\"name\":\"IMG_1.MOV\",\"offset\":\"0\"}" "{}" $U | grep -q "arrived different"' 'a piece that arrives different from the one sent is not kept'
+check 'BODY="$ROOT/q2" PIECE=$h2 call POST "{\"piece\":\"\",\"batch\":\"$ub\",\"name\":\"IMG_1.MOV\",\"offset\":\"6\"}" "{}" $U | grep -q "not the next piece"' 'pieces go in order'
+check 'BODY="$ROOT/q1" PIECE=$h1 call POST "{\"piece\":\"\",\"batch\":\"$ub\",\"name\":\"IMG_1.MOV\",\"offset\":\"0\"}" "{}" $U | grep -q "\"have\":6,\"done\":false" && call GET "{\"have\":\"\",\"batch\":\"$ub\",\"name\":\"IMG_1.MOV\"}" "{}" $U | grep -q "\"have\":6"' 'a stopped upload carries on from what arrived'
+check 'call POST "{}" "{\"action\":\"finish\",\"batch\":\"$ub\"}" $U | grep -q "Not every file"' 'it is not listed for the helper before every file is whole'
+check 'BODY="$ROOT/q2" PIECE=$h2 call POST "{\"piece\":\"\",\"batch\":\"$ub\",\"name\":\"IMG_1.MOV\",\"offset\":\"6\"}" "{}" $U | grep -q "\"done\":true" && [ "$(cat "$ROOT/app/inbox/phone/$ub/files/IMG_1.MOV")" = "hello world" ] && [ "$(cat "$ROOT/app/inbox/phone/$ub/fp/IMG_1.MOV")" = "sha256:$(printf "hello world" | sha256sum | cut -d" " -f1)" ]' 'the last piece makes it whole, with its own fingerprint beside it'
+check '[ "$(stat -c %Y "$ROOT/app/inbox/phone/$ub/files/IMG_1.MOV")" = 1790000000 ]' 'and the time it was shot'
+check 'call POST "{}" "{\"action\":\"finish\",\"batch\":\"$ub\"}" $U | grep -q "\"queued\":true" && grep -qx "upload	phone/$ub" "$ROOT/app/ingest-queue.tsv" && grep -qx "uploader	Maria" "$ROOT/app/inbox/phone/$ub/batch.tsv" && grep -q "^into	/Volumes/VIDEO/Library/PARKS/2026/20261002 Kite Fest$" "$ROOT/app/inbox/phone/$ub/batch.tsv"' 'whole: listed, with who and where, and queued for the helper'
+check 'call GET "{\"inbox\":\"phone/$ub/files/IMG_1.MOV\"}" | grep -qx "hello world"' 'the helper is given the uploaded files'
+check 'call GET "{\"state\":\"\",\"batch\":\"$ub\"}" "{}" $U | grep -q "\"state\":\"\(waiting\|paused\)\""' 'the receipt can ask where it is'
+printf '2026-10-02 20:00\tuploaded\tphone/%s\t1\t11\t3\tby Maria into Library/PARKS/2026/20261002 Kite Fest\n' "$ub" >> "$ROOT/app/ingest-history.tsv"
+check 'call GET "{\"state\":\"\",\"batch\":\"$ub\"}" "{}" $U | grep -q "\"state\":\"placed\""' 'and hears when it is in the archive'
+check 'call POST "{}" "{\"action\":\"inbox-done\",\"batch\":\"phone/$ub\"}" | grep -q "\"ok\":true" && [ ! -e "$ROOT/app/inbox/phone/$ub" ]' 'once placed, its inbox copy goes'
+
 # Manage → Duplicates: where the copies are, by top folder, and what each folder is (one press)
 A="$ROOT/archive"
 printf '100\t%s\t%s\n200\t%s\t%s\n50\t%s\t%s\n7\t%s\t%s\n' \

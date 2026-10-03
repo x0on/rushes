@@ -119,6 +119,7 @@ $aname  = $S['archive']['label'] ?? 'Archive';
   <div class="ing-h">
     <h1>Bring in a shoot</h1>
     <span class="grow"></span>
+    <a class="btn quiet" href="/upload.php" title="Photos and video from a phone or this computer, without a card">Upload files instead</a>
     <button class="btn quiet tab-i" type="button" id="another" disabled
             title="Queue this one first"><?= icon('plus', 2) ?> Queue another source</button>
   </div>

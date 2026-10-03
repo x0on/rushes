@@ -170,7 +170,7 @@ function queue_add(string $line): void {
     foreach (@file($OUT) ?: [] as $l) {
         $l = rtrim($l, "\n");
         if ($l === '' || $l === $line || isset($gone[$l])) continue;
-        if (str_starts_with($l, "ingest\t") || str_starts_with($l, "tidy\t") || str_starts_with($l, "untidy\t")) $first[] = $l;
+        if (str_starts_with($l, "ingest\t") || str_starts_with($l, "upload\t") || str_starts_with($l, "tidy\t") || str_starts_with($l, "untidy\t")) $first[] = $l;
         else $rest[] = $l;
     }
     $all = array_merge($first, [$line], $rest);

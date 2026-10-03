@@ -19,7 +19,8 @@ if (getenv('ORIGIN') !== false) $_SERVER['HTTP_ORIGIN'] = getenv('ORIGIN');
 if (getenv('RANGE')) $_SERVER['HTTP_RANGE'] = getenv('RANGE');
 if (getenv('WATCHER')) $_SERVER['HTTP_X_RUSHES_WATCHER'] = getenv('WATCHER');
 if (getenv('HELPERID')) $_SERVER['HTTP_X_RUSHES_HELPER'] = getenv('HELPERID');
-if (getenv('BODY')) $_SERVER['RUSHES_TEST_BODY'] = getenv('BODY');                // a request's raw body (watcher.php ?upload)
+if (getenv('BODY')) $_SERVER['RUSHES_TEST_BODY'] = getenv('BODY');
+if (getenv('PIECE')) $_SERVER['HTTP_X_PIECE_SHA256'] = getenv('PIECE');                // a piece's fingerprint (upload.php)                // a request's raw body (watcher.php ?upload)
 if (getenv('LOCAL')) $_SERVER['REMOTE_ADDR'] = '127.0.0.1';                      // as the runner, on the same machine
 if (getenv('SIGNED')) { @session_start(); $_SESSION['rushes_in'] = true; }      // as if signed in to Manage
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];

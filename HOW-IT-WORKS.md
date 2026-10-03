@@ -387,6 +387,37 @@ and records "refused".
 branch), and in `ingest.py`, `watch()`, `main()` (with `--into` and `--day`)
 and `card_size()`.
 
+### Upload from a phone
+
+Photos and video from a phone (or any computer), without a card: **Upload**
+(the phone menu, or **Upload files instead** on Ingest). Open like Ingest, to
+anyone who can reach Rushes; on the office network, or from elsewhere through a
+VPN (INSTALL.md).
+
+- **Who, what, which day.** Your name (remembered on that phone, never an
+  account), the department and what the shoot was, and the day, filled in from
+  the files and changeable. Rushes works out the folder, as for a card:
+  `<shelf>/<department>/<year>/<date> <what it was>`.
+- **Nothing is changed or made smaller.** The files go up exactly as the
+  browser hands them over, 4K and ProRes included. The page says to choose
+  them from **Files**: from the Photo Library an iPhone may convert or shrink a
+  file before it leaves the phone, which a web page cannot prevent. A video the
+  iPhone re-encoded (its name starts with `trim.`) is pointed out in yellow.
+- **Checked piece by piece.** Each file goes up in pieces of 4 MB, each with
+  its SHA-256 taken on the phone (`db/upload.php`), and is kept only if it
+  arrives the same; a dropped connection carries on from what arrived. Whole
+  files wait in Rushes' inbox (`inbox/phone/<batch>`, never handed out), with
+  their own fingerprint and the time they were shot.
+- **Into the archive like a card.** The helper fetches each file, checks it
+  again against that fingerprint, gives it back the time it was shot, and puts
+  it in with the card copy: the same check, origin record (“a phone, uploaded by
+  Maria”) and copy proof. Only when every file is in its place does the inbox
+  copy go; otherwise it stays, and Activity says why. Paused is paused: it waits.
+- **The receipt:** who, the shoot, how many files and how big, where they are,
+  when, and whether they are in the archive yet, with **Send to myself** (the
+  phone's own share sheet: Mail, Messages, Notes) and **Open in Search**. The
+  link opens Rushes, so it works where Rushes does.
+
 ### Folders from an old server: Transfers
 
 For bringing over a whole server, folder by folder:

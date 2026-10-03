@@ -1862,6 +1862,93 @@ def deliver(rel):
     status(phase="done", source=pname, copied=len(taken), of=len(b["files"]), failed=failed)
 
 
+# ── photos and video from a phone (db/upload.php) ───────────────────────────
+# Uploaded whole into Rushes' inbox (inbox/phone/<batch>), each piece checked as
+# it arrived. Here: each file fetched to this computer and checked again against
+# its fingerprint, given back the time it was shot, then put in the archive
+# exactly as a card is (the same copy, check, origin record and copy proof),
+# into the shoot folder Rushes worked out. The inbox copy goes only after that.
+def read_upload(text):
+    """batch.tsv of an upload -> dict, or ValueError. Rushes writes it (upload.php)
+    once every file has arrived whole, and ends it with "end"."""
+    lines = text.split("\n")
+    while lines and lines[-1] == "":
+        lines.pop()
+    if not lines or lines[0] != "rushes-upload 1" or lines[-1] != "end":
+        raise ValueError("batch.tsv is not complete")
+    b = {"uploader": "", "device": "", "into": "", "files": []}
+    for l in lines[1:-1]:
+        f = l.split("\t")
+        if f[0] in ("uploader", "device", "into") and len(f) == 2:
+            b[f[0]] = f[1]; continue
+        if (f[0] == "file" and len(f) == 5 and f[1] and _plain(f[1], 255) == f[1] and f[3].isdigit()
+                and f[4].isdigit() and re.fullmatch(r"sha256:[0-9a-f]{64}", f[2])):
+            b["files"].append({"name": f[1], "fp": f[2], "size": int(f[3]), "mtime": int(f[4])}); continue
+        raise ValueError(f"batch.tsv has a line it should not: {l[:80]}")
+    if not b["uploader"] or not b["files"] or len({x["name"] for x in b["files"]}) != len(b["files"]):
+        raise ValueError("batch.tsv does not say who uploaded what")
+    shelf = _shelf()
+    parts = b["into"].split("/")
+    if not shelf or not b["into"].startswith(shelf.rstrip("/") + "/") or ".." in parts or "" in parts[1:]:
+        raise ValueError("it is not for a folder on the shelf")
+    return b
+
+
+def upload(rel):
+    t0 = time.time()
+    _mark_done(f"upload {rel}")                # asked once: a refusal is not retried every 20 s
+
+    def refuse(why):
+        print(f"Upload {rel} not taken in: {why}.\nNothing in the archive changed; the files are still in Rushes' inbox.")
+        history("refused", f"upload {rel}", 0, 0, 0, why)
+
+    if not re.fullmatch(r"phone/[0-9]{14}-[0-9a-f]{8}", rel):
+        return refuse("that is not an upload")
+    try:
+        b = read_upload(_fetch(f"{NAS_URL}/db/helper.php?inbox={urllib.parse.quote(rel)}/batch.tsv", 30))
+    except (OSError, ValueError, urllib.error.URLError) as e:
+        return refuse(f"its list cannot be read ({e})")
+    name, total = os.path.basename(b["into"]), sum(x["size"] for x in b["files"])
+    print(f"from a phone, uploaded by {b['uploader']}: {len(b['files'])} file(s), {total / 1e9:.1f} GB, for {b['into']}")
+    tmp = HOME / "inbox" / rel.replace("/", "-"); tmp.mkdir(parents=True, exist_ok=True)
+    try:
+        for i, x in enumerate(b["files"], 1):
+            if control().get("paused") or stopped():
+                _unmark_done(f"upload {rel}")      # carries on when work resumes, from what is here already
+                print("  stopped part-way (paused) — the rest comes when work resumes"); return
+            local = tmp / x["name"]
+            if not (local.is_file() and local.stat().st_size == x["size"]
+                    and _fingerprint_of(str(local), "sha256") == x["fp"][7:]):
+                _from_inbox(rel, x["name"], str(local), x["size"], "sha256", x["fp"][7:])
+            if x["mtime"]:
+                os.utime(local, (x["mtime"], x["mtime"]))   # when it was shot: the shoot's date, as on a card
+            status(phase="delivering", source=name, copied=i, of=len(b["files"]))
+    except (OSError, urllib.error.URLError) as e:
+        _unmark_done(f"upload {rel}")              # tried again later; nothing in the archive changed
+        print(f"  ! could not fetch it from Rushes ({e}) — tried again later"); return
+    rc = run_self("--source", str(tmp), "--into", b["into"], "--apply", "--label", f"a phone, uploaded by {b['uploader']}")
+    if rc != 0:
+        _unmark_done(f"upload {rel}")
+        print("  not all of it is in the archive yet — the upload stays in Rushes' inbox, and carries on later"); return
+    rel_into = os.path.relpath(b["into"], NAS_MOUNT).replace(os.sep, "/")
+    # Each file where it belongs, whole: only then does Rushes' inbox copy go.
+    missing = [x["name"] for x in b["files"] if not (os.path.isfile(os.path.join(b["into"], x["name"]))
+                                                    and os.path.getsize(os.path.join(b["into"], x["name"])) == x["size"])]
+    if missing:
+        note = f"by {b['uploader']} into {rel_into}; {len(missing)} could not be copied ({', '.join(missing[:3])}) — kept in Rushes' inbox"
+        print(f"  ! {note}")
+        history("uploaded", rel, len(b["files"]) - len(missing), total, time.time() - t0, note)
+        return
+    try:
+        body = urllib.parse.urlencode({"action": "inbox-done", "batch": rel}).encode()
+        urllib.request.urlopen(NAS_URL + "/db/helper.php", data=body, timeout=30).close()
+    except Exception as e:
+        print(f"  ! the upload stays in Rushes' inbox for now ({e})")
+    shutil.rmtree(tmp, ignore_errors=True)
+    history("uploaded", rel, len(b["files"]), total, time.time() - t0, f"by {b['uploader']} into {rel_into}")
+    print(f"  in the archive ✓ {rel_into}")
+
+
 _looked = [[], 0.0]        # the latest look at what is plugged in here, and when
 _looking = [""]            # the drive being looked at right now
 
@@ -2503,7 +2590,7 @@ def watch(root, every=20):
             elif len(f) >= 2 and f[0] == "analyze" and f[1].startswith("/"):
                 # the third field is when it was asked for: asking again (new footage) runs again
                 want.append(("analyze", f[1], f[2] if len(f) > 2 and f[2].isdigit() else ""))
-            elif len(f) >= 2 and f[0] in ("tidy", "untidy", "deliver") and f[1]:
+            elif len(f) >= 2 and f[0] in ("tidy", "untidy", "deliver", "upload") and f[1]:
                 want.append((f[0], f[1], ""))
             elif len(f) >= 3 and f[0] == "ingest" and f[1] and f[2]:
                 # a card, the folder it goes in, and — for a card that spans
@@ -2558,12 +2645,12 @@ def watch(root, every=20):
         # one the transfer does not know is finished when this computer did it.
         item_done = lambda p: job_items[p]["phase"] in ("done", "removed")
         finished = lambda v, p, i: ((v == "copy" and (item_done(p) if p in job_items else p in done)) or (v == "ingest" and i.split("\t")[0] in done)
-                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy", "deliver") and f"{v} {p}" in done)
+                                    or (v == "list" and p in listed) or (v in ("tidy", "untidy", "deliver", "upload") and f"{v} {p}" in done)
                                     or (v == "analyze" and f"analyze {p}{' ' + i if i else ''}" in done))
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
         # A tidy-up works inside the archive, and a delivery comes from the
         # Deliveries share, so a source drive going away stops neither.
-        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy", "deliver")]
+        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy", "deliver", "upload")]
         try:
             gone = within("sources", 30, lambda: [p for p in copies if not os.path.isdir(p)]) if copies else []
         except Stalled:
@@ -2666,6 +2753,10 @@ def watch(root, every=20):
                 did = True
                 print(f"\n=== an editor's delivery: {path} ===")
                 run_self("--deliver", path); break
+            if verb == "upload":
+                did = True
+                print(f"\n=== photos and video from a phone: {path} ===")
+                run_self("--upload", path); break
             if verb == "copy" and path in c.get("skip", []):
                 continue                               # skipped from Manage
             item = job_items.get(path) if verb == "copy" else None
@@ -2911,6 +3002,8 @@ def main():
     ap.add_argument("--tidy", metavar="PLAN", help="move copied footage onto the shelf by an approved plan")
     ap.add_argument("--untidy", metavar="RECORD", help="put back what one tidy-up moved")
     ap.add_argument("--deliver", metavar="KEY/BATCH", help="take in what an editor's Watcher delivered")
+    ap.add_argument("--upload", metavar="phone/BATCH", help="take in what was uploaded from a phone")
+    ap.add_argument("--label", help="with --into: what the source is called in the origin record")
     ap.add_argument("--into", help="copy the whole source into exactly this folder, "
                                    "keeping its layout (a card into its shoot folder)")
     ap.add_argument("--day", help="with --into: only the files recorded on this day (YYYY-MM-DD)")
@@ -2947,7 +3040,7 @@ def main():
     # Anything that copies or lists needs to know where things are. Without
     # Rushes' settings it would be guessing, and a guessed path is how files
     # land somewhere nobody looks. Stop and say why instead.
-    if (a.sections or a.source or a.trace or a.tidy or a.untidy or a.deliver) and not SETTINGS:
+    if (a.sections or a.source or a.trace or a.tidy or a.untidy or a.deliver or a.upload) and not SETTINGS:
         sys.exit(f"Cannot reach Rushes at {NAS_URL} — nothing copied.\n"
                  "Stop the helper (Ctrl-C) and start it again with the command from Setup.")
     # The one boundary every copy must respect: it lands inside the archive.
@@ -2966,6 +3059,7 @@ def main():
         return tidy(a.tidy)
     if a.untidy:   return untidy(a.untidy)
     if a.deliver:  return deliver(a.deliver)
+    if a.upload:   return upload(a.upload)
     if a.sections: return sections(a.sections, a.fresh)
     if a.undo:     return undo()
     if not a.source: sys.exit("need --source")
@@ -2998,6 +3092,8 @@ def main():
     # footage belongs — that is the restructure's job, and it can only do it
     # if the original path survived the copy.
     src_root, src_name = source_root(a.source)
+    if a.into and a.label:
+        src_name = _plain(a.label)                  # e.g. "a phone, uploaded by Maria"
     mirror = os.path.join(a.root, src_name)
 
     print(f"walking {a.source} …  "

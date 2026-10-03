@@ -56,11 +56,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // The work: only for the paired helper (pair.php), once there is one.
     // The mark of the helper's code: a helper checks for new code only when it changes.
     if (isset($_GET['queue'])) { helper_gate(); header('X-Rushes-Code: ' . substr(hash('sha256', json_encode(helper_hashes())), 0, 16)); out((string)@file_get_contents(web_dir() . '/ingest-queue.tsv'), 'text/plain; charset=utf-8'); }
-    // What an editor's Watcher sent (watcher.php), for the helper to place: its
-    // list (batch.tsv), then each file. Only the paired helper is given them.
+    // What an editor's Watcher sent (watcher.php), or a phone (upload.php), for
+    // the helper to place: its list (batch.tsv), then each file. Only the paired helper is given them.
     if (isset($_GET['inbox'])) {
         helper_gate();
-        if (!preg_match('#^([0-9a-f]{16}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79})/(batch\.tsv|files/[^/\\\\:\x00-\x1f]{1,200})$#u', (string)$_GET['inbox'], $m)
+        if (!preg_match('#^((?:[0-9a-f]{16}|phone)/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79})/(batch\.tsv|files/[^/\\\\:\x00-\x1f]{1,200})$#u', (string)$_GET['inbox'], $m)
             || str_contains($m[2], '/.') || !is_file($f = web_dir() . "/inbox/{$m[1]}/{$m[2]}")) bail(404, 'not in the inbox');
         header('Content-Type: application/octet-stream'); header('Content-Length: ' . filesize($f)); header('Cache-Control: no-store');
         readfile($f); exit;
@@ -146,10 +146,10 @@ $act = (string)($_POST['action'] ?? '');
 // The helper has placed a batch, checked, in the archive: its copy in the inbox goes.
 if ($act === 'inbox-done') {
     helper_gate();
-    if (!preg_match('#^[0-9a-f]{16}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$#', $b = (string)($_POST['batch'] ?? ''))) bail(400, 'not a batch');
+    if (!preg_match('#^(?:[0-9a-f]{16}|phone)/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$#', $b = (string)($_POST['batch'] ?? ''))) bail(400, 'not a batch');
     $dir = web_dir() . "/inbox/$b";
     foreach (array_merge(glob("$dir/files/*") ?: [], glob("$dir/fp/*") ?: []) as $f) @unlink($f);
-    @unlink("$dir/batch.tsv"); @rmdir("$dir/files"); @rmdir("$dir/fp"); @rmdir($dir);
+    @unlink("$dir/batch.tsv"); @unlink("$dir/meta.json"); @rmdir("$dir/files"); @rmdir("$dir/fp"); @rmdir($dir);
     out(['ok' => !is_dir($dir)]);
 }
 $switch = in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge'], true);

@@ -569,6 +569,43 @@ class ProofTests(unittest.TestCase):
         self.posted = getattr(self, 'posted', []) + [(url, parse_qs(data.decode()) if data else {})]
         return io.BytesIO(b'{}')
 
+    def test_an_upload_from_a_phone_goes_in_like_a_card(self):
+        """Fetched from Rushes' inbox and checked, given back the time it was shot, put in by the
+        card path into the folder Rushes worked out, and only then cleared from the inbox."""
+        import hashlib
+        m = self.mod
+        m.SETTINGS = {"organise": {"shelves": "Library"}, "archive": {"local": str(self.archive)}}
+        into = str(self.archive / "Library/PARKS/2026/20261002 Kite")
+        data = b"hello world"; fp = hashlib.sha256(data).hexdigest()
+        batch = f"rushes-upload 1\nuploader\tMaria\ndevice\tiPhone\ninto\t{into}\nfile\tIMG_1.MOV\tsha256:{fp}\t11\t1790000000\nend\n"
+        said, ran, posted = [], [], []
+        def fetch_file(rel, name, dest, size, algo, want):
+            open(dest, "wb").write(data); return dest
+        def card(*args):
+            ran.append(args); src = args[args.index("--source") + 1]
+            os.makedirs(into, exist_ok=True)
+            for n in os.listdir(src):
+                with open(os.path.join(src, n), "rb") as i, open(os.path.join(into, n), "wb") as o: o.write(i.read())
+                os.utime(os.path.join(into, n), (os.path.getmtime(os.path.join(src, n)),) * 2)
+            return 0
+        with patch.object(m, "_fetch", return_value=batch), patch.object(m, "_from_inbox", side_effect=fetch_file), \
+             patch.object(m, "run_self", side_effect=card), patch.object(m, "control", return_value={}), \
+             patch.object(m, "stopped", return_value=False), patch.object(m, "history", side_effect=lambda *a: said.append(a)), \
+             patch("urllib.request.urlopen", side_effect=lambda url, data=None, timeout=None: posted.append(data) or io.BytesIO(b"{}")):
+            m.upload("phone/20261002200000-0a1b2c3d")
+        self.assertEqual(open(os.path.join(into, "IMG_1.MOV"), "rb").read(), data)
+        self.assertEqual(int(os.path.getmtime(os.path.join(into, "IMG_1.MOV"))), 1790000000)      # the shoot's time, as on a card
+        self.assertIn("a phone, uploaded by Maria", ran[0])
+        self.assertTrue(any(b"inbox-done" in (d or b"") for d in posted))
+        self.assertEqual(said[-1][0:2], ("uploaded", "phone/20261002200000-0a1b2c3d"))
+        self.assertIn("by Maria into Library/PARKS/2026/20261002 Kite", said[-1][5])
+        # a list naming a folder off the shelf is refused, and nothing is fetched
+        bad = batch.replace(into, "/etc")
+        with patch.object(m, "_fetch", return_value=bad), patch.object(m, "_from_inbox") as f, \
+             patch.object(m, "history", side_effect=lambda *a: said.append(a)):
+            m.upload("phone/20261002200001-0a1b2c3d")
+        f.assert_not_called(); self.assertEqual(said[-1][0], "refused")
+
     def test_a_share_that_goes_away_is_written_down(self):
         m = self.mod
         mounts = ["//me@nas.test/VIDEO on /Volumes/VIDEO (smbfs, nodev, nosuid, mounted by me)\n"

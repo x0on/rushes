@@ -28,6 +28,8 @@ foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
     if (count($f) >= 3 && in_array($f[1], ['copied', 'refused'], true)) $landed[$f[2]] = true;
     if (count($f) >= 3 && in_array($f[1], ['tidied', 'untidied', 'refused'], true)) $landed[preg_replace('/ /', "\t", $f[2], 1)] = true;
     if (count($f) >= 3 && $f[1] === 'delivered') $landed["deliver\t{$f[2]}"] = true;
+    if (count($f) >= 3 && $f[1] === 'uploaded') $landed["upload\t{$f[2]}"] = true;
+    if (count($f) >= 3 && $f[1] === 'refused' && str_starts_with($f[2], 'upload ')) $landed["upload\t" . substr($f[2], 7)] = true;
     if (count($f) >= 3 && $f[1] === 'analysed') {
         $landed["analyze\t" . $f[2]] = true;
         if (preg_match('/asked=(\d+)/', $f[6] ?? '', $m)) $landed["analyze\t{$f[2]}\t{$m[1]}"] = true;
@@ -35,7 +37,7 @@ foreach (@file(web_dir() . '/ingest-history.tsv') ?: [] as $l) {
 }
 // A tidy-up (Structure → Tidy-up) is its own door, db/tidy.php. Kept here
 // untouched, and dropped once the helper has done it.
-$ingests = []; $tidies = []; $others = []; $describes = []; $delivers = [];
+$ingests = []; $tidies = []; $others = []; $describes = []; $delivers = []; $uploads = [];
 foreach (@file($OUT) ?: [] as $l) {
     $l = rtrim($l, "\n");
     if ($l === '') continue;
@@ -44,6 +46,8 @@ foreach (@file($OUT) ?: [] as $l) {
     if (str_starts_with($l, "analyze\t")) { if (!isset($landed[$l])) $describes[] = $l; continue; }
     // What an editor's Watcher delivered (watcher.php): kept until the helper has taken it in.
     if (str_starts_with($l, "deliver\t")) { if (!isset($landed[$l])) $delivers[] = $l; continue; }
+    // What a phone uploaded (db/upload.php): kept, with the cards, until the helper has placed it.
+    if (str_starts_with($l, "upload\t")) { if (!isset($landed[$l])) $uploads[] = $l; continue; }
     if (!str_starts_with($l, "ingest\t")) { $others[] = $l; continue; }
     // A card that has landed leaves the list, or the list grows for ever.
     if (!isset($landed[explode("\t", $l)[2] ?? ''])) $ingests[] = $l;
@@ -135,7 +139,7 @@ if (isset($_POST['ingest_src'])) {
 
 // Cards first. Someone standing there with a card should not wait behind a
 // week-long migration; whatever is already copying still finishes first.
-$all = array_merge($ingests, $tidies, $delivers, $others, $describes);
+$all = array_merge($ingests, $uploads, $tidies, $delivers, $others, $describes);
 if (@file_put_contents("$OUT.new", $all ? implode("\n", $all) . "\n" : '') === false || !@rename("$OUT.new", $OUT))
     bail(500, "could not write $OUT — is the web folder writable?");
 echo json_encode($said);
