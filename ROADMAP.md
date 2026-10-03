@@ -277,6 +277,12 @@ One Rushes, packaged three ways:
   of screens, so a fix to one is a fix to both. Built in the order that risks
   least: catalogue and search (reads only), then describing, then a
   duplicates report, then reorganizing (the only part that moves files).
+  The first thing it shows, once a drive is catalogued, is what is on it:
+  footage, editing caches and render files, and copies of the same clip,
+  each with its size, so a person sees what can go before anything moves. It
+  looks in the laptop's own cache folders too (Premiere's Media Cache lives
+  there by default), and adds the render folders of Final Cut and Resolve to
+  `rules.json` once real drives show their names.
   Drives are known by their own ID, not their name: an unplugged drive stays
   searchable, and Rushes says which drive to plug in. Between drives, a move
   is a copy that is checked; the original stays for the person to delete.
