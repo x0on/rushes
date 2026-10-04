@@ -10,6 +10,14 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   files whole and unchanged, in checked pieces that carry on after a dropped
   connection; then the helper puts them in the archive like a card. A receipt
   at the end, to send to yourself.
+- **The archive itself can be the shelf** (Reorganize 00): departments and
+  Projects straight at its top. A department's link to a folder counts only
+  while that folder is on the shelf, so a new folder takes the department's
+  proper name, never an old shelf's misspelt one.
+- **A file already at the destination is read in full** before a copy counts
+  it as done: it may not be Rushes' own copy.
+- **Upload after a Safari restart** comes back filled in and says how to carry
+  on; departments are listed A to Z in Upload and Ingest.
 - **The NAS's disks on Overview:** a RAID rebuilding (how far, how long left,
   from the system's own numbers) or missing a disk is said at the top; the
   runner reads it once a minute (/proc/mdstat), with what each turn costs.

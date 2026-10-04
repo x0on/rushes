@@ -417,6 +417,10 @@ VPN (INSTALL.md).
   when, and whether they are in the archive yet, with **Send to myself** (the
   phone's own share sheet: Mail, Messages, Notes) and **Open in Search**. The
   link opens Rushes, so it works where Rushes does.
+- **If Safari restarts the page** (an iPhone short of memory does this, often
+  while it prepares a big video from Photos), the form comes back filled in and
+  says the upload was cut off. A page cannot keep the files chosen: choosing
+  the same ones again carries on from what arrived.
 
 ### Folders from an old server: Transfers
 
@@ -513,8 +517,10 @@ where this section says otherwise.
    fingerprint.** On a Mac this read skips the computer's cache, so it really
    comes from the disk. Only if they match does the file get its real name.
 5. A file already there, with the same name, size and content, counts as
-   "already here". A *different* file with the same name is never overwritten:
-   it is reported as a problem and left alone.
+   "already here". Its content is **read in full**, both copies, before it
+   counts: it may not be Rushes' own copy, and one dragged over in Finder can
+   match at both ends and be broken in the middle. A *different* file with the
+   same name is never overwritten: it is reported as a problem and left alone.
 6. Names are matched whichever way their accents are written (NFC or NFD).
 
 **After each file,** it is added to the search catalogue within seconds and to
@@ -912,9 +918,14 @@ now live on each editor's computer and are kept as copies, so it is off unless
 
 - what your top folders are called (departments, clients, projects, or your own
   word), and which folder at the top of the archive they live in (the shelf),
-  picked from the folders that are there;
+  picked from the folders that are there, or **the archive itself**, with the
+  departments straight at its top;
 - the list of them, each linked to the folder it already has. Writing the plan
-  renames nothing and breaks no Premiere project.
+  renames nothing and breaks no Premiere project. A link counts only while its
+  folder is on the shelf: after the shelf moves, a department whose old folder
+  is not up there gets a new folder named exactly as the department, never a
+  copy of the old folder's name (typos included). The old link stays, so the
+  tidy-up still knows where that department's footage came from.
 
 Building the list:
 
