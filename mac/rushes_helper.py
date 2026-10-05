@@ -445,9 +445,20 @@ def helper_id():
         return ""
 
 
+def mac_user():
+    """Who is signed in to this Mac, by the name macOS shows (Activity says who turned a switch)."""
+    try:
+        import pwd
+        e = pwd.getpwuid(os.getuid())
+        return (e.pw_gecos.split(",")[0] or e.pw_name).strip()
+    except (ImportError, KeyError):
+        return ""
+
+
 def rushes(url, path, data=None, timeout=6):
     body = urllib.parse.urlencode(data).encode() if data is not None else None
-    req = urllib.request.Request(url.rstrip("/") + path, data=body, headers={"X-Rushes-Helper": helper_id()})
+    req = urllib.request.Request(url.rstrip("/") + path, data=body,
+                                 headers={"X-Rushes-Helper": helper_id(), "X-Rushes-Who": urllib.parse.quote(mac_user())})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
@@ -535,6 +546,7 @@ class Window:
         self.lock = threading.Lock()
         self.quit = threading.Event()                    # before any thread that watches it
         self.remote, self.asking, self.asked = {}, None, 0.0     # what Rushes last said (ask_rushes)
+        self.activity_at = 0.0
         self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
                   "done": [], "waiting": False, "lan_asked": False}
         if self.s["url"] and not WATCHER and not service_points_here() and was_helper():
@@ -601,7 +613,7 @@ class Window:
 
     def home(self):
         loaded, pid = service_running()
-        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": WORKLOG, "local_up": local_up(),
+        h = {"running": loaded, "pid": pid, "log": log_tail(60), "app": HOMEAPP, "logfile": WORKLOG, "local_up": local_up(),
              "newer": self.newer(), "version": app_version()}
         if WATCHER:
             # Everything is on this computer: what it says it is doing, and its switch.
@@ -645,10 +657,25 @@ class Window:
             r["check_paused"] = bool(c.get("check_paused"))
             st = rushes(self.s["url"], "/db/state.php")
             r["now"] = st.get("copy") or {}
+            a, d = st.get("archive") or {}, st.get("disk") or {}
+            r["stats"] = {"files": a.get("files", 0), "bytes": a.get("bytes", 0), "free": d.get("free", 0)}
             r["describing"] = ((st.get("helper") or {}).get("describe")) or {}
             r["rushes"] = True
         except Exception as e:
             r["rushes"] = False; r["rushes_why"] = str(getattr(e, "reason", e))
+        # Activity and the editors' computers: asked every 15 s, kept between (the page asks every 1.5)
+        with self.lock:
+            old = self.remote or {}
+        if r.get("rushes") and time.time() - self.activity_at > 15:
+            try:
+                a = rushes(self.s["url"], "/db/activity.php?n=150")
+                r["activity"], r["watchers"] = a.get("events") or [], a.get("watchers") or []
+                self.activity_at = time.time()
+            except Exception:
+                pass
+        for k in ("activity", "watchers"):
+            if k not in r and k in old:
+                r[k] = old[k]
         with self.lock:
             self.remote = r
 
@@ -704,6 +731,11 @@ class Window:
             self.set(said=f"On ✓ Phones and computers on your network (or Tailscale) open http://{local_name()}:{c.get('port') or PORT} "
                           "and sign in with Rushes' password. Set your own in Rushes → Manage first: until then they are refused."
                      if c["others"] else "Off ✓ Only this Mac opens Rushes now.")
+        elif do == "reveal-archive" and local():
+            # the archive, in Finder (where Setup last put it)
+            subprocess.run(["open", (read_json(os.path.join(WEB, "settings.json")).get("archive") or {}).get("local") or local()["archive"]])
+        elif do == "open-setup":
+            subprocess.run(["open", (local_url() if local() else s["url"]) + "/setup.php"])
         elif do == "show-log":
             subprocess.run(["open", "-a", "Console", WORKLOG])
         elif do == "open-window":
@@ -932,16 +964,36 @@ class Window:
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>Rushes Helper</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root{--bg:#f6f5f2;--card:#fff;--fg:#1d1d1b;--muted:#6b6a66;--line:#e3e1dc;--accent:#2f7d74;--accent-fg:#fff;--ok:#2f7d4a;--warn:#9a6a12;--bad:#b3261e}
-@media (prefers-color-scheme:dark){:root{--bg:#1c1c1b;--card:#252523;--fg:#ecebe7;--muted:#a3a19b;--line:#3a3936;--accent:#4fa396;--accent-fg:#0d1f1c;--ok:#6cc08a;--warn:#e2b04a;--bad:#f08a80}}
+:root{--bg:#f6f5f2;--card:#fff;--fg:#1d1d1b;--muted:#6b6a66;--line:#e3e1dc;--accent:#2f7d74;--accent-fg:#fff;--ok:#2f7d4a;--warn:#9a6a12;--bad:#b3261e;--side:#efede8;--sel:#dde8e5;--okbg:#dcefe2;--badbg:#f6dcd9}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1c1b;--card:#252523;--fg:#ecebe7;--muted:#a3a19b;--line:#3a3936;--accent:#4fa396;--accent-fg:#0d1f1c;--ok:#6cc08a;--warn:#e2b04a;--bad:#f08a80;--side:#222220;--sel:#2c3a37;--okbg:#1f3a29;--badbg:#45211e}}
 *{box-sizing:border-box}html,body{margin:0;height:100%}
 body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;background:var(--bg);color:var(--fg);display:flex;-webkit-user-select:none;user-select:none}
-nav{width:190px;padding:26px 16px;border-right:1px solid var(--line)}
+nav{width:210px;flex:none;padding:22px 12px 14px;border-right:1px solid var(--line);background:var(--side);display:flex;flex-direction:column}
+nav h1{padding:0 4px}
 nav h1{font-size:15px;margin:0 0 22px}nav h1 small{display:block;font-weight:400;color:var(--muted);font-size:12px}
 nav ol{list-style:none;margin:0;padding:0}nav li{padding:7px 0 7px 26px;position:relative;color:var(--muted)}
 nav li:before{content:"";position:absolute;left:4px;top:12px;width:10px;height:10px;border-radius:50%;border:2px solid var(--line)}
 nav li.on{color:var(--fg);font-weight:600}nav li.on:before{border-color:var(--accent);background:var(--accent)}
 nav li.ok{color:var(--fg)}nav li.ok:before{border-color:var(--ok);background:var(--ok)}
+nav li.pg{padding:7px 10px;margin:1px 0;border-radius:7px;color:var(--fg);cursor:pointer;display:flex;align-items:center;gap:8px}
+nav li.pg:before{display:none}nav li.pg:hover{background:rgba(127,127,127,.12)}nav li.pg.on{background:var(--sel);font-weight:600}
+nav li.pg .pill{margin-left:auto;font-size:11px;background:var(--accent);color:var(--accent-fg);border-radius:9px;padding:0 7px;font-weight:600}
+#navtop:empty,#navfoot:empty{display:none}#navtop{margin:0 0 16px}#navtop button{width:100%;padding:9px 12px;font-size:14.5px}
+#navfoot{margin-top:auto;padding:10px 4px 0;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+#navfoot .lnk{padding:0;font-size:12px;color:var(--accent)}
+.foot:empty{display:none}
+.lnk{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font:inherit}.lnk:hover{text-decoration:underline}.lnk.danger{color:var(--bad)}
+.sub{color:var(--muted);margin:-6px 0 18px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 14px}.stats div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.stats b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.stats small{color:var(--muted)}
+.feed{list-style:none;margin:0;padding:0}.feed li{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--line);margin:0;align-items:flex-start}
+.feed li:first-child{border-top:0;padding-top:0}.feed time{color:var(--muted);font-variant-numeric:tabular-nums;width:42px;flex:none}
+.feed .t{flex:1;min-width:0}.feed .day{color:var(--muted);font-size:12px;font-weight:600;padding:14px 0 2px;border:0}.feed .day:first-child{padding-top:0}
+.ico{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:10px;background:var(--line);color:var(--muted);margin-top:1px}
+.ico.ok{background:var(--okbg);color:var(--ok)}.ico.bad{background:var(--badbg);color:var(--bad)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}.chips button{border-radius:14px;padding:2px 11px;font-size:12.5px}
+.chips button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.head{display:flex;align-items:center;gap:12px}.head .t{flex:1}
 main{flex:1;display:flex;flex-direction:column;min-width:0}
 .body{flex:1;overflow:auto;padding:28px 32px}
 h2{font-size:20px;margin:0 0 12px}p{margin:0 0 12px}.muted{color:var(--muted)}
@@ -969,7 +1021,7 @@ h3{font-size:14px;margin:18px 0 6px}h4{font-size:13.5px;margin:16px 0 6px}ul,ol{
 th,td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid var(--line)}th{color:var(--muted);font-weight:500}
 .big{font-size:40px;line-height:1;margin:6px 0 14px;color:var(--ok)}
 </style></head><body>
-<nav><h1>Rushes Helper<small>Rushes Media Management Software</small></h1><ol id="steps"></ol></nav>
+<nav><h1>Rushes Helper<small>Rushes Media Management Software</small></h1><div id="navtop"></div><ol id="steps"></ol><div id="navfoot"></div></nav>
 <main><div class="body" id="body"></div><div class="foot" id="foot"></div></main>
 <script>
 const K = location.pathname;       // the page's own key, needed for every question
@@ -1032,8 +1084,14 @@ function draw() {
   if (credits != null) return;              // reading the list: the screen underneath waits
   const s = S, busy = s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '';
   const setupStep = STEPS.findIndex(x => x[0] === (s.step === 'network' ? 'address' : s.step === 'later' ? 'fda' : s.step));
-  $('steps').innerHTML = s.step === 'home' || s.step === 'remove' || s.step === 'removed'
-    ? '<li class="on">This Mac</li>'
+  // Set up: the side panel is the menu (its pages); setting up: it shows the steps
+  const atHome = s.step === 'home', pages = s.watcher ? WPAGES : PAGES;
+  if (atHome && !pages.some(x => x[0] === page)) page = 'ov';
+  $('navtop').innerHTML = atHome ? openBtn(s, true) : '';
+  $('navfoot').innerHTML = atHome ? 'Version ' + esc(s.version) + ' · <button class="lnk" data-credits="1">What it is made of</button>' : '';
+  $('steps').innerHTML = atHome ? pages.map(x => '<li class="pg' + (x[0] === page ? ' on' : '') + '" data-page="' + x[0] + '">' + x[1] +
+      (x[0] === 'help' && s.newer ? '<span class="pill">update</span>' : '') + '</li>').join('')
+    : s.step === 'remove' || s.step === 'removed' ? ''
     : STEPS.map((x, i) => '<li class="' + (i < setupStep ? 'ok' : i === setupStep ? 'on' : '') + '">' + x[1] + '</li>').join('');
   let b = '', f = '';
   const err = s.error ? '<p class="err">' + esc(s.error) + '</p>' : '';
@@ -1085,8 +1143,8 @@ function draw() {
         '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
       '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
     f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Done', 'done') + openBtn(s, true); break;
-  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + (s.watcher ? '' : lnk('Where Rushes is…', 'change-where')) + lnk('Show the log', 'show-log') +
-      lnk('Remove…', 'remove', 'danger') + '</span>' + btn('Done', 'done') + openBtn(s, true); break;
+  // No row of buttons: the window is a place you visit, closed with its red dot. Open Rushes is in the side panel.
+  case 'home': b = s.watcher ? whome(s) : home(s); f = ''; break;
   case 'remove':
     b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
@@ -1097,7 +1155,7 @@ function draw() {
     f = btn('Done', 'done', true); break;
   }
   const made = '<button class="lnk" data-credits="1">What it is made of</button>';
-  if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left">' + made)
+  if (['welcome', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left">' + made)
     : '<span class="left">' + made + '</span>' + f);
   const keep = $('url') && document.activeElement === $('url');
   const keepCode = $('paircode') && document.activeElement === $('paircode');
@@ -1114,109 +1172,187 @@ function draw() {
     act(d, d === 'address' ? {url: $('url').value} : d === 'pair' ? {code: $('paircode').value} : null);
   });
 }
-const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
-  analysing:'Describing footage', tidying:'Tidying up', idle:'Nothing to describe', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
-function home(s) {
-  const n = s.now || {}, on = s.running;
-  const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
-    : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
-    : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work.'
-    : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
-  const now = s.rushes === null ? '<p class="muted"><span class="spin"></span>Asking Rushes …</p>'
-    : !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and four of the switches are not available. The log below still shows its work.' +
-      (s.local ? '' : ' If Rushes is to run on this Mac now, with the archive on a drive it sees, press <b>Where Rushes is…</b> below.') + '</p>'
-    : n.phase ? '<p><b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(n.source.split('/').pop()) : '') + '</p>' +
-        (n.note ? '<p class="muted">' + esc(n.note) + '</p>' : '') + (n.file ? '<p class="muted">now: ' + esc(n.file.split('/').pop()) + '</p>' : '')
-    : '<p class="muted">Nothing to do right now.</p>';
-  const sw = (on_, off, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
-    '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? off[1] : off[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
-  const L = s.local, here = L ? '<div class="box"><div class="row"><div class="t"><b>Rushes runs on this Mac</b><small>The archive: ' + esc(L.archive) +
-      (L.there ? '' : ' — <b>not connected right now</b>: search still works from the last list; connect the drive to see it change') +
-      '. Rushes runs while this does (Run in the background, below); Open Rushes is in the menu bar.</small></div>' + openBtn(s) + '</div>' +
-      sw(L.others, ['others-on', 'others-off'], 'Let other devices open Rushes', L.others
-        ? 'On: phones and computers on your network, or on your Tailscale, open http://' + esc(L.name) + ':' + esc(L.port) + ' (or this Mac\'s Tailscale address, port ' + esc(L.port) + ') and sign in with Rushes\' password.'
-        : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') + '</div>' : '';
-  return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' + here + upd(s) +
-    '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div>' + now + '</div>' +
-    // what went wrong, said where it happened (a wrong pairing code, a switch Rushes refused, …)
-    (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
-    (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
-    // The place to type the code: always there until this Mac is the paired one.
-    // Rushes on this Mac: this app is its helper from the start, nothing to pair
-    (!s.local && s.rushes !== null && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
-      (s.pairing === 'other' ? '<b>Rushes is paired with another helper</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
-        : s.pairing === 'none' ? '<b>Not paired yet</b><small>Rushes gives work to any helper on the network until one is paired; two at once would copy over each other. To pair this one, '
-        : '<b>Pair this Mac</b><small>Rushes did not say whether this Mac is paired (it is slow to answer right now). If Rushes → Setup → 04 says no helper is paired, or names another computer, ') +
-      'open Rushes → Setup → Pair a helper and type the six numbers here. The helper paired before is refused from then on.</small></div></div>' +
-      '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
-      btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>'
-      : s.pairing === 'this' ? '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — it gives work to this Mac only.</p>' : '') +
-    '<div class="box">' +
-      sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here.') +
-      sw(on && !s.paused, ['resume', 'pause'], 'Copy footage', 'Off pauses copying at its next safe point; nothing is lost. Rushes → Manage has the same switch.', !on || !s.rushes) +
-      sw(on && !s.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage',
-        'The second lane, beside copying: this Mac\'s chip reads each shot and what is said. Off pauses it; files already described are kept.' +
-        (s.describing && s.describing.phase === 'analysing' ? ' Now: ' + esc(s.describing.label || '') + (s.describing.of ? ' · ' + esc(s.describing.n) + ' of ' + esc(s.describing.of) : '') : ''), !on || !s.rushes) +
-      sw(on && !s.check_paused, ['check-resume', 'check-pause'], 'Check copies',
-        'When there is nothing to copy: older copies are read again beside their originals (once), then every file in the archive now and then, against its fingerprint. Reading only. Off pauses it; where it got to is kept.', !on || !s.rushes) +
-      sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes) +
-    '</div>' +
-    // Support: said here, where the person at this Mac sees it, so nobody has
-    // to wonder whether someone can reach in. There is no way in.
-    '<div class="box">' +
-      '<div class="row"><div class="t">Diagnostics<small>Everything someone helping you would ask for, in one text file on your Desktop, ' +
-        'to read before you send it to anyone: versions, switches, and what the helper said lately. It names folders and files; ' +
-        'it holds no footage, and no passwords are written to it on purpose — read it first. Nothing is sent.</small></div>' + btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
-      '<div class="row"><div class="t">Ask for help<small>Opens a new issue for Rushes on GitHub, where help is asked for in the open, ' +
-        'and saves the diagnostics on your Desktop. GitHub issues are public: read the file, and attach it only if nothing in it is private.</small></div>' +
-        btn('Ask for help', 'ask-help', false, !!s.busy) + '</div>' +
-      '<div class="row"><div class="t">Support access<small>None. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
-        'Help happens in the open, on GitHub, with what you choose to share.</small></div></div>' +
-    '</div>' +
-    (s.local ? '<p class="muted" style="font-size:12.5px">Updates: Rushes and its copying and describing code all come inside this app, signed by its author, ' +
-      'and change only when you press Update (the menu bar icon says when there is one). Nothing else can reach this Mac through it.</p>'
-    : '<p class="muted" style="font-size:12.5px">Updates: the helper keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) +
-      ', never anywhere else), between jobs, when Rushes says it has changed. This app itself updates only when you press Update (the menu bar icon says when there is one). Nothing else can reach this Mac through it.</p>') +
-    '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
-      esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
-}
+// The pages of the side panel, once set up (draw: the nav). Which one is open stays here, in the window.
+const PAGES = [['ov', 'Overview'], ['act', 'Activity'], ['work', 'Work'], ['arch', 'Archive'], ['dev', 'Other devices'], ['help', 'Help']];
+const WPAGES = [['ov', 'Overview'], ['act', 'Activity'], ['work', 'Work'], ['help', 'Help']];
+let page = 'ov', kind = 'all', raw = false;
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-page],[data-kind],[data-raw]');
+  if (!t) return;
+  if (t.dataset.page) { page = t.dataset.page; raw = false; credits = null; draw(); $('body').scrollTop = 0; }
+  else if (t.dataset.kind) { kind = t.dataset.kind; draw(); }
+  else { raw = !raw; draw(); }
+});
+const size = b => b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB' : b >= 1e9 ? Math.round(b / 1e9).toLocaleString() + ' GB' : Math.round(b / 1e6).toLocaleString() + ' MB';
+const ago = t => { const m = Math.round((Date.now() / 1000 - t) / 60);
+  return !t ? 'not yet' : m < 2 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+const base = p => String(p || '').replace(/\/+$/, '').split('/').pop();
+const sw = (on_, ids, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
+  '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? ids[1] : ids[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
+// What a button did, or did not do, said where it happened: on every page
+const said = s => (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
+  (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '');
+const head = (h, sub) => '<h2>' + h + '</h2><p class="sub">' + sub + '</p>';
 // A newer version on Rushes: one button, it puts itself in place and starts again.
 const upd = s => s.newer ? '<div class="box"><div class="row"><div class="t"><b>Rushes ' + esc(s.newer) + ' is ready</b><small>This is ' +
   esc(s.version) + '. The update comes from your Rushes, signed by its author; settings, pairing and permissions stay.</small></div>' +
   btn('Update to ' + s.newer, 'update-app', true, !!s.busy) + '</div></div>' : '';
+
+// Activity (db/activity.php): what came in, what went out, what changed, and who did it
+const ICO = {in: ['↓', 'ok'], out: ['↑', ''], changed: ['•', ''], check: ['✓', 'ok'], problem: ['!', 'bad'], people: ['☺', '']};
+const KINDS = [['all', 'Everything'], ['in', 'In'], ['out', 'Out'], ['changed', 'Changes'], ['check', 'Checks'], ['problem', 'Problems']];
+function feed(evs, days) {
+  let day = '', out = '';
+  const ymd = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const today = ymd(Date.now()), yday = ymd(Date.now() - 864e5);     // this Mac's own days, as Rushes writes its times
+  evs.forEach(r => {
+    const d = String(r.at).slice(0, 10), i = ICO[r.kind] || ICO.changed;
+    if (days && d !== day) { day = d; out += '<li class="day">' + (d === today ? 'Today' : d === yday ? 'Yesterday' : esc(d)) + '</li>'; }
+    out += '<li><time>' + esc(String(r.at).slice(11, 16)) + '</time><span class="ico ' + i[1] + '">' + i[0] + '</span><div class="t">' +
+      (r.who ? '<b>' + esc(r.who) + '</b> · ' : '') + esc(r.text) + '</div></li>';
+  });
+  return '<ul class="feed">' + out + '</ul>';
+}
+const rawLog = s => '<div class="box"' + (raw ? '' : ' hidden') + '><div class="muted" style="margin-bottom:6px">The technical log, newest last <span style="float:right">' +
+  lnk('Open the whole file', 'show-log') + '</span></div><pre>' + esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
+const rawLink = () => '<p class="muted" style="font-size:12.5px"><button class="lnk" data-raw="1">' + (raw ? 'Hide the technical log' : 'Show the technical log') +
+  '</button> · for when something is wrong: every step, as this Mac wrote it</p>';
+
+const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
+  analysing:'Describing footage', tidying:'Tidying up', idle:'Nothing to describe', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
+function home(s) {
+  const n = s.now || {}, on = s.running, L = s.local;
+  const state = !on ? '<span class="dot"></span><b>Stopped</b> — Rushes does nothing until you turn it on in Work.'
+    : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
+    : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work. Work turns it back on.'
+    : '<span class="dot ok"></span><b>Rushes is running</b>';
+  const where = L ? 'Archive: ' + esc(base(L.archive)) + (L.there ? '' : ' — <b>not plugged in</b>: Search still shows its files, marked not plugged in')
+    : 'Connected to Rushes at ' + esc(s.url);
+  const now = s.rushes === null ? '<span class="spin"></span>Asking Rushes …'
+    : !s.rushes ? '<span class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '). Activity\'s technical log still shows this Mac\'s work.</span>'
+    : n.phase ? '<b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(base(n.source)) : '') +
+        (n.note ? '<div class="muted">' + esc(n.note) + '</div>' : '') + (n.file ? '<div class="muted">now: ' + esc(base(n.file)) + '</div>' : '')
+    : '<span class="muted">Nothing to do right now.</span>';
+  const st = s.stats, ev = s.activity || [];
+  const unpaired = !L && s.rushes !== null && s.pairing !== 'this';
+  switch (page) {
+  case 'act':
+    const shown = ev.filter(r => kind === 'all' || r.kind === kind || (kind === 'changed' && r.kind === 'people'));
+    return head('Activity', 'What came in, what went out, what changed, and who did it. Newest first.') + said(s) +
+      '<div class="chips">' + KINDS.map(k => '<button data-kind="' + k[0] + '"' + (k[0] === kind ? ' class="on"' : '') + '>' + k[1] + '</button>').join('') + '</div>' +
+      '<div class="box">' + (s.activity === undefined ? (s.rushes === false ? '<p class="muted">Rushes cannot be reached right now, so its activity is not here. The technical log below still shows this Mac\'s work.</p>'
+        : '<p class="muted"><span class="spin"></span>Asking Rushes …</p>')
+        : shown.length ? feed(shown, true) : '<p class="muted">Nothing ' + (kind === 'all' ? 'yet.' : 'of this kind yet.') + '</p>') + '</div>' +
+      '<p class="muted" style="font-size:12.5px">Names are the ones people gave Rushes in their browser, and editors\' computers by their pairing. Rushes → Manage → Activity shows the same.</p>' +
+      rawLink() + rawLog(s);
+  case 'work':
+    return head('Work', 'What Rushes is allowed to do. Each switch pauses at a safe point; nothing is lost.') + said(s) + '<div class="box">' +
+      sw(on, ['service-on', 'service-off'], 'Run in the background', 'Starts when you log in and restarts itself if it stops. Off stops Rushes completely, also after a restart, until you turn it on here.') +
+      sw(on && !s.paused, ['resume', 'pause'], 'Copy footage', 'Cards and drives brought into the archive. Rushes → Manage has the same switch.', !on || !s.rushes) +
+      sw(on && !s.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage',
+        'This Mac\'s chip reads each shot and what is said, so Search finds it. Files already described are kept.' +
+        (s.describing && s.describing.phase === 'analysing' ? ' Now: ' + esc(s.describing.label || '') + (s.describing.of ? ' · ' + esc(s.describing.n) + ' of ' + esc(s.describing.of) : '') : ''), !on || !s.rushes) +
+      sw(on && !s.check_paused, ['check-resume', 'check-pause'], 'Check copies',
+        'When there is nothing to copy: copies are read again against their originals, then every file now and then against its fingerprint. Reading only.', !on || !s.rushes) +
+      (L ? '' : sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes)) +
+    '</div>';
+  case 'arch':
+    return head('Archive', 'Where your footage lives.') + said(s) + (L
+      ? '<div class="box"><div class="head"><div class="t"><span class="dot' + (L.there ? ' ok' : ' warn') + '"></span><b>' + esc(base(L.archive)) + '</b><small class="muted" style="display:block">' +
+          esc(L.archive) + ' · ' + (L.there ? 'plugged in' + (st && st.free ? ' · ' + size(st.free) + ' free' : '') : 'not plugged in: plug it in and Rushes carries on by itself') + '</small></div>' +
+          btn('Show in Finder', 'reveal-archive', false, !L.there) + '</div></div>' +
+        '<div class="box"><div class="head"><div class="t">Move Rushes somewhere else<small class="muted" style="display:block">Another drive on this Mac, or a Rushes server on your network. Your footage is not touched.</small></div>' +
+          btn('Change…', 'change-where') + '</div></div>'
+      : '<div class="box"><div class="head"><div class="t"><span class="dot' + (s.rushes ? ' ok' : ' warn') + '"></span><b>A Rushes server</b><small class="muted" style="display:block">' + esc(s.url) +
+          ' · ' + (s.rushes ? 'answering' : s.rushes === null ? 'asking …' : 'not answering right now') + '. This Mac does its copying and describing.</small></div>' + btn('Change…', 'change-where') + '</div></div>') +
+      '<p style="margin-top:28px;font-size:12.5px"><button class="lnk danger" data-do="remove">Remove Rushes from this Mac…</button> <span class="muted">· it stops and no longer starts at login; the archive and its footage stay.</span></p>';
+  case 'dev':
+    const ws = s.watchers || [];
+    return head('Other devices', 'Phones and computers that may open Rushes, and editors\' computers sending their projects.') + said(s) +
+      (L ? '<div class="box">' + sw(L.others, ['others-on', 'others-off'], 'Let other devices open Rushes', L.others
+          ? 'On: phones and computers on your network, or on your Tailscale, open <b>http://' + esc(L.name) + ':' + esc(L.port) + '</b> (or this Mac\'s Tailscale address, port ' + esc(L.port) + ') and sign in with Rushes\' password.'
+          : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') + '</div>' : '') +
+      (unpaired ? pairBox(s) : !L && s.pairing === 'this' ? '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — it gives work to this Mac only.</p>' : '') +
+      '<div class="box"><div class="muted" style="margin-bottom:6px">Editors\' computers (Rushes Watcher)</div>' +
+      (s.watchers === undefined ? '<p class="muted">' + (s.rushes === false ? 'Rushes cannot be reached right now.' : '<span class="spin"></span>Asking Rushes …') + '</p>'
+        : ws.length ? ws.map(w => '<div class="row"><div class="t"><b>' + esc(w.name) + '</b>' + (w.host && w.host !== w.name ? ' <span class="muted">· ' + esc(w.host) + '</span>' : '') +
+            '<small>' + (w.seen ? 'Last heard from ' + ago(w.seen) + (w.state ? ' · ' + esc(w.state) : '') : 'Added ' + ago(w.added) + ', not heard from yet') + '</small></div>' +
+            '<span class="dot' + (w.seen && Date.now() / 1000 - w.seen < 900 ? ' ok' : '') + '"></span></div>').join('')
+        : '<p class="muted">None yet. Each editor\'s Mac gets Rushes Watcher; Rushes → Setup → Editors\' work adds it.</p>') +
+      '<div class="row">' + btn('Open Setup', 'open-setup') + '</div></div>';
+  case 'help':
+    return head('Help', 'Help happens in the open, with only what you choose to share.') + said(s) + upd(s) + '<div class="box">' +
+      '<div class="row"><div class="t">Updates<small>' + (L ? 'Rushes and all its parts come inside this app, signed by its author, and change only when you press Update.'
+        : 'This Mac keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) + ', never anywhere else). The app itself changes only when you press Update.') +
+        ' This is ' + esc(s.version) + '.</small></div>' + btn('Check for updates', 'check-updates', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Collect diagnostics<small>One text file on your Desktop, to read before you send it to anyone: versions, switches, what Rushes did lately. ' +
+        'It names folders and files; it holds no footage and no passwords. Nothing is sent.</small></div>' + btn('Collect', 'diagnostics', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Ask for help<small>Opens a new issue for Rushes on GitHub, where help is asked for in the open, and saves the diagnostics on your Desktop. ' +
+        'GitHub issues are public: attach the file only if nothing in it is private.</small></div>' + btn('Ask for help', 'ask-help', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Support access<small>None. Nobody — the author, IT or anyone else — can connect to this Mac through Rushes.</small></div></div>' +
+    '</div>';
+  default:
+    return head('Overview', 'How Rushes is doing, at a glance.') + said(s) + upd(s) +
+      '<div class="box">' + state + '<div class="muted" style="margin-top:4px">' + where + '</div></div>' +
+      (st ? '<div class="stats"><div><b>' + Number(st.files || 0).toLocaleString() + '</b><small>files in the archive</small></div><div><b>' + size(st.bytes || 0) +
+        '</b><small>of footage</small></div><div><b>' + (st.free ? size(st.free) : '—') + '</b><small>free' + (L ? ' on ' + esc(base(L.archive)) : ' in the archive') + '</small></div></div>' : '') +
+      '<div class="box"><div class="muted" style="margin-bottom:6px">Doing now</div>' + now + '</div>' +
+      (unpaired ? '<div class="box"><div class="head"><div class="t"><b>Not paired with Rushes yet</b><small class="muted" style="display:block">Rushes gives this Mac no work until it is: Other devices has the place for the code.</small></div>' +
+        '<button data-page="dev">Pair…</button></div></div>' : '') +
+      '<div class="box"><div class="head" style="margin-bottom:8px"><div class="t muted">Lately</div><button class="lnk" data-page="act">See all activity →</button></div>' +
+        (ev.length ? feed(ev.slice(0, 4), false) : '<p class="muted">' + (s.activity === undefined ? 'Asking Rushes …' : 'Nothing yet.') + '</p>') + '</div>';
+  }
+}
+// The place to type the code, until this Mac is the one Rushes gives work to (a Rushes server, not on this Mac)
+function pairBox(s) {
+  return '<div class="box"><div class="row"><div class="t">' +
+    (s.pairing === 'other' ? '<b>Rushes gives its work to another Mac</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
+      : s.pairing === 'none' ? '<b>Not paired yet</b><small>Rushes gives work to any Mac on the network until one is paired; two at once would copy over each other. To pair this one, '
+      : '<b>Pair this Mac</b><small>Rushes did not say whether this Mac is paired (it is slow to answer right now). If Rushes → Setup says none is paired, or names another computer, ') +
+    'open Rushes → Setup → Pair a Mac and type the six numbers here. The Mac paired before is refused from then on.</small></div></div>' +
+    '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
+    btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>';
+}
 // Rushes Watcher on this computer: everything it shows is on this computer.
 const WATCHING = {idle: 'Idle — no editing program open', watching: 'Watching — an editing program is open', delivering: 'Sending a project\'s files to Rushes',
   pointing: 'Pointing projects at the archive', offline: 'Cannot reach Rushes', unpaired: 'Not paired with Rushes yet', paused: 'Paused'};
 function whome(s) {
   const n = s.now || {}, on = s.running;
-  const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on below.'
+  const state = !on ? '<span class="dot"></span><b>Stopped</b> — it does nothing until you turn it on in Work.'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but it looks at no project.'
-    : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
-  const sw = (on_, ids, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
-    '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? ids[1] : ids[0]) + '"' + (dis ? ' disabled' : '') + '></button></div>';
-  return '<h2>Rushes Watcher on this Mac</h2><div class="box">' + state + '</div>' + upd(s) +
-    '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div><p><b>' + esc(WATCHING[n.state] || n.state || 'Starting') + '</b>' +
-      (n.note ? ' · ' + esc(n.note) : '') + '</p></div>' +
-    (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
-    (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
-    (!s.paired ? '<div class="box"><div class="row"><div class="t"><b>Not paired yet</b><small>It delivers nothing until it is. In Rushes → Setup → Editors\' work, ' +
-      'press Add an editor\'s computer, and type the six numbers here. (A code for the helper does not work here, so an editor\'s computer never takes the helper\'s place.)</small></div></div>' +
-      '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
-      btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>'
-      : '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — Rushes lists this computer in Setup → Editors\' work.</p>') +
-    '<div class="box">' +
-      sw(on, ['service-on', 'service-off'], 'Run in the background', 'Off stops it completely, also after a restart, until you turn it on here. Its icon goes with it.') +
+    : '<span class="dot ok"></span><b>Running in the background</b>';
+  const lines = (s.log || []).slice().reverse();
+  switch (page) {
+  case 'act':
+    return head('Activity', 'What this computer sent to Rushes, in its own words. Newest first.') + said(s) +
+      '<div class="box">' + (lines.length ? '<ul class="feed">' + lines.map(l => '<li><div class="t">' + esc(l) + '</div></li>').join('') + '</ul>' : '<p class="muted">Nothing yet.</p>') + '</div>' +
+      '<p class="muted" style="font-size:12.5px">Rushes → Manage → Activity shows what every editor\'s computer sent, with everything else that happened. ' + lnk('Open the whole log file', 'show-log') + '</p>';
+  case 'work':
+    return head('Work', 'What Rushes Watcher is allowed to do.') + said(s) + '<div class="box">' +
+      sw(on, ['service-on', 'service-off'], 'Run in the background', 'Starts when you log in. Off stops it completely, also after a restart, until you turn it on here. Its icon goes with it.') +
       sw(!s.paused, ['watch-resume', 'watch-pause'], 'Watch projects', 'Off: it looks at no project; nothing already delivered changes. The menu bar icon has the same switch.', !on) +
-    '</div>' +
-    '<div class="box">' +
-      '<div class="row"><div class="t">Diagnostics<small>Versions, switches and what it said lately, in one text file on your Desktop, to read before you send it to anyone. Nothing is sent.</small></div>' +
-        btn('Collect diagnostics', 'diagnostics', false, !!s.busy) + '</div>' +
+    '</div>';
+  case 'help':
+    return head('Help', 'Help happens in the open, with only what you choose to share.') + said(s) + upd(s) + '<div class="box">' +
+      '<div class="row"><div class="t">Updates<small>This app changes only when you press Update. This is ' + esc(s.version) + '.</small></div>' + btn('Check for updates', 'check-updates', false, !!s.busy) + '</div>' +
+      '<div class="row"><div class="t">Collect diagnostics<small>Versions, switches and what it said lately, in one text file on your Desktop, to read before you send it to anyone. Nothing is sent.</small></div>' +
+        btn('Collect', 'diagnostics', false, !!s.busy) + '</div>' +
       '<div class="row"><div class="t">Ask for help<small>Opens a new issue for Rushes on GitHub, where help is asked for in the open. Issues are public: read the diagnostics before you attach them.</small></div>' +
         btn('Ask for help', 'ask-help', false, !!s.busy) + '</div>' +
       '<div class="row"><div class="t">Support access<small>None. There is no way for anyone to connect to this Mac through Rushes Watcher.</small></div></div>' +
-    '</div>' +
-    '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
-      esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
+    '</div>';
+  default:
+    return head('Overview', 'Keeps every project you save, with the files it uses, in your Rushes archive.') + said(s) + upd(s) +
+      '<div class="box">' + state + '<div class="muted" style="margin-top:4px">Rushes at ' + esc(s.url) + '</div></div>' +
+      '<div class="box"><div class="muted" style="margin-bottom:6px">Doing now</div><b>' + esc(WATCHING[n.state] || n.state || 'Starting') + '</b>' + (n.note ? ' · ' + esc(n.note) : '') + '</div>' +
+      (!s.paired ? '<div class="box"><div class="row"><div class="t"><b>Not paired yet</b><small>It sends nothing until it is. In Rushes → Setup → Editors\' work, ' +
+        'press Add an editor\'s computer, and type the six numbers here. (A code for the Mac that copies does not work here, so an editor\'s computer never takes its place.)</small></div></div>' +
+        '<div class="row"><input id="paircode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:9em" value="' + esc(paircode) + '">' +
+        btn('Pair', 'pair', false, !!s.busy) + ' ' + btn('Paste the code from Rushes', 'paste-pair', true, !!s.busy) + '</div></div>'
+        : '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — Rushes lists this computer in Other devices and in Setup → Editors\' work.</p>') +
+      '<div class="box"><div class="head" style="margin-bottom:8px"><div class="t muted">Lately</div><button class="lnk" data-page="act">See all →</button></div>' +
+        (lines.length ? '<ul class="feed">' + lines.slice(0, 4).map(l => '<li><div class="t">' + esc(l) + '</div></li>').join('') + '</ul>' : '<p class="muted">Nothing yet.</p>') + '</div>';
+  }
 }
 // Asks again 1.5 s after each answer, never while the last question is still out.
 let polling = false;
