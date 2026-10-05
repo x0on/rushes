@@ -504,6 +504,7 @@ class Window:
     def __init__(self):
         self.lock = threading.Lock()
         self.quit = threading.Event()                    # before any thread that watches it
+        self.remote, self.asking, self.asked = {}, None, 0.0     # what Rushes last said (ask_rushes)
         self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
                   "done": [], "waiting": False, "lan_asked": False}
         if self.s["url"] and service_points_here() and has_full_disk_access():
@@ -585,22 +586,36 @@ class Window:
                 h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
         except OSError:
             pass
+        # What Rushes says is asked in the background, never while the window waits:
+        # a Rushes that does not answer (a NAS that is off) made every look at this
+        # window take 20 seconds. Until the first answer, it says it is asking.
+        with self.lock:
+            asking = self.asking and self.asking.is_alive()
+            if not asking and time.time() - self.asked > 3:
+                self.asked = time.time()
+                self.asking = threading.Thread(target=self.ask_rushes, daemon=True); self.asking.start()
+            h.update(self.remote or {"rushes": None})
+        return h
+
+    def ask_rushes(self):
+        r = {}
         # Paired or not is asked first and on its own: the box to type the code
         # in is shown even when the rest of Rushes is slow to answer.
-        try: h["pairing"] = rushes(self.s["url"], "/db/pair.php", timeout=15).get("pairing", "")
-        except Exception: h["pairing"] = ""              # not known right now: the box stays
+        try: r["pairing"] = rushes(self.s["url"], "/db/pair.php", timeout=15).get("pairing", "")
+        except Exception: r["pairing"] = ""              # not known right now: the box stays
         try:
             c = rushes(self.s["url"], "/db/helper.php?control")
-            h["paused"], h["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
-            h["describe_paused"] = bool(c.get("describe_paused"))
-            h["check_paused"] = bool(c.get("check_paused"))
+            r["paused"], r["no_reconnect"] = bool(c.get("paused")), bool(c.get("no_reconnect"))
+            r["describe_paused"] = bool(c.get("describe_paused"))
+            r["check_paused"] = bool(c.get("check_paused"))
             st = rushes(self.s["url"], "/db/state.php")
-            h["now"] = st.get("copy") or {}
-            h["describing"] = ((st.get("helper") or {}).get("describe")) or {}
-            h["rushes"] = True
+            r["now"] = st.get("copy") or {}
+            r["describing"] = ((st.get("helper") or {}).get("describe")) or {}
+            r["rushes"] = True
         except Exception as e:
-            h["rushes"] = False; h["rushes_why"] = str(getattr(e, "reason", e))
-        return h
+            r["rushes"] = False; r["rushes_why"] = str(getattr(e, "reason", e))
+        with self.lock:
+            self.remote = r
 
     def run(self, what, fn):
         """Slow work: shown as busy, never twice at once."""
@@ -1055,7 +1070,8 @@ function home(s) {
     : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work.'
     : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
-  const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and four of the switches are not available. The log below still shows its work.' +
+  const now = s.rushes === null ? '<p class="muted"><span class="spin"></span>Asking Rushes …</p>'
+    : !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and four of the switches are not available. The log below still shows its work.' +
       (s.local ? '' : ' If Rushes is to run on this Mac now, with the archive on a drive it sees, press <b>Where Rushes is…</b> below.') + '</p>'
     : n.phase ? '<p><b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(n.source.split('/').pop()) : '') + '</p>' +
         (n.note ? '<p class="muted">' + esc(n.note) + '</p>' : '') + (n.file ? '<p class="muted">now: ' + esc(n.file.split('/').pop()) + '</p>' : '')
@@ -1074,7 +1090,7 @@ function home(s) {
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
     // The place to type the code: always there until this Mac is the paired one.
-    (s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
+    (s.rushes !== null && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
       (s.pairing === 'other' ? '<b>Rushes is paired with another helper</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
         : s.pairing === 'none' ? '<b>Not paired yet</b><small>Rushes gives work to any helper on the network until one is paired; two at once would copy over each other. To pair this one, '
         : '<b>Pair this Mac</b><small>Rushes did not say whether this Mac is paired (it is slow to answer right now). If Rushes → Setup → 04 says no helper is paired, or names another computer, ') +
@@ -1310,7 +1326,8 @@ def own_menu(w):
         busy = n.get("phase") in ("copying", "looking", "tracing", "analysing", "tidying", "delivering", "proving")
         icon = ("exclamationmark.triangle" if s.get("stopped") or n.get("phase") == "blocked" else "wifi.exclamationmark" if not up
                 else "pause.circle" if s.get("paused") else "arrow.triangle.2.circlepath" if busy else "film")
-        head = (f"Stopped by itself — {s['stopped']}" if s.get("stopped") else f"Cannot reach Rushes ({s.get('rushes_why', '')})" if not up
+        head = (f"Stopped by itself — {s['stopped']}" if s.get("stopped") else "Asking Rushes …" if up is None
+                else f"Cannot reach Rushes ({s.get('rushes_why', '')})" if not up
                 else "Paused — copying starts nothing new" if s.get("paused") else
                 PHASE.get(n.get("phase"), n.get("phase") or "Waiting — nothing queued")
                 + (f" · {os.path.basename(n['source'].rstrip('/'))}" if n.get("source") else "")

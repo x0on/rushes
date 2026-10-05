@@ -1416,7 +1416,10 @@ joins the same menu as a third section.)
 ### The window
 
 **The window** is a page served on this Mac only, behind a random key. If the
-app cannot open its own window, the page opens in the browser instead.
+app cannot open its own window, the page opens in the browser instead. What Rushes
+says (pairing, switches, what the helper is doing) is asked in the background
+every few seconds (`ask_rushes()`), so the window and the menu never wait on a
+Rushes that does not answer; until the first answer they say "Asking Rushes …".
 
 **Setting up**, the first time:
 

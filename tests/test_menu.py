@@ -106,7 +106,11 @@ class MenuTests(unittest.TestCase):
     def test_helper_without_rushes(self):
         m = front("Rushes Helper", self.home)
         with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")):
-            got = serve(m)("menu?fresh=1")
+            ask = serve(m)
+            first = ask("menu?fresh=1")                  # Rushes is asked in the background: never waited for
+            self.assertIn("Asking Rushes", first["items"][0]["label"])
+            time.sleep(2.2)
+            got = ask("menu?fresh=1")
         self.assertTrue(plain(got), got)
         self.assertEqual(got["icon"], "wifi.exclamationmark")
         self.assertIn("Cannot reach Rushes", got["items"][0]["label"])

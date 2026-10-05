@@ -3,7 +3,7 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## Next
+## 0.12.0 — October 2026 (being tried on a Mac)
 
 - **Rushes on a Mac, with the archive on a drive it sees** (the first step of
   the Mac app, ROADMAP.md → Order 1): in Rushes Helper's setup, **Choose the
@@ -32,6 +32,10 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   under any name. Setup says what is on each drive (footage, caches, copies).
   Duplicates move aside within one drive only; the same file on two drives is
   shown and left alone.
+- **Rushes Helper's window opens at once,** whatever Rushes is doing: what
+  Rushes says is asked in the background (a Rushes that did not answer made
+  each look take 20 seconds). **Where Rushes is…** moves a Helper set up for a
+  NAS to a drive on this Mac.
 - **Other devices, if you want:** a switch lets phones and computers on the
   network (or Tailscale) open it, only after Rushes' first password is changed,
   and only signed in with it.
