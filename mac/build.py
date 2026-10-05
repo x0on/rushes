@@ -24,10 +24,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = HERE
 OUT = os.path.join(TOP, "out")
 WATCHER = sys.argv[1:] == ["watcher"]
-# "Rushes": the app you install (it was "Rushes Helper" until 0.12; its ID, and so macOS's
-# permissions, stay org.rushes.helper). "Rushes Watcher": the small one for editors' computers.
+# "Rushes": the app you install (it was "Rushes Helper", org.rushes.helper, until 0.12; its own
+# ID now, so macOS lists it as Rushes). "Rushes Watcher": the small one for editors' computers.
 NAME = "Rushes Watcher" if WATCHER else "Rushes"
-BUNDLE = "org.rushes.watcher" if WATCHER else "org.rushes.helper"
+BUNDLE = "org.rushes.watcher" if WATCHER else "org.rushes.app"
 APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
 PBS = "cpython-3.12.11+20250918-{}-apple-darwin-install_only_stripped.tar.gz"

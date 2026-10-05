@@ -1153,6 +1153,49 @@ is something to do:
 **Activity** (a side column, and its own pane) lists what happened, newest
 first, and shows the runner's raw log.
 
+### Activity
+
+What came in, what went out, what changed, and who did it, in plain sentences,
+newest first (`db/activity.php`). Manage → Activity and the Rushes app's
+Activity page tell the same story; both can show one kind at a time: **In**,
+**Out**, **Changes**, **Checks**, **Problems**. The raw log stays one click
+below, for when something is wrong.
+
+It is two records read together:
+
+- **What the copier did** (`ingest-history.tsv`): cards and drives copied,
+  projects taken in from editors' computers, phone uploads, tidy-ups, copies
+  checked, describing, a copy that stopped part-way, a share that dropped off.
+  A card with nothing new on it is not an event.
+- **What people did, and drives coming and going** (`activity.tsv`, appended
+  one line at a time, the last 5,000 kept): a pull made, a pull downloaded
+  (for Premiere, Final Cut or Resolve, as a list, or as a zip), a project sent
+  from an editor's computer, an editor's computer added or removed, a switch
+  turned (copying, describing, checking copies, reconnecting), a job asked for
+  in Manage that changes something (duplicates or caches moved to holding, put
+  back, previews), and, on a Mac, a drive or the archive's own drive unplugged
+  or plugged in again.
+
+**Who.** Rushes has one password, not accounts, so a name is asked once in
+each browser: a bar under the top of the page, "Who is using Rushes here?",
+never a pop-up. The name is kept in that browser (the `rushes_who` cookie) and
+goes beside what is done from it; **Who?** (or your name) at the top changes
+it, and so does the phone menu. Giving a name is itself a line ("Started using
+Rushes on a phone"). The name also fills in "Your name" when making a pull and
+uploading from a phone. Editors' computers are known by the name they were
+paired with, and the Rushes app on a Mac by the name of whoever is signed in
+to that Mac.
+
+A typed name is not proof: anyone can type any name. It is for knowing who did
+what in a team that trusts itself, not for keeping anyone out (Who can do
+what). Editors' computers, which send work into the archive, are the ones that
+are paired; personal sign-ins can come with Watchers on a server (ROADMAP).
+Searches and the clips someone only looks at are not recorded.
+
+Names are people's: `activity.php` gives them only to someone signed in, or to
+the paired Rushes app, and `activity.tsv` is never handed to a browser
+(`.htaccess`, `router.php`, and the daily check of both).
+
 ### Jobs and tools
 
 Buttons for running things by hand, each asking twice:
@@ -1229,14 +1272,30 @@ Opening Setup lists the shares on the archive machine.
 
 **Its name.** Until 0.12 the Mac app was called **Rushes Helper**: it only
 copied footage, for a Rushes on a NAS. Since it can hold Rushes itself, it is
-called **Rushes** (`mac/build.py`). Its ID stays `org.rushes.helper`, so macOS
-keeps the permissions it was given. Opened where an older Rushes Helper was
-set up, it takes its place by itself (`was_helper()`, then the usual
-Installing): `Rushes.app` goes into Applications with the same settings, and
-the old `Rushes Helper.app` there goes to the Trash. Below,
-"Rushes Helper" is this app. **Rushes Watcher** is the separate small app for
-editors' computers.
+called **Rushes** (`mac/build.py`), with an ID of its own, `org.rushes.app`, so
+macOS lists it as Rushes everywhere (Full Disk Access, Login Items). That
+means macOS asks for its permissions once more. Opened where an older Rushes
+Helper was set up, it takes its place by itself (`was_helper()`, then the usual
+Installing): Rushes Helper's background service (`org.rushes.helper`) is
+stopped and its plist goes to the Trash (`retire_old_helper()`), `Rushes.app`
+goes into Applications with the same settings, and an old `Rushes Helper.app`
+there, or in the Mac's own Applications folder, goes to the Trash. Its entry in
+Full Disk Access can then be taken out with −. Below, "Rushes Helper" or "the
+helper" is the part of this app that copies. **Rushes Watcher** is the
+separate small app for editors' computers.
 
+**Its window.** Once set up, the side panel is a menu of pages, like System
+Settings: **Overview** (running or not, the archive, three numbers, what it is
+doing, the last few things that happened), **Activity** (below), **Work** (its
+switches), **Archive** (where the footage lives, Show in Finder, Change…, and
+Remove at the bottom), **Other devices** (letting phones and computers in, the
+editors' computers with when each was last heard from, and pairing, for a
+Rushes on a server) and **Help** (updates, diagnostics, asking for help, no
+support access). **Open Rushes** is the one coloured button, at the top of the
+side panel, and waits ("Starting Rushes …") until Rushes answers. There is no
+row of buttons at the bottom: the window is closed with its red dot. While
+setting up, the side panel shows the steps instead. Rushes Watcher's window
+has the same shape, with Overview, Activity, Work and Help.
 
 Rushes Helper is a Mac app with its own Python inside. Opened from Finder, it
 shows one window. Started by macOS in the background, it runs the helper, and

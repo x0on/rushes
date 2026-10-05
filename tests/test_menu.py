@@ -124,7 +124,7 @@ class AppUpdateTests(unittest.TestCase):
         import plistlib
         sys.path.insert(0, str(HERE.parent / "app")); import release
         with tempfile.TemporaryDirectory() as t:
-            app = Path(t) / "Rushes Helper.app"; (app / "Contents").mkdir(parents=True)
+            app = Path(t) / "Rushes.app"; (app / "Contents").mkdir(parents=True)
             (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "0.9.1",
                 "CFBundleIdentifier": "org.rushes.helper", "CFBundleExecutable": "Rushes"}))
             for theirs, want in (("0.9.2", "0.9.2"), ("0.9.1", ""), ("0.8.9", ""), ("0.10.0", "0.10.0")):

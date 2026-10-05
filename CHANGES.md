@@ -32,11 +32,19 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   under any name. Setup says what is on each drive (footage, caches, copies).
   Duplicates move aside within one drive only; the same file on two drives is
   shown and left alone.
-- **Rushes Helper is called Rushes** now: it holds Rushes itself. Same app ID,
-  so macOS keeps its permissions; the old copy in Applications goes to the
-  Trash when it is set up. Its window's seldom-used choices are quiet links;
-  **Open Rushes** is the main button, and says **Starting Rushes …** until
-  Rushes answers.
+- **Rushes Helper is called Rushes** now: it holds Rushes itself, with an ID of
+  its own (`org.rushes.app`), so macOS lists it as Rushes; it asks for Full
+  Disk Access once more. Rushes Helper's background service and old copies go
+  to the Trash when it is set up.
+- **The Rushes app's window is a side panel of pages:** Overview, Activity,
+  Work, Archive, Other devices, Help. **Open Rushes** is the one coloured
+  button, and says **Starting Rushes …** until Rushes answers; there is no row
+  of buttons at the bottom any more.
+- **Activity says what happened and who did it,** in plain sentences: what
+  came in, what went out (a pull made, a pull downloaded), what changed, copies
+  checked, problems. Manage and the app tell the same story. A name is asked
+  once in each browser (never an account); editors' computers are known by
+  their pairing.
 - **Rushes Helper's window opens at once,** whatever Rushes is doing: what
   Rushes says is asked in the background (a Rushes that did not answer made
   each look take 20 seconds). **Where Rushes is…** moves a Helper set up for a

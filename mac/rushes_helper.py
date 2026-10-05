@@ -36,11 +36,13 @@ import urllib.request
 APP = os.environ.get("RUSHES_APP") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HOME = os.path.expanduser("~")
 DIR = os.path.join(HOME, "Library", "Application Support", "Rushes")
-# "Rushes" (called "Rushes Helper" before 0.12; same ID, org.rushes.helper) or "Rushes Watcher"
+# "Rushes" (called "Rushes Helper", org.rushes.helper, before 0.12) or "Rushes Watcher"
 NAME = os.environ.get("RUSHES_NAME") or ("Rushes Watcher" if "Rushes Watcher" in APP else "Rushes")
 WATCHER = NAME == "Rushes Watcher"
 LOGS = os.path.join(HOME, "Library", "Logs", "Rushes Watcher" if WATCHER else "Rushes")
-LABEL = "org.rushes.watcher" if WATCHER else "org.rushes.helper"
+LABEL = "org.rushes.watcher" if WATCHER else "org.rushes.app"
+# Before 0.12 the app was Rushes Helper, org.rushes.helper: its background service is retired when Rushes is set up
+OLD_PLIST = os.path.join(HOME, "Library", "LaunchAgents", "org.rushes.helper.plist")
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
 HOMEAPP = os.path.join(HOME, "Applications", NAME + ".app")
 WORKLOG = os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")      # what the work itself says
@@ -97,12 +99,30 @@ def service_points_here():
 
 
 def was_helper():
-    """The background service was set up by this app under its old name, Rushes Helper (before 0.12)."""
-    try:
-        with open(PLIST, "rb") as f:
-            return "/Rushes Helper.app/" in plistlib.load(f).get("ProgramArguments", [""])[0]
-    except (OSError, plistlib.InvalidFileException):
+    """The background service was set up under the app's old name, Rushes Helper (before 0.12)."""
+    if WATCHER:
         return False
+    for p in (OLD_PLIST, PLIST):
+        try:
+            with open(p, "rb") as f:
+                if "/Rushes Helper.app/" in plistlib.load(f).get("ProgramArguments", [""])[0] or p == OLD_PLIST:
+                    return True
+        except (OSError, plistlib.InvalidFileException):
+            pass
+    return False
+
+
+def retire_old_helper():
+    """Rushes Helper's own background service (org.rushes.helper, before 0.12) stops for good:
+    Rushes, with its own ID, takes its place. Its plist goes to the Trash, never just deleted."""
+    if WATCHER or not os.path.exists(OLD_PLIST):
+        return
+    launchctl("bootout", f"gui/{UID}/org.rushes.helper")
+    try:
+        os.rename(OLD_PLIST, os.path.join(HOME, ".Trash", f"org.rushes.helper {int(time.time())}.plist"))
+        log("Rushes Helper's background service is retired: Rushes takes its place")
+    except OSError as e:
+        log(f"Rushes Helper's background service could not be moved to the Trash ({e})")
 
 
 def service_running():
@@ -346,6 +366,7 @@ def launchctl(*args):
 
 
 def install_service(url):
+    retire_old_helper()
     os.makedirs(os.path.dirname(PLIST), exist_ok=True)
     os.makedirs(LOGS, exist_ok=True)
     plist = {
@@ -414,14 +435,14 @@ def copy_to_applications():
     r = subprocess.run(["ditto", here, HOMEAPP], capture_output=True, text=True)
     if r.returncode:
         return r.stderr.strip() or "ditto failed"
-    # Called "Rushes Helper" before 0.12: that copy goes to the Trash, so it is never opened by mistake
-    was = os.path.join(os.path.dirname(HOMEAPP), "Rushes Helper.app")
-    if not WATCHER and was != HOMEAPP and os.path.isdir(was):
-        try:
-            os.rename(was, os.path.join(HOME, ".Trash", "Rushes Helper.app"))
-            log("the old Rushes Helper.app went to the Trash (it is Rushes now)")
-        except OSError as e:
-            log(f"the old Rushes Helper.app is still in Applications ({e}): it can go to the Trash")
+    # Called "Rushes Helper" before 0.12: those copies go to the Trash, so they are never opened by mistake
+    for was in (os.path.join(os.path.dirname(HOMEAPP), "Rushes Helper.app"), "/Applications/Rushes Helper.app"):
+        if not WATCHER and was != HOMEAPP and os.path.isdir(was):
+            try:
+                os.rename(was, os.path.join(HOME, ".Trash", f"Rushes Helper {int(time.time())}.app"))
+                log(f"the old {was} went to the Trash (it is Rushes now)")
+            except OSError as e:
+                log(f"the old {was} is still there ({e}): it can go to the Trash")
     # It came from the download that was already allowed to open.
     subprocess.run(["xattr", "-dr", "com.apple.quarantine", HOMEAPP], capture_output=True)
     return ""
@@ -515,7 +536,7 @@ def diagnostics(url):
         add("Rushes' switches for this helper")
         try: lines.append(json.dumps(rushes(url, "/db/helper.php?control"), indent=1))
         except Exception as e: lines.append(f"(Rushes did not answer: {e})")
-        add("What the helper is doing, as Rushes sees it")
+        add("What this Mac is doing, as Rushes sees it")
         try:
             st = rushes(url, "/db/state.php")
             lines.append(json.dumps({k: st.get(k) for k in ("copy", "helper", "transfer", "conditions")}, indent=1, ensure_ascii=False))
@@ -859,7 +880,7 @@ class Window:
         log("paired with Rushes")
         if service_running()[0]:
             restart_service()
-        self.set(said="Paired ✓ Rushes gives work to this Mac only. Any other helper is refused, and Rushes names it.")
+        self.set(said="Paired ✓ Rushes gives work to this Mac only. Any other Mac is refused, and Rushes names it.")
 
     def ask_help(self):
         """Help is asked for in the open: a new GitHub issue for Rushes, filled in
@@ -927,10 +948,10 @@ class Window:
                 json.dump(cfg, f)
             os.replace(os.path.join(WDIR, "config.json.new"), os.path.join(WDIR, "config.json"))
         elif local():
-            did("Rushes and the helper's code are inside this app: nothing to download")
+            did("Rushes and everything it needs are inside this app: nothing to download")
         else:
             fetch_files(url)
-            did("Downloaded the helper from Rushes")
+            did("Downloaded the copying and describing code from Rushes")
         if not install_service(url):
             raise RuntimeError("macOS would not start the background service. The detail is in ~/Library/Logs/Rushes/setup.log")
         did("Background service installed and started — it starts by itself when you log in")
@@ -961,7 +982,7 @@ class Window:
         threading.Thread(target=watch, daemon=True).start()
 
 
-PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>Rushes Helper</title>
+PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>%NAME%</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{--bg:#f6f5f2;--card:#fff;--fg:#1d1d1b;--muted:#6b6a66;--line:#e3e1dc;--accent:#2f7d74;--accent-fg:#fff;--ok:#2f7d4a;--warn:#9a6a12;--bad:#b3261e;--side:#efede8;--sel:#dde8e5;--okbg:#dcefe2;--badbg:#f6dcd9}
@@ -1021,7 +1042,7 @@ h3{font-size:14px;margin:18px 0 6px}h4{font-size:13.5px;margin:16px 0 6px}ul,ol{
 th,td{text-align:left;vertical-align:top;padding:6px 8px;border-top:1px solid var(--line)}th{color:var(--muted);font-weight:500}
 .big{font-size:40px;line-height:1;margin:6px 0 14px;color:var(--ok)}
 </style></head><body>
-<nav><h1>Rushes Helper<small>Rushes Media Management Software</small></h1><div id="navtop"></div><ol id="steps"></ol><div id="navfoot"></div></nav>
+<nav><h1>%NAME%<small>Rushes Media Management Software</small></h1><div id="navtop"></div><ol id="steps"></ol><div id="navfoot"></div></nav>
 <main><div class="body" id="body"></div><div class="foot" id="foot"></div></main>
 <script>
 const K = location.pathname;       // the page's own key, needed for every question
@@ -1097,7 +1118,7 @@ function draw() {
   const err = s.error ? '<p class="err">' + esc(s.error) + '</p>' : '';
   switch (s.step) {
   case 'welcome':
-    b = '<h2>Set up Rushes Helper</h2>' + (s.watcher
+    b = '<h2>Set up %NAME%</h2>' + (s.watcher
       ? '<p>Rushes Watcher keeps every Premiere project you save, wherever you keep it on this Mac, with the files it uses, in your Rushes archive, without you pressing anything. ' +
         'It sends the files a project uses that the archive does not have yet (music, stock, downloads, graphics, voiceover: only what you imported), and makes an <b>Output</b> folder beside each project: export the finished work there and it is kept too. ' +
         'When you quit Premiere, a dated copy of each project you saved is kept, pointing at the archive. Your files on this Mac are only read, never moved or changed.</p>' +
@@ -1110,15 +1131,15 @@ function draw() {
   case 'address':
     b = '<h2>Where is Rushes?</h2><p>The address you open Rushes at in the browser. Rushes → Setup shows it, with a Copy button.</p>' +
       '<input id="url" placeholder="http://" value="' + esc(typed != null ? typed : s.url) + '">' +
-      '<p class="muted" style="margin-top:10px">If macOS asks whether Rushes Helper may find and connect to devices on your local network, press Allow.</p>' +
+      '<p class="muted" style="margin-top:10px">If macOS asks whether %NAME% may find and connect to devices on your local network, press Allow.</p>' +
       (s.watcher ? '' : '<div class="box" style="margin-top:18px"><div class="row"><div class="t"><b>Or: the archive is a drive on this Mac</b><small>No server: ' +
         'Rushes runs inside this app, and you open it from the menu bar icon (Open Rushes). Choose the drive, or a folder on one. ' +
         'Other devices can be let in later, with a password.</small></div>' + btn('Choose the drive…', 'local-pick', false, !!s.busy) + '</div></div>') + err + busy;
     f = btn('Cancel', s.set_up ? 'back-home' : 'done') + btn('Next', 'address', true, !!s.busy); break;
   case 'network':
-    b = '<h2>macOS is not letting Rushes Helper talk to your network yet</h2>' +
-      '<p>If it asked whether Rushes Helper may “find and connect to devices on your local network”, press Allow, then Try again.</p>' +
-      '<p>If it did not ask: open Local Network settings, turn on Rushes Helper, then Try again.</p>' + err + busy;
+    b = '<h2>macOS is not letting %NAME% talk to your network yet</h2>' +
+      '<p>If it asked whether %NAME% may “find and connect to devices on your local network”, press Allow, then Try again.</p>' +
+      '<p>If it did not ask: open Local Network settings, turn on %NAME%, then Try again.</p>' + err + busy;
     f = btn('Cancel', 'done') + btn('Open Local Network settings', 'network-settings') + btn('Try again', 'retry', true, !!s.busy); break;
   case 'install':
     b = '<h2>Installing</h2><ul class="did">' + (s.done || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
@@ -1127,29 +1148,31 @@ function draw() {
   case 'fda':
     b = '<h2>One switch left: Full Disk Access</h2>' +
       '<p>macOS keeps apps away from network drives and other disks until you allow it. ' + (s.watcher ? 'Rushes Watcher needs that to read your projects and the files they use, wherever they are on this Mac — nothing more.'
-        : 'Rushes Helper needs that to read footage from the source and write it into the archive — nothing more.') + '</p>' +
-      '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows Rushes Helper. Turn Rushes Helper on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).</p>' +
+        : 'Rushes needs that to reach your drives: to read cards and drives when footage comes in, and to keep the archive and check its copies — nothing more.') + '</p>' +
+      '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows %NAME%. Turn %NAME% on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).</p>' +
       '<p class="muted">If System Settings opens somewhere else, type Full Disk Access into its search field, top left.</p>' +
       (s.waiting ? '<div class="box"><span class="spin"></span>Waiting for the switch … this window moves on by itself the moment it is on.</div>' : '');
     f = btn('Later', 'later') + btn(s.waiting ? 'Show me where again' : 'Open System Settings', 'fda-open', true); break;
   case 'later':
-    b = '<h2>Not finished yet</h2><p>Rushes Helper is installed and running, but it cannot reach the drives until Full Disk Access is on.</p><p>Open Rushes Helper again any time to finish; it starts right at that step.</p>';
+    b = '<h2>Not finished yet</h2><p>%NAME% is installed and running, but it cannot reach the drives until Full Disk Access is on.</p><p>Open %NAME% again any time to finish; it starts right at that step.</p>';
     f = btn('Done', 'done', true); break;
   case 'all-set':
     b = '<div class="big">✓</div><h2>All set</h2>' +
       (s.watcher ? '<p>Rushes Watcher is set up. It runs in the background, starts when you log in, and its icon is in the menu bar.</p>' +
         '<p><b>One thing left: pair it with Rushes.</b> In Rushes → Setup → Editors\' work, press Add an editor\'s computer, and type the six numbers on the next screen.</p>'
-      : '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
-        '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
-      '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
+      : s.local ? '<p>Rushes is set up. It runs in the background, starts when you log in, and restarts itself if it stops.</p>' +
+        '<p><b>Open Rushes</b> for Search, Ingest and Manage, in your browser: here, or from the menu bar icon. Open this window again any time to see what Rushes is doing, and what happened.</p>'
+      : '<p>Rushes is set up on this Mac. It does your Rushes server\'s copying and describing in the background, starts when you log in, restarts itself if it stops, and keeps that code the same as the server\'s.</p>' +
+        '<p>Rushes → Manage shows what it is doing, and so does this window: open it again any time.</p>') +
+      '<p class="muted">macOS may show a notice that %NAME% can run in the background — that is this.</p>';
     f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Done', 'done') + openBtn(s, true); break;
   // No row of buttons: the window is a place you visit, closed with its red dot. Open Rushes is in the side panel.
   case 'home': b = s.watcher ? whome(s) : home(s); f = ''; break;
   case 'remove':
-    b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
+    b = '<h2>Remove %NAME% from this Mac?</h2><p>It stops, and no longer starts at login. ' + (s.watcher ? 'Projects already sent stay in the archive.' : 'The archive and its footage stay; anything half-copied carries on if you set it up again.') + '</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
   case 'removed':
-    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag Rushes Helper from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ' +
+    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag %NAME% from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ' +
       (s.watcher ? '~/Library/Application Support/Rushes Watcher (its pairing and what it delivered) and ~/Library/Logs/Rushes Watcher. Projects keep their “Rushes backups” folders.'
         : '~/archive-pilot (its progress and pairing), ~/Library/Application Support/Rushes and ~/Library/Logs/Rushes.') + '</p>';
     f = btn('Done', 'done', true); break;
@@ -1385,7 +1408,7 @@ def serve(port, key):
 
         def do_GET(self):
             if self.path == f"/{key}/":
-                return self._send(200, PAGE.replace("Rushes Helper", NAME).replace("Rushes Rushes", "Rushes"), "text/html")
+                return self._send(200, PAGE.replace("%NAME%", NAME), "text/html")
             if self.path == f"/{key}/credits":
                 try:
                     return self._send(200, open(os.path.join(APP, "Contents", "Resources", "CREDITS.md"), "rb").read(), "text/plain")
@@ -1436,7 +1459,7 @@ WATCHING = {"idle": "Idle — no editing program open", "watching": "Watching �
 # The first of them that runs draws it, with a section for each other one; the
 # others hide theirs. Quit one and the next draws it, so there is always one.
 ROLES = ("Rushes", "Rushes Watcher")
-_label = lambda n: "org.rushes.watcher" if n == "Rushes Watcher" else "org.rushes.helper"
+_label = lambda n: "org.rushes.watcher" if n == "Rushes Watcher" else "org.rushes.app"
 _running = {"at": 0.0, "names": [NAME]}
 def running_roles():
     """The Rushes apps running in the background on this Mac, in ROLES order (macOS asked at most every 20 s)."""

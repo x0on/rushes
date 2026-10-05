@@ -83,7 +83,11 @@ that NAS; the Mac app has to prove each part again.
 - **The NAS's Setup pages and its install script still call the Mac app
   Rushes Helper** (renamed Rushes in 0.12), and an update of the app from a
   NAS looks for `Rushes Helper.app` (`release.py`, signed code: changed with
-  the next signed release).
+  the next signed release). It also takes an update only with the same app ID,
+  so a Rushes 0.12 tried before the app had its own ID (`org.rushes.helper`)
+  is replaced by hand, once.
+- **Activity's names are typed, not proven:** a name asked once in each
+  browser. Personal sign-ins can come with Watchers on a server (step 4).
 
 Things Rushes does today that are not right yet. Each one is described where it
 happens in HOW-IT-WORKS.
