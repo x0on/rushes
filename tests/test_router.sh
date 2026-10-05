@@ -24,9 +24,9 @@ U=http://127.0.0.1:18642
 for f in job.log .htaccess runner.sh ingest.py ingest-history.tsv 'x/../job.log' db/settings.json; do
     [ "$(code "$U/$f")" = 404 ] || no "$f was handed out"
 done; ok "logs, lists, hidden files and code are never handed out"
-echo "1	$R/Archive/a" > "$R/web/manifest.tsv"
+echo "1	$R/Archive/a" > "$R/web/manifest.tsv"; echo "map	a	b" > "$R/web/tidy-20261005-120000.tsv"
 [ "$(code $U/settings.json)" = 200 ] && [ "$(code $U/rules.json)" = 200 ] && [ "$(code $U/manifest.tsv)" = 200 ] \
-    && ok "the three files the helper reads are there for it" || no "the helper's files"
+    && [ "$(code $U/tidy-20261005-120000.tsv)" = 200 ] && ok "the files the helper reads are there for it" || no "the helper's files"
 
 # Other devices: this machine's own address that is not 127.0.0.1
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')

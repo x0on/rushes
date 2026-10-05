@@ -270,7 +270,10 @@ like any other.
    then on the whole copied archive once its copy is finished.*
 2. **Organizing a main drive:** the plan (departments, years, shoots), the
    tidy-up for any existing folders (not only ones Rushes copied in), every
-   move recorded and undoable, then relinking editors' projects.
+   move recorded and undoable, then relinking editors' projects. *Built
+   (October 2026), not yet tried on a real Mac: the tidy-up takes folders
+   already in the archive; duplicates (the scan done by the app itself) and
+   caches (deleted on a person's own drives) work on a Mac.*
 3. **Drives that come and go,** the report of what is on each (footage,
    caches, copies), duplicates into a holding folder.
 4. **Connected Rushes:** the same app set up as connected to a main one, for

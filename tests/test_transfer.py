@@ -471,6 +471,42 @@ class TidyPauseTests(unittest.TestCase):
         self.assertIn('tidy t1', m.DONE.read_text().splitlines())
 
 
+class TidyHereTests(unittest.TestCase):
+    """Folders already in the archive (not copied in by Rushes) are tidied onto
+    the shelf as they are, file by file as the plan names them, recorded, and put back."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_existing_folders_move_onto_the_shelf_and_back(self):
+        m = self.mod
+        m.ARCHIVE = str(self.archive / 'ARCHIVE')
+        m.SETTINGS = dict(m.SETTINGS, organise={'shelves': '/'})            # the archive itself is the shelf
+        old = self.archive / 'VIDEO from QNAP' / 'Library'
+        for rel in ('PARKS/2019/Kite/A001.MXF', 'PARKS/2019/Kite/A002.MXF', 'PARKS/loose.mov', 'POLICE/2020/x.mov'):
+            p = old / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(rel)
+        (old / 'PARKS' / '.DS_Store').write_text('finder')
+        plan = "".join(f"file\t{old / 'PARKS' / r}\t{self.archive / 'Parks' / r}\n"
+                       for r in ('2019/Kite/A001.MXF', '2019/Kite/A002.MXF', 'loose.mov'))
+        plan += (f"file\t{self.archive / '_rushes' / 'x'}\t{self.archive / 'Parks' / 'x'}\n"          # Rushes' own: refused
+                 f"file\t{old / 'POLICE' / '2020' / 'x.mov'}\t/elsewhere/Police/x.mov\n")          # off the shelf: refused
+        told = []
+        common = dict(_fetch=lambda u: plan, fetch_queue=lambda *a: '', control=lambda: {}, tell_moved=told.extend,
+                      history=lambda *a: None, status=lambda **k: None, mhl_follow=lambda *a: None, replay=lambda: {})
+        with patch.multiple(m, **common), patch('sys.stdout', new_callable=io.StringIO) as out:
+            m.tidy('h1')
+        self.assertTrue((self.archive / 'Parks' / '2019' / 'Kite' / 'A002.MXF').is_file())
+        self.assertTrue((self.archive / 'Parks' / 'loose.mov').is_file())
+        self.assertFalse((old / 'PARKS').exists(), 'an emptied folder goes, .DS_Store and all')
+        self.assertTrue((old / 'POLICE' / '2020' / 'x.mov').is_file())
+        self.assertEqual(out.getvalue().count('refused a line'), 2)
+        self.assertEqual(len(told), 3)
+        rec = next(m.ORIGIN.glob('* tidy.tsv')).name
+        with patch.multiple(m, history=lambda *a: None, status=lambda **k: None, tell_moved=lambda *a: None,
+                            mhl_follow=lambda *a: None), patch('sys.stdout', new_callable=io.StringIO):
+            m.untidy(rec)
+        self.assertTrue((old / 'PARKS' / '2019' / 'Kite' / 'A001.MXF').is_file())
+        self.assertTrue((old / 'PARKS' / 'loose.mov').is_file())
+
+
 class SignedUpdateTests(unittest.TestCase):
     """The helper takes a new version of its code only as a signed release,
     checked with the release.py it already has."""

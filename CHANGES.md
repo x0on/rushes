@@ -21,6 +21,11 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   they were on the cache list, but they are someone's work.
 - **Overview and Setup speak of the Mac** when Rushes runs on one, with free
   space limits that fit a laptop's drive.
+- **The tidy-up takes folders already in the archive,** not only what Rushes
+  copied in: an old server's layout or a drive's own folders move onto the
+  shelf into their department's folder (a misspelt old name is matched),
+  recorded, undoable and relinkable as before; their old top folder goes once
+  empty.
 - **Other devices, if you want:** a switch lets phones and computers on the
   network (or Tailscale) open it, only after Rushes' first password is changed,
   and only signed in with it.

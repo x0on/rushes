@@ -1488,15 +1488,25 @@ def tidy(plan_id):
         print(f"Cannot read the tidy-up plan from Rushes ({e}). Nothing moved — approve it again.")
         history("refused", f"tidy {plan_id}", 0, 0, 0, "could not read the plan")
         return
-    maps = []
+    maps, files = [], []
+    root = NAS_MOUNT.rstrip("/\\")
     for l in body.splitlines():
         f = l.split("\t")
-        if len(f) == 3 and f[0] == "map" and f[1] and f[2]:
+        if len(f) == 3 and f[0] in ("map", "file") and f[1] and f[2]:
             to = f[2].rstrip("/\\")
             # The one boundary that matters: nothing is moved anywhere but the shelf.
             if not to.startswith(shelf + os.sep) or ".." in to.split(os.sep):
                 print(f"  ! refused a line of the plan: {to} is not on the shelf ({shelf})"); continue
-            maps.append((f[1].rstrip("/\\"), to))
+            if f[0] == "map":
+                maps.append((f[1].rstrip("/\\"), to)); continue
+            # "file": one file already in the archive, outside the shelf, and where it goes
+            # (HOW-IT-WORKS.md → Reorganize). Never from Rushes' own folders or the shelf.
+            frm = f[1]
+            top = frm[len(root) + 1:].split(os.sep)[0] if frm.startswith(root + os.sep) else ""
+            if (not top or top[0] in "_@.#" or top in ("ARCHIVE", "PROXIES") or ".." in frm.split(os.sep)
+                    or (shelf != root and (frm == shelf or frm.startswith(shelf + os.sep)))):
+                print(f"  ! refused a line of the plan: {frm} is not in the archive outside the shelf"); continue
+            files.append((frm, to))
     maps.sort(key=lambda m: -len(m[0]))          # the most specific line wins
 
     done = {l.rstrip("\n") for l in open(DONE) if l.strip()} if DONE.exists() else set()
@@ -1513,7 +1523,13 @@ def tidy(plan_id):
         for frm, to in maps:
             if inside(src, frm):
                 work.append((arch, to + src[len(frm):], src, int(rows[0][2] or 0))); break
-    print(f"{len(work):,} files to move, by {len(maps)} line{'s' if len(maps) != 1 else ''} of the plan\n")
+    # Files already in the archive: exactly the ones the plan names (what the rows counted).
+    for frm, to in files:
+        try: size = os.lstat(frm).st_size
+        except OSError: size = 0                 # gone since: said as "not there any more" below
+        work.append((frm, to, frm, size))
+    lines = len(maps) + len(files)
+    print(f"{len(work):,} files to move, by {lines} line{'s' if lines != 1 else ''} of the plan\n")
 
     o = Origin("tidy", f"tidy-up plan {plan_id}", ARCHIVE, "archive", shelf)
     status(phase="tidying", source=plan_id, copied=0, of=len(work))
@@ -1550,7 +1566,7 @@ def tidy(plan_id):
                 move_proxy(old, new, o)
                 moved.append((old, new)); mb += size
                 d = os.path.dirname(old)
-                while d.startswith(area) and d not in examples:
+                while (d.startswith(area) or d.startswith(root + os.sep)) and d not in examples:
                     examples[d] = (old, new); d = os.path.dirname(d)
             except Stalled:
                 stall("the archive share, moving " + os.path.basename(old))
@@ -1564,7 +1580,9 @@ def tidy(plan_id):
             print(f"  {i:,} of {len(work):,} — {len(moved):,} moved")
             status(phase="tidying", source=plan_id, copied=len(moved), of=len(work))
     mhl_follow(moved, o, f"tidy-up {plan_id}")
-    rm = clear_out([a for a, _ in moved], ARCHIVE, o, examples)
+    rm = clear_out([a for a, _ in moved if a.startswith(area)], ARCHIVE, o, examples)
+    # a folder already in the archive goes once it is empty, up to the archive's top (never the top itself)
+    rm += clear_out([a for a, _ in moved if not a.startswith(area)], root, o, examples)
     o.close()
     left = o.n["skipped"] + o.n["failed"]
     print(f"\nmoved {len(moved):,} files onto the shelf, {left:,} left where they were"

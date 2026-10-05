@@ -7,9 +7,10 @@
 // Mac). That server does not read .htaccess, so its rules are here, and more:
 //
 //   - nothing hidden, nothing private (.htaccess's list), and only what a
-//     browser needs (pages, styles, scripts, pictures), plus the three files
-//     the helper reads (settings.json, rules.json, the file list manifest.tsv):
-//     never the database, the other lists, the logs or the code
+//     browser needs (pages, styles, scripts, pictures), plus the files the
+//     helper reads (settings.json, rules.json, the file list manifest.tsv, a
+//     tidy-up's plan tidy-….tsv): never the database, the other lists, the
+//     logs or the code
 //   - from this Mac: everything else as usual
 //   - from any other device: only when "Let other devices open Rushes" is on
 //     (RUSHES_OTHERS=1, set by Rushes Helper), only once Rushes' password is
@@ -32,7 +33,7 @@ if (preg_match('/^(\.adminpass|\.pull-.*|rushes\.sqlite.*|db-copy\.sqlite.*|inge
     return refuse(403, 'Private.');
 $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
 if (!is_dir($_SERVER['DOCUMENT_ROOT'] . $path) && !in_array($ext, ['php', 'html', 'css', 'js', 'png', 'ico', 'svg', 'jpg', 'webp'], true)
-    && !in_array($path, ['/settings.json', '/rules.json', '/manifest.tsv'], true))
+    && !in_array($path, ['/settings.json', '/rules.json', '/manifest.tsv'], true) && !preg_match('#^/tidy-\d{8}-\d{6}\.tsv$#', $path))
     return refuse(404, 'Not found.');
 
 if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)

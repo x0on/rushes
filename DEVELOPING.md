@@ -105,6 +105,7 @@ python3 -m unittest test_menu              # the menu bar icon's answers, for bo
 busybox sh test_runner.sh                  # the runner, on a pretend archive, on its bad days
 sh test_router.sh                          # Rushes on a Mac: private files, other devices, the password
 python3 -m unittest test_mac_runner        # Rushes on a Mac: duplicates and caches, with a Mac's stat and awk
+sh test_tidy_here.sh                       # the tidy-up of folders already in the archive: what is offered, the plan
 php test_server.php                        # the catalogue, imports, plans, pulls, passwords
 php test_pages.php                         # what Overview says
 PHPBIN=php sh test_helper.sh               # the helper's doors and install script

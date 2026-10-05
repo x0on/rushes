@@ -2,6 +2,10 @@
 // tidy.php — the tidy-up. What the copies brought into ARCHIVE, and where each
 // part of it goes on the shelf.
 //
+// And what is already in the archive, outside the shelf and outside Rushes'
+// own folders (an old server's layout, a drive's own folders): grouped the same
+// way from the catalogue, and moved as they are ("here" rows).
+//
 //   GET                           the proposal, as JSON
 //   POST go=1 picks={<folder>: <department>}   approve: writes the plan, queues it
 //   POST undo=<record file>       queue putting one tidy-up back
@@ -115,7 +119,53 @@ function proposal(): array {
         if ($g[$key]['eg'] === '') $g[$key]['eg'] = substr($src, strlen($key));
     }
     ksort($g, SORT_NATURAL | SORT_FLAG_CASE);
-    return ['groups' => array_values($g), 'shelf' => $shelf, 'records' => count($recs)];
+    $h = here_groups();
+    return ['groups' => array_merge(array_values($g), $h), 'shelf' => $shelf, 'records' => count($recs), 'here' => count($h)];
+}
+
+// Folders already in the archive that are not on the shelf: from the catalogue,
+// grouped as the records are (a department in the path: that folder and the one
+// under it; none: the first two levels). here_files() calls $each(path, bytes,
+// key, base, dept, via) for every such file, so the plan can name exactly the
+// files a picked row counted, and no others.
+function here_files(callable $each): void {
+    require_once __DIR__ . '/schema.php';
+    $a = rtrim(archive_dir(), '/'); $L = strlen($a) + 1;
+    $off_shelf = function (string $top) {
+        if ($top === '' || strpbrk($top[0], '_@.#') !== false || in_array($top, ['ARCHIVE', 'PROXIES'], true)) return false;   // Rushes' own, hidden, the bin
+        if (!shelf_is_top()) return $top !== shelf_name();
+        return $top !== 'Projects' && dept_of_folder($top) === null
+            && !in_array(strtolower($top), array_map(fn($d) => strtolower($d['name']), departments()), true);
+    };
+    $tops = [];
+    $q = db()->query("SELECT path, bytes FROM files WHERE substr(path, 1, " . $L . ") = '" . SQLite3::escapeString("$a/") . "'");
+    while ($r = $q->fetchArray(SQLITE3_ASSOC)) {
+        $parts = explode('/', substr($r['path'], $L));
+        if (count($parts) < 2) continue;                      // a file loose at the top: left where it is
+        $tops[$parts[0]] ??= $off_shelf($parts[0]);
+        if (!$tops[$parts[0]]) continue;
+        array_pop($parts);
+        $dept = null; $at_i = -1;
+        foreach ($parts as $i => $c) if (($dept = dept_named($c)) !== null) { $at_i = $i; break; }
+        if ($dept !== null) {
+            $base = "$a/" . implode('/', array_slice($parts, 0, $at_i + 1));
+            $key  = $base . (isset($parts[$at_i + 1]) ? '/' . $parts[$at_i + 1] : '');
+        } else {
+            $base = ''; $key = "$a/" . implode('/', array_slice($parts, 0, 2));
+        }
+        $each($r['path'], (int)$r['bytes'], $key, $base, $dept, $dept !== null ? $parts[$at_i] : '');
+    }
+}
+function here_groups(): array {
+    $g = []; $a = rtrim(archive_dir(), '/');
+    here_files(function ($path, $bytes, $key, $base, $dept, $via) use (&$g, $a) {
+        if (!isset($g[$key])) $g[$key] = ['key' => $key, 'root' => $a, 'base' => $base, 'dept' => $dept,
+            'via' => $via, 'n' => 0, 'bytes' => 0, 'busy' => false, 'eg' => '', 'here' => true];
+        $g[$key]['n']++; $g[$key]['bytes'] += $bytes;
+        if ($g[$key]['eg'] === '') $g[$key]['eg'] = substr($path, strlen($key));
+    });
+    ksort($g, SORT_NATURAL | SORT_FLAG_CASE);
+    return array_values($g);
 }
 
 // Where a row goes for a given department — worked out here, never sent by the page.
@@ -181,7 +231,7 @@ function queue_add(string $line): void {
 if (($_POST['go'] ?? '') === '1') {
     if (helper_archive() === '') bail(400, 'Setup does not know where the helper finds the archive yet.');
     if (!shelf_chosen()) bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Reorganize → 00.');
-    $p = proposal(); $lines = []; $files = 0;
+    $p = proposal(); $lines = []; $files = 0; $here = [];
     // As JSON, not pick[...] fields: a folder called "Gala [2024]" would break those.
     $pick = json_decode((string)($_POST['picks'] ?? ''), true);
     if (!is_array($pick)) bail(400, 'Nothing is picked to move.');
@@ -190,7 +240,18 @@ if (($_POST['go'] ?? '') === '1') {
         if ($d === '') continue;                              // left where it is
         $to = dest_for($row, $d, $p['shelf']);
         if ($to === null) bail(400, "“{$d}” is not in the plan any more — reload the page.");
-        $lines[] = "map\t{$row['key']}\t$to"; $files += $row['n'];
+        if (!empty($row['here'])) $here[$row['key']] = $to;      // its files, one line each, below
+        else $lines[] = "map\t{$row['key']}\t$to";
+        $files += $row['n'];
+    }
+    // Folders already in the archive: exactly the files the picked rows counted,
+    // each named as the helper sees it, with where it goes.
+    if ($here) {
+        $A = rtrim(archive_dir(), '/'); $H = rtrim(helper_archive(), '/\\');
+        here_files(function ($path, $bytes, $key) use (&$lines, $here, $A, $H) {
+            if (!isset($here[$key]) || str_contains($path, "\t") || str_contains($path, "\n")) return;
+            $lines[] = "file\t" . $H . substr($path, strlen($A)) . "\t" . $here[$key] . substr($path, strlen($key));
+        });
     }
     if (!$lines) bail(400, 'Nothing is picked to move.');
     $id = date('Ymd-His');

@@ -3,7 +3,7 @@
 # Run: sh tests/test_pair.sh   (each question is its own PHP run, as on the web server)
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-PHP="node $HERE/../php-runtime/node_modules/@php-wasm/cli/php-wasm.js"
+PHP=${PHPBIN:-"node $HERE/../php-runtime/node_modules/@php-wasm/cli/php-wasm.js"}
 R=$(mktemp -d "${RUSHES_TEST_TMP:-/tmp}/pair-XXXXXX"); trap 'rm -rf "$R"' EXIT
 mkdir -p "$R/web/db"; cp "$HERE"/app/db/*.php "$R/web/db/"
 printf '{"archive":{"web":"%s","local":"%s/archive"},"helper":{"mode":"external"}}' "$R/web" "$R" > "$R/web/settings.json"

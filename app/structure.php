@@ -303,12 +303,14 @@ $opts = function (string $cur) use ($folders, $e) {
     <h3 class="part">Part 2 · Moving what is already here</h3>
     <div class="grp" id="tidy">
       <h2><span>04 /</span> Tidy-up</h2>
-      <p>Moves what the copies brought into ARCHIVE onto the shelf. Where each file goes is read
-         from where it <i>came from</i>, not where the copy put it &mdash; and everything below the
-         <?= $e($one) ?> keeps the layout it had. Nothing is copied, renamed or deleted, every
-         move is recorded so Premiere projects can be relinked, and a tidy-up can be put back.</p>
+      <p>Moves what the copies brought into ARCHIVE onto the shelf, and the folders that were already
+         in the archive outside it (an old server's layout, a drive's own folders). For a copy, where
+         each file goes is read from where it <i>came from</i>, not where the copy put it; a folder already
+         here moves as it is. Either way everything below the <?= $e($one) ?> keeps the layout it had.
+         Nothing is copied, renamed or deleted, every move is recorded so Premiere projects can be
+         relinked, a tidy-up can be put back, and folders left empty are removed.</p>
       <div id="tWait" class="banner warn" hidden><div class="txt"></div></div>
-      <div id="tList"><p class="note" style="margin:0">Reading the records of what was copied &hellip;</p></div>
+      <div id="tList"><p class="note" style="margin:0">Looking at what is outside the shelf &hellip;</p></div>
       <div id="tGo" class="btns" style="margin-top:14px" hidden>
         <button class="btn" type="button" id="tAsk"></button>
         <span class="note" id="tSum"></span>
@@ -437,7 +439,7 @@ $opts = function (string $cur) use ($folders, $e) {
         var n = 0, b = 0, rows = 0;
         data.groups.forEach(function (r, i) {
           var v = $('tp' + i).value;
-          $('td' + i).innerHTML = v ? '&rarr; ' + esc(dest(r, v)) : 'stays in ARCHIVE';
+          $('td' + i).innerHTML = v ? '&rarr; ' + esc(dest(r, v)) : (r.here ? 'stays where it is' : 'stays in ARCHIVE');
           $('td' + i).className = 'to' + (v ? '' : ' stay');
           if (v) { n += r.n; b += r.bytes; rows++; }
         });
@@ -458,19 +460,20 @@ $opts = function (string $cur) use ($folders, $e) {
             + esc(d.helper) + ' is running. Moving more now adds another one behind it.' : '';
         if (!d.groups.length) {
           $('tList').innerHTML = '<p class="note" style="margin:0">' + (d.records
-            ? 'Nothing to tidy &mdash; everything the copies brought in is on the shelf already.'
-            : 'Nothing to tidy yet. Every copy writes a record of where each file came from, and the tidy-up works from those &mdash; none has been written so far.') + '</p>';
+            ? 'Nothing to tidy &mdash; everything the copies brought in is on the shelf already, and nothing else is outside it.'
+            : 'Nothing to tidy: nothing is outside the shelf, and no copy has written a record yet.') + '</p>';
         } else {
-          var opts = '<option value="">— leave it in ARCHIVE —</option>' + d.depts.map(function (x) {
+          var opts = d.depts.map(function (x) {
             return '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>'; }).join('');
           $('tList').innerHTML = '<div class="dep-h tg"><span>Came from</span><span>Goes to</span></div>'
             + d.groups.map(function (r, i) {
               return '<div class="tg' + (r.busy ? ' busy' : '') + '"><div><b>' + esc(shown(r)) + '</b>'
-                + '<small>' + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
+                + '<small>' + (r.here ? 'already in the archive · ' : 'copied in · ') + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
                 + (r.eg ? ' · e.g. …' + esc(r.eg) : '') + '</small>'
                 + (r.busy ? '<small class="flag">Still being copied &mdash; those files wait for the next tidy-up.</small>' : '')
                 + (r.dept ? '' : '<small>No ' + <?= json_encode(strtolower($one)) ?> + ' in its path &mdash; pick one, or leave it.</small>')
-                + '</div><div><select id="tp' + i + '" aria-label="Goes to">' + opts + '</select>'
+                + '</div><div><select id="tp' + i + '" aria-label="Goes to"><option value="">— leave it '
+                + (r.here ? 'where it is' : 'in ARCHIVE') + ' —</option>' + opts + '</select>'
                 + '<small id="td' + i + '" class="to"></small></div></div>';
             }).join('');
           d.groups.forEach(function (r, i) { $('tp' + i).value = r.dept || ''; $('tp' + i).onchange = sum; });

@@ -939,11 +939,24 @@ Building the list:
 - **Folders not in the plan** shows shelf folders no department uses.
 - You choose whether new ones may be added at Ingest.
 
-**The tidy-up** moves footage that was copied into `ARCHIVE` onto the shelf, into
-its department's folder:
+**The tidy-up** moves footage onto the shelf, into its department's folder. Two
+kinds of footage are offered, each row saying which:
 
-- Rushes groups the files by where they came from and suggests a department for
-  each group, when a name matches closely enough. You confirm.
+- **copied in:** what Rushes copied into `ARCHIVE`, grouped by where it came
+  from (its record);
+- **already in the archive:** every other folder of the archive outside the
+  shelf (an old server's layout, a drive's own folders), from the catalogue,
+  so press Rebuild the file list first if folders changed outside Rushes.
+  Never Rushes' own folders (`ARCHIVE`, `PROXIES`, `_rushes`, `_duplicates`),
+  hidden ones, the recycle bin, `Projects`, or loose files at the archive's
+  top. These move as they are: the plan names each file the row counted, and
+  only those (a file that arrived since is left for the next tidy-up).
+
+Then:
+
+- Rushes groups the files and suggests a department for each group, when a
+  name in its path matches closely enough (a misspelt old folder too). You
+  confirm.
 - The helper then moves each file (a rename on the same disk, so it is instant).
   It never moves a file onto one that exists, and never moves anything from a
   folder still being copied. A plan that points outside the shelf is refused.
@@ -952,7 +965,10 @@ its department's folder:
   `_rushes/ascmhl-moved`, never deleted.
 - Search, every pull, and what describing found all follow each file to its new
   place.
-- Folders left empty are removed.
+- Folders left empty are removed, up to the top of `ARCHIVE` for copies, and
+  up to the archive's top for folders already there (an old server's top
+  folder goes once everything in it has moved). `.DS_Store` is the only file
+  ever removed with them.
 - A tidy-up stops at the next file when copying is paused, when the helper has
   stopped by itself, or when a move does not answer within 30 seconds. What it
   moved so far is recorded, and search is told; the rest is moved when work
@@ -973,7 +989,8 @@ its department's folder:
    Windows paths both work.
 
 **In the code:** `structure.php` (the page), `db/tidy.php` (the proposal and
-asking), `db/relink.php` (Premiere paths), `db/moved.php` (search, pulls and
+asking; `here_files()` for folders already in the archive), `ingest.py`
+(`tidy()`: `map` lines for copies, `file` lines for folders already there), `db/relink.php` (Premiere paths), `db/moved.php` (search, pulls and
 descriptions follow), and in `ingest.py` `tidy()`, `untidy()`, `move_proxy()`,
 `mhl_follow()` and `clear_out()`.
 
@@ -1245,9 +1262,9 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   through `app/router.php` first, because that server does not read
   `.htaccess`: hidden files and the private files `.htaccess` lists are
   refused, and only what a browser needs is handed out (pages, styles,
-  scripts, pictures), with the three files the helper reads (`settings.json`,
-  `rules.json` and the file list `manifest.tsv`); never the database, the
-  other lists, the logs or code.
+  scripts, pictures), with the files the helper reads (`settings.json`,
+  `rules.json`, the file list `manifest.tsv` and a tidy-up's plan
+  `tidy-….tsv`); never the database, the other lists, the logs or code.
   PHP's errors go to `php-errors.log` in the web folder;
 - starts it again within 10 s if it stops, and when other devices are turned on
   or off;
