@@ -28,7 +28,7 @@ Where Rushes falls short of what it should do, this document says so, and the
 9. [Projects in and out](#projects-in-and-out)
 10. [Keeping the archive tidy](#keeping-the-archive-tidy)
 11. [Manage](#manage)
-12. [Rushes Helper on the Mac](#rushes-helper-on-the-mac)
+12. [The Mac app: Rushes](#the-mac-app-rushes)
 13. [What runs by itself](#what-runs-by-itself)
 14. [Stopping things](#stopping-things)
 15. [Updates](#updates)
@@ -1225,7 +1225,16 @@ Opening Setup lists the shares on the archive machine.
 
 ---
 
-## Rushes Helper on the Mac
+## The Mac app: Rushes
+
+**Its name.** Until 0.12 the Mac app was called **Rushes Helper**: it only
+copied footage, for a Rushes on a NAS. Since it can hold Rushes itself, it is
+called **Rushes** (`mac/build.py`). Its ID stays `org.rushes.helper`, so macOS
+keeps the permissions it was given; setting it up puts `Rushes.app` in
+Applications and moves an old `Rushes Helper.app` there to the Trash. Below,
+"Rushes Helper" is this app. **Rushes Watcher** is the separate small app for
+editors' computers.
+
 
 Rushes Helper is a Mac app with its own Python inside. Opened from Finder, it
 shows one window. Started by macOS in the background, it runs the helper, and

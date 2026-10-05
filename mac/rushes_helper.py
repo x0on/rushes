@@ -36,7 +36,8 @@ import urllib.request
 APP = os.environ.get("RUSHES_APP") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HOME = os.path.expanduser("~")
 DIR = os.path.join(HOME, "Library", "Application Support", "Rushes")
-NAME = os.environ.get("RUSHES_NAME") or ("Rushes Watcher" if "Rushes Watcher" in APP else "Rushes Helper")
+# "Rushes" (called "Rushes Helper" before 0.12; same ID, org.rushes.helper) or "Rushes Watcher"
+NAME = os.environ.get("RUSHES_NAME") or ("Rushes Watcher" if "Rushes Watcher" in APP else "Rushes")
 WATCHER = NAME == "Rushes Watcher"
 LOGS = os.path.join(HOME, "Library", "Logs", "Rushes Watcher" if WATCHER else "Rushes")
 LABEL = "org.rushes.watcher" if WATCHER else "org.rushes.helper"
@@ -404,6 +405,14 @@ def copy_to_applications():
     r = subprocess.run(["ditto", here, HOMEAPP], capture_output=True, text=True)
     if r.returncode:
         return r.stderr.strip() or "ditto failed"
+    # Called "Rushes Helper" before 0.12: that copy goes to the Trash, so it is never opened by mistake
+    was = os.path.join(os.path.dirname(HOMEAPP), "Rushes Helper.app")
+    if not WATCHER and was != HOMEAPP and os.path.isdir(was):
+        try:
+            os.rename(was, os.path.join(HOME, ".Trash", "Rushes Helper.app"))
+            log("the old Rushes Helper.app went to the Trash (it is Rushes now)")
+        except OSError as e:
+            log(f"the old Rushes Helper.app is still in Applications ({e}): it can go to the Trash")
     # It came from the download that was already allowed to open.
     subprocess.run(["xattr", "-dr", "com.apple.quarantine", HOMEAPP], capture_output=True)
     return ""
@@ -918,7 +927,9 @@ main{flex:1;display:flex;flex-direction:column;min-width:0}
 .body{flex:1;overflow:auto;padding:28px 32px}
 h2{font-size:20px;margin:0 0 12px}p{margin:0 0 12px}.muted{color:var(--muted)}
 .foot{display:flex;gap:10px;justify-content:flex-end;align-items:center;padding:14px 22px;border-top:1px solid var(--line)}
-.foot .left{margin-right:auto;display:flex;gap:8px}.foot button{white-space:nowrap}
+.foot .left{margin-right:auto;display:flex;gap:2px;flex-wrap:wrap}.foot button{white-space:nowrap}
+.foot .lnk{border:0;background:none;padding:4px 7px;color:var(--muted);font-size:12.5px;font-weight:400}
+.foot .lnk:hover{color:var(--fg);text-decoration:underline}.foot .lnk.danger:hover{color:var(--bad)}
 button{font:inherit;padding:7px 16px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
 button.go{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
 button:disabled{opacity:.5;cursor:default}
@@ -954,6 +965,8 @@ async function act(d, extra) {
 }
 // Open Rushes, only once Rushes answers: "Starting Rushes …" until then (Rushes on this Mac)
 function openBtn(s, go) { return s.local_up === false ? btn('Starting Rushes …', 'open-rushes', go, true) : btn('Open Rushes', 'open-rushes', go); }
+// What is seldom pressed is a quiet link, not a button that looks as important as Done
+function lnk(label, d, cls) { return '<button class="lnk' + (cls ? ' ' + cls : '') + '" data-do="' + d + '">' + esc(label) + '</button>'; }
 function btn(label, d, go, dis) { return '<button' + (go ? ' class="go"' : '') + (dis ? ' disabled' : '') + ' data-do="' + d + '">' + esc(label) + '</button>'; }
 // What Rushes is made of: every part, what it does, its license. Opens over
 // any screen and goes back to it.
@@ -1012,7 +1025,8 @@ function draw() {
         'It sends the files a project uses that the archive does not have yet (music, stock, downloads, graphics, voiceover: only what you imported), and makes an <b>Output</b> folder beside each project: export the finished work there and it is kept too. ' +
         'When you quit Premiere, a dated copy of each project you saved is kept, pointing at the archive. Your files on this Mac are only read, never moved or changed.</p>' +
         '<p>Its icon in the menu bar shows what it is doing, with its switches. While it runs, the icon is there.</p>'
-      : '<p>Rushes Helper copies footage into your Rushes archive in the background, and Rushes → Manage shows everything it does.</p>') +
+      : '<p>Rushes looks after your footage: it finds it (Search), brings cards and drives in, keeps copies checked, and tidies the archive. ' +
+        'The archive can be a drive on this Mac, or a Rushes server on your network. Its icon in the menu bar shows what it is doing.</p>') +
       '<p>It carries its own copy of Python — the free, open-source programming language it is written in. That copy lives inside this app and nothing else uses it, so nothing on this Mac is changed or needs updating.</p>' +
       '<p>Setting up takes a minute, in this window: where Rushes is, and two permissions from macOS — to talk to your network (press Allow when macOS asks), and one switch in System Settings. The last step tells you when everything is done.</p>';
     f = btn('Cancel', 'done') + btn('Set up', 'start', true); break;
@@ -1051,8 +1065,9 @@ function draw() {
       : '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
         '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
       '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
-    f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : openBtn(s) + btn('Done', 'done', true); break;
-  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + btn('Remove…', 'remove') + (s.watcher ? '' : ' ' + btn('Where Rushes is…', 'change-where')) + '</span>' + btn('Show the log', 'show-log') + openBtn(s) + btn('Done', 'done', true); break;
+    f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Done', 'done') + openBtn(s, true); break;
+  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + (s.watcher ? '' : lnk('Where Rushes is…', 'change-where')) + lnk('Show the log', 'show-log') +
+      lnk('Remove…', 'remove', 'danger') + '</span>' + btn('Done', 'done') + openBtn(s, true); break;
   case 'remove':
     b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
@@ -1062,8 +1077,9 @@ function draw() {
         : '~/archive-pilot (its progress and pairing), ~/Library/Application Support/Rushes and ~/Library/Logs/Rushes.') + '</p>';
     f = btn('Done', 'done', true); break;
   }
-  if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left"><button data-credits="1">What it is made of</button> ')
-    : '<span class="left"><button data-credits="1">What it is made of</button></span>' + f);
+  const made = '<button class="lnk" data-credits="1">What it is made of</button>';
+  if (['welcome', 'home', 'all-set'].includes(s.step)) f = (f.includes('class="left"') ? f.replace('<span class="left">', '<span class="left">' + made)
+    : '<span class="left">' + made + '</span>' + f);
   const keep = $('url') && document.activeElement === $('url');
   const keepCode = $('paircode') && document.activeElement === $('paircode');
   $('body').innerHTML = b; $('foot').innerHTML = f;
@@ -1137,8 +1153,10 @@ function home(s) {
       '<div class="row"><div class="t">Support access<small>None. There is no way for anyone — the author, IT or anyone else — to connect to this Mac through Rushes Helper. ' +
         'Help happens in the open, on GitHub, with what you choose to share.</small></div></div>' +
     '</div>' +
-    '<p class="muted" style="font-size:12.5px">Updates: the helper keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) +
-      ', never anywhere else), between jobs, when Rushes says it has changed. This app itself updates only when you press Update (the menu bar icon says when there is one). Nothing else can reach this Mac through it.</p>' +
+    (s.local ? '<p class="muted" style="font-size:12.5px">Updates: Rushes and its copying and describing code all come inside this app, signed by its author, ' +
+      'and change only when you press Update (the menu bar icon says when there is one). Nothing else can reach this Mac through it.</p>'
+    : '<p class="muted" style="font-size:12.5px">Updates: the helper keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) +
+      ', never anywhere else), between jobs, when Rushes says it has changed. This app itself updates only when you press Update (the menu bar icon says when there is one). Nothing else can reach this Mac through it.</p>') +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it did lately <span style="float:right">Rushes: ' + esc(s.url) + '</span></div><pre>' +
       esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 }
@@ -1211,7 +1229,7 @@ def serve(port, key):
 
         def do_GET(self):
             if self.path == f"/{key}/":
-                return self._send(200, PAGE.replace("Rushes Helper", NAME), "text/html")
+                return self._send(200, PAGE.replace("Rushes Helper", NAME).replace("Rushes Rushes", "Rushes"), "text/html")
             if self.path == f"/{key}/credits":
                 try:
                     return self._send(200, open(os.path.join(APP, "Contents", "Resources", "CREDITS.md"), "rb").read(), "text/plain")
@@ -1261,7 +1279,7 @@ WATCHING = {"idle": "Idle — no editing program open", "watching": "Watching �
 # itself, later): each does its own work, but the menu bar has one Rushes icon.
 # The first of them that runs draws it, with a section for each other one; the
 # others hide theirs. Quit one and the next draws it, so there is always one.
-ROLES = ("Rushes Helper", "Rushes Watcher")
+ROLES = ("Rushes", "Rushes Watcher")
 _label = lambda n: "org.rushes.watcher" if n == "Rushes Watcher" else "org.rushes.helper"
 _running = {"at": 0.0, "names": [NAME]}
 def running_roles():
@@ -1453,6 +1471,10 @@ def service(args):
         with open(os.path.join(LOGS, "server.log"), "a") as out:
             subprocess.Popen([sys.executable, "-u", os.path.abspath(__file__), "--server"],
                              stdin=subprocess.DEVNULL, stdout=out, stderr=out)
+        for _ in range(60):                              # the helper asks Rushes nothing before it answers
+            if local_up():
+                break
+            time.sleep(0.5)
     # The helper's code that came inside this app (a signed release, checked
     # here as any update is) goes in when it is newer than the one installed,
     # so a new app brings its code with it, even before Rushes can be asked.

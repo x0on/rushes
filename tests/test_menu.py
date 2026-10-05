@@ -86,25 +86,25 @@ class MenuTests(unittest.TestCase):
         with patch.dict(os.environ, {"HOME": str(self.home)}), both(w):
             got = serve(w)("menu?fresh=1")
         self.assertIs(got.get("hide"), True)
-        h = front("Rushes Helper", self.home)
+        h = front("Rushes", self.home)
         with patch.dict(os.environ, {"HOME": str(self.home)}), both(h):
             ask = serve(h)
             got = ask("menu?fresh=1")
             self.assertTrue(plain(got), got)
             self.assertNotIn("hide", got)
             labels = [i.get("label") for i in got["items"]]
-            self.assertEqual(labels[0], "RUSHES HELPER")
+            self.assertEqual(labels[0], "RUSHES")
             self.assertIn("RUSHES WATCHER", labels)
             sw = next(i for i in got["items"] if i.get("label") == "Watch projects")
             self.assertEqual(sw["do"], "watcher-watch-pause")
             self.assertEqual(sum(1 for i in got["items"] if i.get("do") == "open-rushes"), 1)
-            self.assertEqual(got["items"][-1], {"label": "Quit Rushes Helper and Rushes Watcher", "do": "quit-all"})
+            self.assertEqual(got["items"][-1], {"label": "Quit Rushes and Rushes Watcher", "do": "quit-all"})
             with patch.object(h.role("Rushes Watcher")[0], "launchctl", return_value=h.subprocess.CompletedProcess([], 0, "pid = 42", "")):
                 ask("do?a=watcher-watch-pause")                # chosen in the Helper's menu: done by the Watcher
             self.assertTrue((self.home / "Library/Application Support/Rushes Watcher/paused").exists())
 
     def test_helper_without_rushes(self):
-        m = front("Rushes Helper", self.home)
+        m = front("Rushes", self.home)
         with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")):
             ask = serve(m)
             first = ask("menu?fresh=1")                  # Rushes is asked in the background: never waited for
@@ -116,7 +116,7 @@ class MenuTests(unittest.TestCase):
         self.assertIn("Cannot reach Rushes", got["items"][0]["label"])
         sw = next(i for i in got["items"] if i.get("label") == "Copy footage")
         self.assertNotIn("do", sw)                       # Rushes keeps these switches: not while it cannot be reached
-        self.assertEqual(got["items"][-1], {"label": "Quit Rushes Helper", "do": "quit"})
+        self.assertEqual(got["items"][-1], {"label": "Quit Rushes", "do": "quit"})
 
 
 class AppUpdateTests(unittest.TestCase):
@@ -126,11 +126,11 @@ class AppUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             app = Path(t) / "Rushes Helper.app"; (app / "Contents").mkdir(parents=True)
             (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "0.9.1",
-                "CFBundleIdentifier": "org.rushes.helper", "CFBundleExecutable": "Rushes Helper"}))
+                "CFBundleIdentifier": "org.rushes.helper", "CFBundleExecutable": "Rushes"}))
             for theirs, want in (("0.9.2", "0.9.2"), ("0.9.1", ""), ("0.8.9", ""), ("0.10.0", "0.10.0")):
                 with patch("urllib.request.urlopen", return_value=io.BytesIO(theirs.encode())):
                     self.assertEqual(release.app_update("http://rushes.test", str(app), check_only=True), want, theirs)
-        m = front("Rushes Helper", Path(tempfile.mkdtemp()))
+        m = front("Rushes", Path(tempfile.mkdtemp()))
         with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")), \
              patch.object(m.Window, "newer", return_value="0.9.2"):
             got = serve(m)("menu?fresh=1")
@@ -139,7 +139,7 @@ class AppUpdateTests(unittest.TestCase):
 
     def test_rushes_is_asked_once_a_week_and_nothing_installs_by_itself(self):
         home = Path(tempfile.mkdtemp())
-        m = front("Rushes Helper", home)
+        m = front("Rushes", home)
         sys.path.insert(0, str(HERE.parent / "app")); import release
         asked = []
         with patch.object(release, "app_update", side_effect=lambda *a, **k: asked.append(k) or "0.9.3"), \
@@ -168,7 +168,7 @@ class BundledCodeTests(unittest.TestCase):
             shutil.copy(HERE.parent / "mac/rushes_helper.py", app)
             for f in ("ingest.py", "transfer_state.py", "analyze.py", "release.py", "release.sig"):
                 shutil.copy(HERE.parent / "app" / f, app)
-            with patch.dict(os.environ, {"RUSHES_NAME": "Rushes Helper", "HOME": str(home)}):
+            with patch.dict(os.environ, {"RUSHES_NAME": "Rushes", "HOME": str(home)}):
                 spec = importlib.util.spec_from_file_location("front_bundled", app / "rushes_helper.py")
                 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
             sys.path.insert(0, str(app))

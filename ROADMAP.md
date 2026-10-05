@@ -80,6 +80,11 @@ that NAS; the Mac app has to prove each part again.
 
 ## Known problems
 
+- **The NAS's Setup pages and its install script still call the Mac app
+  Rushes Helper** (renamed Rushes in 0.12), and an update of the app from a
+  NAS looks for `Rushes Helper.app` (`release.py`, signed code: changed with
+  the next signed release).
+
 Things Rushes does today that are not right yet. Each one is described where it
 happens in HOW-IT-WORKS.
 
@@ -281,7 +286,13 @@ like any other.
    drive, copies on two drives left alone. To come: pulls from a drive kept
    where it is, and a drive's own index on the drive itself.*
 4. **Connected Rushes:** the same app set up as connected to a main one, for
-   cards, phone uploads and editors' projects (today's Helper and Watcher).
+   cards, phone uploads and editors' projects (today's Helper and Watcher). *Decided (October 2026): it is
+   Rushes Watcher's job, grown: on each other computer it brings cards and
+   drives in and keeps the editor's projects, and who brought what in is said.
+   It never writes the archive: what it brings is sent to the main Rushes'
+   inbox, as Watcher deliveries and phone uploads already are, and the main
+   Rushes' own helper places it. So there is still one copier writing the
+   archive, and the one-helper rule stays.*
 5. **Its own window,** proxies and describing inside the app, the installer.
 6. **The packages after the Mac:** server (a container, for a team's virtual
    machine), then Windows. The installer carries the

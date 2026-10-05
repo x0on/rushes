@@ -73,8 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['app'])) {
         // Built by mac/build.py and put next to the helper on the archive:
         // Rushes Helper, or (?app=watcher) Rushes Watcher for editors' computers.
-        $n = $_GET['app'] === 'watcher' ? 'Rushes Watcher' : 'Rushes Helper';
+        $n = $_GET['app'] === 'watcher' ? 'Rushes Watcher' : 'Rushes';
         $z = archive_dir() . "/_rushes/$n.zip";
+        if ($n === 'Rushes' && !is_readable($z)) { $n = 'Rushes Helper'; $z = archive_dir() . "/_rushes/$n.zip"; }   // its name before 0.12
         if (!is_readable($z)) bail(404, "$n for Mac is not on the archive yet (_rushes/$n.zip).");
         header('Content-Type: application/zip');
         header("Content-Disposition: attachment; filename=\"$n.zip\"");

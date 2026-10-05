@@ -265,7 +265,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <input type="hidden" name="a_url" value="<?= $e($aUrl ?: $here) ?>">
           <label class="f"><span>Address</span></label>
           <div class="seen">On this Mac: <b><?= $e($aUrl ?: $here) ?></b> (Open Rushes, in the menu bar icon, opens it).
-            Other devices open it only when <b>Let other devices open Rushes</b> is on in Rushes Helper, at this
+            Other devices open it only when <b>Let other devices open Rushes</b> is on in the Rushes app, at this
             Mac's name on the network or its Tailscale address, and only with the password.</div>
         <?php else: ?>
         <label class="f"><span>Address people open Rushes at</span>
@@ -351,9 +351,9 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <p>The part of Rushes that copies. It watches for cards and drives, and does
            whatever Ingest and Transfers ask for.</p>
         <?php if (on_mac()): ?>
-          <!-- On a Mac the helper is Rushes Helper itself, the app Rushes runs in -->
+          <!-- On a Mac the helper is part of the Rushes app itself -->
           <input type="hidden" name="h_mode" value="built_in">
-          <p class="note">On this Mac, the helper is <b>Rushes Helper</b>, the app Rushes runs in: cards and drives
+          <p class="note">On this Mac, the helper is part of the <b>Rushes</b> app itself: cards and drives
             plugged into this Mac are what it sees. Its switches are in its menu bar icon, and below in Manage.</p>
         <?php endif; ?>
         <div class="pick"<?= on_mac() ? ' hidden' : '' ?>>
@@ -597,7 +597,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
               if (on_mac() && name_url() !== '') $wurl = name_url(); ?>
         <?php if (on_mac()): ?>
           <div class="seen">Editors' computers reach Rushes on this Mac only while <b>Let other devices open Rushes</b>
-            is on in Rushes Helper, and the password is your own (not the first one).</div>
+            is on in the Rushes app, and the password is your own (not the first one).</div>
         <?php endif; ?>
         <div class="how-h" style="margin-top:14px">Add an editor's computer</div>
         <ol class="how">

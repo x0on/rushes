@@ -2,7 +2,7 @@
 # Source available: https://github.com/x0on/rushes
 """The minute's work, for a Rushes whose archive is a drive on this computer.
 
-runner.sh does this on a NAS, as root, from cron. On a Mac, Rushes Helper runs
+runner.sh does this on a NAS, as root, from cron. On a Mac, the Rushes app runs
 Rushes itself (rushes_helper.py --server) and calls Runner.minute() once a
 minute. Same files in the web folder, same rules (HOW-IT-WORKS.md → The
 minute's work); only what a drive on this computer needs:
@@ -209,7 +209,7 @@ class Runner:
             if back and not any(x.endswith("-drive.job") for x in os.listdir(self.p("queue"))):
                 self.write(f"queue/{time.strftime('%Y%m%d-%H%M%S')}-drive.job", "ACTION=reindex\n")
                 self.say("plugged in: " + ", ".join(d["name"] for d in back) + " — its list is made again")
-        # The helper runs in Rushes Helper itself, beside this; Setup asks.
+        # The helper runs in the Rushes app itself, beside this; Setup asks.
         self.write("helper-builtin.txt", "running\n")
         load = " ".join(f"{x:.2f}" for x in os.getloadavg())
         self.write("load.txt", f"{int(time.time())}\t{load}\t{int(time.time() - t0)}\n")

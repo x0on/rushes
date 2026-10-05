@@ -119,11 +119,11 @@ if ($stopped) {
                   . '(What runs by itself, below). Rushes\' pages and search still answer.',
         'act' => null, 'help' => null];
 } elseif (!$runner_ok && on_mac()) {
-    // On a Mac the minute's work is inside Rushes Helper (runner.py), started with it
-    $c[] = ['level' => 'bad', 'title' => 'Rushes Helper is not doing its minute\'s work',
-        'body' => 'Search updates, file lists and the jobs asked for here happen inside Rushes Helper on this Mac. It has been silent for '
+    // On a Mac the minute's work is inside the Rushes app (runner.py), started with it
+    $c[] = ['level' => 'bad', 'title' => 'The Rushes app is not doing its minute\'s work',
+        'body' => 'Search updates, file lists and the jobs asked for here happen inside the Rushes app on this Mac. It has been silent for '
                   . ($alive ? round(($now - $alive) / 60) . ' minutes' : 'as long as this page can tell')
-                  . '. Open Rushes Helper and check that Run in the background is on; its log (Show the log) says what stopped it.',
+                  . '. Open the Rushes app and check that Run in the background is on; its log (Show the log) says what stopped it.',
         'act' => null, 'help' => null];
 } elseif (!$runner_ok) {
     $c[] = ['level' => 'bad', 'title' => 'The NAS is not picking up jobs',
@@ -449,14 +449,14 @@ function tb(int $b): string {
 // last did its work, and whether it stopped. Read from files on Web only.
 $hv = helper_volumes();
 $repeats = [
-    [on_mac() ? 'The minute\'s work, inside Rushes Helper' : 'The runner on the archive machine', 'every minute; does nothing when there is nothing to do'
+    [on_mac() ? 'The minute\'s work, inside the Rushes app' : 'The runner on the archive machine', 'every minute; does nothing when there is nothing to do'
         . (($ld = explode("\t", trim((string)@file_get_contents("$WEB/load.txt")))) && count($ld) === 3
            ? " · last turn {$ld[2]} s, machine load {$ld[1]} (1, 5, 15 min)" : ''), $alive,
         $stopped ? 'stopped — nothing runs until Start' : ($runner_ok ? 'ok' : 'bad'),
         $stopped ? ['start-runner', 'Start'] : ['stop-runner', 'Stop']],
     [on_mac() ? 'Reaching the archive (' . (settings()['archive']['label'] ?? 'the drive') . ')' : 'Reaching the VIDEO share', 'every minute, never while paused; walked away from after 20 s, stops after three',
         $mtime('disk.txt'), is_readable("$WEB/video-tripped.txt") ? 'stopped — Try again above' : 'ok'],
-    // On a Mac, Rushes' pages and code come inside Rushes Helper: updated with the app, never from the archive
+    // On a Mac, Rushes' pages and code come inside the Rushes app: updated with the app, never from the archive
     ...(on_mac() ? [] : [['Looking for new versions of Rushes itself (in _rushes on VIDEO)', 'only when you press Check now, and once after an install',
         $mtime('waiting.tsv'), is_file("$WEB/survey-now") ? 'asked — within a minute' : 'ok', ['check-updates', 'Check now']]]),
     ['Copy of the database', 'once a day, checked first; a week of copies in _rushes/db-copies',

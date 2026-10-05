@@ -3,7 +3,7 @@
 // Source available: https://github.com/x0on/rushes
 //
 // router.php — the door, when Rushes is served by PHP's own small web server
-// (php -S, which Rushes Helper runs on a Mac: HOW-IT-WORKS.md → Rushes on a
+// (php -S, which the Rushes app runs on a Mac: HOW-IT-WORKS.md → Rushes on a
 // Mac). That server does not read .htaccess, so its rules are here, and more:
 //
 //   - nothing hidden, nothing private (.htaccess's list), and only what a
@@ -13,7 +13,7 @@
 //     logs or the code
 //   - from this Mac: everything else as usual
 //   - from any other device: only when "Let other devices open Rushes" is on
-//     (RUSHES_OTHERS=1, set by Rushes Helper), only once Rushes' password is
+//     (RUSHES_OTHERS=1, set by the Rushes app), only once Rushes' password is
 //     no longer the default, and only signed in with it; except the three
 //     doors editors' computers use, which check their own (a paired ID, the
 //     six-digit code, or the password)
@@ -40,7 +40,7 @@ if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
     && !in_array($path, ['/tokens.css', '/icon.php', '/favicon.ico', '/apple-touch-icon.png'], true)) {   // what the sign-in page shows
     if (getenv('RUSHES_OTHERS') !== '1')
         return refuse(403, 'Rushes on this Mac is for this Mac only. To open it from other devices, turn on '
-            . '"Let other devices open Rushes" in Rushes Helper on the Mac.');
+            . '"Let other devices open Rushes" in the Rushes app on the Mac (its window, or its menu bar icon).');
     require_once $_SERVER['DOCUMENT_ROOT'] . '/db/auth.php';
     if (pass_is_default())
         return refuse(403, 'Rushes still has its first password. On the Mac, open Rushes → Manage and set your own; '

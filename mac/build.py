@@ -24,7 +24,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = HERE
 OUT = os.path.join(TOP, "out")
 WATCHER = sys.argv[1:] == ["watcher"]
-NAME = "Rushes Watcher" if WATCHER else "Rushes Helper"
+# "Rushes": the app you install (it was "Rushes Helper" until 0.12; its ID, and so macOS's
+# permissions, stay org.rushes.helper). "Rushes Watcher": the small one for editors' computers.
+NAME = "Rushes Watcher" if WATCHER else "Rushes"
 BUNDLE = "org.rushes.watcher" if WATCHER else "org.rushes.helper"
 APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
@@ -153,8 +155,8 @@ with open(os.path.join(C, "Info.plist"), "wb") as f:
         # Without this line macOS refuses local-network connections without asking ("No route to host").
         "NSLocalNetworkUsageDescription": ("Rushes Watcher talks to Rushes on your network: it says which files your "
                                            "projects use, and what it is doing." if WATCHER else
-                                           "Rushes Helper talks to Rushes on your network: it asks what to copy "
-                                           "and reports what it is doing."),
+                                           "Rushes talks to your network only to reach a Rushes server, or, "
+                                           "when you turn it on, to let your other devices open it."),
         "NSHumanReadableCopyright": "Rushes Media Management Software · by Alejandro Renteria · source available, github.com/x0on/rushes",
     }, f)
 
