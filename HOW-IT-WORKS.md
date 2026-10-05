@@ -1230,8 +1230,10 @@ Opening Setup lists the shares on the archive machine.
 **Its name.** Until 0.12 the Mac app was called **Rushes Helper**: it only
 copied footage, for a Rushes on a NAS. Since it can hold Rushes itself, it is
 called **Rushes** (`mac/build.py`). Its ID stays `org.rushes.helper`, so macOS
-keeps the permissions it was given; setting it up puts `Rushes.app` in
-Applications and moves an old `Rushes Helper.app` there to the Trash. Below,
+keeps the permissions it was given. Opened where an older Rushes Helper was
+set up, it takes its place by itself (`was_helper()`, then the usual
+Installing): `Rushes.app` goes into Applications with the same settings, and
+the old `Rushes Helper.app` there goes to the Trash. Below,
 "Rushes Helper" is this app. **Rushes Watcher** is the separate small app for
 editors' computers.
 

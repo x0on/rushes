@@ -96,6 +96,15 @@ def service_points_here():
         return False
 
 
+def was_helper():
+    """The background service was set up by this app under its old name, Rushes Helper (before 0.12)."""
+    try:
+        with open(PLIST, "rb") as f:
+            return "/Rushes Helper.app/" in plistlib.load(f).get("ProgramArguments", [""])[0]
+    except (OSError, plistlib.InvalidFileException):
+        return False
+
+
 def service_running():
     """(loaded, pid): whether macOS has the background service, and its process."""
     r = launchctl("print", f"gui/{UID}/{LABEL}")
@@ -528,7 +537,11 @@ class Window:
         self.remote, self.asking, self.asked = {}, None, 0.0     # what Rushes last said (ask_rushes)
         self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
                   "done": [], "waiting": False, "lan_asked": False}
-        if self.s["url"] and service_points_here() and has_full_disk_access():
+        if self.s["url"] and not WATCHER and not service_points_here() and was_helper():
+            # Set up before 0.12, as Rushes Helper: this app takes its place, with the same settings
+            self.s.update(step="install", done=["Rushes Helper is called Rushes now: it takes its place"])
+            threading.Thread(target=lambda: self.install_quietly(self.s["url"]), daemon=True).start()
+        elif self.s["url"] and service_points_here() and has_full_disk_access():
             self.s["step"] = "home"
         elif service_points_here() and self.s["url"]:
             self.s["step"] = "fda"                       # came back to finish the last switch
@@ -893,6 +906,12 @@ class Window:
             restart_service(); self.set(step="all-set")
         else:
             self.set(step="fda", waiting=False); self._watch_access()
+
+    def install_quietly(self, url):
+        try:
+            self.install(url)
+        except Exception as e:
+            log(f"install: {e}"); self.set(error=str(e))
 
     def show_fda(self):
         """Settings at Full Disk Access, and the app in Finder to drag into the list."""
