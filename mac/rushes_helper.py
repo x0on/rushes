@@ -59,6 +59,12 @@ LAN_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extens
 FDA_PANE = ("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
 UID = str(os.getuid())
+# Rushes itself, when the archive is a drive on this Mac (HOW-IT-WORKS.md → Rushes on a Mac):
+# the pages and what they keep (web), and which drive, which port, other devices or not (local.json).
+RES = os.path.dirname(os.path.abspath(__file__))       # inside the app: the pages, PHP, runner.py, router.php
+WEB = os.path.join(DIR, "web")
+LOCAL = os.path.join(DIR, "local.json")
+PORT = 8642
 
 
 def log(msg):
@@ -107,6 +113,25 @@ def read_json(path):
             return json.load(f)
     except (OSError, ValueError):
         return {}
+
+
+def local():
+    """Rushes on this Mac: {"archive", "port", "others"}, or {} when Rushes is somewhere else."""
+    c = {} if WATCHER else read_json(LOCAL)
+    return c if c.get("archive") else {}
+
+
+def local_url():
+    return f"http://127.0.0.1:{local().get('port') or PORT}"
+
+
+def local_name():
+    """This Mac on the network (name.local), for other devices."""
+    try:
+        n = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        n = ""
+    return (n or platform.node().split(".")[0]) + ".local"
 
 
 def saved_url():
@@ -213,6 +238,82 @@ def fetch_files(url):
         os.replace(os.path.join(DIR, f + ".new"), os.path.join(DIR, f))
     with open(os.path.join(DIR, "url"), "w") as fh:
         fh.write(url + "\n")
+
+
+def write_json(path, d):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".new", "w") as f:
+        json.dump(d, f, indent=1)
+    os.replace(path + ".new", path)
+
+
+def pages_in():
+    """The pages inside this app, put in the web folder where they differ. Only
+    the pages: what Rushes keeps there (settings, database, lists) stays."""
+    src = os.path.join(RES, "pages")
+    for root, _, files in os.walk(src):
+        for f in files:
+            if f == "settings.json":                     # this Mac's own, written by Setup: never replaced
+                continue
+            a = os.path.join(root, f); b = os.path.join(WEB, os.path.relpath(a, src))
+            data = read_text(a, binary=True)
+            try:
+                if read_text(b, binary=True) == data:
+                    continue
+            except OSError:
+                pass
+            os.makedirs(os.path.dirname(b), exist_ok=True)
+            with open(b + ".new", "wb") as h:
+                h.write(data)
+            os.replace(b + ".new", b)
+
+
+def server():
+    """Rushes itself, on this Mac: PHP's own web server for the pages (router.php
+    is its door) and the minute's work (runner.py). Started by the background
+    helper, and gone with it."""
+    import signal
+    sys.path.insert(0, RES)
+    import runner
+    pages_in()
+    os.makedirs(os.path.join(DIR, "sessions"), exist_ok=True)
+    php = os.path.join(RES, "php-" + ("arm64" if platform.machine() == "arm64" else "x86_64"))
+    tz = os.path.realpath("/etc/localtime").partition("zoneinfo/")[2] or "UTC"
+    ini = {"post_max_size": "0", "memory_limit": "512M", "max_execution_time": "0", "display_errors": "0",
+           "log_errors": "1", "error_log": os.path.join(WEB, "php-errors.log"), "date.timezone": tz, "session.save_path": os.path.join(DIR, "sessions"),
+           # signed in on a phone stays signed in for a month, not 24 minutes
+           "session.gc_maxlifetime": "2592000", "session.cookie_lifetime": "2592000"}
+    parent, run, p, bound, started, nxt = os.getppid(), None, None, None, 0.0, time.time() + 5   # the first minute once it answers
+    def stop():
+        if p and p.poll() is None:
+            p.terminate()
+            try: p.wait(5)
+            except subprocess.TimeoutExpired: p.kill()
+    signal.signal(signal.SIGTERM, lambda *a: (stop(), sys.exit(0)))
+    try:
+        while os.getppid() == parent:                    # the helper that started it is gone: so is this
+            c = local()
+            want = ("0.0.0.0" if c.get("others") else "127.0.0.1", int(c.get("port") or PORT))
+            if p and (p.poll() is not None or bound != want):
+                if p.poll() is not None:
+                    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  the web server stopped ({p.returncode}); started again")
+                stop(); p = None
+            if not p and time.time() - started > 10:     # one that cannot start (port in use) is tried every 10 s
+                started, bound = time.time(), want
+                p = subprocess.Popen([php, *sum((["-d", f"{k}={v}"] for k, v in ini.items()), []),
+                                      "-S", f"{want[0]}:{want[1]}", "-t", WEB, os.path.join(RES, "router.php")],
+                                     # every request is a line on its own output: not kept (errors go to php-errors.log)
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=dict(os.environ, PHP_CLI_SERVER_WORKERS="8",
+                                                                        RUSHES_OTHERS="1" if c.get("others") else "0"))
+                print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  Rushes at http://{want[0]}:{want[1]} (archive: {c.get('archive')})", flush=True)
+            if time.time() >= nxt:
+                nxt = time.time() + 60
+                run = run or runner.Runner(WEB, local_url())
+                run.url = local_url()
+                run.minute()
+            time.sleep(2)
+    finally:
+        stop()
 
 
 def launchctl(*args):
@@ -473,6 +574,10 @@ class Window:
             h.update(now=n, paired=paired, paused=os.path.exists(os.path.join(WDIR, "paused")),
                      rushes=n.get("state") != "offline", rushes_why=n.get("note", ""))
             return h
+        if local():
+            c = local()
+            h["local"] = {"archive": c["archive"], "others": bool(c.get("others")), "port": c.get("port") or PORT,
+                          "there": os.path.isdir(c["archive"]), "name": local_name()}
         try:
             with open(STOPPED) as f:
                 h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
@@ -535,7 +640,16 @@ class Window:
         elif do == "later":
             self.set(step="later")
         elif do == "open-rushes":
-            subprocess.run(["open", s["url"] + ("/db/admin.php#projects" if WATCHER else "/db/admin.php")])
+            subprocess.run(["open", s["url"] + ("/db/admin.php#projects" if WATCHER else "/" if local() else "/db/admin.php")])
+        elif do == "local-pick":
+            self.run("Choose the archive's drive or folder in the window macOS opens …", self.pick_local)
+        elif do in ("others-on", "others-off") and local():
+            c = read_json(LOCAL); c["others"] = do == "others-on"
+            write_json(LOCAL, c)
+            log(f"switch: {do}")
+            self.set(said=f"On ✓ Phones and computers on your network (or Tailscale) open http://{local_name()}:{c.get('port') or PORT} "
+                          "and sign in with Rushes' password. Set your own in Rushes → Manage first: until then they are refused."
+                     if c["others"] else "Off ✓ Only this Mac opens Rushes now.")
         elif do == "show-log":
             subprocess.run(["open", "-a", "Console", WORKLOG])
         elif do == "open-window":
@@ -597,6 +711,40 @@ class Window:
                                                     if start_service() else "Could not start it — see setup.log."))
         elif do in ("pause", "resume", "describe-pause", "describe-resume", "reconnect-off", "reconnect-on", "check-pause", "check-resume"):
             self.run("Asking Rushes …", lambda: self.switch(do))
+
+    def pick_local(self):
+        """The archive is a drive (or a folder) on this Mac: Rushes runs inside this app (HOW-IT-WORKS.md → Rushes on a Mac)."""
+        r = subprocess.run(["osascript", "-e", 'POSIX path of (choose folder with prompt "The archive: the drive or folder '
+                            'Rushes looks after" default location "/Volumes")'], capture_output=True, text=True)
+        if r.returncode:
+            return                                       # Cancel: nothing changes
+        arch = r.stdout.strip().rstrip("/") or "/"
+        sys.path.insert(0, RES)
+        import runner
+        if not runner.archive_ok(arch, WEB):
+            raise RuntimeError(f"{arch} cannot be the archive: choose a drive, or a folder on one, "
+                               "not a system folder or the whole startup disk.")
+        pages_in()
+        s = read_json(os.path.join(WEB, "settings.json")) or read_json(os.path.join(RES, "pages", "settings.example.json"))
+        s.pop("_", None)
+        url = local_url() if local() else f"http://127.0.0.1:{PORT}"
+        s.setdefault("archive", {}).update(label=os.path.basename(arch), local=arch, web=WEB, url=url, as_seen_from_helper=arch)
+        s.setdefault("helper", {})["mode"] = "built_in"
+        s["holding"] = {"duplicates": arch + "/_duplicates", "cache": arch + "/_duplicates/_media-cache"}
+        write_json(os.path.join(WEB, "settings.json"), s)
+        # the helper is this app: paired with this Rushes from the start
+        if not os.path.exists(os.path.join(WEB, "helper-id.php")):
+            with open(os.path.join(WEB, "helper-id.php"), "w") as f:
+                f.write(f"<?php return ['id' => '{os.urandom(16).hex()}', 'host' => 'this Mac', 'at' => {int(time.time())}];\n")
+            os.chmod(os.path.join(WEB, "helper-id.php"), 0o600)
+        c = read_json(LOCAL); c.update(archive=arch, port=c.get("port") or PORT)
+        write_json(LOCAL, c)
+        os.makedirs(DIR, exist_ok=True)
+        with open(os.path.join(DIR, "url"), "w") as f:
+            f.write(url + "\n")
+        log(f"Rushes runs on this Mac, archive: {arch}")
+        self.set(url=url, step="install", done=[f"Rushes runs inside this app, archive: {arch}"])
+        self.install(url)
 
     def pair(self, code):
         """The code Rushes → Setup shows, for this Mac's ID. The background
@@ -684,6 +832,8 @@ class Window:
             with open(os.path.join(WDIR, "config.json.new"), "w") as f:
                 json.dump(cfg, f)
             os.replace(os.path.join(WDIR, "config.json.new"), os.path.join(WDIR, "config.json"))
+        elif local():
+            did("Rushes and the helper's code are inside this app: nothing to download")
         else:
             fetch_files(url)
             did("Downloaded the helper from Rushes")
@@ -827,7 +977,10 @@ function draw() {
   case 'address':
     b = '<h2>Where is Rushes?</h2><p>The address you open Rushes at in the browser. Rushes → Setup shows it, with a Copy button.</p>' +
       '<input id="url" placeholder="http://" value="' + esc(typed != null ? typed : s.url) + '">' +
-      '<p class="muted" style="margin-top:10px">If macOS asks whether Rushes Helper may find and connect to devices on your local network, press Allow.</p>' + err + busy;
+      '<p class="muted" style="margin-top:10px">If macOS asks whether Rushes Helper may find and connect to devices on your local network, press Allow.</p>' +
+      (s.watcher ? '' : '<div class="box" style="margin-top:18px"><div class="row"><div class="t"><b>Or: the archive is a drive on this Mac</b><small>No server: ' +
+        'Rushes runs inside this app, and you open it from the menu bar icon (Open Rushes). Choose the drive, or a folder on one. ' +
+        'Other devices can be let in later, with a password.</small></div>' + btn('Choose the drive…', 'local-pick', false, !!s.busy) + '</div></div>') + err + busy;
     f = btn('Cancel', 'done') + btn('Next', 'address', true, !!s.busy); break;
   case 'network':
     b = '<h2>macOS is not letting Rushes Helper talk to your network yet</h2>' +
@@ -898,7 +1051,13 @@ function home(s) {
     : '<p class="muted">Nothing to do right now.</p>';
   const sw = (on_, off, title, sub, dis) => '<div class="row"><div class="t">' + title + '<small>' + sub + '</small></div>' +
     '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? off[1] : off[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
-  return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' + upd(s) +
+  const L = s.local, here = L ? '<div class="box"><div class="row"><div class="t"><b>Rushes runs on this Mac</b><small>The archive: ' + esc(L.archive) +
+      (L.there ? '' : ' — <b>not connected right now</b>: search still works from the last list; connect the drive to see it change') +
+      '. Rushes runs while this does (Run in the background, below); Open Rushes is in the menu bar.</small></div>' + btn('Open Rushes', 'open-rushes') + '</div>' +
+      sw(L.others, ['others-on', 'others-off'], 'Let other devices open Rushes', L.others
+        ? 'On: phones and computers on your network, or on your Tailscale, open http://' + esc(L.name) + ':' + esc(L.port) + ' (or this Mac\'s Tailscale address, port ' + esc(L.port) + ') and sign in with Rushes\' password.'
+        : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') + '</div>' : '';
+  return '<h2>Rushes Helper on this Mac</h2><div class="box">' + state + '</div>' + here + upd(s) +
     '<div class="box"><div class="muted" style="margin-bottom:6px">What it is doing</div>' + now + '</div>' +
     // what went wrong, said where it happened (a wrong pairing code, a switch Rushes refused, …)
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
@@ -1157,6 +1316,9 @@ def own_menu(w):
                   sw("Describe footage", not s.get("describe_paused"), ("describe-resume", "describe-pause")),
                   sw("Check copies", not s.get("check_paused"), ("check-resume", "check-pause")),
                   sw("Reconnect network drives", not s.get("no_reconnect"), ("reconnect-on", "reconnect-off"))]
+        if s.get("local"):                               # Rushes on this Mac: its one switch
+            o = s["local"]["others"]
+            items.append({"label": "Let other devices open Rushes", "on": o, "do": "others-off" if o else "others-on"})
         if s.get("stopped"):
             items.append({"label": "Try again", "do": "try-again"})
         if s.get("pairing") != "this":
@@ -1239,6 +1401,12 @@ def service(args):
         # Its code is the one inside this signed app; nothing is downloaded.
         os.execv(sys.executable, [sys.executable, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "rushes_watcher.py"), "run"])
     here = os.path.dirname(os.path.abspath(__file__))
+    if local():
+        # Rushes on this Mac: started beside the helper, in its own process, and gone with it.
+        os.makedirs(LOGS, exist_ok=True)
+        with open(os.path.join(LOGS, "server.log"), "a") as out:
+            subprocess.Popen([sys.executable, "-u", os.path.abspath(__file__), "--server"],
+                             stdin=subprocess.DEVNULL, stdout=out, stderr=out)
     # The helper's code that came inside this app (a signed release, checked
     # here as any update is) goes in when it is newer than the one installed,
     # so a new app brings its code with it, even before Rushes can be asked.
@@ -1310,6 +1478,8 @@ if __name__ == "__main__":
     if "--menu" in a:
         i = a.index("--menu")
         sys.exit(menu(int(a[i + 1]), a[i + 2]))
+    if "--server" in a:
+        sys.exit(server())
     if "--service" in a or "--watch" in a:
         sys.exit(service(a))
     print(f"{NAME}: open it from Finder to see its window.")

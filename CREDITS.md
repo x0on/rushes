@@ -78,8 +78,10 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | Python 3.12 | The language the helper is written in; a private copy inside the app | Inside Rushes Helper | PSF License | python.org |
 | python-build-standalone | The ready-to-ship build of that Python | Inside Rushes Helper | MPL-2.0 | github.com/astral-sh/python-build-standalone (Astral) |
+| PHP 8.5 | Runs Rushes' pages and its own small web server, when the archive is a drive on this Mac; a private copy inside the app | Inside Rushes Helper | PHP License (with the open-source libraries built into it: SQLite, zlib, libxml2, OpenSSL, curl and others, each under its own license) | php.net |
+| static-php-cli | The ready-to-ship, self-contained build of that PHP | Inside Rushes Helper | MIT | github.com/crazywhalecc/static-php-cli |
 | xxHash (python-xxhash) | The XXH3-128 fingerprint that proves each copy matches its original — the one ASC MHL and professional copy tools read | Inside Rushes Helper | BSD-2-Clause | Yann Collet (xxHash); github.com/ifduyue/python-xxhash |
-| macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive; caffeinate keeps the Mac awake while a copy or describing runs; scutil gives the computer's name for pairing; xattr and pbpaste help find the Rushes address during setup (where the app was downloaded from, the clipboard); AppKit and WebKit draw the window; open | Part of macOS | Apple | Apple |
+| macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive and shows the window for choosing the archive; caffeinate keeps the Mac awake while a copy or describing runs; scutil gives the computer's name for pairing; xattr and pbpaste help find the Rushes address during setup (where the app was downloaded from, the clipboard); AppKit and WebKit draw the window; open | Part of macOS | Apple | Apple |
 
 ## On this Mac: describing footage
 

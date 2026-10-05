@@ -64,7 +64,9 @@ two parts do the work.
 machine's scheduler (cron) starts it once a minute, and it runs with full
 rights (as root). It does the jobs the pages ask for, such as making proxies,
 looking for duplicates, measuring space and installing approved updates. It
-also keeps the catalogue up to date and copies the database every day.
+also keeps the catalogue up to date and copies the database every day. When
+the archive is a drive on a Mac, Rushes Helper does the runner's everyday part
+itself (`runner.py`; see [Rushes on this Mac](#rushes-on-this-mac)).
 
 **3. The helper.** The program that copies footage (`ingest.py`). It runs
 where it can see both the footage and the archive. That is usually a Mac,
@@ -1185,6 +1187,79 @@ built the same way from the same launcher and window (`mac/build.py watcher`),
 and carries only its own work (`rushes_watcher.py`); neither app carries the
 other.
 
+### Rushes on this Mac
+
+When the archive is a drive this Mac sees (an external drive, a server share,
+a folder on one), Rushes itself runs inside Rushes Helper: no NAS, no server.
+In **Where Rushes is**, press **Choose the drive…** instead of typing an
+address, and pick the drive or folder in the window macOS opens.
+`pick_local()` in `mac/rushes_helper.py` then:
+
+- refuses a system folder, the whole startup disk, or anything that is not a
+  folder (`archive_ok()` in `app/runner.py`);
+- puts the pages that came inside the app into
+  `~/Library/Application Support/Rushes/web`, the web folder (`pages_in()`:
+  only the pages; settings, the database and the lists there are never
+  replaced, and the app puts its pages in again each time it starts, so an
+  updated app brings its pages with it);
+- writes `settings.json` there: the archive, the web folder, the address
+  (`http://127.0.0.1:8642`), the helper built in, the holding folder
+  `_duplicates` on the archive;
+- pairs the helper with this Rushes (`helper-id.php`): they are the same app;
+- writes `local.json` beside it (the archive, the port, other devices on or
+  off), and carries on to Installing as usual, without downloading anything:
+  the helper's code is inside the app.
+
+**What runs.** The background helper starts Rushes beside itself
+(`rushes_helper.py --server`, its output in `~/Library/Logs/Rushes/server.log`)
+and Rushes stops with it: Rushes runs while Run in the background is on.
+`server()`:
+
+- runs PHP's own web server (a copy of PHP inside the app, one for each kind of
+  chip) on the web folder, eight requests at a time. Every request goes
+  through `app/router.php` first, because that server does not read
+  `.htaccess`: hidden files and the private files `.htaccess` lists are
+  refused, and only what a browser needs is handed out (pages, styles,
+  scripts, pictures), never `settings.json`, the lists, the logs or code.
+  PHP's errors go to `php-errors.log` in the web folder;
+- starts it again within 10 s if it stops, and when other devices are turned on
+  or off;
+- once a minute, does the runner's everyday work (`Runner.minute()` in
+  `app/runner.py`): it writes `runner-alive.txt`, the archive's free space
+  (`disk.txt`), the load (`load.txt`); asks for the search update
+  (`import.php?part=web`, then `?part=video`); copies the database onto the
+  archive once a day (`_rushes/db-copies`, one per weekday); once a day asks
+  its own web server for the private files (`exposed.txt`); trims logs past
+  5 MB; and does the queue's **Rebuild the file list**, and **Try again**.
+  Jobs that move files (duplicates, caches, proxies, tidy-up) are not done on
+  a Mac yet: each is written in the log as not done.
+- Every touch of the archive has a time limit (20 s; the search update 2 min,
+  the database copy 10 min). Three that do not answer in a row stop it
+  touching the archive until **Try again** in Manage, as on a NAS.
+- **The file list** (`manifest.tsv` and `index.txt`) is one walk of the archive.
+  macOS's own folders on a drive (`.Trashes`, `.Spotlight-V100`, …) and
+  `@Recycle` are left out; symbolic links are not followed; a name with a tab
+  or a line break is left out and counted. A folder that cannot be read means
+  the list is not replaced, and a list less than half the last one is kept
+  aside (`manifest-rejected.tsv`) instead of replacing it.
+
+**Opening it.** **Open Rushes**, in the window and in the menu, opens Search in
+the browser, at `http://127.0.0.1:8642`.
+
+**Other devices** (a phone, another computer, over the office network or
+Tailscale) are off at first: Rushes answers this Mac only. **Let other devices
+open Rushes**, a switch in the window and in the menu, opens it to the network
+at `http://<this Mac's name>.local:8642`, and then:
+
+- while Rushes' password is still the first one, other devices are refused
+  and told to set a new one in Manage;
+- after that, every page asks them for that password first (the Manage
+  password: one password, as in [Who can do what](#who-can-do-what)). Signed in
+  stays signed in for a month on that device;
+- the private files stay private, signed in or not.
+
+`tests/test_router.sh` checks this door.
+
 ### Always in sight: the menu bar icon
 
 While either app works, its icon is in the menu bar, the way Tailscale's is.
@@ -1624,6 +1699,11 @@ can do today.
 - download the helper's code and Rushes Helper;
 - while no helper is paired: press the helper's switches (Pause, Try again now,
   …), and act as a helper.
+
+On a Mac running Rushes itself, "anyone who can open Rushes" is whoever uses
+this Mac, plus, only when **Let other devices open Rushes** is on, whoever
+signs in with the password from another device ([Rushes on this
+Mac](#rushes-on-this-mac)).
 
 **Someone signed in to Manage can also:**
 

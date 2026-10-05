@@ -3,6 +3,18 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## Next
+
+- **Rushes on a Mac, with the archive on a drive it sees** (the first step of
+  the Mac app, ROADMAP.md → Order 1): in Rushes Helper's setup, **Choose the
+  drive…** instead of an address. Rushes then runs inside the app, with its own
+  PHP; the minute's work is done by the app (`runner.py`): the search update,
+  the file list, free space, the daily database copy. **Open Rushes** opens
+  Search. Moving jobs are not on the Mac yet.
+- **Other devices, if you want:** a switch lets phones and computers on the
+  network (or Tailscale) open it, only after Rushes' first password is changed,
+  and only signed in with it.
+
 ## 0.11.0 — October 2026
 
 - **Upload from a phone:** photos and video straight into a shoot folder, the way

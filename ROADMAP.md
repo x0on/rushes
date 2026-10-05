@@ -264,7 +264,10 @@ like any other.
 1. **The Mac app, reading:** Rushes inside the app (its own PHP), the runner's
    work moved into the app, every path from settings; the archive is a drive
    the Mac sees. Catalogue and search, and Overview: nothing in the archive is
-   changed.
+   changed. *Built (October 2026), not yet tried on a real Mac:
+   Choose the drive… in Rushes Helper's setup, PHP and runner.py inside the
+   app, other devices behind the password. Next: try it on a small folder,
+   then on the whole copied archive once its copy is finished.*
 2. **Organizing a main drive:** the plan (departments, years, shoots), the
    tidy-up for any existing folders (not only ones Rushes copied in), every
    move recorded and undoable, then relinking editors' projects.

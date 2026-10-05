@@ -136,8 +136,13 @@ function sign_in_page(string $why): void {
 </style>
 <form class="card" method="post">
   <?= mark() ?>
+  <?php if (defined('RUSHES_SIGN_IN_ALL')): ?>
+  <h1><?= htmlspecialchars(settings()['name'] ?? 'Rushes') ?></h1>
+  <p>From another device, Rushes asks for its password first.</p>
+  <?php else: ?>
   <h1>Manage</h1>
   <p>Search and Ingest are open to anyone here. This part changes files, so it asks.</p>
+  <?php endif; ?>
   <?php if ($why): ?><p class="bad-note"><?= htmlspecialchars($why) ?></p><?php endif; ?>
   <input type="password" name="_pass" placeholder="password" autofocus autocomplete="current-password">
   <button class="btn" type="submit">Unlock</button>

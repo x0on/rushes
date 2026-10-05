@@ -31,6 +31,8 @@ app/                     everything that is installed
     state.php            everything Overview shows, and why
     admin.php            Manage
   runner.sh              runs as root every minute: jobs, updates, catalogue, backups
+  runner.py              the same everyday work, inside Rushes Helper, when the archive is a drive on that Mac
+  router.php             the door of PHP's own web server there: what may be handed out, and to whom
   proxy.sh dedupe.sh verify.sh organize.sh   what the runner's jobs call
   ingest.py              the helper: copying, proof, checking, describing lane, reporting
   transfer_state.py      the helper's saved progress (SQLite on its computer)
@@ -101,6 +103,7 @@ python3 -m unittest test_transfer          # the helper: copying, proof, pause, 
 python3 -m unittest test_watcher           # Rushes Watcher and the helper, end to end: save, deliver, quit, repoint
 python3 -m unittest test_menu              # the menu bar icon's answers, for both apps
 busybox sh test_runner.sh                  # the runner, on a pretend archive, on its bad days
+sh test_router.sh                          # Rushes on a Mac: private files, other devices, the password
 php test_server.php                        # the catalogue, imports, plans, pulls, passwords
 php test_pages.php                         # what Overview says
 PHPBIN=php sh test_helper.sh               # the helper's doors and install script
@@ -110,6 +113,7 @@ node test_relink.js                        # relinking FCPXML and XML addresses
 cd .. && python3 app/analyze.py --selftest  # describing's rules, without a model
 python3 app/ingest.py --selftest
 python3 app/release.py --selftest
+python3 app/runner.py                       # Rushes on a Mac: the minute's work, on a pretend drive
 ```
 
 `test_runner.sh` rewrites `/share/` to a temporary folder, so it runs anywhere
@@ -151,6 +155,8 @@ zip on the archive in `_rushes`, where Setup offers them for download. It needs:
 
 - the two `python-build-standalone` archives (Python 3.12 for arm64 and x86_64)
   next to `build.py`;
+- for Rushes Helper, the two static PHP archives named in `build.py` (`PHP`,
+  from static-php.dev's "common" build, arm64 and x86_64) next to `build.py`;
 - `python3.12` and the `ziglang` pip package, to compile `launcher.c` for both
   processors;
 - `rcodesign` (apple-codesign);

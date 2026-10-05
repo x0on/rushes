@@ -12,6 +12,8 @@ its own work: the helper's comes from Rushes (signed releases), the Watcher's
 Runs on Linux or a Mac. Needs, next to this file or on the PATH:
   - the two python-build-standalone "install_only_stripped" tarballs named in PBS below
     (github.com/astral-sh/python-build-standalone/releases)
+  - for Rushes Helper, the two static PHP tarballs named in PHP below (static-php.dev,
+    the "common" build: dl.static-php.dev/static-php-cli/common/), for Rushes on a Mac
   - python3.12, to precompile the standard library
   - zig, to compile the launcher for both chips (pip install ziglang)
   - rcodesign, to sign it (github.com/indygreg/apple-platform-rs, apple-codesign)
@@ -28,6 +30,10 @@ APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
 PBS = "cpython-3.12.11+20250918-{}-apple-darwin-install_only_stripped.tar.gz"
 ARCHES = {"arm64": "aarch64", "x86_64": "x86_64"}
+PHP = "php-8.5.8-cli-macos-{}.tar.gz"
+# Rushes on a Mac (HOW-IT-WORKS.md): the pages, without what only runs elsewhere
+# (the NAS's scripts, the helper's code, which goes in on its own, below).
+NOT_PAGES = (".htaccess", "router.php", "release.sig", "settings.json")     # settings: each Mac's own, never one from here
 # One number for all of Rushes: the pages, the helper's code and both apps (app/VERSION).
 VERSION = open(os.path.join(HERE, "..", "app", "VERSION")).read().strip()
 RC = shutil.which("rcodesign") or next(os.path.join(r, "rcodesign") for r, _, fs in os.walk(TOP, followlinks=True) if "rcodesign" in fs)
@@ -118,6 +124,17 @@ else:
     # and brings that code with it (installed when newer than the one in place).
     for f in ("release.py", "ingest.py", "transfer_state.py", "analyze.py", "release.sig"):
         shutil.copy(os.path.join(HERE, "..", "app", f), os.path.join(C, "Resources"))
+    # Rushes itself, for an archive on a drive of this Mac: its pages, its door
+    # (router.php), its minute's work (runner.py), and PHP for each chip.
+    for f in ("runner.py", "router.php"):
+        shutil.copy(os.path.join(HERE, "..", "app", f), os.path.join(C, "Resources"))
+    shutil.copytree(os.path.join(HERE, "..", "app"), os.path.join(C, "Resources", "pages"),
+                    ignore=lambda d, names: [n for n in names if n in NOT_PAGES or n == "__pycache__" or n.endswith((".py", ".sh", ".tsv", ".sqlite", ".db"))])
+    for a, z in ARCHES.items():
+        with tarfile.open(os.path.join(TOP, PHP.format(z))) as t:
+            m = t.getmember("php"); m.name = f"php-{a}"
+            t.extract(m, os.path.join(C, "Resources"), filter="tar")
+        os.chmod(os.path.join(C, "Resources", f"php-{a}"), 0o755)
 shutil.copy(os.path.join(HERE, "AppIcon.icns"), os.path.join(C, "Resources"))
 # What Rushes is made of, and whose each part is: shown in the app's window.
 shutil.copy(os.path.join(HERE, "..", "CREDITS.md") if os.path.exists(os.path.join(HERE, "..", "CREDITS.md"))
