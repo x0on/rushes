@@ -1304,7 +1304,9 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   aside (`manifest-rejected.tsv`) instead of replacing it.
 
 **Opening it.** **Open Rushes**, in the window and in the menu, opens Search in
-the browser, at `http://127.0.0.1:8642`.
+the browser, at `http://127.0.0.1:8642`. Until Rushes answers there (it is
+starting, or Run in the background is off), the button says **Starting Rushes …**
+and does nothing (`local_up()`).
 
 **What the pages say on a Mac** (`on_mac()` in `db/config.php`, from
 `archive.runs_on` in `settings.json`): Overview names Rushes Helper, not a NAS

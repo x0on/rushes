@@ -125,6 +125,18 @@ def local_url():
     return f"http://127.0.0.1:{local().get('port') or PORT}"
 
 
+def local_up():
+    """Rushes on this Mac answering: None when Rushes is elsewhere, else whether its door opens."""
+    if not local():
+        return None
+    import socket
+    try:
+        socket.create_connection(("127.0.0.1", local().get("port") or PORT), 0.3).close()
+        return True
+    except OSError:
+        return False
+
+
 def local_name():
     """This Mac on the network (name.local), for other devices."""
     try:
@@ -520,7 +532,8 @@ class Window:
     def state(self):
         with self.lock:
             s = dict(self.s)
-        s.update(name=NAME, watcher=WATCHER, set_up=bool(s["url"]) and service_points_here())
+        s.update(name=NAME, watcher=WATCHER, set_up=bool(s["url"]) and service_points_here(),
+                 local_up=None if WATCHER else local_up())     # Open Rushes waits until Rushes answers
         if s["step"] == "home":
             s.update(self.home())
         return s
@@ -566,7 +579,7 @@ class Window:
 
     def home(self):
         loaded, pid = service_running()
-        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": WORKLOG,
+        h = {"running": loaded, "pid": pid, "log": log_tail(), "app": HOMEAPP, "logfile": WORKLOG, "local_up": local_up(),
              "newer": self.newer(), "version": app_version()}
         if WATCHER:
             # Everything is on this computer: what it says it is doing, and its switch.
@@ -656,6 +669,8 @@ class Window:
             self.show_fda(); self.set(waiting=True)
         elif do == "later":
             self.set(step="later")
+        elif do == "open-rushes" and local_up() is False:
+            self.set(said="Rushes is still starting on this Mac. It opens in a moment: Open Rushes is ready when it answers.")
         elif do == "open-rushes":
             subprocess.run(["open", s["url"] + ("/db/admin.php#projects" if WATCHER else "/" if local() else "/db/admin.php")])
         elif do == "local-pick":
@@ -937,6 +952,8 @@ async function act(d, extra) {
   if (d === 'done') { document.body.innerHTML = ''; return; }
   poll();
 }
+// Open Rushes, only once Rushes answers: "Starting Rushes …" until then (Rushes on this Mac)
+function openBtn(s, go) { return s.local_up === false ? btn('Starting Rushes …', 'open-rushes', go, true) : btn('Open Rushes', 'open-rushes', go); }
 function btn(label, d, go, dis) { return '<button' + (go ? ' class="go"' : '') + (dis ? ' disabled' : '') + ' data-do="' + d + '">' + esc(label) + '</button>'; }
 // What Rushes is made of: every part, what it does, its license. Opens over
 // any screen and goes back to it.
@@ -1034,8 +1051,8 @@ function draw() {
       : '<p>Rushes Helper is set up. It runs in the background, starts when you log in, restarts itself if it stops, and keeps itself up to date from Rushes.</p>' +
         '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
       '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
-    f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
-  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + btn('Remove…', 'remove') + (s.watcher ? '' : ' ' + btn('Where Rushes is…', 'change-where')) + '</span>' + btn('Show the log', 'show-log') + btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
+    f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : openBtn(s) + btn('Done', 'done', true); break;
+  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + btn('Remove…', 'remove') + (s.watcher ? '' : ' ' + btn('Where Rushes is…', 'change-where')) + '</span>' + btn('Show the log', 'show-log') + openBtn(s) + btn('Done', 'done', true); break;
   case 'remove':
     b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
@@ -1080,7 +1097,7 @@ function home(s) {
     '<button class="sw' + (on_ ? ' on' : '') + '" data-do="' + (on_ ? off[1] : off[0]) + '"' + (dis ? ' disabled' : '') + ' title="' + (on_ ? 'Turn off' : 'Turn on') + '"></button></div>';
   const L = s.local, here = L ? '<div class="box"><div class="row"><div class="t"><b>Rushes runs on this Mac</b><small>The archive: ' + esc(L.archive) +
       (L.there ? '' : ' — <b>not connected right now</b>: search still works from the last list; connect the drive to see it change') +
-      '. Rushes runs while this does (Run in the background, below); Open Rushes is in the menu bar.</small></div>' + btn('Open Rushes', 'open-rushes') + '</div>' +
+      '. Rushes runs while this does (Run in the background, below); Open Rushes is in the menu bar.</small></div>' + openBtn(s) + '</div>' +
       sw(L.others, ['others-on', 'others-off'], 'Let other devices open Rushes', L.others
         ? 'On: phones and computers on your network, or on your Tailscale, open http://' + esc(L.name) + ':' + esc(L.port) + ' (or this Mac\'s Tailscale address, port ' + esc(L.port) + ') and sign in with Rushes\' password.'
         : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') + '</div>' : '';
@@ -1355,7 +1372,8 @@ def own_menu(w):
     items.append({"label": f"Update to {s['newer']}", "do": "update-app"} if s.get("newer")
                  else {"label": "Check for updates", "do": "check-updates"})
     items += [
-              {"label": "Open Rushes", "do": "open-rushes"}, {"label": "Show the log", "do": "show-log"},
+              {"label": "Starting Rushes …"} if s.get("local_up") is False else {"label": "Open Rushes", "do": "open-rushes"},
+              {"label": "Show the log", "do": "show-log"},
               {"label": "Collect diagnostics", "do": "diagnostics"}, {"label": "Ask for help…", "do": "ask-help"},
               {"label": f"Open {NAME}…", "do": "open-window"}, {"sep": True},
               {"label": f"Quit {NAME}", "do": "quit"}]
