@@ -20,6 +20,7 @@
 // Premiere for every kind of file — MP4 and MOV ignore sidecar .xmp files — and
 // nothing is written beside the footage.
 require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/activity.php';
 db_init();
 $db = db();
 
@@ -46,6 +47,12 @@ $file = trim(preg_replace('/[^\w\- ]+/u', '', $p['name'])) ?: 'pull';
 $win  = (bool)preg_match('/^([A-Za-z]:|\\\\\\\\)/', $base);
 
 // Where a clip is, on the computer downloading this.
+// Said in Activity: who took which pull out, and for what (a zip too big to make is not taken out)
+if (!($fmt === 'zip' && (array_sum(array_column($items, 'bytes')) > 1073741824 || count($items) > 1000 || !class_exists('ZipArchive'))))
+activity_add('out', "Downloaded the pull “{$p['name']}” " . (['zip' => 'as the files themselves', 'list' => 'as a list of where its clips are',
+    'fcpxml' => 'for Final Cut Pro or DaVinci Resolve'][$fmt] ?? 'for Premiere') . ': ' . count($items) . (count($items) === 1 ? ' clip' : ' clips')
+    . (($sz = activity_size((int)array_sum(array_column($items, 'bytes')))) !== '' ? " ($sz)" : ''));
+
 $local = function (string $rel) use ($base, $win): string {
     return $win ? $base . '\\' . str_replace('/', '\\', $rel) : $base . '/' . $rel;
 };

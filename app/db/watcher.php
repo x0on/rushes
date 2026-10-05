@@ -19,6 +19,7 @@
 //   POST action=project name saved files outside missing (names, separated by ;) shoot
 //   GET  ?where&project=<name>                    where its delivered files are now, inside the archive
 require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/activity.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 function said(int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); exit; }
@@ -145,6 +146,9 @@ if ($act === 'delivered') {
         array_splice($all, $at, 0, [$line]);
         $ok = @file_put_contents("$q.new", implode("\n", $all) . "\n") !== false && @rename("$q.new", $q);
         if (!$ok) said(500, ['error' => 'could not write the queue — is the web folder writable?']);
+        $n = count(array_filter($out, fn($l) => str_starts_with($l, 'file' . "\t")));
+        activity_add('in', 'Sent the project “' . basename($proj) . '”' . ($n ? " with $n " . ($n === 1 ? 'file' : 'files') . ' it uses' : '')
+            . ': the archive takes them in next', (string)($me['name'] ?? ''));
     }
     said(200, ['queued' => "{$me['key']}/$batch"]);
 }

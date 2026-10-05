@@ -75,4 +75,10 @@ if (@file_put_contents($file, $body) === false) {
     exit;
 }
 
+// Said in Activity: who asked for what (the jobs that change something, not the looks)
+$said = ['apply' => 'Moved duplicate copies into the holding folder (nothing deleted)', 'undo' => 'Put duplicate copies back where they were',
+         'cacheclean' => 'Moved cache files that rebuild themselves into the holding folder', 'cache-undo' => 'Put cache files back',
+         'organize-undo' => 'Undid the old date-based layout', 'verify' => 'Asked for every copy to be checked',
+         'proxy-build' => 'Started making previews', 'proxy-stop' => 'Stopped making previews'][$action] ?? '';
+if ($said !== '') { require_once __DIR__ . '/db/activity.php'; activity_add('changed', $said . ($drive !== '' ? ' · on ' . basename($drive) : '')); }
 echo json_encode(['queued' => $action, 'runs_within' => '60 seconds']);

@@ -415,27 +415,10 @@ if ($copies && $copies['lost'][0] > 0) {
 if (!$c) $c[] = ['level' => 'good', 'title' => 'Everything is in order',
     'body' => 'Search is current, nothing is waiting, no job needs you.', 'act' => null];
 
-// ── what has been done lately ─────────────────────────────────────────────
-$recent = [];
-if (is_readable("$WEB/ingest-history.tsv")) {
-    $lines = array_slice(array_filter(file("$WEB/ingest-history.tsv"), function ($l) {
-        $f = explode("\t", $l);
-        return !(($f[1] ?? '') === 'copied' && (int)($f[3] ?? 0) === 0 && (int)($f[4] ?? 0) === 0);
-    }), -12);
-    foreach (array_reverse($lines) as $l) {
-        $f = explode("\t", rtrim($l, "\n"));
-        if (count($f) < 6) continue;
-        // a tidy-up is named for what it did, not for its plan's number
-        $tidy = preg_match('/^(un)?tidy /', $f[2]);
-        $what = ['copied' => 'brought over', 'tidied' => 'moved onto the shelf', 'untidied' => 'put back',
-                 'refused' => 'refused', 'traced' => 'traced', 'interrupted' => 'interrupted',
-                 'dropped' => 'dropped', 'analysed' => 'described', 'delivered' => "taken in from an editor's computer",
-                 'proven' => 'checked against its originals', 'checked' => 'checked for damage', 'counted' => 'counted'][$f[1]] ?? 'looked at';
-        $recent[] = ['when' => $f[0], 'what' => $what,
-                     'target' => $tidy ? ($f[1] === 'untidied' ? 'A tidy-up' : 'Tidy-up') : basename($f[2]), 'files' => (int)$f[3], 'bytes' => (int)$f[4],
-                     'secs' => (int)$f[5], 'note' => $f[6] ?? ''];
-    }
-}
+// ── what has been done lately, and by whom (activity.php: the same story the Rushes app tells) ──
+// Names are people's: only for someone signed in (the helper reads this page too, and needs none of it)
+require_once __DIR__ . '/activity.php';
+$recent = signed_in() ? activity_list(150) : [];
 
 // the log, so the admin page can show what actually happened
 $log = '';

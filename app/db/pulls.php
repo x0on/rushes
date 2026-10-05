@@ -13,6 +13,7 @@
 // team, and a pull is theirs to share. Every write is checked: a clip must be
 // a file search knows, inside the archive; names are plain text.
 require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/activity.php';
 header('Content-Type: application/json');
 db_init();
 $db = db();
@@ -59,9 +60,11 @@ if ($act === 'create') {
     // called "Council" never collide.
     $base = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $name) ?: 'pull')), '-') ?: 'pull';
     $slug = substr($base, 0, 40) . '-' . substr(bin2hex(random_bytes(3)), 0, 5);
+    $by = clean((string)($_POST['made_by'] ?? ''), 60) ?: activity_who();     // the name this browser was given, if none is typed
     $st = $db->prepare('INSERT INTO pulls (slug, name, made_by, created, updated) VALUES (?,?,?,?,?)');
-    foreach ([$slug, $name, clean((string)($_POST['made_by'] ?? ''), 60), time(), time()] as $i => $v) $st->bindValue($i + 1, $v);
+    foreach ([$slug, $name, $by, time(), time()] as $i => $v) $st->bindValue($i + 1, $v);
     $st->execute();
+    activity_add('out', "Started the pull “{$name}”", $by);
     out(['slug' => $slug, 'name' => $name]);
 }
 

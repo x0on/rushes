@@ -369,7 +369,7 @@ upkeep() {
     if [ ! -f $WEB/exposed.txt ] || [ -n "$(find $WEB/exposed.txt -mmin +1440 2>/dev/null)" ]; then
         : > $WEB/exposed.txt.new
         if command -v curl >/dev/null 2>&1; then
-            for f in rushes.sqlite db-copy.sqlite ingest-queue.tsv helper-refused.tsv; do
+            for f in rushes.sqlite db-copy.sqlite ingest-queue.tsv helper-refused.tsv activity.tsv; do
                 [ -f "$WEB/$f" ] || continue
                 code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "${RUSHES_URL:-http://127.0.0.1}/$f" 2>/dev/null)
                 [ "$code" = 200 ] && echo "$f" >> $WEB/exposed.txt.new

@@ -29,7 +29,7 @@ function refuse(int $code, string $why): bool {
 }
 if ($path === '' || $path[0] !== '/' || str_contains($path, "\0") || preg_match('#(^|/)\.#', $path))
     return refuse(404, 'Not found.');
-if (preg_match('/^(\.adminpass|\.pull-.*|rushes\.sqlite.*|db-copy\.sqlite.*|ingest-queue\.tsv|helper-refused\.tsv)$/', $base))
+if (preg_match('/^(\.adminpass|\.pull-.*|rushes\.sqlite.*|db-copy\.sqlite.*|ingest-queue\.tsv|helper-refused\.tsv|activity\.tsv)$/', $base))
     return refuse(403, 'Private.');
 $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
 if (!is_dir($_SERVER['DOCUMENT_ROOT'] . $path) && !in_array($ext, ['php', 'html', 'css', 'js', 'png', 'ico', 'svg', 'jpg', 'webp'], true)

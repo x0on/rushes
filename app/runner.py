@@ -33,7 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.s
 SKIP = {"@Recycle", ".Trashes", ".Spotlight-V100", ".fseventsd", ".DocumentRevisions-V100",
         ".TemporaryItems", ".DS_Store_cache"}
 TRIM = ("helper.log", "proxy.log", "proxy-built.tsv", "proxy-built.tsv.err", "proxy-speed.tsv", "proxy-failed.tsv", "php-errors.log")
-PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv")
+PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
 
 def archive_ok(a, web):
@@ -72,6 +72,14 @@ class Runner:
 
     def say(self, line):
         self.log(time.strftime("%Y-%m-%d %H:%M:%S  ") + line)
+
+    def activity(self, kind, text):
+        """One line in Activity (db/activity.php reads activity.tsv): drives coming and going."""
+        try:
+            with open(self.p("activity.tsv"), "a") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{kind}\t\t{text}\n")
+        except OSError:
+            pass
 
     def arch(self):
         """The archive, from settings.json: a folder that exists, never a system folder, never the web folder."""
@@ -190,6 +198,16 @@ class Runner:
         self.write("runner-alive.txt", f"{int(time.time())}\n")
         t0, self.stalled = time.time(), False
         a = self.arch()
+        # The archive's own drive, plugged in or not: said in Activity when that changes
+        here = "1" if a and archive_ok(a, self.web) else "0"
+        try: was = open(self.p("archive-here.txt")).read().strip()
+        except OSError: was = ""
+        if was != here:
+            self.write("archive-here.txt", here + "\n")
+            if was:
+                name = os.path.basename((self.settings().get("archive") or {}).get("local", "") or "") or "The archive"
+                self.activity("problem" if here == "0" else "changed", f"{name} was unplugged: Search keeps showing its files, marked not plugged in"
+                              if here == "0" else f"{name} is plugged in again")
         if self.may_v():
             def df():
                 u = shutil.disk_usage(a)       # the columns of df -P, in KB, as state.php reads them
@@ -209,6 +227,12 @@ class Runner:
             if back and not any(x.endswith("-drive.job") for x in os.listdir(self.p("queue"))):
                 self.write(f"queue/{time.strftime('%Y%m%d-%H%M%S')}-drive.job", "ACTION=reindex\n")
                 self.say("plugged in: " + ", ".join(d["name"] for d in back) + " — its list is made again")
+            for d in ds:
+                b = before.get(d["source"])
+                if b and b.get("connected") and not d["connected"]:
+                    self.activity("changed", f"{d['name']} was unplugged: Search keeps showing its files, marked not plugged in")
+                elif d["connected"] and not (b or {}).get("connected"):
+                    self.activity("changed", f"{d['name']} was plugged in" + (" again" if b else "") + ": its list of files is made again")
         # The helper runs in the Rushes app itself, beside this; Setup asks.
         self.write("helper-builtin.txt", "running\n")
         load = " ".join(f"{x:.2f}" for x in os.getloadavg())

@@ -54,6 +54,9 @@ if (isset($_POST['_newpass'])) {
   .transfer-summary .job-percent small { font-size:14px; font-weight:500; color:var(--muted) }
   .transfer-summary p { margin:5px 0; line-height:1.5 }
   .side .ev { padding: 9px 14px }
+  .actk { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: 10px; vertical-align: middle }
+  .actk button { font: 12px var(--font); border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 12px; padding: 1px 9px; cursor: pointer }
+  .actk button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg) }
   .hctl { display: block; margin: 12px 0; padding: 10px 14px;
           border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; background: var(--surface) }
   .hctl .t { flex: 1; min-width: 220px; color: var(--muted) }
@@ -256,7 +259,8 @@ if (isset($_POST['_newpass'])) {
       <!-- ══ activity ══ -->
       <section id="pane-activity" hidden>
         <div class="panel" style="margin-top:8px">
-          <header><b>What has happened</b></header>
+          <header><b>What has happened, and who did it</b>
+            <span class="actk" id="actKinds"><button data-k="all" aria-pressed="true">Everything</button><button data-k="in">In</button><button data-k="out">Out</button><button data-k="changed">Changes</button><button data-k="check">Checks</button><button data-k="problem">Problems</button></span></header>
           <div id="events"></div>
         </div>
         <details style="margin-top:16px">
@@ -532,6 +536,15 @@ const tb  = function (b) {
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
 let pane = 'overview', latestTransfer = null, quiet = 0;
+// Activity's filter: everything, or one kind (activity.php names them)
+let actKind = 'all';
+document.querySelectorAll('#actKinds button').forEach(function (b) {
+  b.onclick = function () {
+    actKind = b.dataset.k;
+    document.querySelectorAll('#actKinds button').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
+    load();
+  };
+});
 
 // ── moving between sections ────────────────────────────────────────────────
 // Where the minute's work runs: inside Rushes Helper on a Mac (HOW-IT-WORKS.md → Rushes on this Mac), or the server's runner
@@ -1154,24 +1167,24 @@ async function load() {
     b.onclick = function () { act(d.conditions[+b.dataset.a].act[0], b); };
   });
 
-  // Activity: what happened, as events. Same markup in the pane and in the
-  // side column, so the two can never tell different stories.
-  const evs = (d.recent || []).map(function (r) {
-    const drop = r.what === 'dropped';          // a share that went away, and came back
-    return '<div class="ev"><span class="ico">' + (r.what === 'interrupted' ? 'Ⅱ' : drop ? '↯' : '✓') + '</span><div class="t">' +
-      esc(r.target) + ' ' + esc(r.what) +
-      '<small>' + (drop ? esc(r.note) + ' after ' + Math.max(1, Math.round(r.secs / 60)) + ' min'
-        : r.files.toLocaleString() + ' files · ' + tb(r.bytes) + (r.secs ? ' · ' + Math.round(r.secs / 60) + ' min' : '')) +
-      '</small></div>' +
-      '<span class="when">' + esc(String(r.when).slice(5, 16)) + '</span></div>';
-  });
-  $('events').innerHTML = evs.length ? evs.join('') : '<div class="empty">Nothing yet.</div>';
+  // Activity: what happened and who did it (activity.php). Same markup in the
+  // pane and in the side column, so the two can never tell different stories.
+  const ICO = {in: ['↓', 'ok'], out: ['↑', ''], changed: ['•', ''], check: ['✓', 'ok'], problem: ['!', 'bad'], people: ['☺', '']};
+  const ev = function (r) {
+    const i = ICO[r.kind] || ICO.changed;
+    return '<div class="ev" data-k="' + esc(r.kind) + '"><span class="ico ' + i[1] + '">' + i[0] + '</span><div class="t">' +
+      (r.who ? '<b>' + esc(r.who) + '</b> · ' : '') + esc(r.text) + '</div>' +
+      '<span class="when">' + esc(String(r.at).slice(5, 16)) + '</span></div>';
+  };
+  const recent = d.recent || [];
+  const evs = recent.filter(function (r) { return actKind === 'all' || r.kind === actKind || (actKind === 'changed' && r.kind === 'people'); }).map(ev);
+  $('events').innerHTML = evs.length ? evs.join('') : '<div class="empty">Nothing ' + (actKind === 'all' ? 'yet.' : 'of this kind yet.') + '</div>';
   $('sideLog').innerHTML = (d.running
       ? '<div class="ev"><span class="ico">•</span><div class="t">' + esc(d.running) +
         '<small>running now' + (d.progress ? ' · ' + d.progress.pct + '%' : '') + '</small>' +
         '<div class="bar' + (d.progress ? '' : ' wait') + '"><i style="width:' +
         ((d.progress && d.progress.pct) || 0) + '%"></i></div></div></div>'
-      : '') + (evs.length ? evs.slice(0, 12).join('') : '<div class="empty">Nothing yet.</div>');
+      : '') + (recent.length ? recent.slice(0, 12).map(ev).join('') : '<div class="empty">Nothing yet.</div>');
   $('sideNow').textContent = d.runner && d.runner.ok
     ? 'Picking up jobs · checked ' + (d.runner.ago || 'just now')
     : d.runner && d.runner.stopped ? 'Stopped: nothing runs until Start' : 'Not picking up jobs';

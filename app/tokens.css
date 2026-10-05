@@ -394,7 +394,7 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
   .mnav h2 { margin: 18px 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600 }
   .mnav a { display: block; padding: 13px 12px; border-radius: 10px; color: var(--fg); text-decoration: none; font-size: 17px }
   .mnav a[aria-current="page"] { background: var(--surface); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent) }
-  .mnav-foot { display: flex; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line) }
+  .mnav-foot { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line) }
   .mnav-foot button { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--fg); font-size: 15px }
   .mnav-open body { overflow: hidden }
   /* Search's own list (where to look) stays a row you swipe: its edge fades, so it shows there is more. */

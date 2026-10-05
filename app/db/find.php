@@ -538,7 +538,7 @@ async function openPullDlg() {
   $('pdList').querySelectorAll('.pd-pick').forEach(function (b) {
     b.onclick = function () { usePull({ slug: b.dataset.slug, name: b.dataset.name }); };
   });
-  $('pdBy').value = store('myName') || '';
+  $('pdBy').value = store('myName') || (decodeURIComponent((document.cookie.match(/(?:^|; )rushes_who=([^;]*)/) || [])[1] || ''));     // or the name this browser was given (head.php)
   $('pullDlg').showModal(); $('pdName').focus();
 }
 async function usePull(p) {

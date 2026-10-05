@@ -14,6 +14,7 @@
 //
 // One helper (pairing it again replaces the last one); any number of Watchers.
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/activity.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 function said(int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
@@ -50,6 +51,7 @@ if ($act === 'forget') {
     foreach (array_keys($w) as $k) if (strlen($key) === 16 && str_starts_with((string)$k, $key)) unset($w[$k]);
     if (count($w) === $n) said(404, ['error' => 'No such computer.']);
     if (!php_keep(watchers_file(), $w)) said(500, ['error' => 'Could not save — is the web folder writable?']);
+    activity_add('changed', 'Removed an editor\'s computer: it can send nothing more');
     said(200, ['forgotten' => $key]);
 }
 
@@ -78,9 +80,11 @@ if (($c['role'] ?? 'helper') === 'watcher') {
     $h = hash('sha256', $id); $name = (string)($c['name'] ?? '') ?: ($host ?: 'Editor');
     $w = watchers(); $w[$h] = ['host' => $host, 'name' => $name, 'folder' => "$name (" . substr($h, 0, 4) . ')', 'at' => time()];
     if (!php_keep(watchers_file(), $w)) said(500, ['error' => 'Could not save the pairing — is the web folder writable?']);
+    activity_add('changed', "Added the editor's computer “{$name}”" . ($host !== '' && $host !== $name ? " ($host)" : '') . ': it can send projects from now on', $name);
     said(200, ['id' => $id, 'host' => $host, 'name' => $name, 'folder' => $w[$h]['folder'], 'role' => 'watcher']);
 }
 if (!php_keep(helper_id_file(), ['id' => $id, 'host' => $host, 'at' => time()]))
     said(500, ['error' => 'Could not save the pairing — is the web folder writable?']);
 @unlink(web_dir() . '/helper-refused.tsv');
+if (!on_mac()) activity_add('changed', 'Paired the Mac that copies footage: ' . ($host ?: 'a Mac'), '');
 said(200, ['id' => $id, 'host' => $host]);

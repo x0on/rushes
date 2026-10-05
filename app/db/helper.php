@@ -210,4 +210,9 @@ if ($act === 'pause' || $act === 'resume') {
 }
 $c['by'] = $act; $c['at'] = time();
 if (!helper_control_save($c)) bail(500, 'Could not save — is the web folder writable?');
+$said = ['pause' => 'Paused copying', 'resume' => 'Let copying carry on', 'describe-pause' => 'Paused describing footage',
+         'describe-resume' => 'Let describing footage carry on', 'check-pause' => 'Paused checking copies', 'check-resume' => 'Let checking copies carry on',
+         'reconnect-off' => 'Turned off reconnecting network drives by itself', 'reconnect-on' => 'Turned on reconnecting network drives by itself',
+         'skip' => 'Took a folder out of the transfer: ' . basename((string)($_POST['path'] ?? ''))][$act] ?? '';
+if ($said !== '') { require_once __DIR__ . '/activity.php'; activity_add('changed', $said); }
 out(['ok' => true, 'control' => $c]);

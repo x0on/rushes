@@ -119,6 +119,8 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   <a class="tab tab-i" href="/db/admin.php" style="margin-left:12px"
      <?= $NAV === 'admin' ? 'aria-current="page"' : '' ?>><?= icon('lock', 1.8) ?>Manage</a>
 
+  <!-- Who is using this browser: their name goes beside what they do, in Activity -->
+  <button class="tab" id="hWho" type="button" title="The name Activity shows beside what you do here">Who?</button>
   <button class="tab tab-i" id="hTheme" title="light or dark"
           aria-label="Switch light or dark"><svg viewBox="0 0 24 24" fill="none"
     stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
@@ -141,9 +143,53 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   <?= $m('Setup', '/setup.php') ?>
   <div class="mnav-foot">
     <button type="button" id="mTheme">Light or dark</button>
+    <button type="button" id="mWho" onclick="document.getElementById('hMenu').click(); document.getElementById('hWho').click()">Your name, for Activity</button>
     <form method="post" action="/db/admin.php"><button name="_signout" value="1" type="submit">Sign out</button></form>
   </div>
 </nav>
+
+<!-- Asked once in each browser, in the page, never in a pop-up: a name, not an account
+     (db/activity.php). Anyone can type any name; editors' computers are known by their pairing. -->
+<div class="whobar" id="whoBar" hidden>
+  <form id="whoForm">
+    <label for="whoName"><b>Who is using Rushes here?</b> Your name goes beside what you do, in Activity: a pull you make,
+      one you download, a switch you turn. It is kept in this browser only.</label>
+    <span class="whorow"><input id="whoName" maxlength="40" autocomplete="name" placeholder="Your name">
+      <button class="btn" type="submit">That's me</button>
+      <button class="btn quiet" type="button" id="whoLater">Not now</button></span>
+  </form>
+</div>
+<style>
+.whobar { border-bottom: 1px solid var(--line); background: var(--raised); padding: 10px 16px }
+.whobar form { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; font-size: 13px }
+.whobar label { flex: 1 1 320px; min-width: 0; color: var(--muted) } .whobar label b { color: var(--fg) }
+.whorow { display: flex; gap: 8px; flex-wrap: wrap } .whorow input { width: 12em; padding: 6px 9px; font: inherit;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg) }
+</style>
+<script>
+(function () {
+  var bar = document.getElementById('whoBar'), btn = document.getElementById('hWho'), inp = document.getElementById('whoName');
+  var name = (document.cookie.match(/(?:^|; )rushes_who=([^;]*)/) || [])[1];
+  name = name ? decodeURIComponent(name) : '';
+  var later = false; try { later = sessionStorage.getItem('rushes_who_later') === '1'; } catch (e) {}
+  function show() { btn.textContent = name || 'Who?'; btn.title = name ? 'You are ' + name + ' here: press to change it' : 'Say who you are, for Activity'; }
+  show();
+  bar.hidden = !!name || later;
+  btn.onclick = function () { bar.hidden = !bar.hidden; if (!bar.hidden) { inp.value = name; inp.focus(); } };
+  document.getElementById('whoLater').onclick = function () { bar.hidden = true; try { sessionStorage.setItem('rushes_who_later', '1'); } catch (e) {} };
+  document.getElementById('whoForm').onsubmit = function (e) {
+    e.preventDefault();
+    var n = inp.value.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 40);
+    if (!n) { inp.focus(); return; }
+    // said in Activity first (while the old name is still the cookie), then kept
+    fetch('/db/activity.php', {method: 'POST', body: new URLSearchParams({action: 'hello', name: n})}).catch(function () {}).then(function () {
+      document.cookie = 'rushes_who=' + encodeURIComponent(n) + '; max-age=31536000; path=/; SameSite=Lax';
+      name = n; show(); bar.hidden = true;
+      btn.textContent = '✓ ' + n; setTimeout(show, 2500);       // seen to have happened
+    });
+  };
+})();
+</script>
 
 <script>
 (function () {

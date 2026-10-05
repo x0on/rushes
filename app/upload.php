@@ -153,7 +153,7 @@ window.__sha256 = sha256;            // for the page's own check, below, and the
 
 // ── what is chosen ──────────────────────────────────────────────────────────
 let picked = [], running = false;
-$('who').value = store.get('rushes-uploader') || '';
+$('who').value = store.get('rushes-uploader') || (decodeURIComponent((document.cookie.match(/(?:^|; )rushes_who=([^;]*)/) || [])[1] || ''));     // or the name this browser was given (head.php)
 // Safari can restart a page (short of memory, often while the iPhone prepares a big
 // video from Photos): the form comes back as it was, and an upload that was cut off
 // says how to carry on. A page cannot keep the chosen files; choosing them again resumes.
