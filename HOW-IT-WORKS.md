@@ -1314,6 +1314,15 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   the list is not replaced, and a list less than half the last one is kept
   aside (`manifest-rejected.tsv`) instead of replacing it.
 
+**When the archive drive is unplugged.** Rushes itself (its pages, the
+catalogue, the database) lives on the Mac, in the app's folder, not on the
+drive. So Rushes keeps working: Overview says first that the drive is not
+plugged in (and stops saying anything about its free space, which is from
+before), Search answers from the last list and marks each of its files
+**not plugged in**, and the minute's work, the helper, duplicates, caches and
+tidy-ups touch nothing on it and wait. Plugged in again, everything carries
+on by itself; nothing is lost and nothing half-done is left.
+
 **Opening it.** **Open Rushes**, in the window and in the menu, opens Search in
 the browser, at `http://127.0.0.1:8642`. Until Rushes answers there (it is
 starting, or Run in the background is off), the button says **Starting Rushes …**

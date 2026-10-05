@@ -112,6 +112,13 @@ if (!$transferOpen && ($mac['phase'] ?? '') === 'blocked') {
 // The NAS's own disks (raid.txt, written by the runner from /proc/mdstat each
 // minute): a RAID rebuilding, or one missing a disk, is said at the top.
 if (($rc = raid_said((string)@file_get_contents("$WEB/raid.txt"))) && $now - (int)@filemtime("$WEB/raid.txt") < 600) $c[] = $rc;
+// On a Mac the archive is a drive that can be unplugged: said first, plainly. Rushes itself
+// (these pages, the catalogue) lives on the Mac, so Search keeps working from the last list.
+if (on_mac() && !is_dir(archive_dir()))
+    $c[] = ['level' => 'bad', 'title' => basename(archive_dir()) . ' is not plugged in',
+        'body' => 'It is the archive. Search still works from its last list, and its files say they need it plugged in. '
+            . 'Copying, tidying, duplicates and checks wait, and nothing is lost: plug it in and everything carries on by itself.',
+        'act' => null, 'help' => null];
 $stopped = file_exists("$WEB/STOP");
 if ($stopped) {
     $c[] = ['level' => 'warn', 'title' => on_mac() ? 'Rushes\' minute\'s work is stopped' : 'The runner is stopped',
@@ -137,12 +144,13 @@ if ($stopped) {
 // far enough above it to give about a day's warning at the speed this link runs.
 $FLOOR = limit('disk_stop_free');
 $WARN  = limit('disk_warn_free');
-if ($disk['free'] && $disk['free'] < $FLOOR) {
+$arch_away = on_mac() && !is_dir(archive_dir());          // its free space is from before it went: not said
+if (!$arch_away && $disk['free'] && $disk['free'] < $FLOOR) {
     $c[] = ['level' => 'bad', 'title' => 'The archive is full enough to stop copying',
         'body' => sprintf('%s free, %d%% used. Bringing footage over has stopped by itself '
                         . 'and will start again once there is room. Nothing was lost.',
                   tb($disk['free']), $disk['pct']), 'act' => null];
-} elseif ($disk['free'] && $disk['free'] < $WARN) {
+} elseif (!$arch_away && $disk['free'] && $disk['free'] < $WARN) {
     $c[] = ['level' => 'warn', 'title' => 'Running low on space',
         'body' => sprintf('%s free, %d%% used. Copying stops on its own at %s free, '
                         . 'which at this link speed is about a day away.',

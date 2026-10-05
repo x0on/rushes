@@ -84,9 +84,12 @@ $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
 $res = $st->execute();
 if ($res === false) { echo json_encode(['error' => 'rows query: ' . $db->lastErrorMsg()]); exit; }
 $rows = [];
+// On a Mac, the archive itself is a drive that can be unplugged
+$arch_away = on_mac() && !is_dir(archive_dir());
 while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
     // a file on a drive kept where it is: which drive, and whether it is plugged in now
     if ($d = drive_of($r['path'])) { $r['drive'] = (string)$d['name']; $r['away'] = empty($d['connected']); }
+    elseif ($arch_away && str_starts_with($r['path'], archive_dir() . '/')) { $r['drive'] = basename(archive_dir()); $r['away'] = true; }
     $rows[] = $r;
 }
 
