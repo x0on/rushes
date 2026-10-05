@@ -21,9 +21,12 @@ serve 127.0.0.1:18642 0; sleep 1.5
 U=http://127.0.0.1:18642
 [ "$(code $U/)" = 200 ] && [ "$(code $U/db/state.php)" = 200 ] && [ -s "$R/web/rushes.sqlite" ] && ok "this Mac opens the pages" || no "pages"
 [ "$(code $U/rushes.sqlite)" = 403 ] && ok "the database is never handed out" || no "database"
-for f in settings.json job.log .htaccess runner.sh ingest.py 'x/../settings.json'; do
+for f in job.log .htaccess runner.sh ingest.py ingest-history.tsv 'x/../job.log' db/settings.json; do
     [ "$(code "$U/$f")" = 404 ] || no "$f was handed out"
-done; ok "settings, logs, hidden files and code are never handed out"
+done; ok "logs, lists, hidden files and code are never handed out"
+echo "1	$R/Archive/a" > "$R/web/manifest.tsv"
+[ "$(code $U/settings.json)" = 200 ] && [ "$(code $U/rules.json)" = 200 ] && [ "$(code $U/manifest.tsv)" = 200 ] \
+    && ok "the three files the helper reads are there for it" || no "the helper's files"
 
 # Other devices: this machine's own address that is not 127.0.0.1
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -34,6 +37,8 @@ case "$(curl -s --noproxy '*' http://$IP:18644/)" in *"first password"*) ok "ref
 (cd "$R/web" && "$PHP" -r 'require "db/auth.php"; set_pass("parks123");'); sleep 3     # opcache looks again after 2 s
 [ "$(code http://$IP:18644/)" = 200 ] && case "$(curl -s --noproxy '*' http://$IP:18644/index.html)" in *_pass*) true ;; *) false ;; esac \
     && ok "other devices see the sign-in page first" || no "no sign-in page"
+case "$(curl -s --noproxy '*' http://$IP:18644/db/pair.php)" in *'"pairing"'*) ok "an editor's computer can ask about pairing without signing in" ;; *) no "pair.php" ;; esac
+[ "$(code http://$IP:18644/db/watcher.php)" = 403 ] && ok "but only a paired editor's computer gets past watcher.php" || no "watcher.php"
 [ "$(code -c "$R/cj" -d _pass=wrong http://$IP:18644/)" = 401 ] && ok "a wrong password is refused" || no "wrong password"
 [ "$(code -b "$R/cj" -c "$R/cj" -d _pass=parks123 http://$IP:18644/)" = 302 ] \
     && [ "$(code -b "$R/cj" http://$IP:18644/db/state.php)" = 200 ] && ok "signed in, other devices open Rushes" || no "sign in"

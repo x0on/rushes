@@ -2,7 +2,9 @@
 // the wait up to a minute; the first good one goes back to normal.
 // Run: node tests/test_every.js
 const fs = require('fs');
-const src = fs.readFileSync(__dirname + '/../app/head.php', 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+// the script that holds every() (head.php has more than one)
+const src = [...fs.readFileSync(__dirname + '/../app/head.php', 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)]
+  .map(m => m[1]).find(x => x.includes('window.every'));
 
 let hidden=false, now=0, timers=[], calls=0, fail=true, listeners=[];
 global.window=global; global.document={get hidden(){return hidden}, addEventListener:(e,f)=>listeners.push(f), getElementById:()=>null, documentElement:{dataset:{}}};

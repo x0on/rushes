@@ -7,12 +7,15 @@
 // Mac). That server does not read .htaccess, so its rules are here, and more:
 //
 //   - nothing hidden, nothing private (.htaccess's list), and only what a
-//     browser needs (pages, styles, scripts, pictures): never the database,
-//     the lists, the logs, settings.json or the code beside the pages
+//     browser needs (pages, styles, scripts, pictures), plus the three files
+//     the helper reads (settings.json, rules.json, the file list manifest.tsv):
+//     never the database, the other lists, the logs or the code
 //   - from this Mac: everything else as usual
 //   - from any other device: only when "Let other devices open Rushes" is on
 //     (RUSHES_OTHERS=1, set by Rushes Helper), only once Rushes' password is
-//     no longer the default, and only signed in with it
+//     no longer the default, and only signed in with it; except the three
+//     doors editors' computers use, which check their own (a paired ID, the
+//     six-digit code, or the password)
 //
 // It is outside the folder it serves, so it can never be asked for itself.
 $path = rawurldecode((string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH));
@@ -28,7 +31,8 @@ if ($path === '' || $path[0] !== '/' || str_contains($path, "\0") || preg_match(
 if (preg_match('/^(\.adminpass|\.pull-.*|rushes\.sqlite.*|db-copy\.sqlite.*|ingest-queue\.tsv|helper-refused\.tsv)$/', $base))
     return refuse(403, 'Private.');
 $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
-if (!is_dir($_SERVER['DOCUMENT_ROOT'] . $path) && !in_array($ext, ['php', 'html', 'css', 'js', 'png', 'ico', 'svg', 'jpg', 'webp'], true))
+if (!is_dir($_SERVER['DOCUMENT_ROOT'] . $path) && !in_array($ext, ['php', 'html', 'css', 'js', 'png', 'ico', 'svg', 'jpg', 'webp'], true)
+    && !in_array($path, ['/settings.json', '/rules.json', '/manifest.tsv'], true))
     return refuse(404, 'Not found.');
 
 if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
@@ -40,6 +44,9 @@ if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
     if (pass_is_default())
         return refuse(403, 'Rushes still has its first password. On the Mac, open Rushes → Manage and set your own; '
             . 'then other devices can sign in with it.');
+    // The doors editors' computers (Rushes Watcher) use check their own: a paired ID, the six-digit
+    // code, or the password (helper.php, pair.php, watcher.php). A browser's pages need signing in.
+    if (in_array($path, ['/db/helper.php', '/db/pair.php', '/db/watcher.php'], true)) return false;
     define('RUSHES_SIGN_IN_ALL', true);           // sign_in_page says it is for all of Rushes
     require_sign_in();                            // the sign-in page, until signed in
     session_write_close();                        // the page opens it again: never held across a long upload

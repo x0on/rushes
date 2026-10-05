@@ -104,6 +104,7 @@ python3 -m unittest test_watcher           # Rushes Watcher and the helper, end 
 python3 -m unittest test_menu              # the menu bar icon's answers, for both apps
 busybox sh test_runner.sh                  # the runner, on a pretend archive, on its bad days
 sh test_router.sh                          # Rushes on a Mac: private files, other devices, the password
+python3 -m unittest test_mac_runner        # Rushes on a Mac: duplicates and caches, with a Mac's stat and awk
 php test_server.php                        # the catalogue, imports, plans, pulls, passwords
 php test_pages.php                         # what Overview says
 PHPBIN=php sh test_helper.sh               # the helper's doors and install script

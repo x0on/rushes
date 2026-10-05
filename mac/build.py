@@ -126,7 +126,7 @@ else:
         shutil.copy(os.path.join(HERE, "..", "app", f), os.path.join(C, "Resources"))
     # Rushes itself, for an archive on a drive of this Mac: its pages, its door
     # (router.php), its minute's work (runner.py), and PHP for each chip.
-    for f in ("runner.py", "router.php"):
+    for f in ("runner.py", "router.php", "dedupe.sh", "verify.sh"):
         shutil.copy(os.path.join(HERE, "..", "app", f), os.path.join(C, "Resources"))
     shutil.copytree(os.path.join(HERE, "..", "app"), os.path.join(C, "Resources", "pages"),
                     ignore=lambda d, names: [n for n in names if n in NOT_PAGES or n == "__pycache__" or n.endswith((".py", ".sh", ".tsv", ".sqlite", ".db"))])

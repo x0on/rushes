@@ -224,10 +224,17 @@ if (isset($_POST['_newpass'])) {
           <header><b>Rebuildable cache</b><span class="n" id="cTotal"></span></header>
           <div id="cRows"><div class="empty">Counting&hellip;</div></div>
         </div>
+        <div class="panel" id="cOwnBox" style="margin-top:12px" hidden>
+          <div class="row"><span class="nm">These are my own drives</span>
+            <button class="btn quiet" id="cOwn">…</button></div>
+          <p class="note" style="margin:0;padding:0 14px 12px">On: caches that rebuild themselves are deleted, which gives
+            the space back at once; what went is written down (cache-deleted.tsv). Off: everything is moved to the
+            holding folder, as on an archive a team shares. Either way, nothing under Left alone is ever touched.</p>
+        </div>
         <div class="btns" style="margin-top:12px">
           <button class="btn" id="cMove" disabled>Move them out</button>
           <button class="btn quiet" id="cBack" title="Every cache file still in the holding folder goes back where it was">Put them back</button>
-          <span class="note">They go to the holding folder, not the bin. Editing software rebuilds
+          <span class="note" id="cNote">They go to the holding folder, not the bin. Editing software rebuilds
             them from the originals, so nothing is lost; the space comes back when you empty that folder.</span>
         </div>
 
@@ -522,6 +529,8 @@ let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 
 let pane = 'overview', latestTransfer = null, quiet = 0;
 
 // ── moving between sections ────────────────────────────────────────────────
+// Where the minute's work runs: inside Rushes Helper on a Mac (HOW-IT-WORKS.md → Rushes on this Mac), or the server's runner
+const ON_MAC = <?= on_mac() ? 'true' : 'false' ?>, WHERE = ON_MAC ? 'on this Mac' : 'on the server';
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
                  duplicates: 'Duplicates', describe: 'Describe',
                  activity: 'Activity', tools: 'Jobs and tools', projects: "Editors' projects" };
@@ -595,7 +604,8 @@ document.querySelectorAll('#pane-duplicates [data-t]')
 
 // ── asking for work ────────────────────────────────────────────────────────
 const ASK = {
-  scan:     'Read every file in the archive to find the ones that are the same (Czkawka, in its container). Hours for a big archive; other jobs wait meanwhile. Moves nothing.',
+  scan:     <?= on_mac() ? json_encode('Read the files that have the same size as another, every byte, to find the ones that are the same (on this Mac). Hours for a big archive the first time, minutes after: what was read is remembered. Pausing copying stops it, and it carries on next time. Moves nothing.')
+                 : json_encode('Read every file in the archive to find the ones that are the same (Czkawka, in its container). Hours for a big archive; other jobs wait meanwhile. Moves nothing.') ?>,
   plan:     'Look through the archive for files that are the same file. Moves nothing.',
   apply:    'Move every duplicate copy to the holding folder. Nothing is deleted, and this can be undone.',
   undo:     'Put everything in the holding folder back where it came from.',
@@ -671,8 +681,7 @@ document.querySelectorAll('#exports a').forEach(function (a) {
 async function loadCache() {
   try {
     const d = await (await fetch('junk.php?json=1&t=' + Date.now())).json();
-    const n = d.sweep.reduce(function (a, x) { return a + x.files; }, 0);
-    const b = d.sweep.reduce(function (a, x) { return a + x.bytes; }, 0);
+    const n = d.total.files, b = d.total.bytes;        // each file once, even when two groups name it
     $('cTotal').textContent = n.toLocaleString() + ' files · ' + tb(b);
     $('cRows').innerHTML = d.sweep.map(function (x) {
       return '<div class="row' + (x.files ? '' : ' dim') + '"><span class="nm">' + esc(x.label) + '</span>' +
@@ -686,11 +695,26 @@ async function loadCache() {
     $('cEx').textContent = d.examples.join('\n') || 'Nothing to move.';
     $('cMove').disabled = !n;
     $('nCache').textContent = n ? tb(b) : '';
+    // On a Mac, the person's own drives: caches that rebuild are deleted (runner.py → cache_clean)
+    $('cOwnBox').hidden = !d.mac; cacheOwn = !!d.own;
+    $('cOwn').textContent = d.own ? 'On — turn off' : 'Off — turn on';
+    $('cMove').textContent = d.own ? 'Clear them out' : 'Move them out';
+    if (d.own) $('cNote').textContent = 'Deleted, for good: editing software makes them again from the originals when it needs them. The space comes back at once.';
   } catch (e) {
     $('cRows').innerHTML = '<div class="empty">Could not count the cache: ' + esc(e.message) + '</div>';
   }
 }
+let cacheOwn = false;
 $('cMove').onclick = function () { moveCache(this); };
+$('cOwn').onclick = async function () {
+  const b = this; b.disabled = true;
+  try {
+    const j = await (await fetch('junk.php', { method: 'POST', body: new URLSearchParams({ own: cacheOwn ? '0' : '1' }) })).json();
+    if (j.error) oops(j.error);
+    else b.textContent = j.own ? 'On ✓ caches that rebuild will be deleted' : 'Off ✓ caches will be moved aside';
+  } catch (e) { oops('could not do that: ' + e.message); }
+  setTimeout(function () { b.disabled = false; loadCache(); }, 2500);
+};
 // Undo for "Move them out": asked twice on the button itself, then a job.
 $('cBack').onclick = async function () {
   const b = this;
@@ -709,7 +733,9 @@ $('cBack').onclick = async function () {
 // Two calls behind one button: work out which files are rebuildable scratch,
 // then move them. They go to the holding folder, not the bin.
 async function moveCache(btn) {
-  if (!sure(btn, 'They go to the holding folder, not the bin; the space comes back when you empty that folder. ' +
+  if (!sure(btn, cacheOwn ? 'Caches that rebuild themselves are deleted, for good; the rest go to the holding folder. ' +
+      'Editing software makes them again from the originals when it needs them.'
+      : 'They go to the holding folder, not the bin; the space comes back when you empty that folder. ' +
       'Editing software rebuilds them from the originals, so nothing is lost.', 'cache-out')) return;
   const was = btn.textContent;
   btn.disabled = true; btn.textContent = 'listing them…';
@@ -1007,9 +1033,9 @@ function drawHelper(d) {
         sw(!h.check_paused, ['check-resume', 'check-pause'], 'Check copies', 'When there is nothing to copy, copies are read again against their fingerprints. Off pauses it; where it got to is kept.' + ask, !h.fresh) +
         sw(!h.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, the helper connects it again once the server answers. Off: you connect drives in Finder.', false)
       : '') +
-    '<div class="hgrp" style="margin-top:10px">On the server</div>' +
-    sw(!off, ['start-runner', 'stop-runner'], 'Rushes on the server', off
-      ? 'Off: nothing runs on the server (no jobs, no checks, nothing touching VIDEO) until you turn it on. These pages keep working.'
+    '<div class="hgrp" style="margin-top:10px">' + (ON_MAC ? 'On this Mac' : 'On the server') + '</div>' +
+    sw(!off, ['start-runner', 'stop-runner'], ON_MAC ? 'Rushes\' minute\'s work' : 'Rushes on the server', off
+      ? 'Off: nothing runs ' + WHERE + ' (no jobs, no checks, nothing touching the archive) until you turn it on. These pages keep working.'
       : 'Its jobs and checks, once a minute. Off stops all of it, for a disk rebuild or repairs, until you turn it on. These pages keep working.', false) +
     (stuck ? '<div class="alarm"><p><b>' + esc(cur.split('/').pop()) + ' stopped at ' + esc(clock(d.transfer.updated)) +
       ' and has not started again.</b> The helper keeps retrying by itself. If it keeps stopping — a file it cannot read, ' +
@@ -1038,8 +1064,8 @@ function drawHelper(d) {
               'reconnect-on': 'On ✓ The helper connects dropped shares again by itself, only when the server answers.',
               'check-pause': 'Checking paused ✓ It stops after the file it is reading; where it got to is kept. Copying is not affected.',
               'check-resume': 'Checking resumed ✓ It carries on from the same file whenever there is nothing to copy.',
-              'stop-runner': 'Stopped ✓ Nothing runs on the server until Start. What it is in the middle of finishes; these pages keep working.',
-              'start-runner': 'Started ✓ The runner on the server checks in within a minute.' }[what] };
+              'stop-runner': 'Stopped ✓ Nothing runs ' + WHERE + ' until Start. What it is in the middle of finishes; these pages keep working.',
+              'start-runner': 'Started ✓ The minute\'s work ' + WHERE + ' checks in within a minute.' }[what] };
       } catch (e) { said = { until: Date.now() + 8000, text: 'Could not reach the archive: ' + e.message }; }
       load();
     };
@@ -1092,7 +1118,7 @@ async function load() {
       try {
         const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: b.dataset.rep }) })).json();
         b.textContent = r.error ? 'Did not happen: ' + r.error
-          : r.stopped === true ? 'Stopped ✓ Nothing runs on the server until Start'
+          : r.stopped === true ? 'Stopped ✓ Nothing runs ' + WHERE + ' until Start'
           : r.stopped === false ? 'Started ✓ The runner checks in within a minute'
           : 'Asked ✓ The runner looks within a minute';
         if (r.stopped !== undefined) setTimeout(load, 2500);

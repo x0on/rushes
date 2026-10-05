@@ -576,6 +576,8 @@ class Window:
             return h
         if local():
             c = local()
+            # Setup (02) can move the archive: settings.json says where it is now
+            c["archive"] = (read_json(os.path.join(WEB, "settings.json")).get("archive") or {}).get("local") or c["archive"]
             h["local"] = {"archive": c["archive"], "others": bool(c.get("others")), "port": c.get("port") or PORT,
                           "there": os.path.isdir(c["archive"]), "name": local_name()}
         try:
@@ -728,9 +730,14 @@ class Window:
         s = read_json(os.path.join(WEB, "settings.json")) or read_json(os.path.join(RES, "pages", "settings.example.json"))
         s.pop("_", None)
         url = local_url() if local() else f"http://127.0.0.1:{PORT}"
-        s.setdefault("archive", {}).update(label=os.path.basename(arch), local=arch, web=WEB, url=url, as_seen_from_helper=arch)
+        s.setdefault("archive", {}).update(label=os.path.basename(arch), local=arch, web=WEB, url=url, as_seen_from_helper=arch, runs_on="mac")
         s.setdefault("helper", {})["mode"] = "built_in"
         s["holding"] = {"duplicates": arch + "/_duplicates", "cache": arch + "/_duplicates/_media-cache"}
+        # Free space: a NAS's floor (5 TB) would stop a laptop drive at once. Copying stops
+        # below 2% of the drive (20 GB to 500 GB) and Overview warns below 5% (50 GB to 1 TB).
+        lim, total = s.setdefault("limits", {}), shutil.disk_usage(arch).total
+        if lim.get("disk_stop_free") is None: lim["disk_stop_free"] = max(20 << 30, min(total // 50, 500 << 30))
+        if lim.get("disk_warn_free") is None: lim["disk_warn_free"] = max(50 << 30, min(total // 20, 1 << 40))
         write_json(os.path.join(WEB, "settings.json"), s)
         # the helper is this app: paired with this Rushes from the start
         if not os.path.exists(os.path.join(WEB, "helper-id.php")):

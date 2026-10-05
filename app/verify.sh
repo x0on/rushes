@@ -133,7 +133,7 @@ while IFS="$TAB" read -r dst src keeper bytes; do
             "$TAB" "$TAB" "$dst" "$TAB" "$keeper" "$TAB" >> $T/verify.rows
         bad=$((bad + 1)); continue
     fi
-    ksize=$(stat -c %s "$keeper" 2>/dev/null || echo 0)
+    ksize=$(stat -c %s "$keeper" 2>/dev/null || stat -f %z "$keeper" 2>/dev/null || echo 0)     # GNU/BusyBox, or a Mac
     if [ "$ksize" != "$bytes" ]; then
         printf 'ROW%sno%s%s%s%s%sthe copy we kept changed size\n' \
             "$TAB" "$TAB" "$dst" "$TAB" "$keeper" "$TAB" >> $T/verify.rows

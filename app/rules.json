@@ -134,7 +134,9 @@
     "_": [
       "Editing scratch that regenerates itself from the originals. Large, worthless,",
       "and safe to move out — but only what genuinely rebuilds.",
-      "'sweep' is offered for removal. 'keep' is reported and never touched."
+      "'sweep' is offered for removal. 'keep' is reported and never touched.",
+      "'rebuilds': the program makes it again from the originals by itself, so on a",
+      "person's own drives (Setup) it is deleted rather than moved aside."
     ],
     "sweep": [
       {
@@ -143,33 +145,34 @@
           "pek",
           "cfa",
           "ims"
-        ]
+        ],
+        "rebuilds": true
       },
       {
-        "label": "Capture One",
+        "label": "Capture One cache",
         "ext": [
           "cof",
           "cop",
-          "cot",
-          "cos",
-          "coa"
+          "cot"
         ],
         "path_contains": [
-          "/CaptureOne/"
-        ]
+          "/CaptureOne/Cache/"
+        ],
+        "rebuilds": true
       },
       {
         "label": "Media cache folders",
         "path_contains": [
           "/Media Cache"
-        ]
+        ],
+        "rebuilds": true
       },
       {
         "label": "Resolve cache",
         "path_contains": [
-          "/CacheClip/",
-          "/.gallery/"
-        ]
+          "/CacheClip/"
+        ],
+        "rebuilds": true
       }
     ],
     "keep": [
@@ -186,6 +189,25 @@
           "/.ProjectBackups/"
         ],
         "why": "Same reason."
+      },
+      {
+        "label": "Capture One adjustments",
+        "ext": [
+          "cos",
+          "coa",
+          "comask"
+        ],
+        "path_contains": [
+          "/CaptureOne/Settings"
+        ],
+        "why": "The edits themselves: the colour, crops and masks someone made. Nothing makes them again."
+      },
+      {
+        "label": "Resolve gallery stills",
+        "path_contains": [
+          "/.gallery/"
+        ],
+        "why": "Stills and grades someone saved on purpose. Nothing makes them again."
       }
     ]
   },
@@ -221,12 +243,31 @@
         "(awk). Folders that only one archive has go in its settings.json, set in Setup."
       ],
       "rules": [
-        {"contains": "/@Recycle/",    "weight": 1000, "why": "the recycle bin: deleted on purpose"},
-        {"contains": "/Copied_",      "weight": 400,  "why": "a copy someone made of a folder"},
-        {"contains": "/Media Cache/", "weight": 300,  "why": "Premiere's cache, rebuilt on demand"},
-        {"matches": "\\.(MXF|MOV|MP4)\\.(MXF|MOV|MP4)$", "weight": 200, "why": "a file saved twice with its extension doubled"}
+        {
+          "contains": "/@Recycle/",
+          "weight": 1000,
+          "why": "the recycle bin: deleted on purpose"
+        },
+        {
+          "contains": "/Copied_",
+          "weight": 400,
+          "why": "a copy someone made of a folder"
+        },
+        {
+          "contains": "/Media Cache/",
+          "weight": 300,
+          "why": "Premiere's cache, rebuilt on demand"
+        },
+        {
+          "matches": "\\.(MXF|MOV|MP4)\\.(MXF|MOV|MP4)$",
+          "weight": 200,
+          "why": "a file saved twice with its extension doubled"
+        }
       ],
-      "settings_weight": {"never_keep": 500, "other_side": 450}
+      "settings_weight": {
+        "never_keep": 500,
+        "other_side": 450
+      }
     }
   },
   "conditions": {

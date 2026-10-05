@@ -10,7 +10,17 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   drive…** instead of an address. Rushes then runs inside the app, with its own
   PHP; the minute's work is done by the app (`runner.py`): the search update,
   the file list, free space, the daily database copy. **Open Rushes** opens
-  Search. Moving jobs are not on the Mac yet.
+  Search. Editors' computers (Rushes Watcher) can pair with it while other
+  devices are let in.
+- **Duplicates and caches on a Mac:** the scan is done by Rushes itself (no
+  container): files of the same size, read in full, remembered so a scan
+  again reads only what changed. The plan, the move, putting back and the
+  check work as on a NAS. On a person's own drives, caches that rebuild are
+  deleted (Manage → Cache → These are my own drives); otherwise moved aside.
+- **Capture One's adjustments and Resolve's gallery stills are left alone:**
+  they were on the cache list, but they are someone's work.
+- **Overview and Setup speak of the Mac** when Rushes runs on one, with free
+  space limits that fit a laptop's drive.
 - **Other devices, if you want:** a switch lets phones and computers on the
   network (or Tailscale) open it, only after Rushes' first password is changed,
   and only signed in with it.

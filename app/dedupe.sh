@@ -46,6 +46,8 @@ MTIMES=${MTIMES:-$WEB/dedupe-mtimes.txt}
 RULES=${RULES:-$WEB/dedupe-rules.tsv}
 KEEP_SIDE=${KEEP_SIDE:-project}
 TAB=$(printf '\t')
+# a file's size: GNU and BusyBox stat say it with -c, a Mac's (BSD) with -f
+fsize() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0; }
 
 MODE=${1:-dry}
 
@@ -98,7 +100,11 @@ if [ "$KEEP_SIDE" = "oldest" ]; then
         "$RESULTS" | sort -u > "$MTIMES.paths"
     # xargs batches the stat calls: one process per few thousand files, not per file
     : > "$MTIMES"
-    xargs -r -d '\n' -n 500 stat -c '%Y|%n' < "$MTIMES.paths" >> "$MTIMES" 2>/dev/null
+    if stat -c %Y / >/dev/null 2>&1; then
+        xargs -r -d '\n' -n 500 stat -c '%Y|%n' < "$MTIMES.paths" >> "$MTIMES" 2>/dev/null
+    else    # a Mac's stat (BSD) and xargs
+        tr '\n' '\0' < "$MTIMES.paths" | xargs -0 -n 500 stat -f '%m|%N' >> "$MTIMES" 2>/dev/null
+    fi
     echo "  got times for $(wc -l < "$MTIMES") of $(wc -l < "$MTIMES.paths") files"
 fi
 
@@ -199,7 +205,7 @@ while IFS="$TAB" read -r bytes src keep; do
     if [ ! -f "$src" ]; then
         printf 'SRC-MISSING\t%s\n' "$src" >> "$LOG"; skipped=$((skipped + 1)); continue
     fi
-    actual=$(stat -c %s "$src" 2>/dev/null || echo 0)
+    actual=$(fsize "$src")
     if [ "$actual" != "$bytes" ]; then
         printf 'SIZE-MISMATCH\t%s\n' "$src" >> "$LOG"; skipped=$((skipped + 1)); continue
     fi

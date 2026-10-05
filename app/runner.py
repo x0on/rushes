@@ -13,13 +13,19 @@ minute's work); only what a drive on this computer needs:
   - the private-file check (exposed.txt)
   - the queue: Rebuild the file list (reindex, manifest), Try again (reset-breaker);
     and the first file list of a new archive, by itself
+  - duplicates: the scan (here, in Python: no container), the plan, moving the
+    copies aside, putting them back, checking the holding folder (dedupe.sh and
+    verify.sh, as on a NAS)
+  - editing caches: moved aside, or deleted on a person's own drives (Setup)
 
 Every touch of the archive has a time limit, and three stalls in a row stop
 it touching the archive until Try again — the same breaker as runner.sh.
-Jobs that move files (duplicates, caches, proxies) are not here yet: they are
-refused with a line in the log (ROADMAP.md → Order, 2 and 3).
+Proxies are not here yet: those jobs are refused with a line in the log
+(ROADMAP.md → Order, 5).
 """
-import json, os, shutil, threading, time, urllib.request
+import hashlib, json, os, re, shutil, subprocess, threading, time, urllib.request
+
+HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.sh are beside this file
 
 SKIP = {"@Recycle", ".Trashes", ".Spotlight-V100", ".fseventsd", ".DocumentRevisions-V100",
         ".TemporaryItems", ".DS_Store_cache"}
@@ -213,17 +219,10 @@ class Runner:
             action = fields.get("ACTION", "")
             self.write("job-status.txt", f"running: {action}\n")
             self.log(f"\n{'=' * 62}\n{time.strftime('%Y-%m-%d %H:%M:%S')}  {action}\n{'=' * 62}")
-            if action in ("reindex", "manifest"):
-                self.log("walking the archive once — file list and search index together")
-                self.build_index()
-            elif action == "reset-breaker":
-                for n in ("video-tripped.txt", "video-stalls.txt"):
-                    try: os.remove(self.p(n))
-                    except OSError: pass
-                self.log("  the archive may be reached again — the next minute tries it")
-            elif action != "refused":
-                # ponytail: moving jobs come with organizing a drive (ROADMAP.md → Order, 2)
-                self.log(f"  {action}: not on this computer yet — nothing was done")
+            try:
+                self.job(action, fields)
+            except Exception as e:                       # said; the queue carries on
+                self.log(f"  {action} stopped: {e}")
             self.log(f"--- finished {time.strftime('%H:%M:%S')} ---")
             self.write("job-status.txt", "idle\n")
         # A new archive has no list yet: the first one is made by itself (once each start).
@@ -235,6 +234,243 @@ class Runner:
             self.write("job-status.txt", "idle\n")
         if not os.path.exists(self.p("job-status.txt")):
             self.write("job-status.txt", "idle\n")
+
+    def job(self, action, f):
+        a = self.arch()
+        moving = action in ("plan", "apply", "undo", "verify", "scan", "cacheclean", "cache-undo", "holding")
+        if moving and (a is None or not self.may_v()):
+            self.log("  the archive is not there, copying is paused, or it stopped after not answering — nothing was done")
+            return
+        if action in ("reindex", "manifest"):
+            self.log("walking the archive once — file list and search index together")
+            self.build_index()
+        elif action == "reset-breaker":
+            for n in ("video-tripped.txt", "video-stalls.txt"):
+                try: os.remove(self.p(n))
+                except OSError: pass
+            self.log("  the archive may be reached again — the next minute tries it")
+        elif action in ("plan", "apply", "undo"):
+            # never trust the queue file (as runner.sh): only these, only inside the archive
+            keep = f.get("KEEP_SIDE") if f.get("KEEP_SIDE") in ("project", "card", "short", "oldest") else "project"
+            dest = f.get("DEST", "")
+            if not dest.startswith(a + "/") or ".." in dest.split("/"):
+                dest = a + "/_duplicates"
+            self.script("dedupe.sh", {"plan": [], "apply": ["--apply"], "undo": ["--undo"]}[action], KEEP_SIDE=keep, DEST=dest)
+            if action != "plan":
+                self.refresh()
+        elif action == "verify":
+            q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", f.get("QUERY", ""))[:200]
+            if ".." in q:
+                self.log("  refused a folder with .. in it"); return
+            self.script("verify.sh", [q] if q else [])
+        elif action == "scan":
+            self.scan()
+        elif action in ("cacheclean", "cache-undo"):
+            (self.cache_clean if action == "cacheclean" else self.cache_undo)()
+            self.refresh()
+        elif action == "holding":
+            self.holding()
+        elif action == "df":
+            u = shutil.disk_usage(a)
+            self.log(f"  {a}: {u.free / 1e9:,.1f} GB free of {u.total / 1e9:,.1f} GB")
+        elif action == "organize-undo":
+            self.log("  the old date-based layout was never used on this computer: nothing to put back")
+        elif action != "refused":
+            # ponytail: proxies come with the app's own describing (ROADMAP.md → Order, 5)
+            self.log(f"  {action}: not on this computer yet — nothing was done")
+
+    def script(self, name, args, **env):
+        """dedupe.sh or verify.sh, as runner.sh runs them, their words into the log."""
+        with open(self.p("job.log"), "a") as out:
+            r = subprocess.run(["sh", os.path.join(HERE, name), *args], stdout=out, stderr=out, stdin=subprocess.DEVNULL,
+                               env=dict(os.environ, WEB=self.web, ARCH=self.arch(), **env))
+        if r.returncode:
+            self.log(f"  {name} ended with {r.returncode}")
+
+    def refresh(self):
+        """After anything that moves files: the file list again, the holding folder, free space."""
+        self.log("\nre-reading the archive after the job...")
+        self.build_index()
+        self.holding()
+        u = shutil.disk_usage(self.arch())
+        self.log(f"  free space: {u.free / 1e9:,.1f} GB")
+
+    def holding(self):
+        """How much sits in the holding folder: what emptying it would give back (holding-kb.txt)."""
+        h, kb = os.path.join(self.arch(), "_duplicates"), 0
+        for root, _, files in os.walk(h):
+            for n in files:
+                try: kb += os.lstat(os.path.join(root, n)).st_size // 1024
+                except OSError: pass
+        self.write("holding-kb.txt", f"{kb}\n")
+        self.log(f"holding folder: {kb / 1e6:,.1f} GB")
+
+    # ── duplicates: the scan ─────────────────────────────────────────────────
+    def scan(self):
+        """Which files are the same, by every byte: files of one size (from the
+        file list, so no walk), then their first and last 64 KB, then all of
+        them. A fingerprint is remembered with the file's size and date
+        (dup-hashes.tsv), so a scan again reads only what changed, and a scan
+        stopped (paused, the drive gone) carries on where it was. The answer is
+        results_duplicates.txt, in the form dedupe.sh reads (Czkawka's)."""
+        a = self.arch()
+        if not os.path.exists(self.p("manifest.tsv")):
+            self.log("  no file list yet: Rebuild the file list first"); return
+        skip = (a + "/_duplicates/", a + "/_rushes/")
+        by_size = {}
+        with open(self.p("manifest.tsv"), encoding="utf-8", errors="surrogateescape") as m:
+            for line in m:
+                size, _, path = line.rstrip("\n").partition("\t")
+                if not size.isdigit() or int(size) == 0 or path.startswith(skip) or "/@Recycle/" in path or '"' in path:
+                    continue
+                by_size.setdefault(int(size), []).append(path)
+        groups = {k: v for k, v in by_size.items() if len(v) > 1}
+        grouped = {p for v in groups.values() for p in v}
+        todo = sum(len(v) for v in groups.values())
+        self.log(f"  {todo:,} files share a size with another; reading them to compare")
+        cache = {}
+        try:
+            with open(self.p("dup-hashes.tsv"), encoding="utf-8", errors="surrogateescape") as h:
+                for line in h:
+                    x = line.rstrip("\n").split("\t", 4)
+                    if len(x) == 5: cache[x[4]] = x[:4]          # size, date, first-and-last, every byte
+        except OSError:
+            pass
+        keep, seen, unread, last, stopped = {}, 0, 0, time.time(), False
+
+        def fingerprint(path, size, part):
+            key = [str(size), str(int(os.stat(path).st_mtime))]
+            got = cache.get(path)
+            if not got or got[:2] != key:
+                got = cache[path] = key + ["", ""]           # new, or changed since: read again
+            i = 2 if part else 3
+            if not got[i]:
+                h = hashlib.blake2b(digest_size=20)
+                with open(path, "rb") as f:
+                    if part and size > 131072:
+                        h.update(f.read(65536)); f.seek(-65536, 2); h.update(f.read(65536))
+                    else:
+                        while chunk := f.read(4 << 20):
+                            h.update(chunk)
+                if os.path.getsize(path) != size:
+                    raise OSError("it changed while it was read")
+                got[i] = h.hexdigest()
+            return got[i]
+
+        out = []
+        for size, paths in sorted(groups.items(), reverse=True):        # the biggest first: where the space is
+            for part in (True, False):
+                split = {}
+                for path in paths:
+                    if not self.may_v():
+                        stopped = True; break
+                    try:
+                        split.setdefault(fingerprint(path, size, part), []).append(path)
+                    except OSError:
+                        unread += 1
+                    if time.time() - last > 30:
+                        last = time.time()
+                        self.log(f"progress: {seen} of {todo} ({100 * seen // max(todo, 1)}%)")
+                if stopped: break
+                paths = [p for g in split.values() if len(g) > 1 for p in g]
+                if not part:
+                    out += [(size, g) for g in split.values() if len(g) > 1]
+            seen += len(groups[size])
+            if stopped: break
+        with open(self.p("dup-hashes.tsv.new"), "w", encoding="utf-8", errors="surrogateescape") as h:
+            for path, x in cache.items():
+                if path in grouped:                      # only files still listed: it never grows for ever
+                    h.write("\t".join(x + [path]) + "\n")
+        os.replace(self.p("dup-hashes.tsv.new"), self.p("dup-hashes.tsv"))
+        if stopped:
+            self.log("  stopped: copying was paused, or the archive stopped answering. What was read is remembered: "
+                     "Scan the archive again carries on from there. The last results are kept.")
+            return
+        with open(self.p("results_duplicates.txt.new"), "w", encoding="utf-8", errors="surrogateescape") as r:
+            for size, g in out:
+                r.write(f"---- Size {size} B ({size} bytes) - {len(g)} files\n")
+                r.writelines(f'"{p}"\n' for p in sorted(g))
+                r.write("\n")
+        os.replace(self.p("results_duplicates.txt.new"), self.p("results_duplicates.txt"))
+        n = sum(len(g) - 1 for _, g in out); b = sum(size * (len(g) - 1) for size, g in out)
+        self.log(f"progress: {todo} of {todo} (100%)")
+        self.log(f"scan done: {len(out):,} sets of identical files, {n:,} copies beyond the first ({b / 1e9:,.1f} GB)"
+                 + (f"; {unread:,} files could not be read and were left out" if unread else ""))
+
+    # ── editing caches ───────────────────────────────────────────────────────
+    def cache_rule(self, path):
+        """'sweep' when rules.json says the path is an editing cache, 'keep' when it
+        must never be touched, '' otherwise. Asked again of every file before it is
+        moved or deleted: the list (cache-files.txt) is only where to look."""
+        with open(self.p("rules.json")) as f:                # the pages' copy: the same rules they listed with
+            c = json.load(f)["cache"]
+        low, ext = path.lower(), os.path.splitext(path)[1][1:].lower()
+        hit = lambda g: ext in [e.lower() for e in g.get("ext", [])] or any(x.lower() in low for x in g.get("path_contains", []))
+        if any(hit(g) for g in c.get("keep", []) if isinstance(g, dict)):
+            return "keep"
+        for g in c.get("sweep", []):
+            if isinstance(g, dict) and hit(g):
+                return "delete" if g.get("rebuilds") else "sweep"
+        return ""
+
+    def own_drives(self):
+        try:
+            with open(self.p("settings.json")) as f:
+                return json.load(f).get("archive", {}).get("own") is True
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def cache_clean(self):
+        """Every file on cache-files.txt that the rules still call a cache: deleted
+        when the archive is a person's own drives and that kind rebuilds itself
+        (cache-deleted.tsv says what went), moved into _duplicates/_media-cache
+        otherwise (cache-moves.tsv, so Put them back can)."""
+        a = self.arch(); hold = a + "/_duplicates/_media-cache/"
+        own, moved, deleted, left = self.own_drives(), 0, 0, 0
+        try:
+            paths = open(self.p("cache-files.txt"), encoding="utf-8", errors="surrogateescape").read().splitlines()
+        except OSError:
+            self.log("  no list: press Move them out in Manage → Cache"); return
+        self.log(("deleting caches that rebuild themselves, moving the rest to " if own else "moving cache files to ") + hold)
+        with open(self.p("cache-moves.tsv"), "a", encoding="utf-8", errors="surrogateescape") as mv, \
+             open(self.p("cache-deleted.tsv"), "a", encoding="utf-8", errors="surrogateescape") as gone:
+            for i, f in enumerate(paths):
+                if i % 250 == 0:
+                    self.log(f"progress: {i} of {len(paths)} ({100 * i // max(len(paths), 1)}%)")
+                # never from the recycle bin (that would undelete it) or the holding folder itself
+                if (not f.startswith(a + "/") or "/@Recycle/" in f or f.startswith(a + "/_duplicates/")
+                        or ".." in f.split("/") or not os.path.isfile(f) or os.path.islink(f)):
+                    continue
+                rule = self.cache_rule(f)
+                if rule not in ("sweep", "delete"):
+                    left += 1; continue
+                if own and rule == "delete":
+                    size = os.path.getsize(f)
+                    os.remove(f)
+                    gone.write(f"{int(time.time())}\t{size}\t{f}\n"); deleted += 1
+                    continue
+                d = hold + f[len(a) + 1:]
+                if os.path.exists(d):
+                    continue
+                os.makedirs(os.path.dirname(d), exist_ok=True)
+                os.rename(f, d)
+                mv.write(f"{f}\t{d}\n"); moved += 1
+        self.log(f"moved {moved} cache files" + (f", deleted {deleted} that rebuild themselves" if own else "")
+                 + (f"; {left} on the list are not caches by the rules now, and were left" if left else ""))
+
+    def cache_undo(self):
+        """Every cache file still in the holding folder goes back where it was. Deleted ones cannot: they rebuild."""
+        n = 0
+        try:
+            lines = open(self.p("cache-moves.tsv"), encoding="utf-8", errors="surrogateescape").read().splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            src, _, dst = line.partition("\t")
+            if os.path.isfile(dst) and not os.path.exists(src):
+                os.makedirs(os.path.dirname(src), exist_ok=True)
+                os.rename(dst, src); n += 1
+        self.log(f"put back {n} cache files")
 
     def build_manifest(self):
         """size<TAB>path for every file on the archive (manifest.tsv). A folder

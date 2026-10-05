@@ -239,6 +239,14 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
 
         <?php $aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
               $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST); ?>
+        <?php if (on_mac()): ?>
+          <!-- Rushes on this Mac (HOW-IT-WORKS.md → Rushes on this Mac): its address is this Mac's own -->
+          <input type="hidden" name="a_url" value="<?= $e($aUrl ?: $here) ?>">
+          <label class="f"><span>Address</span></label>
+          <div class="seen">On this Mac: <b><?= $e($aUrl ?: $here) ?></b> (Open Rushes, in the menu bar icon, opens it).
+            Other devices open it only when <b>Let other devices open Rushes</b> is on in Rushes Helper, at this
+            Mac's name on the network or its Tailscale address, and only with the password.</div>
+        <?php else: ?>
         <label class="f"><span>Address people open Rushes at</span>
           <input type="text" name="a_url" id="aUrl" value="<?= $e($aUrl ?: $here) ?>"></label>
         <?php if ($aUrl === '' && $here !== ''): ?>
@@ -279,6 +287,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             })();
           </script>
         <?php endif; ?>
+        <?php endif; /* not on a Mac */ ?>
       </div>
 
       <!-- ══ 03 sources ══ -->
@@ -309,7 +318,13 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <h2><span>04 /</span> Helper</h2>
         <p>The part of Rushes that copies. It watches for cards and drives, and does
            whatever Ingest and Transfers ask for.</p>
-        <div class="pick">
+        <?php if (on_mac()): ?>
+          <!-- On a Mac the helper is Rushes Helper itself, the app Rushes runs in -->
+          <input type="hidden" name="h_mode" value="built_in">
+          <p class="note">On this Mac, the helper is <b>Rushes Helper</b>, the app Rushes runs in: cards and drives
+            plugged into this Mac are what it sees. Its switches are in its menu bar icon, and below in Manage.</p>
+        <?php endif; ?>
+        <div class="pick"<?= on_mac() ? ' hidden' : '' ?>>
           <label class="opt"><input type="radio" name="h_mode" value="built_in" <?= $hmode !== 'external' ? 'checked' : '' ?>>
             <b>Built in</b>
             <small>Runs on this machine. Cards and drives plugged in here are what it sees.
@@ -403,9 +418,11 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <?php $win = helper_windows(); $url = rtrim((string)(settings()['archive']['url'] ?? ''), '/'); ?>
           <?php if ($hmode !== 'external'): $bi = trim((string)@file_get_contents(web_dir() . '/helper-builtin.txt')); ?>
             <!-- Built in: the runner starts it and starts it again. Nothing to open. -->
+            <?php if (!on_mac()): ?>
             <div class="how-h">Rushes keeps it running on this machine</div>
             <p class="note" style="margin:0">It starts by itself, and again within a minute if it ever stops.
                Nothing to open and no window to keep open.</p>
+            <?php endif; ?>
             <?php if ($bi === 'no-python'): ?>
               <div class="seen bad">Python 3 is not installed on this machine yet. Install <b>Python 3</b> from the App
                 Center once; the helper starts by itself a minute later.</div>
@@ -473,7 +490,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <p class="note" style="margin:6px 0 0">If it says Python was not found, install it from python.org first — once.
             On Windows it runs in a window for now; starting by itself comes later.</p>
           <?php endif; ?>
-          <p class="note" style="margin:6px 0 0">Changed the kind above? Save first &mdash; these instructions follow the saved setting.</p>
+          <p class="note" style="margin:6px 0 0"<?= on_mac() ? " hidden" : "" ?>>Changed the kind above? Save first &mdash; these instructions follow the saved setting.</p>
         </div>
         <script>
           document.addEventListener('DOMContentLoaded', function () {
@@ -543,7 +560,13 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <h2><span>05 /</span> Editors' work</h2>
         <p>Rushes Watcher keeps each editor's Premiere projects in the archive: the files a project uses and what
            the editor exports. Install it once on each editor's computer. The editor keeps working as usual.</p>
-        <?php $ws = watchers(); $wurl = rtrim((string)(settings()['archive']['url'] ?? ''), '/'); ?>
+        <?php $ws = watchers(); $wurl = rtrim((string)(settings()['archive']['url'] ?? ''), '/');
+              // On a Mac, editors' computers reach it by this Mac's name, once other devices are let in
+              if (on_mac() && name_url() !== '') $wurl = name_url(); ?>
+        <?php if (on_mac()): ?>
+          <div class="seen">Editors' computers reach Rushes on this Mac only while <b>Let other devices open Rushes</b>
+            is on in Rushes Helper, and the password is your own (not the first one).</div>
+        <?php endif; ?>
         <div class="how-h" style="margin-top:14px">Add an editor's computer</div>
         <ol class="how">
           <li>On the editor's computer, download Rushes Watcher (about 30 MB):

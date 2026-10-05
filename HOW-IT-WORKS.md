@@ -228,6 +228,7 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | `name` | the name shown on the pages. While the password is still the default, the default is this name in lower case, with everything but letters and digits removed. |
 | `archive.local`, `archive.web`, `archive.url`, `archive.label` | where the archive and the web folder are on the archive machine, and the address people open Rushes at. The runner reads `archive.local` from `archive-path.txt` (see [Where things are kept](#where-things-are-kept)). |
 | `archive.as_seen_from_helper` | where the helper's computer sees the archive (e.g. `/Volumes/VIDEO`) |
+| `archive.runs_on`, `archive.own` | `mac` when Rushes runs inside Rushes Helper ([Rushes on this Mac](#rushes-on-this-mac)); `own`: the archive is a person's own drives, so caches that rebuild are deleted ([Editing caches](#editing-caches)) |
 | `archive.database` | puts the catalogue outside the web folder |
 | `sources` | servers and drives to copy from, with a name for each |
 | `helper.mode`, `helper.label` | built in or external, and the helper computer's name |
@@ -982,8 +983,17 @@ Rushes finds files that are the same file, keeps one, and moves the others into
 the holding folder (`_duplicates`). The folder structure is kept, so anything
 can be put back.
 
-1. **The scan** compares every file by content. It is done by Czkawka, a
-   separate duplicate finder running in a container on the archive machine.
+1. **The scan** compares every file by content. On a NAS it is done by
+   Czkawka, a separate duplicate finder running in a container on the archive
+   machine. On a Mac, Rushes does it itself (`scan()` in `runner.py`): only
+   files that share a size with another (from the file list, so nothing is
+   walked), first their first and last 64 KB, then every byte (BLAKE2), so two
+   files count as the same only when both were read in full and match. Each
+   fingerprint is remembered with the file's size and date
+   (`dup-hashes.tsv`): a scan again reads only what changed, and a scan
+   stopped by Pause copying, or by the drive going, carries on where it was.
+   Files it cannot read are left out and counted. The answer is written in
+   Czkawka's form, so everything after it is the same on both.
    - **Scan the archive** (Manage → Duplicates) starts it, after asking twice.
      It takes hours, and other jobs wait meanwhile (the upkeep does not).
    - It needs a container called `czkawka` with the archive mounted as
@@ -1029,7 +1039,7 @@ Rushes never empties the holding folder. Emptying it is your step, after the
 check says SAFE.
 
 **In the code:** `runner.sh` (the `scan`, `plan`, `apply`, `undo` and `verify`
-jobs), `dedupe.sh`, `verify.sh`, `run.php` and `db/config.php`
+jobs; on a Mac `runner.py`: `job()`, `scan()`), `dedupe.sh`, `verify.sh`, `run.php` and `db/config.php`
 (`dedupe_rules_write()`), `setup.php` (05).
 
 ### Editing caches
@@ -1048,9 +1058,24 @@ rescue after a crash) are shown as "left alone" and are never on the move list.
   from the recycle bin (that would undelete it) or from the holding folder
   itself.
 - **Put them back** returns every cache file still in the holding folder.
+- **On a Mac, a person's own drives** (Manage → Cache → **These are my own
+  drives**, off at first): the kinds `rules.json` marks `rebuilds` (Premiere's
+  cache, Media Cache folders, Capture One's cache, Resolve's CacheClip) are
+  deleted instead, which gives the space back at once, and each is written to
+  `cache-deleted.tsv` (when, size, path); the button says **Clear them out**.
+  Moving them aside would free nothing on a drive one person owns. On an
+  archive a team shares, leave it off.
+- On a Mac, each file is checked against `rules.json` again just before it
+  is moved or deleted (`cache_rule()` in `runner.py`): the list is only where
+  to look, and anything under Left alone is never touched.
+- **Left alone** includes Capture One's adjustments (`.cos`, `.coa`,
+  `.comask`, `CaptureOne/Settings…`) and Resolve's gallery stills
+  (`.gallery`): they are someone's work, not a cache, and nothing makes them
+  again.
 
-**In the code:** `db/junk.php` (the list), `runner.sh` (the `cacheclean` and
-`cache-undo` jobs), `db/config.php` (`cache_groups()`,
+**In the code:** `db/junk.php` (the list, and the own-drives switch), `runner.sh`
+(the `cacheclean` and `cache-undo` jobs; on a Mac `runner.py`: `cache_clean()`,
+`cache_undo()`, `cache_rule()`), `db/config.php` (`cache_groups()`,
 `cache_sql()`).
 
 ### The old date-based layout
@@ -1220,7 +1245,9 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   through `app/router.php` first, because that server does not read
   `.htaccess`: hidden files and the private files `.htaccess` lists are
   refused, and only what a browser needs is handed out (pages, styles,
-  scripts, pictures), never `settings.json`, the lists, the logs or code.
+  scripts, pictures), with the three files the helper reads (`settings.json`,
+  `rules.json` and the file list `manifest.tsv`); never the database, the
+  other lists, the logs or code.
   PHP's errors go to `php-errors.log` in the web folder;
 - starts it again within 10 s if it stops, and when other devices are turned on
   or off;
@@ -1230,12 +1257,18 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   (`import.php?part=web`, then `?part=video`); copies the database onto the
   archive once a day (`_rushes/db-copies`, one per weekday); once a day asks
   its own web server for the private files (`exposed.txt`); trims logs past
-  5 MB; and does the queue's **Rebuild the file list**, and **Try again**.
+  5 MB; and does the jobs asked for in Manage (below).
   A new archive's first file list is made by itself, so Search has it within
   a few minutes of setting up; after that, as on a NAS, the list is rebuilt
   when asked (Manage → Jobs and tools).
-  Jobs that move files (duplicates, caches, proxies, tidy-up) are not done on
-  a Mac yet: each is written in the log as not done.
+  The jobs: **Rebuild the file list**, **Try again**, the duplicates jobs
+  (the scan is done here, in Python: see [Duplicates](#duplicates); the plan,
+  the move, putting back and the check are `dedupe.sh` and `verify.sh`, as on
+  a NAS, written so they run with a Mac's own tools too), and the editing
+  caches ([Editing caches](#editing-caches)). After anything that moves files,
+  the file list is made again and the holding folder measured. Proxies are
+  not made on a Mac yet, and the old layout's undo has nothing to undo there:
+  each such job is written in the log as not done.
 - Every touch of the archive has a time limit (20 s; the search update 2 min,
   the database copy 10 min). Three that do not answer in a row stop it
   touching the archive until **Try again** in Manage, as on a NAS.
@@ -1249,6 +1282,16 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
 **Opening it.** **Open Rushes**, in the window and in the menu, opens Search in
 the browser, at `http://127.0.0.1:8642`.
 
+**What the pages say on a Mac** (`on_mac()` in `db/config.php`, from
+`archive.runs_on` in `settings.json`): Overview names Rushes Helper, not a NAS
+or its scheduler, when the minute's work goes quiet; Setup shows this Mac's
+address and the helper as Rushes Helper itself, without the NAS's choices;
+there is no looking for new versions in `_rushes` (pages and code come with
+the app). Free space: a NAS's floor (5 TB) would stop a laptop drive at once,
+so Setup writes the drive's own: copying stops below 2% free (20 GB to
+500 GB) and Overview warns below 5% (50 GB to 1 TB), each changeable in
+`settings.json` → `limits`.
+
 **Other devices** (a phone, another computer, over the office network or
 Tailscale) are off at first: Rushes answers this Mac only. **Let other devices
 open Rushes**, a switch in the window and in the menu, opens it to the network
@@ -1259,6 +1302,12 @@ at `http://<this Mac's name>.local:8642`, and then:
 - after that, every page asks them for that password first (the Manage
   password: one password, as in [Who can do what](#who-can-do-what)). Signed in
   stays signed in for a month on that device;
+- except the three doors editors' computers use (`db/helper.php`,
+  `db/pair.php`, `db/watcher.php`), which check their own: Rushes Watcher's
+  paired ID, the six-digit pairing code, or the password. So an editor's
+  Rushes Watcher can pair with a Mac's Rushes and deliver to it, while other
+  devices are let in. The helper is this Mac's own (paired at setup), so any
+  other helper is refused;
 - the private files stay private, signed in or not.
 
 `tests/test_router.sh` checks this door.
