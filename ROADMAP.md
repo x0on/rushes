@@ -5,6 +5,12 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 
 ## Status
 
+**October 2026: the first installation's NAS lost its RAID** (a second disk
+failed during a rebuild; the volume went read-only). The footage was copied off
+to another server, and Rushes is now built **Mac app first**: one app on a Mac,
+with the archive on any drive that Mac can see. "Proven" below means proven on
+that NAS; the Mac app has to prove each part again.
+
 ### Proven in real use
 
 - Search, and the catalogue keeping itself up to date.
@@ -45,6 +51,11 @@ finished in. What Rushes does now is in [HOW-IT-WORKS.md](HOW-IT-WORKS.md).
 - Rushes Helper for Windows.
 - Live support for organisations with a commercial license (see
   [Decided](#decided-and-why)).
+- **Copying over SSH** (an idea, October 2026). Rushes copies only through
+  shares mounted on the computer. During the NAS rescue, pulling files over SSH
+  was faster than the share (about twice) and kept working when the share
+  stopped answering. Worth offering as an advanced way in ("copy from a server
+  over SSH"); it needs the server's admin login and SSH turned on.
 - **Send out, to approved destinations** (designed October 2026). For footage
   that has to leave fast, such as a shoot for the press that a station needs tonight.
   - **Destinations, set once by the admin** in Setup: a station's FTP or SFTP,
@@ -144,7 +155,7 @@ What could go wrong, what was decided, and where it stands.
 | Default password, plain http, anyone on the network can open Manage | A real password; local network only; private files checked daily | Partly done |
 | Live support becomes a way into someone's computer | Paid license only; off and not installed by default; the person at the computer opens each session, sees it the whole time, ends it with one button; every session logged | To build |
 | Only one person knows how it fits together | HOW-IT-WORKS, INSTALL, DEVELOPING | Done |
-| The archive machine ages out of security updates | Plan its replacement; keep the archive portable (the packages below) | To plan |
+| The archive machine ages out of security updates | Plan its replacement; keep the archive portable (the packages below) | Happened (October 2026): the NAS lost its RAID; the footage was copied off; Rushes is now Mac app first, with the archive on any drive |
 
 ## Version 1: what makes it a product for filmmakers
 
@@ -229,24 +240,41 @@ Later versions:
 
 ## Where Rushes will run
 
-One Rushes, packaged three ways:
+One Rushes, packaged three ways. **The Mac app comes first, and is the one most
+people install.**
 
-| | Mac | Server | Windows |
+| | Mac (first) | Server (later) | Windows (later) |
 |---|---|---|---|
-| For | one editor or a small team | a team, on a NAS or Linux server | a Windows PC or server |
-| Pages | in the app's own window; nothing on the network | in a container | bundled in the installer |
-| Jobs | a background service | in the container | a Windows service |
-| The helper | built in | built in, plus Rushes Helper on workstations | built in, plus Rushes Helper on workstations |
+| For | anyone: alone, or as a small team's main Rushes | a team's main Rushes, on a virtual machine or server | a Windows PC or server |
+| The archive | any drive the Mac sees: a NAS share, a server, external drives; one main drive or many that come and go | a share the machine mounts | a share or drives |
+| Pages | in the app's own window (in the browser until then); this Mac only, or also the person's other devices if they turn it on | in a container | bundled in the installer |
+| Jobs | inside the app | in the container | a Windows service |
+
+**Main and connected.** Each archive has **one main Rushes**: it keeps the
+catalogue and is the only one that moves, renames or tidies anything in the
+archive. Every other copy of Rushes on the team is **connected** to it: it
+searches, brings in cards and phone uploads, and watches its editor's projects
+(what Rushes Helper and Rushes Watcher do today), and hands everything to the
+main one, never writing the archive itself. One app; which it is, is chosen
+when it is set up. A NAS stops being where Rushes runs and becomes a drive
+like any other.
 
 ## Order
 
-1. **Finish the loop on a real archive:** the copy, then tidy-up, relinking,
-   proxies and describing.
-2. **A portable core, along the way.** Whenever the runner or a path is
-   touched, make it portable: the runner's work moves into Python, every path
-   comes from settings, and updates arrive as normal signed updates instead of a
-   drop folder.
-3. **The packages: Mac, then server, then Windows.** The installer carries the
+1. **The Mac app, reading:** Rushes inside the app (its own PHP), the runner's
+   work moved into the app, every path from settings; the archive is a drive
+   the Mac sees. Catalogue and search, and Overview: nothing in the archive is
+   changed.
+2. **Organizing a main drive:** the plan (departments, years, shoots), the
+   tidy-up for any existing folders (not only ones Rushes copied in), every
+   move recorded and undoable, then relinking editors' projects.
+3. **Drives that come and go,** the report of what is on each (footage,
+   caches, copies), duplicates into a holding folder.
+4. **Connected Rushes:** the same app set up as connected to a main one, for
+   cards, phone uploads and editors' projects (today's Helper and Watcher).
+5. **Its own window,** proxies and describing inside the app, the installer.
+6. **The packages after the Mac:** server (a container, for a team's virtual
+   machine), then Windows. The installer carries the
    whole describing stage (ffmpeg, shot detection, the models). It checks the
    machine first and shows progress while the models download. On managed
    computers nothing is a loose script: the app is signed and notarized, so IT
@@ -258,8 +286,9 @@ One Rushes, packaged three ways:
    Not before the editors' projects are tried end to end.
    Reaching Rushes from elsewhere, on a phone too, is any VPN's job: Rushes
    names one easy option in its guide (INSTALL.md) and bundles none. The Mac
-   app is the exception: it is for one person on one computer, so its pages
-   listen on nothing and no phone or VPN reaches them.
+   app answers only its own Mac until the person turns on **other devices**;
+   then it answers the network too, and asks for a password on anything that
+   is not that Mac.
    On a Mac, Rushes Helper and Rushes Watcher come as a disk image (.dmg)
    with the app beside an Applications folder to drag it onto, as Mac apps
    usually do, not a zip. Installing is once per computer, by the person or by
@@ -271,9 +300,11 @@ One Rushes, packaged three ways:
 
 - **On a Mac, Rushes is a Mac app, not a web service** (October 2026). One
   person, one laptop, drives that come and go: an icon in the Dock and a
-  window, with the same pages inside it, made by the app and shown only in
-  its own window. No browser, no address, no password, nothing listening on
-  the network, no phone. The same pages as the server's, never a second set
+  window, with the same pages inside it (in the browser until the window is
+  built). By default it answers only that Mac: no address anyone else can
+  open. **Other devices** is a setting the person turns on, for their phone
+  through a VPN such as Tailscale: then it asks for a password on anything
+  that is not that Mac, and works while the Mac is awake. The same pages as the server's, never a second set
   of screens, so a fix to one is a fix to both. Built in the order that risks
   least: catalogue and search (reads only), then describing, then a
   duplicates report, then reorganizing (the only part that moves files).
@@ -283,12 +314,12 @@ One Rushes, packaged three ways:
   looks in the laptop's own cache folders too (Premiere's Media Cache lives
   there by default), and adds the render folders of Final Cut and Resolve to
   `rules.json` once real drives show their names.
-  What it does with them, on the Mac app (the person's own drives, nobody
-  else's work on them):
-  - **Caches are deleted**, after the list and sizes are shown and one press
-    of a button; what went is recorded. They rebuild from the originals, and
-    moving them aside would free nothing. The `keep` list (auto-saves,
-    project backups) is never touched.
+  What it does with them, on the Mac app:
+  - **Caches on a person's own drives are deleted**, after the list and sizes
+    are shown and one press of a button; what went is recorded. They rebuild
+    from the originals, and moving them aside would free nothing. On an
+    archive a team shares, the main Rushes moves them aside instead, as on a
+    server. The `keep` list (auto-saves, project backups) is never touched.
   - **Duplicates are moved, never deleted**: into a holding folder on the same
     drive (a move within a drive is instant), only after both copies are read
     in full and match. They stay there until the person is sure and empties
@@ -300,7 +331,12 @@ One Rushes, packaged three ways:
   searchable, and Rushes says which drive to plug in. Between drives, a move
   is a copy that is checked; the original stays for the person to delete.
 
-- **Three programs, each with only what its job needs** (October 2026):
+- **One main Rushes per archive, the rest connected** (October 2026): see
+  [Where Rushes will run](#where-rushes-will-run). Two copies of Rushes
+  tidying the same archive at once would undo each other's work; one in
+  charge, the others handing it what they bring in, cannot.
+- **Three programs, each with only what its job needs** (October 2026; now
+  the roles of one app, main or connected):
   - **Rushes**, on the server: the pages, the catalogue, the runner.
   - **Rushes Helper**, on one computer: the archive work. Copies cards and old
     servers in, describes footage, checks copies. One per archive (pairing).
