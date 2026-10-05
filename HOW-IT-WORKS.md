@@ -1240,7 +1240,9 @@ When the archive is a drive this Mac sees (an external drive, a server share,
 a folder on one), Rushes itself runs inside Rushes Helper: no NAS, no server.
 In **Where Rushes is**, press **Choose the drive…** instead of typing an
 address, and pick the drive or folder in the window macOS opens.
-`pick_local()` in `mac/rushes_helper.py` then:
+A Rushes Helper already set up against a Rushes elsewhere (a NAS) gets there
+with **Where Rushes is…**, at the foot of its window: the same step, where
+**Cancel** goes back. `pick_local()` in `mac/rushes_helper.py` then:
 
 - refuses a system folder, the whole startup disk, or anything that is not a
   folder (`archive_ok()` in `app/runner.py`);

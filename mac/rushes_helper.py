@@ -519,7 +519,7 @@ class Window:
     def state(self):
         with self.lock:
             s = dict(self.s)
-        s.update(name=NAME, watcher=WATCHER)
+        s.update(name=NAME, watcher=WATCHER, set_up=bool(s["url"]) and service_points_here())
         if s["step"] == "home":
             s.update(self.home())
         return s
@@ -695,6 +695,9 @@ class Window:
             self.run("Asking Rushes …", self.check_updates)
         elif do == "update-app":
             self.run(f"Updating {NAME} …", self.update_app)
+        elif do == "change-where" and not WATCHER:
+            # Set up already, against a Rushes elsewhere (a NAS): its address, or a drive on this Mac instead
+            self.set(step="address", error="", said="")
         elif do == "back-home":
             self.set(step="home", said="")
         elif do == "done":
@@ -988,7 +991,7 @@ function draw() {
       (s.watcher ? '' : '<div class="box" style="margin-top:18px"><div class="row"><div class="t"><b>Or: the archive is a drive on this Mac</b><small>No server: ' +
         'Rushes runs inside this app, and you open it from the menu bar icon (Open Rushes). Choose the drive, or a folder on one. ' +
         'Other devices can be let in later, with a password.</small></div>' + btn('Choose the drive…', 'local-pick', false, !!s.busy) + '</div></div>') + err + busy;
-    f = btn('Cancel', 'done') + btn('Next', 'address', true, !!s.busy); break;
+    f = btn('Cancel', s.set_up ? 'back-home' : 'done') + btn('Next', 'address', true, !!s.busy); break;
   case 'network':
     b = '<h2>macOS is not letting Rushes Helper talk to your network yet</h2>' +
       '<p>If it asked whether Rushes Helper may “find and connect to devices on your local network”, press Allow, then Try again.</p>' +
@@ -1017,7 +1020,7 @@ function draw() {
         '<p>Rushes → Manage shows what it is doing — and so does this app: open it again any time to see it working, pause it, or change its settings.</p>') +
       '<p class="muted">macOS may show a notice that Rushes Helper can run in the background — that is this.</p>';
     f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
-  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + btn('Remove…', 'remove') + '</span>' + btn('Show the log', 'show-log') + btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
+  case 'home': b = s.watcher ? whome(s) : home(s); f = '<span class="left">' + btn('Remove…', 'remove') + (s.watcher ? '' : ' ' + btn('Where Rushes is…', 'change-where')) + '</span>' + btn('Show the log', 'show-log') + btn('Open Rushes', 'open-rushes') + btn('Done', 'done', true); break;
   case 'remove':
     b = '<h2>Remove Rushes Helper?</h2><p>It stops, and no longer starts at login. Anything half-copied stays where it is and carries on if you set it up again.</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
@@ -1052,7 +1055,8 @@ function home(s) {
     : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work.'
     : '<span class="dot ok"></span><b>Running in the background</b>' + (s.pid ? ' <span class="muted">· process ' + s.pid + '</span>' : '');
-  const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and four of the switches are not available. The log below still shows its work.</p>'
+  const now = !s.rushes ? '<p class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '), so what it is doing and four of the switches are not available. The log below still shows its work.' +
+      (s.local ? '' : ' If Rushes is to run on this Mac now, with the archive on a drive it sees, press <b>Where Rushes is…</b> below.') + '</p>'
     : n.phase ? '<p><b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(n.source.split('/').pop()) : '') + '</p>' +
         (n.note ? '<p class="muted">' + esc(n.note) + '</p>' : '') + (n.file ? '<p class="muted">now: ' + esc(n.file.split('/').pop()) + '</p>' : '')
     : '<p class="muted">Nothing to do right now.</p>';
