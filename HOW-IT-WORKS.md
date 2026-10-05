@@ -1231,6 +1231,9 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   archive once a day (`_rushes/db-copies`, one per weekday); once a day asks
   its own web server for the private files (`exposed.txt`); trims logs past
   5 MB; and does the queue's **Rebuild the file list**, and **Try again**.
+  A new archive's first file list is made by itself, so Search has it within
+  a few minutes of setting up; after that, as on a NAS, the list is rebuilt
+  when asked (Manage → Jobs and tools).
   Jobs that move files (duplicates, caches, proxies, tidy-up) are not done on
   a Mac yet: each is written in the log as not done.
 - Every touch of the archive has a time limit (20 s; the search update 2 min,

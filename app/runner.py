@@ -11,7 +11,8 @@ minute's work); only what a drive on this computer needs:
   - the search update (import.php ?part=web, then ?part=video)
   - the daily database copy onto the archive (_rushes/db-copies)
   - the private-file check (exposed.txt)
-  - the queue: Rebuild the file list (reindex, manifest), Try again (reset-breaker)
+  - the queue: Rebuild the file list (reindex, manifest), Try again (reset-breaker);
+    and the first file list of a new archive, by itself
 
 Every touch of the archive has a time limit, and three stalls in a row stop
 it touching the archive until Try again — the same breaker as runner.sh.
@@ -224,6 +225,13 @@ class Runner:
                 # ponytail: moving jobs come with organizing a drive (ROADMAP.md → Order, 2)
                 self.log(f"  {action}: not on this computer yet — nothing was done")
             self.log(f"--- finished {time.strftime('%H:%M:%S')} ---")
+            self.write("job-status.txt", "idle\n")
+        # A new archive has no list yet: the first one is made by itself (once each start).
+        if not os.path.exists(self.p("manifest.tsv")) and not getattr(self, "first", False) and self.may_v():
+            self.first = True
+            self.write("job-status.txt", "running: manifest\n")
+            self.log(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  no file list yet: walking the archive for the first one")
+            self.build_index()
             self.write("job-status.txt", "idle\n")
         if not os.path.exists(self.p("job-status.txt")):
             self.write("job-status.txt", "idle\n")
