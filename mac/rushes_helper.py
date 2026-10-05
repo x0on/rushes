@@ -1123,7 +1123,8 @@ function home(s) {
     (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + '</p>' : '') +
     (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '') +
     // The place to type the code: always there until this Mac is the paired one.
-    (s.rushes !== null && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
+    // Rushes on this Mac: this app is its helper from the start, nothing to pair
+    (!s.local && s.rushes !== null && s.pairing !== 'this' ? '<div class="box"><div class="row"><div class="t">' +
       (s.pairing === 'other' ? '<b>Rushes is paired with another helper</b><small>This Mac is given no work and touches nothing. To use this Mac instead, '
         : s.pairing === 'none' ? '<b>Not paired yet</b><small>Rushes gives work to any helper on the network until one is paired; two at once would copy over each other. To pair this one, '
         : '<b>Pair this Mac</b><small>Rushes did not say whether this Mac is paired (it is slow to answer right now). If Rushes → Setup → 04 says no helper is paired, or names another computer, ') +
@@ -1384,7 +1385,7 @@ def own_menu(w):
             items.append({"label": "Let other devices open Rushes", "on": o, "do": "others-off" if o else "others-on"})
         if s.get("stopped"):
             items.append({"label": "Try again", "do": "try-again"})
-        if s.get("pairing") != "this":
+        if s.get("pairing") != "this" and not s.get("local"):
             items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
     items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}")]
     items.append({"label": f"Update to {s['newer']}", "do": "update-app"} if s.get("newer")
