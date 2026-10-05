@@ -275,7 +275,11 @@ like any other.
    already in the archive; duplicates (the scan done by the app itself) and
    caches (deleted on a person's own drives) work on a Mac.*
 3. **Drives that come and go,** the report of what is on each (footage,
-   caches, copies), duplicates into a holding folder.
+   caches, copies), duplicates into a holding folder. *Built (October 2026), not yet
+   tried on a real Mac: drives known by their ID, listed where they are,
+   searchable while unplugged; the report per drive in Setup; duplicates per
+   drive, copies on two drives left alone. To come: pulls from a drive kept
+   where it is, and a drive's own index on the drive itself.*
 4. **Connected Rushes:** the same app set up as connected to a main one, for
    cards, phone uploads and editors' projects (today's Helper and Watcher).
 5. **Its own window,** proxies and describing inside the app, the installer.

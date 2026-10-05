@@ -38,11 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Counted from the plan the last "Look for duplicates" made (size, copy that
 // moves, copy that stays), once per plan: it can be a few hundred thousand lines.
-$plan = web_dir() . '/dedupe-plan.tsv';
+// The archive's plan, or one drive's (kept where it is: ?drive=<its place in Setup>)
+$drv = drive_by_source((string)($_GET['drive'] ?? ''));
+$sfx = $drv ? '-' . drive_key($drv) : '';
+$plan = web_dir() . "/dedupe-plan$sfx.tsv";
 $at = (int)@filemtime($plan);
-$c = json_decode(meta_get('dupfolders', ''), true);
+$c = json_decode(meta_get("dupfolders$sfx", ''), true);
 if (!is_array($c) || ($c['at'] ?? -1) !== $at) {
-    $pre = rtrim(archive_dir(), '/') . '/'; $L = strlen($pre); $f = [];
+    $pre = rtrim($drv ? $drv['path'] : archive_dir(), '/') . '/'; $L = strlen($pre); $f = [];
     $top = function (string $p) use ($pre, $L) {
         if (strncmp($p, $pre, $L) !== 0) return '';
         $x = explode('/', substr($p, $L), 2);
@@ -62,7 +65,7 @@ if (!is_array($c) || ($c['at'] ?? -1) !== $at) {
     foreach ($f as $n => $v) $rows[] = ['name' => (string)$n, 'move' => $v['move'] ?? 0, 'bytes' => $v['bytes'] ?? 0, 'stay' => $v['stay'] ?? 0];
     usort($rows, fn($a, $b) => ($b['move'] + $b['stay']) <=> ($a['move'] + $a['stay']));
     $c = ['at' => $at, 'rows' => array_slice($rows, 0, 20)];
-    meta_set('dupfolders', json_encode($c, JSON_UNESCAPED_UNICODE));
+    meta_set("dupfolders$sfx", json_encode($c, JSON_UNESCAPED_UNICODE));
 }
 // Folders already chosen stay listed even when the last plan had nothing in them.
 $rows = $c['rows']; $have = array_column($rows, 'name');
@@ -72,5 +75,8 @@ foreach ($rows as &$r) $r['kind'] = ($r['name'] === shelf_name() || (shelf_is_to
 // when that look was made: the plan's own note says (the file's date changes when it is copied)
 $built = (string)(json_decode((string)@file_get_contents("$plan.meta"), true)['built'] ?? '');
 // That plan already carried out (moved, with Move the copies aside): the numbers are what moved, not what would.
-$done = is_file(web_dir() . '/dedupe-moves.tsv') && (int)@filemtime(web_dir() . '/dedupe-moves.tsv') >= $at && $at > 0;
-dup_said(200, ['done' => $done, 'built' => $built !== '' ? str_replace('T', ' ', substr($built, 0, 16)) : ($at ? date('Y-m-d H:i', $at) : ''), 'shelf' => shelf_name(), 'folders' => $rows]);
+$done = is_file(web_dir() . "/dedupe-moves$sfx.tsv") && (int)@filemtime(web_dir() . "/dedupe-moves$sfx.tsv") >= $at && $at > 0;
+// the same file on more than one drive (the last scan): shown, never moved
+$across = (json_decode((string)@file_get_contents(web_dir() . '/dup-summary.json'), true) ?: [])['across'] ?? null;
+dup_said(200, ['across' => $across, 'drives' => array_map(fn($d) => ['source' => $d['source'], 'name' => $d['name'], 'connected' => !empty($d['connected'])], drives_seen()),
+               'done' => $done, 'built' => $built !== '' ? str_replace('T', ' ', substr($built, 0, 16)) : ($at ? date('Y-m-d H:i', $at) : ''), 'shelf' => shelf_name(), 'folders' => $rows]);

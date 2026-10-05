@@ -234,7 +234,7 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | `helper.mode`, `helper.label` | built in or external, and the helper computer's name |
 | `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | the folder in the archive the departments live in (the shelf), the departments and their folders, what they are called, and whether Ingest may add one. All set in Reorganize. The shelf has no default: until it is chosen, Ingest and the tidy-up wait. |
 | `duplicates.never_keep`, `duplicates.card_dumps` | this archive's own folders whose copies are never kept, and where whole cards were once copied (chosen in Manage → Duplicates, from the folders the copies are in). What is true for every archive is in `rules.json → duplicates.never_keep`. |
-| `organise.shape` | saved by Setup; nothing uses it yet |
+| `organise.shape` | `one_place`, or `in_place`: the drives in `sources` are listed where they are ([Drives that come and go](#drives-that-come-and-go)) |
 | `limits.disk_stop_free`, `limits.disk_warn_free` | stop copying below this free space (5 TB), and warn below this (8 TB). They override `rules.json`. |
 | `rules.json → conditions` | when Overview warns: runner silent 3 min, a copy stalled 15 min, more than 100 cache files, more than 1 GB in the holding folder |
 | `proof.check_every_days` | how often each folder of the archive is read again (90) |
@@ -1191,7 +1191,8 @@ in the holding folder. A page can start them only when signed in.
 Each section saves with **Save settings**.
 
 - **01 How media is organised:** bring everything to one place, or leave media
-  on its own drives (saved; not used yet).
+  on its own drives: then 03 lists **the drives** Rushes looks after where they
+  are ([Drives that come and go](#drives-that-come-and-go); on a Mac).
 - **02 This archive:**
   - its name;
   - where it lives on this machine;
@@ -1199,9 +1200,13 @@ Each section saves with **Save settings**.
     opened Setup at. If it is a number that can change, Setup says so, tries
     the machine's own name (`<name>.local`) from your browser, and offers
     **Use the name**.
-- **03 Where footage comes from:** add a drive or folder (picked from what the
-  archive machine or the helper actually sees, never typed), rename one, or
-  remove one.
+- **03 Where footage comes from** (or **The drives**, when media stays on its
+  own drives): add a drive or folder (picked from what the archive machine or
+  the helper actually sees, never typed), rename one, or remove one. For a
+  drive kept where it is, each line also says whether it is plugged in (or
+  since when not), and what is on it: files and size, footage, editing
+  caches, copies (from the last duplicates scan) and what waits in its
+  holding folder.
 - **04 Helper:**
   - **built in**, or **external** with its name, and where it sees the archive;
   - whether it is running, and how many drives it sees;
@@ -1328,6 +1333,43 @@ at `http://<this Mac's name>.local:8642`, and then:
 - the private files stay private, signed in or not.
 
 `tests/test_router.sh` checks this door.
+
+### Drives that come and go
+
+For a person whose footage lives on several drives that are not all plugged
+in at once (Setup 01: **Leave media on its own drives**; 03 lists them).
+Done by Rushes on a Mac (`runner.py`); a NAS's runner does not list drives
+yet.
+
+- **Known by its own ID**, not its name: on a Mac the volume's UUID
+  (`diskutil`), kept in `drives.json`. A drive plugged in under another name
+  (or as "Films 1 1") is found by its ID, and another drive that takes its
+  name is not taken for it (`drives()`).
+- **Listed where it is:** each **Rebuild the file list** walks the archive and
+  every drive that is plugged in, and keeps each drive's own list
+  (`drives/<ID>.tsv`). The file list is the archive's and every drive's
+  together, so Search covers all of them at once.
+- **While a drive is away,** its last list is used: its files stay in Search,
+  marked **on <drive> · not plugged in**, and the file's details say to plug
+  it in. Pulls are made of archive files only, for now.
+- **When it comes back** (or is just added, or turns up under another name),
+  the minute's work notices and lists everything again by itself.
+- **Duplicates:** the scan reads only drives that are plugged in. Copies
+  within one drive are moved aside within that drive, into its own
+  `_duplicates`, never from one drive to another (Manage → Duplicates →
+  **Where**: the archive or a drive, each with its own plan, moves, check and
+  holding folder: `dedupe-plan-<ID>.tsv`, `dedupe-moves-<ID>.tsv`,
+  `verify-result-<ID>.tsv`, `holding-kb-<ID>.txt`). The same file on two
+  drives is often the only backup: it is counted (`dup-across.txt`,
+  `dup-summary.json`), said in Duplicates, and left alone.
+- **Caches** on a drive that is plugged in go into that drive's own holding
+  folder, or are deleted on a person's own drives, as on the archive.
+
+**In the code:** `runner.py` (`drives()`, `build_manifest()`, `scan()`,
+`root()`, `volume_id()`), `db/config.php` (`drives_seen()`,
+`catalogue_roots()`, `drive_of()`, `drive_key()`), `db/sync.php`,
+`db/search.php` and `db/find.php` (the drive on each result), `setup.php`
+(`drive_report()`), `db/dupfolders.php` and `db/admin.php` (Where).
 
 ### Always in sight: the menu bar icon
 

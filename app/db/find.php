@@ -19,6 +19,8 @@ require __DIR__ . '/config.php';
   window.RUSHES = <?= json_encode([
     'archive' => archive_dir(),
     'local'   => s_path('archive.as_seen_from_helper', archive_dir()),
+    // drives kept where they are: a path on one reads from the drive's name
+    'drives'  => array_map(fn($d) => ['path' => rtrim($d['path'], '/'), 'name' => $d['name']], drives_seen()),
   ], JSON_UNESCAPED_SLASHES) ?>;
   // The same drawings the rail uses, handed to the script for the result rows.
   window.ICON = <?= json_encode([
@@ -207,7 +209,11 @@ const tb  = function (b) {
        : b >= 1048576       ? Math.round(b / 1048576) + ' MB'
        : Math.round(b / 1024) + ' KB';
 };
-const short = function (p) { return (p || '').replace(ARCHIVE + '/', ''); };
+const short = function (p) {
+  p = p || '';
+  const d = (RUSHES.drives || []).find(function (x) { return p.indexOf(x.path + '/') === 0; });
+  return d ? d.name + '/' + p.slice(d.path.length + 1) : p.replace(ARCHIVE + '/', '');
+};
 // Where a shoot sits, as a readable trail — the filename is on its own row.
 const trail = function (p) {
   const bits = short(p).split('/'); bits.pop();
@@ -344,9 +350,13 @@ function draw() {
         '<span class="thumb k-' + esc(k) + '">' + (ICON[k] || ICON.file || '') + '</span>' +
         '<span class="nm">' + esc(r.name) +
         (moved ? ' <span class="pill">moved aside</span>' : '') +
+        // on a drive kept where it is; one that is not plugged in says so
+        (r.drive ? ' <span class="pill"' + (r.away ? ' title="Plug in ' + esc(r.drive) + ' to open it"' : '') + '>on ' + esc(r.drive) +
+          (r.away ? ' · not plugged in' : '') + '</span>' : '') +
         '<small>' + esc((r.ext || '').toUpperCase()) + (r.ext ? ' · ' : '') + esc(k) +
         (res(r) ? ' · <b class="res">' + res(r) + '</b>' : '') + '</small></span>' +
-        addBtn(r.path) +
+        // ponytail: pulls are made of archive files; a drive kept where it is joins them later
+        (r.drive ? '' : addBtn(r.path)) +
         '<span class="sz">' + tb(r.bytes) + '</span></div>';
     });
     html += '</div>';
@@ -405,7 +415,7 @@ function clock(s) {
 function inspect(r) {
   if (!r) return;
   const mine = store('archiveBase');
-  const local = mine ? (/^([A-Za-z]:|\\\\)/.test(mine)
+  const local = r.drive ? r.path : mine ? (/^([A-Za-z]:|\\\\)/.test(mine)
       ? mine + '\\' + short(r.path).replace(/\//g, '\\') : mine + '/' + short(r.path))
     : r.path.replace(ARCHIVE, LOCAL);
   $('inspect').hidden = false;
@@ -428,14 +438,16 @@ function inspect(r) {
       (r.proxy_at ? '<div class="k">Plays from</div><div class="v">its proxy (downloads and pulls use the original)</div>' : '') +
       (r.event ? '<div class="k">Shoot</div><div class="v">' + esc(r.event) + '</div>' : '') +
       (r.year  ? '<div class="k">Year</div><div class="v">' + esc(r.year) + '</div>' : '') +
+      (r.drive ? '<div class="k">Drive</div><div class="v">' + esc(r.drive) +
+        (r.away ? ' &mdash; <b>not plugged in</b>: plug it in to open this file' : ' (plugged in)') + '</div>' : '') +
       '<div class="k">Where it lives</div><div class="v">' + esc(short(r.path)) + '</div>' +
       '<div class="btns" style="margin-top:14px">' +
-        '<button class="btn" id="iPull">' + (inPull(r.path) ? 'In the pull ✓' : 'Add to pull') + '</button>' +
+        (r.drive ? '' : '<button class="btn" id="iPull">' + (inPull(r.path) ? 'In the pull ✓' : 'Add to pull') + '</button>') +
         '<button class="btn quiet" id="iCopy">Copy path</button>' +
       '</div>' +
     '</div>';
   $('iCopy').onclick = function () { copyText(local, $('iCopy')); };
-  $('iPull').onclick = function () { addToPull(r.path, $('iPull')); };
+  if ($('iPull')) $('iPull').onclick = function () { addToPull(r.path, $('iPull')); };
 }
 
 // A short memory of what you looked for, kept in this browser only.

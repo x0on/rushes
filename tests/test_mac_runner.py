@@ -127,5 +127,79 @@ class MacJobs(unittest.TestCase):
         self.assertIn("nothing was done", self.log())
 
 
+class Drives(MacJobs):
+    """Drives that come and go: known by their ID, listed where they are, their
+    last list kept while away, found again under another name, duplicates only
+    within a drive, the same file on two drives left alone."""
+    def setUp(self):
+        super().setUp()
+        self.vol = os.path.join(self.t, "Volumes"); os.makedirs(self.vol)
+        self.ids = {"Films 1": "UUID-ONE", "Films 1 1": "UUID-ONE", "Other": "UUID-OTHER"}
+        self.patch = [(runner, n, getattr(runner, n)) for n in ("mounts", "mount_of", "volume_id")]
+        runner.mounts = lambda: [os.path.join(self.vol, n) for n in sorted(os.listdir(self.vol))]
+        runner.mount_of = lambda p: os.path.join(self.vol, p[len(self.vol) + 1:].split("/")[0]) if p.startswith(self.vol + "/") else "/"
+        runner.volume_id = lambda p: self.ids.get(runner.mount_of(p)[len(self.vol) + 1:], "")
+        s = json.load(open(os.path.join(self.web, "settings.json")))
+        s["organise"] = {"shape": "in_place"}
+        s["sources"] = [{"label": "Films 1", "path": os.path.join(self.vol, "Films 1")}]
+        json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
+
+    def tearDown(self):
+        for mod, n, f in self.patch:
+            setattr(mod, n, f)
+        super().tearDown()
+
+    def drive(self, rel, data, name="Films 1"):
+        p = os.path.join(self.vol, name, rel); os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "wb").write(data); return p
+
+    def minute(self):
+        self.r.minute(); self.r.busy["jobs"].join(); self.r.busy["upkeep"].join(60)
+        return {d["name"]: d for d in json.load(open(os.path.join(self.web, "drives.json")))}
+
+    def test_a_drive_is_listed_kept_while_away_and_found_under_another_name(self):
+        self.put("Parks/a.mov", b"a")
+        clip = self.drive("Shoots/2019/b.mov", b"bb")
+        d = self.minute()["Films 1"]                            # plugged in: listed by itself
+        self.assertTrue(d["connected"]); self.assertEqual(d["id"], "UUID-ONE")
+        self.minute()
+        self.assertIn(clip, open(os.path.join(self.web, "index.txt")).read())
+        os.rename(os.path.join(self.vol, "Films 1"), os.path.join(self.t, "away"))            # unplugged
+        self.assertFalse(self.minute()["Films 1"]["connected"])
+        self.r.build_index()
+        self.assertIn(clip, open(os.path.join(self.web, "index.txt")).read(), "an unplugged drive stays searchable")
+        os.rename(os.path.join(self.t, "away"), os.path.join(self.vol, "Films 1 1"))           # back, as "Films 1 1"
+        d = self.minute()["Films 1"]
+        self.assertTrue(d["connected"]); self.assertEqual(d["path"], os.path.join(self.vol, "Films 1 1"))
+        self.minute()
+        idx = open(os.path.join(self.web, "index.txt")).read()
+        self.assertIn(os.path.join(self.vol, "Films 1 1", "Shoots/2019/b.mov"), idx); self.assertNotIn(clip, idx)
+        self.ids["Films 1"] = "UUID-SOMEONE-ELSES"
+        self.drive("x.mov", b"x", name="Films 1")               # another drive takes the old name: not it
+        self.assertEqual(self.minute()["Films 1"]["path"], os.path.join(self.vol, "Films 1 1"))
+
+    def test_duplicates_within_a_drive_move_aside_there_and_across_drives_stay(self):
+        both = os.urandom(5000)
+        self.put("Parks/same.mov", both); on_drive = self.drive("Card/same.mov", both)
+        twice = os.urandom(7000)
+        a = self.drive("A/clip.mov", twice); b = self.drive("A long folder/clip.mov", twice)
+        self.minute(); self.minute()
+        self.r.job("scan", {})
+        summary = json.load(open(os.path.join(self.web, "dup-summary.json")))
+        self.assertEqual(summary["across"]["sets"], 1)
+        self.assertEqual(open(os.path.join(self.web, "results_duplicates.txt")).read(), "", "nothing within the archive")
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        src = os.path.join(self.vol, "Films 1")
+        self.r.job("plan", {"KEEP_SIDE": "short", "DRIVE": src})
+        self.r.job("apply", {"KEEP_SIDE": "short", "DRIVE": src})
+        self.assertTrue(os.path.isfile(os.path.join(src, "_duplicates", "A long folder/clip.mov")) and os.path.isfile(a))
+        self.assertTrue(os.path.isfile(on_drive), "the copy on another drive than the archive's stays")
+        self.assertGreater(int(open(os.path.join(self.web, f"holding-kb-UUID-ONE.txt")).read()) + 1, 0)
+        self.r.job("verify", {"DRIVE": src})
+        self.assertIn("VERDICT\tSAFE", open(os.path.join(self.web, "verify-result-UUID-ONE.tsv")).read())
+        self.r.job("undo", {"DRIVE": src})
+        self.assertTrue(os.path.isfile(b))
+
+
 if __name__ == "__main__":
     unittest.main()

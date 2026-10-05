@@ -25,6 +25,9 @@ $dest      = $_POST['dest']      ?? archive_dir() . '/_duplicates';
 $stills    = ($_POST['stills'] ?? '0') === '1' ? '1' : '0';
 $exclude   = preg_replace('/[^A-Za-z0-9 ,_.\/-]/', '', $_POST['exclude'] ?? '');
 // letters of any language (Fútbol, Año), digits, and a few marks; the runner checks again
+// a drive kept where it is (Setup 01 and 03), for the duplicates jobs: by its place in Setup
+$drive     = (string)($_POST['drive'] ?? '');
+if ($drive !== '' && !drive_by_source($drive)) $drive = '';
 $query     = implode('', array_slice(preg_split('//u', preg_replace('/[^\p{L}\p{N} _.\/&(),+-]/u', '', (string)($_POST['query'] ?? '')), -1, PREG_SPLIT_NO_EMPTY), 0, 200));
 
 // A signed-in admin session is enough; a password in the request also works,
@@ -63,7 +66,8 @@ if (in_array($action, ['plan', 'apply'], true) && dedupe_rules_write() === null)
 }
 
 $file = $QUEUE . '/' . date('Ymd-His') . '-' . substr(md5(uniqid('', true)), 0, 6) . '.job';
-$body = "ACTION=$action\nKEEP_SIDE=$keep_side\nDEST=$dest\nSTILLS=$stills\nEXCLUDE=$exclude\nQUERY=$query\n";
+$body = "ACTION=$action\nKEEP_SIDE=$keep_side\nDEST=$dest\nSTILLS=$stills\nEXCLUDE=$exclude\nQUERY=$query\n"
+      . ($drive !== '' && preg_match('/^[^\r\n=]+$/', $drive) ? "DRIVE=$drive\n" : '');
 
 if (@file_put_contents($file, $body) === false) {
     http_response_code(500);

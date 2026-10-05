@@ -26,6 +26,12 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   shelf into their department's folder (a misspelt old name is matched),
   recorded, undoable and relinkable as before; their old top folder goes once
   empty.
+- **Drives that come and go** (Setup 01: Leave media on its own drives): each
+  drive known by its own ID and listed where it is; an unplugged drive stays
+  in Search and says to plug it in; it is listed again when it comes back,
+  under any name. Setup says what is on each drive (footage, caches, copies).
+  Duplicates move aside within one drive only; the same file on two drives is
+  shown and left alone.
 - **Other devices, if you want:** a switch lets phones and computers on the
   network (or Tailscale) open it, only after Rushes' first password is changed,
   and only signed in with it.

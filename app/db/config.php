@@ -94,6 +94,32 @@ function on_mac(): bool        { return (settings()['archive']['runs_on'] ?? '')
 // …and that archive is the person's own drives, not one a team shares: caches that rebuild are deleted, not moved aside
 function own_drives(): bool    { return on_mac() && (settings()['archive']['own'] ?? false) === true; }
 function archive_dir(): string { return s_path('archive.local', '/share/VIDEO'); }
+// Drives that come and go (Setup 01: Leave media on its own drives): what the
+// runner last saw of each (drives.json: name, ID, where it is, plugged in or
+// not), so an unplugged drive's files stay in search and say where they are.
+function drives_seen(): array {
+    if ((settings()['organise']['shape'] ?? '') !== 'in_place') return [];
+    $d = json_decode((string)@file_get_contents(web_dir() . '/drives.json'), true);
+    return is_array($d) ? array_values(array_filter($d, fn($x) => is_array($x) && str_starts_with((string)($x['path'] ?? ''), '/'))) : [];
+}
+// Where the catalogue's files may be: the archive, and each of those drives.
+function catalogue_roots(): array {
+    return array_merge([archive_dir()], array_map(fn($d) => rtrim($d['path'], '/'), drives_seen()));
+}
+// A drive's key in file names (runner.py → drive_key): its ID, or its place in Setup until it was seen.
+function drive_key(array $d): string {
+    return preg_replace('/[^A-Za-z0-9-]/', '_', (string)(($d['id'] ?? '') ?: sha1((string)$d['source'])));
+}
+// One of those drives by its place in Setup (the duplicates jobs name it so), or null.
+function drive_by_source(string $src): ?array {
+    foreach (drives_seen() as $d) if ($d['source'] === $src) return $d;
+    return null;
+}
+// The drive a path is on, or null when it is in the archive.
+function drive_of(string $path): ?array {
+    foreach (drives_seen() as $d) if (str_starts_with($path, rtrim($d['path'], '/') . '/')) return $d;
+    return null;
+}
 
 // ── thresholds ─────────────────────────────────────────────────────────────
 // settings.json may override any of rules.json's numbers; a null there means

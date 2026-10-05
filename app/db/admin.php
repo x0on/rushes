@@ -184,6 +184,11 @@ if (isset($_POST['_newpass'])) {
             <p class="note" style="margin:0 0 12px">Same content, not same name. Size first,
               then the ends of the file where two sizes collide. Copies move to the holding
               folder &mdash; the space comes back when you empty it, not before.</p>
+            <!-- Drives kept where they are (Setup 01): each is tidied on its own, into its own holding folder -->
+            <label class="f" id="dupDriveBox" style="max-width:520px;margin:0 0 12px" hidden><span>Where</span>
+              <select id="dupDrive"></select>
+              <small>Copies move aside within one drive, into its own holding folder, never from one drive to another.
+                <span id="dupAcross"></span></small></label>
             <label class="f" style="max-width:520px;margin:0 0 12px"><span>Which copy is kept</span>
               <select id="keepSide">
                 <option value="project">The one on the shelf (your projects) &mdash; card dumps lose</option>
@@ -563,8 +568,17 @@ $('sideMore').onclick = function () { show('activity'); };
 // Where the copies are: each top folder with what it is, chosen with one press, and said.
 async function loadWhere() {
   let r;
-  try { r = await (await fetch('dupfolders.php?t=' + Date.now())).json(); } catch (e) { $('dwRows').innerHTML = '<div class="empty">Could not ask the archive.</div>'; return; }
+  try { r = await (await fetch('dupfolders.php?t=' + Date.now() + '&drive=' + encodeURIComponent($('dupDrive').value || ''))).json(); } catch (e) { $('dwRows').innerHTML = '<div class="empty">Could not ask the archive.</div>'; return; }
   if (r.error) { $('dwRows').innerHTML = '<div class="empty">' + esc(r.error) + '</div>'; return; }
+  // the drives kept where they are: the archive or one of them, each with its own plan
+  const sel = $('dupDrive'), was = sel.value;
+  $('dupDriveBox').hidden = !(r.drives || []).length;
+  sel.innerHTML = '<option value="">The archive</option>' + (r.drives || []).map(function (d) {
+    return '<option value="' + esc(d.source) + '"' + (d.connected ? '' : ' disabled') + '>' + esc(d.name) +
+      (d.connected ? '' : ' (not plugged in)') + '</option>'; }).join('');
+  sel.value = was;
+  $('dupAcross').textContent = r.across && r.across.sets ? r.across.files.toLocaleString() + ' files are the same on more than one drive (' +
+    r.across.sets.toLocaleString() + ' sets): left alone, since a copy on another drive is often the only backup.' : '';
   $('dwBuilt').textContent = r.built ? (r.done ? 'from the tidy-up of ' + r.built + ': already moved' : 'from the look on ' + r.built) : '';
   const head = r.done ? '<p class="note" style="margin:0;padding:10px 14px;border-top:1px solid var(--line)"><b>That tidy-up is done:</b> ' +
     'these copies were already moved to the holding folder. They show here so you can see where duplicates come from. ' +
@@ -599,6 +613,7 @@ async function loadWhere() {
   });
 }
 
+$('dupDrive').onchange = loadWhere;
 document.querySelectorAll('#pane-duplicates [data-t]')
   .forEach(function (b) { b.onclick = function () { act(b.dataset.t, b); }; });
 
@@ -658,6 +673,7 @@ async function act(name, btn) {
   try {
     const ask = { action: name };
     if (name === 'plan' || name === 'apply') ask.keep_side = $('keepSide').value;   // run.php checks it again
+    if (['plan', 'apply', 'undo', 'verify'].includes(name) && $('dupDrive').value) ask.drive = $('dupDrive').value;
     const j = await (await fetch('../run.php', { method: 'POST',
       body: new URLSearchParams(ask) })).json();
     if (j.error) { oops(j.error); btn.disabled = false; btn.textContent = was; return; }

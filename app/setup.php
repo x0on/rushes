@@ -109,6 +109,26 @@ $hname = $h['label'] ?? 'workstation';
 $hwho  = helper_name();
 $e     = fn($x) => htmlspecialchars((string)$x);
 
+// What is on a drive kept where it is (Setup 01, in place), from the catalogue and the
+// last duplicates scan: what is footage, what is editing cache, what is a copy, and what
+// waits in its holding folder — what could go, before anything moves.
+function drive_report(array $d): array {
+    require_once __DIR__ . '/db/schema.php';
+    $p = rtrim($d['path'], '/') . '/'; $L = strlen($p);
+    $in = "substr(path, 1, $L) = '" . SQLite3::escapeString($p) . "'";
+    $r = db()->querySingle("SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b, COALESCE(SUM(CASE WHEN kind='video' THEN bytes END),0) v FROM files WHERE $in", true) ?: ['n' => 0, 'b' => 0, 'v' => 0];
+    $sw = array_map('cache_sql', cache_groups('sweep')); $kp = array_map('cache_sql', cache_groups('keep'));
+    $cache = $sw ? (int)db()->querySingle("SELECT COALESCE(SUM(bytes),0) FROM files WHERE $in AND (" . implode(' OR ', $sw) . ")"
+                                          . ($kp ? " AND NOT (" . implode(' OR ', $kp) . ")" : '')) : 0;
+    $dup = ((json_decode((string)@file_get_contents(web_dir() . '/dup-summary.json'), true) ?: [])['roots'] ?? [])['-' . drive_key($d)] ?? null;
+    $hold = (int)@file_get_contents(web_dir() . '/holding-kb-' . drive_key($d) . '.txt') * 1024;
+    $gb = fn($b) => $b >= 1e12 ? round($b / 1e12, 1) . ' TB' : ($b >= 1e9 ? round($b / 1e9, 1) . ' GB' : round($b / 1e6) . ' MB');
+    $line = number_format($r['n']) . ' files, ' . $gb($r['b']) . ': footage ' . $gb($r['v']) . ', editing caches ' . $gb($cache)
+          . ($dup ? ', copies ' . $gb($dup['bytes']) . ' (' . number_format($dup['copies']) . ($dup['copies'] === 1 ? ' file' : ' files') . ', from the last scan)' : ', copies: not scanned yet')
+          . ($hold ? ' · in its holding folder: ' . $gb($hold) : '');
+    return ['files' => (int)$r['n'], 'line' => $line];
+}
+
 // What the window offers. Cards are left out — Ingest finds those on its own —
 // and so is the archive itself, and the operating system's own clutter.
 $noise = ['System Volume Information', 'RECYCLER', 'lost+found', 'Network Trash Folder', 'Temporary Items'];
@@ -215,9 +235,10 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <small>Media is copied into this archive and organised on its shelves.
                    One drive to back up, one place to look.</small></label>
           <label class="opt"><input type="radio" name="shape" value="in_place" <?= $shape === 'in_place' ? 'checked' : '' ?>>
-            <b>Leave media on its own drives<span class="soon">next</span></b>
-            <small>Each drive keeps its files and carries its own index. Rushes searches
-                   across all of them at once, and catches a drive up whenever it comes back.</small></label>
+            <b>Leave media on its own drives</b>
+            <small>The drives in 03 keep their files where they are. Rushes lists each one, searches
+                   across all of them at once (an unplugged drive too, and says which to plug in),
+                   and lists a drive again whenever it comes back.</small></label>
         </div>
       </div>
 
@@ -292,15 +313,26 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
 
       <!-- ══ 03 sources ══ -->
       <div class="grp">
-        <h2><span>03 /</span> Where footage comes from</h2>
+        <h2><span>03 /</span> <?= $shape === 'in_place' ? 'The drives' : 'Where footage comes from' ?></h2>
+        <?php if ($shape === 'in_place'): ?>
+        <p>The drives Rushes looks after where they are (01). Each is known by its own ID, so it is found
+           again under another name; while it is unplugged its files stay in Search. Cards do not need
+           adding &mdash; Ingest finds them when they are plugged in.</p>
+        <?php else: ?>
         <p>Drives and shares Rushes brings media in from. Cards do not need adding —
            Ingest finds them when they are plugged in.</p>
+        <?php endif; ?>
 
         <?php foreach (($s['sources'] ?? []) as $i => $r): ?>
           <div class="src">
             <input type="text" name="s_label[<?= $i ?>]" value="<?= $e($r['label'] ?? '') ?>" aria-label="Name">
             <div class="where"><?= $e($r['path']) ?>
-              <small>seen by <?= ($r['seen_by'] ?? '') === 'archive' || $hmode !== 'external' ? 'this machine' : 'the ' . $e($hname) ?></small></div>
+              <small>seen by <?= ($r['seen_by'] ?? '') === 'archive' || $hmode !== 'external' ? 'this machine' : 'the ' . $e($hname) ?>
+              <?php foreach (drives_seen() as $d): if ($d['source'] !== rtrim($r['path'], '/')) continue; $rp = drive_report($d); ?>
+                &middot; <?= !empty($d['connected']) ? 'plugged in' . ($d['path'] !== $d['source'] ? ', now at ' . $e($d['path']) : '')
+                                                      : ($d['seen'] ? 'not plugged in since ' . $e(ago_words((int)$d['seen'])) : 'not plugged in yet') ?>
+                <?php if ($rp['files']): ?><br><?= $e($rp['line']) ?><?php endif; ?>
+              <?php endforeach; ?></small></div>
             <label class="x"><input type="checkbox" name="s_drop[<?= $i ?>]" value="1"> remove</label>
           </div>
         <?php endforeach; ?>

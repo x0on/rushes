@@ -26,10 +26,12 @@ function sync_search(bool $force = false): array {
         $ins = $db->prepare('INSERT OR IGNORE INTO files_new (path,name,ext,kind,bytes,dept,year,event,why,seen_at)
             VALUES (?,?,?,?,?,?,?,?,?,?)');
         $n = 0;
+        $roots = array_map(fn($r) => rtrim($r, '/') . '/', catalogue_roots());     // the archive, and drives kept where they are
+        $inside = function (string $p) use ($roots) { foreach ($roots as $r) if (str_starts_with($p, $r)) return true; return false; };
         $db->exec('BEGIN IMMEDIATE');
         while (($line = fgets($fh)) !== false) {
             [$size, $path] = array_pad(explode("\t", rtrim($line, "\r\n"), 2), 2, '');
-            if (!ctype_digit($size) || !str_starts_with($path, archive_dir() . '/') || is_system_junk($path)
+            if (!ctype_digit($size) || !$inside($path) || is_system_junk($path)
                 || str_contains($path, '/_rushes/') || str_ends_with($path, '.part')) continue;
             $c = classify($path); $dept = null;
             if (str_starts_with($path, shelf_dir() . '/')) {

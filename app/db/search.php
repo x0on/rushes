@@ -84,7 +84,11 @@ $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
 $res = $st->execute();
 if ($res === false) { echo json_encode(['error' => 'rows query: ' . $db->lastErrorMsg()]); exit; }
 $rows = [];
-while ($r = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
+    // a file on a drive kept where it is: which drive, and whether it is plugged in now
+    if ($d = drive_of($r['path'])) { $r['drive'] = (string)$d['name']; $r['away'] = empty($d['connected']); }
+    $rows[] = $r;
+}
 
 // true totals, and per-kind counts for the chips — one scan, not five
 $counts = ['all' => 0];
