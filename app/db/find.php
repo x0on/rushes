@@ -349,7 +349,7 @@ function draw() {
       html += '<div class="row pick' + (moved ? ' dim' : '') + '" data-p="' + esc(r.path) + '">' +
         '<span class="thumb k-' + esc(k) + '">' + (ICON[k] || ICON.file || '') + '</span>' +
         '<span class="nm">' + esc(r.name) +
-        (moved ? ' <span class="pill">moved aside</span>' : '') +
+        (moved ? ' <span class="pill">in Recently Removed</span>' : '') +
         // on a drive kept where it is; one that is not plugged in says so
         (r.drive ? ' <span class="pill"' + (r.away ? ' title="Plug in ' + esc(r.drive) + ' to open it"' : '') + '>on ' + esc(r.drive) +
           (r.away ? ' · not plugged in' : '') + '</span>' : '') +

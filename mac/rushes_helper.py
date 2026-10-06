@@ -878,7 +878,7 @@ class Window:
         url = local_url() if local() else f"http://127.0.0.1:{PORT}"
         s.setdefault("archive", {}).update(label=os.path.basename(arch), local=arch, web=WEB, url=url, as_seen_from_helper=arch, runs_on="mac")
         s.setdefault("helper", {})["mode"] = "built_in"
-        s["holding"] = {"duplicates": arch + "/_duplicates", "cache": arch + "/_duplicates/_media-cache"}
+        s["holding"] = {"duplicates": arch + "/_Recently Removed", "cache": arch + "/_Recently Removed/_media-cache"}
         # Free space: a NAS's floor (5 TB) would stop a laptop drive at once. Copying stops
         # below 2% of the drive (20 GB to 500 GB) and Overview warns below 5% (50 GB to 1 TB).
         lim, total = s.setdefault("limits", {}), shutil.disk_usage(arch).total

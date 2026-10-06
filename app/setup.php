@@ -147,6 +147,11 @@ foreach ($local as $v) {
                 'folders' => array_map(fn($d) => ['name' => $d, 'path' => $v['path'] . '/' . $d],
                               array_values(array_filter($v['top'], fn($d) => !in_array($d, $noise, true))))];
 }
+// ⓘ: the explanation a section does not need to show all the time (tokens.css → .info)
+$tip   = fn($t) => '<span class="info" tabindex="0" data-tip="' . $e($t) . '">i</span>';
+$N     = 0;                                   // sections are numbered as they show: a Mac has no Helper section
+$num   = function () use (&$N) { return sprintf('%02d', ++$N); };
+$open  = $said !== '' && $said !== 'ok';      // nothing saved: every section open, to see what to fix
 $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . ' TB'
                                        : number_format($b / 1073741824) . ' GB';
 ?><!doctype html>
@@ -208,6 +213,18 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
   .how li .cmd { margin-top: 10px }
   .how + .seen { margin-top: 4px }
   .how li::marker { color: var(--accent-text); font-weight: 650 }
+  /* A section that is done is one line: what it is set to, and Change */
+  details.sec > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+  details.sec > summary::-webkit-details-marker { display: none }
+  details.sec > summary h2 { font-size: 14px; font-weight: 650; margin: 0 }
+  details.sec > summary h2 span { color: var(--muted); font-weight: 500; margin-right: 4px }
+  details.sec > summary .val { color: var(--muted); font-size: 13px; flex: 1; min-width: 0; overflow-wrap: anywhere }
+  details.sec > summary .chg { color: var(--accent-text); font-size: 13px }
+  details.sec[open] > summary .val, details.sec[open] > summary .chg { display: none }
+  details.sec[open] > summary { margin: 0 0 14px }
+  details.add-w > summary { list-style: none; display: inline-flex; margin-top: 14px }
+  details.add-w > summary::-webkit-details-marker { display: none }
+  details.add-w[open] > summary { display: none }
 </style>
 
 <div class="app">
@@ -226,9 +243,10 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
       <?php endif; ?>
 
       <!-- ══ 01 the decision everything else follows ══ -->
-      <div class="grp">
-        <h2><span>01 /</span> How media is organised</h2>
-        <p>The one decision that changes what every other page does.</p>
+      <details class="grp sec"<?= $open || !isset($s['organise']['shape']) ? ' open' : '' ?>>
+        <summary><h2><span><?= $num() ?> /</span> How media is organised<?= $tip('The one decision that changes what every other page does.') ?></h2>
+          <span class="val"><?= $shape === 'in_place' ? 'Left on its own drives' : 'Brought to one place' ?></span>
+          <span class="chg">Change</span></summary>
         <div class="pick">
           <label class="opt"><input type="radio" name="shape" value="one_place" <?= $shape !== 'in_place' ? 'checked' : '' ?>>
             <b>Bring everything to one place</b>
@@ -240,12 +258,19 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
                    across all of them at once (an unplugged drive too, and says which to plug in),
                    and lists a drive again whenever it comes back.</small></label>
         </div>
-      </div>
+      </details>
 
       <!-- ══ 02 the archive ══ -->
-      <div class="grp">
-        <h2><span>02 /</span> This archive</h2>
-        <p>The collection everything is measured against.</p>
+      <?php $aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
+            $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST);
+            $aDrive = ''; foreach ($local as $v) if ($v['path'] === $aLoc) $aDrive = $v['name'];
+            $aNum = !on_mac() && filter_var(trim($aHost, '[]'), FILTER_VALIDATE_IP);     // a number: the warning shows, so open
+            $aDone = $aLoc !== '' && (on_mac() || $aUrl !== '') && !$aNum; ?>
+      <details class="grp sec"<?= $open || !$aDone ? ' open' : '' ?>>
+        <summary><h2><span><?= $num() ?> /</span> This archive<?= $tip('The collection everything is measured against.') ?></h2>
+          <span class="val"><?= $e($s['name'] ?? 'Rushes') ?> &middot; <?= $e($aDrive ?: basename($aLoc)) ?> &middot; <?= $e($aUrl ?: $here) ?>
+            <button type="button" class="ghost" data-copy="<?= $e($aUrl ?: $here) ?>">Copy</button></span>
+          <span class="chg">Change</span></summary>
         <label class="f"><span>What to call it</span>
           <input type="text" name="name" value="<?= $e($s['name'] ?? 'Rushes') ?>"></label>
 
@@ -258,15 +283,11 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             <?php endif; ?>
           </select></label>
 
-        <?php $aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
-              $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST); ?>
         <?php if (on_mac()): ?>
           <!-- Rushes on this Mac (HOW-IT-WORKS.md → Rushes on this Mac): its address is this Mac's own -->
           <input type="hidden" name="a_url" value="<?= $e($aUrl ?: $here) ?>">
-          <label class="f"><span>Address</span></label>
-          <div class="seen">On this Mac: <b><?= $e($aUrl ?: $here) ?></b> (Open Rushes, in the menu bar icon, opens it).
-            Other devices open it only when <b>Let other devices open Rushes</b> is on in the Rushes app, at this
-            Mac's name on the network or its Tailscale address, and only with the password.</div>
+          <label class="f"><span>Address<?= $tip('Other devices open it only when Let other devices open Rushes is on in the Rushes app, at this Mac\'s name on the network or its Tailscale address, and only with the password.') ?></span></label>
+          <div class="seen"><b><?= $e($aUrl ?: $here) ?></b> <button type="button" class="ghost" data-copy="<?= $e($aUrl ?: $here) ?>">Copy</button></div>
         <?php else: ?>
         <label class="f"><span>Address people open Rushes at</span>
           <input type="text" name="a_url" id="aUrl" value="<?= $e($aUrl ?: $here) ?>"></label>
@@ -309,19 +330,13 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           </script>
         <?php endif; ?>
         <?php endif; /* not on a Mac */ ?>
-      </div>
+      </details>
 
       <!-- ══ 03 sources ══ -->
       <div class="grp">
-        <h2><span>03 /</span> <?= $shape === 'in_place' ? 'The drives' : 'Where footage comes from' ?></h2>
-        <?php if ($shape === 'in_place'): ?>
-        <p>The drives Rushes looks after where they are (01). Each is known by its own ID, so it is found
-           again under another name; while it is unplugged its files stay in Search. Cards do not need
-           adding &mdash; Ingest finds them when they are plugged in.</p>
-        <?php else: ?>
-        <p>Drives and shares Rushes brings media in from. Cards do not need adding —
-           Ingest finds them when they are plugged in.</p>
-        <?php endif; ?>
+        <h2 style="margin-bottom:14px"><span><?= $num() ?> /</span> <?= $shape === 'in_place' ? 'The drives' : 'Where footage comes from' ?><?= $tip($shape === 'in_place'
+            ? 'The drives Rushes looks after where they are. Each is known by its own ID, so it is found again under another name; while it is unplugged its files stay in Search. Cards do not need adding: Ingest finds them when they are plugged in.'
+            : 'Drives and shares Rushes brings media in from. Cards do not need adding: Ingest finds them when they are plugged in.') ?></h2>
 
         <?php foreach (($s['sources'] ?? []) as $i => $r): ?>
           <div class="src">
@@ -346,16 +361,12 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
       </div>
 
       <!-- ══ 04 helper ══ -->
-      <div class="grp">
-        <h2><span>04 /</span> Helper</h2>
-        <p>The part of Rushes that copies. It watches for cards and drives, and does
-           whatever Ingest and Transfers ask for.</p>
-        <?php if (on_mac()): ?>
-          <!-- On a Mac the helper is part of the Rushes app itself -->
-          <input type="hidden" name="h_mode" value="built_in">
-          <p class="note">On this Mac, the helper is part of the <b>Rushes</b> app itself: cards and drives
-            plugged into this Mac are what it sees. Its switches are in its menu bar icon, and below in Manage.</p>
-        <?php endif; ?>
+      <!-- On a Mac the helper is the Rushes app itself: nothing to set, so no section -->
+      <?php if (on_mac()): ?><input type="hidden" name="h_mode" value="built_in"><?php endif; ?>
+      <details class="grp sec"<?= on_mac() ? ' hidden' : '' ?><?= $open || !$hv['fresh'] || ($hmode === 'external' && !helper_paired()) ? ' open' : '' ?>>
+        <summary><h2><span><?= on_mac() ? '' : $num() . ' /' ?></span> Helper<?= $tip('The part of Rushes that copies. It watches for cards and drives, and does whatever Ingest and Transfers ask for.') ?></h2>
+          <span class="val"><?= $hmode === 'external' ? 'On the ' . $e($hname) : 'Built in' ?> &middot; running</span>
+          <span class="chg">Change</span></summary>
         <div class="pick"<?= on_mac() ? ' hidden' : '' ?>>
           <label class="opt"><input type="radio" name="h_mode" value="built_in" <?= $hmode !== 'external' ? 'checked' : '' ?>>
             <b>Built in</b>
@@ -584,39 +595,18 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           document.querySelectorAll('[name=h_mode]').forEach(function (r) {
             r.onchange = function () {
               document.getElementById('hExt').hidden = r.value !== 'external' || !r.checked; }; });
+          // Copy and ⓘ in a section's one line do their own thing, not open the section
+          document.querySelectorAll('details.sec > summary button, details.sec > summary .info').forEach(function (x) {
+            x.addEventListener('click', function (ev) { ev.preventDefault(); }); });
         </script>
-      </div>
+      </details>
 
-      <!-- ══ 06 editors' work ══ -->
+      <!-- ══ editors' computers ══ -->
       <div class="grp">
-        <h2><span>05 /</span> Editors' work</h2>
-        <p>Rushes Watcher keeps each editor's Premiere projects in the archive: the files a project uses and what
-           the editor exports. Install it once on each editor's computer. The editor keeps working as usual.</p>
         <?php $ws = watchers(); $wurl = rtrim((string)(settings()['archive']['url'] ?? ''), '/');
               // On a Mac, editors' computers reach it by this Mac's name, once other devices are let in
               if (on_mac() && name_url() !== '') $wurl = name_url(); ?>
-        <?php if (on_mac()): ?>
-          <div class="seen">Editors' computers reach Rushes on this Mac only while <b>Let other devices open Rushes</b>
-            is on in the Rushes app, and the password is your own (not the first one).</div>
-        <?php endif; ?>
-        <div class="how-h" style="margin-top:14px">Add an editor's computer</div>
-        <ol class="how">
-          <li>On the editor's computer, download Rushes Watcher (about 30 MB):
-            <p class="mac-only" style="margin:12px 0 6px"><a class="btn" href="<?= $e($wurl) ?>/db/helper.php?app=watcher">Download Rushes Watcher</a></p>
-            <small class="mac-only">Not at that computer? Send the editor this link to download it:</small>
-            <small class="phone-only">Rushes Watcher is a Mac app. Send the editor this link, to open on their Mac:</small>
-            <?= cmd_block($wurl . '/db/helper.php?app=watcher') ?></li>
-          <li>Open <b>Rushes Watcher</b> from Downloads. The first time, macOS stops it with
-            <i>“Apple could not verify Rushes Watcher…”</i>: press <b>Done</b>, then <b>System Settings → Privacy &amp; Security</b>,
-            <i>“Rushes Watcher was blocked”</i>, <b>Open Anyway</b>. macOS asks this once. Its window explains the rest.</li>
-          <li>Here, type the computer's name (the editor's, usually) and press the button:
-            <p style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input type="text" id="wName" placeholder="Name, e.g. Maria" maxlength="40" style="width:14em">
-              <button type="button" class="btn" id="wPair">Add an editor's computer</button></p>
-            <div id="wSaid"></div></li>
-          <li>In Rushes Watcher, press <b>Paste the code from Rushes</b>. The computer appears in the list below.</li>
-        </ol>
-        <div class="how-h" style="margin-top:14px">Editors' computers (<span id="wN"><?= count($ws) ?></span>)</div>
+        <h2 style="margin-bottom:14px"><span><?= $num() ?> /</span> Editors' computers (<span id="wN" style="margin:0"><?= count($ws) ?></span>)<?= $tip('Rushes Watcher keeps each editor\'s Premiere projects in the archive: the files a project uses and what the editor exports. Install it once on each editor\'s computer. The editor keeps working as usual.') ?></h2>
         <div id="wList">
         <?php if (!$ws): ?><p class="note" style="margin:0">None yet. Each computer you add appears here.</p><?php endif; ?>
         <?php
@@ -631,15 +621,37 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
                 if (str_starts_with($l, "at\t")) $heard = (int)substr($l, 3);
             $last = null; try { $st = db()->prepare('SELECT name, saved FROM projects WHERE watcher = :k ORDER BY saved DESC LIMIT 1');
                 $st->bindValue(':k', $key); $last = $st->execute()->fetchArray(SQLITE3_ASSOC) ?: null; } catch (Throwable $x) {} ?>
-          <div class="seen ok" style="display:flex;gap:10px;align-items:center">
-            <span>✓ <b><?= $e($w['name'] ?? ($w['host'] ?: 'a computer')) ?></b> &mdash; <?= $e($w['host'] ?? '') ?>, paired <?= $e(date('j M Y', (int)$w['at'])) ?>
+          <div class="seen" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line-soft)">
+            <span style="flex:1"><b style="color:var(--fg)"><?= $e($w['name'] ?? ($w['host'] ?: 'a computer')) ?></b> &mdash; <?= $e($w['host'] ?? '') ?>, paired <?= $e(date('j M Y', (int)$w['at'])) ?>
               <?= !empty($w['folder']) ? '· its folder: <code>Projects/' . $e($w['folder']) . '</code>' : '· <b>pair it again</b> to give it its folder' ?>
-              <br><small class="muted">Last heard from <?= $heard ? $e($ago($heard)) : 'never yet' ?> ·
+              <br><small>Last heard from <?= $heard ? $e($ago($heard)) : 'never yet' ?> ·
                 <?= $last ? 'last project saved ' . $e($ago((int)$last['saved'])) . ': ' . $e($last['name']) : 'no project saved yet' ?></small></span>
             <button type="button" class="ghost wForget" data-key="<?= $e(substr($k, 0, 16)) ?>" data-host="<?= $e($w['name'] ?? $w['host']) ?>">Remove</button>
           </div>
         <?php endforeach; ?>
         </div>
+        <details class="add-w"<?= $ws ? '' : ' open' ?>><summary class="btn quiet tab-i"><?= icon('plus', 2) ?> Add an editor's computer</summary>
+        <?php if (on_mac()): ?>
+          <div class="seen" style="margin-top:14px">Editors' computers reach Rushes on this Mac only while <b>Let other devices open Rushes</b>
+            is on in the Rushes app, and the password is your own (not the first one).</div>
+        <?php endif; ?>
+        <ol class="how">
+          <li>On the editor's computer, download Rushes Watcher (about 30 MB):
+            <p class="mac-only" style="margin:12px 0 6px"><a class="btn" href="<?= $e($wurl) ?>/db/helper.php?app=watcher">Download Rushes Watcher</a></p>
+            <small class="mac-only">Not at that computer? Send the editor this link to download it:</small>
+            <small class="phone-only">Rushes Watcher is a Mac app. Send the editor this link, to open on their Mac:</small>
+            <?= cmd_block($wurl . '/db/helper.php?app=watcher') ?></li>
+          <li>Open <b>Rushes Watcher</b> from Downloads. The first time, macOS stops it with
+            <i>“Apple could not verify Rushes Watcher…”</i>: press <b>Done</b>, then <b>System Settings → Privacy &amp; Security</b>,
+            <i>“Rushes Watcher was blocked”</i>, <b>Open Anyway</b>. macOS asks this once. Its window explains the rest.</li>
+          <li>Here, type the computer's name (the editor's, usually) and press the button:
+            <p style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="wName" placeholder="Name, e.g. Maria" maxlength="40" style="width:14em">
+              <button type="button" class="btn" id="wPair">Make a code</button></p>
+            <div id="wSaid"></div></li>
+          <li>In Rushes Watcher, press <b>Paste the code from Rushes</b>. The computer appears in the list above.</li>
+        </ol>
+        </details>
         <details style="margin-top:14px"><summary class="note">More settings: when a project is called resting</summary>
           <label class="f"><span>Resting after</span>
             <input type="number" name="rest_days" min="1" max="365" style="width:7em" value="<?= (int)(settings()['projects']['rest_days'] ?? 10) ?>"> days without a save
@@ -679,7 +691,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
                 setTimeout(look, 3000);
               })();
             } catch (e) { said.textContent = 'Could not make a code: ' + e.message; }
-            b.disabled = false; b.textContent = 'Add an editor\'s computer';
+            b.disabled = false; b.textContent = 'Make a code';
           };
           document.querySelectorAll('.wForget').forEach(function (x) {
             x.onclick = async function () {
@@ -698,10 +710,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
       </div>
 
       <input type="hidden" name="_save" value="1">
-      <button class="btn" type="submit">Save settings</button>
-      <p class="note" style="margin:12px 0 0">Rules about media &mdash; what counts as cache,
-         which files are never swept, when a disk is too full &mdash; are the same everywhere
-         and live in <code>rules.json</code>, not here.</p>
+      <button class="btn" type="submit">Save settings</button><?= $tip('Rules about media (what counts as cache, which files are never swept, when a disk is too full) are the same everywhere and live in rules.json, not here.') ?>
     </form>
 
     <!-- One question at a time: which drive, then the whole of it or one
@@ -715,7 +724,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
         <p class="note" style="margin:0 0 12px">Which drive is the footage on?</p>
         <div class="drives" id="dDrives"></div>
         <p class="note" id="dNone" hidden style="margin:0">No drives are showing. If the footage
-          is on another computer, start its helper first &mdash; see <b>04 Helper</b>.</p>
+          is on another computer, start its helper first &mdash; see <b>Helper</b>.</p>
       </div>
 
       <div id="d2" hidden>

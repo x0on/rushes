@@ -717,7 +717,7 @@ const ASK = {
                  : json_encode('Read every file in the archive to find the ones that are the same (Czkawka, in its container). Hours for a big archive; other jobs wait meanwhile. Moves nothing.') ?>,
   plan:     'Look through the archive for files that are the same file. Moves nothing.',
   apply:    'Every extra copy goes to Recently Removed. Nothing is deleted; Recover puts them back.',
-  undo:     'Every duplicate copy in Recently Removed goes back where it was.',
+  undo:     'Recover: every duplicate copy in Recently Removed goes back where it was.',
   'organize-undo':  'Put back the files the old date-based layout moved.',
   import:   'Rebuild search from the file list. Seconds to minutes.',
   'gpu-test': 'Measure what the video chip can do: test encodes and one real clip, a few minutes. Writes a report; makes no video files. Downloads a public ffmpeg container image.',

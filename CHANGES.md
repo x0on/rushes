@@ -17,6 +17,12 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   deleted what.
 - **One scroll bar** on Manage's pages: what sits above a page makes it
   shorter, never the window longer.
+- **Setup, simpler:** a finished section is one line with **Change**; This
+  archive is name · drive · address, with Copy. No Helper section on a Mac
+  (the app is the helper). Editors' computers is a list, with **Add an
+  editor's computer** showing the steps only when pressed. The explanations
+  are behind ⓘ.
+- **The same words everywhere:** Remove, Recover, Recently Removed, Delete All.
 
 ## 0.12.3 — October 2026
 

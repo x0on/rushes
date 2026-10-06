@@ -710,7 +710,7 @@ class Runner:
             if os.path.isfile(dst) and not os.path.exists(src):
                 os.makedirs(os.path.dirname(src), exist_ok=True)
                 os.rename(dst, src); n += 1
-        self.log(f"put back {n} cache files")
+        self.log(f"recovered {n} cache files")
         return n
 
     def build_manifest(self):

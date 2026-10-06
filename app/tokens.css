@@ -415,7 +415,8 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
  * page itself says only names, states and buttons. */
 .info { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
   border: 1px solid var(--line); color: var(--muted); font: italic 600 10.5px/1 Georgia, serif;
-  cursor: help; position: relative; vertical-align: 1px; margin-left: 5px; flex: none }
+  cursor: help; position: relative; vertical-align: 1px; margin-left: 5px; flex: none;
+  text-transform: none; letter-spacing: 0 }
 .info:hover, .info:focus { color: var(--fg); border-color: var(--muted); outline: none }
 .info:hover::after, .info:focus::after { content: attr(data-tip); position: absolute; left: -8px; top: calc(100% + 6px);
   width: max-content; max-width: min(320px, 80vw); background: var(--fg); color: var(--bg);
