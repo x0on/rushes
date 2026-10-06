@@ -3308,18 +3308,18 @@ def main():
         else:
             # The reserve is kept file by file, not only when the folder starts: the
             # free space is asked once a minute (an external helper asks Rushes) and
-            # what is copied meanwhile is taken off it.
+            # what is copied meanwhile is taken off it, once it is copied (a copy that
+            # failed left nothing behind, so it takes nothing off).
             if time.time() - room[1] > 60:
                 room[:] = [free_bytes(NAS_MOUNT), time.time()]
-            if room[0] is not None:
-                if room[0] - size < FLOOR:
-                    raise OSError(errno.ENOSPC, f"only {room[0] / 1024 ** 3:.0f} GB free, and the floor is {FLOOR / 1024 ** 3:.0f} GB")
-                room[0] -= size
+            if room[0] is not None and room[0] - size < FLOOR:
+                raise OSError(errno.ENOSPC, f"only {room[0] / 1024 ** 3:.0f} GB free, and the floor is {FLOOR / 1024 ** 3:.0f} GB")
             progress(name, force=True)
             def moved(n):
                 nonlocal done_b
                 done_b += n; progress(name)
             hexd, algo = copy_verified(src, dest, size, moved)
+            if room[0] is not None: room[0] -= size
             log.write(f"{src}\t{dest}\n"); log.flush()
             # Kept in the where-it-came-from record: years from now, the archive
             # copy can still be proven to be the original.

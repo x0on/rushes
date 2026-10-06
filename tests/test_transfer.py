@@ -294,6 +294,20 @@ class CopyTests(unittest.TestCase):
             self.assertEqual(self.run_copy(), 1)
         self.assertFalse((self.dest / 'a.mov').exists())
 
+    def test_a_failed_copy_takes_no_space_off_the_count(self):
+        # Review of 0.12.5: free space = the floor plus one file; the first attempt fails at
+        # its last step, so nothing was written. The retry must still go ahead.
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        rename, calls = self.mod.ts.rename_new, [0]
+        def hiccup(src, dst):
+            calls[0] += 1
+            if calls[0] == 1: raise OSError('network hiccup')
+            return rename(src, dst)
+        with patch.object(self.mod, 'FLOOR', 100), patch.object(self.mod, 'free_bytes', return_value=110), \
+             patch.object(self.mod.ts, 'rename_new', side_effect=hiccup), patch.object(self.mod.time, 'sleep'):
+            self.assertEqual(self.run_copy(), 0)
+        self.assertEqual((self.dest / 'a.mov').read_bytes(), b'a' * 10)
+
     def test_missing_source_never_becomes_a_completed_empty_job(self):
         self.source.rmdir()
         self.run_copy()
