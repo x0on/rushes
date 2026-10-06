@@ -1,11 +1,127 @@
 # Rushes — Media Management Software, by Alejandro Renteria.
 # Source available: https://github.com/x0on/rushes — whoever finds this file on a computer can see what it is and who made it.
-"""Local durable checkpoints and a retryable search outbox; no mounted drive needed."""
+"""Two things every transfer leans on:
+
+- storing a file safely: the few operations that can lose footage when done
+  carelessly, written once here and used by ingest.py and runner.py alike
+  (HOW-IT-WORKS.md → How a file is copied);
+- local durable checkpoints and a retryable search outbox; no mounted drive needed.
+
+It lives in this file, not one of its own, because the helper's code is a fixed,
+signed set of four files (release.py): a fifth would not reach a helper that
+updates itself from an older release."""
+import errno
 import json
+import os
+import secrets
 import sqlite3
+import sys
 import time
 import urllib.parse
 import urllib.request
+
+
+# ── storing a file safely ───────────────────────────────────────────────────
+CHUNK = 8 << 20
+
+
+def same_bytes(a, b, tick=None):
+    """Every byte of both files, read and compared. True only when they are the
+    same file's content; False when they differ; None when either cannot be
+    read (never "the same"). tick(): called between chunks (a heartbeat)."""
+    try:
+        if os.path.getsize(a) != os.path.getsize(b):
+            return False
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            while True:
+                x, y = fa.read(CHUNK), fb.read(CHUNK)
+                if x != y:
+                    return False
+                if not x:
+                    return True
+                if tick:
+                    tick()
+    except OSError:
+        return None
+
+
+def file_key(st):
+    """What a remembered fingerprint is tied to (st: the file's os.stat): size, the
+    time it last changed to the nanosecond, and the file's own number on its drive
+    (a file replaced by another of the same size and date has a new one)."""
+    return f"{st.st_size}|{st.st_mtime_ns}|{st.st_ino}"
+
+
+def inside(path, root):
+    """True when path really leads into root: shortcuts (symlinks) on the way
+    are followed first, so a folder that is a shortcut to somewhere else does
+    not count as inside. The path itself need not exist yet."""
+    r = os.path.realpath(root).rstrip(os.sep)
+    p = os.path.realpath(path)
+    return p == r or p.startswith(r + os.sep)
+
+
+def new_part(dest):
+    """A temporary file beside dest that did not exist before and is this
+    process's alone: (file opened for writing, its path). Never opens a file
+    that is already there, nor writes through a shortcut."""
+    d, n = os.path.split(dest)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    for _ in range(20):
+        tmp = os.path.join(d, f"{n}.{secrets.token_hex(4)}.part")
+        try:
+            return os.fdopen(os.open(tmp, flags, 0o644), "wb"), tmp
+        except FileExistsError:
+            continue
+    raise OSError(errno.EEXIST, "could not make a temporary file", dest)
+
+
+def _rename_excl(src, dst):
+    """The operating system's own rename that refuses to replace: macOS
+    renamex_np(RENAME_EXCL), Linux renameat2(RENAME_NOREPLACE). True when done,
+    False when this system or drive does not offer it; raises otherwise."""
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        if sys.platform == "darwin":
+            fn, args = libc.renamex_np, (os.fsencode(src), os.fsencode(dst), 0x4)
+        else:
+            fn, args = libc.renameat2, (-100, os.fsencode(src), -100, os.fsencode(dst), 0x1)   # AT_FDCWD
+    except (ImportError, OSError, AttributeError):
+        return False
+    if fn(*args) == 0:
+        return True
+    e = ctypes.get_errno()
+    if e in (errno.EINVAL, errno.ENOSYS, errno.ENOTSUP, getattr(errno, "EOPNOTSUPP", errno.ENOTSUP)):
+        return False
+    raise OSError(e, os.strerror(e), dst)
+
+
+def rename_new(tmp, dest):
+    """tmp (a finished copy, or a file being moved on the same drive) takes the
+    name dest, only if nothing has that name: a file that
+    appeared there meanwhile (Finder, an editor, another copy) is never
+    replaced; FileExistsError says so. The folder's new entry is then stored
+    on the disk, so the name survives a power cut as well as the bytes."""
+    if not _rename_excl(tmp, dest):
+        try:
+            os.link(tmp, dest)                 # fails when dest exists: one step, no gap
+            os.unlink(tmp)
+        except FileExistsError:
+            raise
+        except OSError:
+            # ponytail: a drive with neither (exFAT, some shares): look, then
+            # rename. The gap between the two is microseconds, not zero.
+            if os.path.lexists(dest):
+                raise FileExistsError(errno.EEXIST, "a file of that name is already there", dest)
+            os.rename(tmp, dest)
+    try:
+        fd = os.open(os.path.dirname(dest) or ".", os.O_RDONLY)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+    except OSError:
+        pass                                   # a share may not allow it; the bytes are stored already
+
 
 
 class TransferState:

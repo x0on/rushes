@@ -3,6 +3,49 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.6 — October 2026 (the review of 0.12.5, and a workload review)
+
+- **A failed copy takes no space off the count:** near the free-space floor, a
+  retry was stopped as "full" when it was not.
+- **Delete All and Find duplicates watch their long reads:** as long as data
+  keeps coming, however big the file; no data for 2 minutes and the read is
+  walked away from, the file stays, and Pause stops it within seconds.
+- **The checker saves its place at most every 30 seconds**, not after every
+  file: 1,000 files checked wrote 90 MB of progress before, 91 KB now.
+- **Remembered fingerprints stay bounded,** and those read while copying are
+  kept, so a card checked once is not read again.
+
+## 0.12.5 — October 2026 (a safety round, from an outside review)
+
+Each change has a test that does what the review did to show the problem.
+
+- **"Already here" means every byte.** The size and the first and last
+  megabyte only find which archive files to compare; a file is left out of a
+  copy only when every byte matches. The same check is asked again when the
+  copy starts, and before trusting an earlier record of where a file went.
+  `--paranoid` is no longer needed.
+- **A copy never replaces a file.** Its temporary file is its own (a random
+  name, opened only if new), and the real name is given only if nothing has
+  it by then (the system's own no-replace rename). Tidy-ups, Recover and cache
+  moves use the same rename.
+- **Only inside the archive, where it really leads.** A folder that is a
+  shortcut to somewhere else does not count as inside: nothing is copied or
+  moved through it.
+- **Delete All compares first.** A duplicate is deleted only if it is still the
+  same, byte for byte, as the copy that stays; if that copy changed, the one
+  in Recently Removed may be the last good one, and it stays. Recover forgets
+  only what was deleted. Check before deleting (`verify.sh`) compares contents,
+  not sizes.
+- **A stuck job is not started twice.** What did not answer in time may still
+  happen; until it does, it is not started again beside it.
+- **Copying goes first at the disk.** Describing starts no folder while the
+  helper copies, and holds one already started until the copy is done. Find
+  duplicates and Delete All wait the same way.
+- **Free space is checked before each file**, not only when a folder starts.
+- **A remembered fingerprint is tied to the file itself** (its date to the
+  nanosecond and its own number on the drive). The first Find duplicates
+  after this update reads the duplicates again, once.
+
 ## 0.12.4 — October 2026 (being tried on a Mac)
 
 - **Duplicates, as in Photos:** one button, **Find duplicates**; then what it

@@ -5,7 +5,9 @@
 #   sh verify.sh <file or folder>    just that one
 #
 # A thing is safe to delete when, for every file in it, the copy we kept is
-# still on disk at exactly the size it was measured at. Filenames are ignored
+# still on disk and every byte of it is the same as the file here (cmp reads
+# both in full): if the kept copy changed or broke since the scan, the one here
+# may be the last good one. Unreadable is never safe. Filenames are ignored
 # entirely — cameras reuse them, so the archive has dozens of unrelated clips
 # called DJI_0002.MOV. Only bytes count.
 #
@@ -139,7 +141,18 @@ while IFS="$TAB" read -r dst src keeper bytes; do
             "$TAB" "$TAB" "$dst" "$TAB" "$keeper" "$TAB" >> $T/verify.rows
         bad=$((bad + 1)); continue
     fi
-    printf 'ROW%syes%s%s%s%s%s%s bytes\n' \
+    if [ ! -e "$dst" ]; then
+        printf 'ROW%syes%s%s%s%s%snot in the holding folder any more\n' \
+            "$TAB" "$TAB" "$dst" "$TAB" "$keeper" "$TAB" >> $T/verify.rows
+        ok=$((ok + 1)); continue
+    fi
+    cmp -s "$dst" "$keeper" 2>/dev/null; same=$?
+    if [ "$same" -ne 0 ]; then
+        printf 'ROW%sno%s%s%s%s%s%s\n' "$TAB" "$TAB" "$dst" "$TAB" "$keeper" "$TAB" \
+            "$([ "$same" -eq 1 ] && echo 'the copy we kept is not the same as this one any more' || echo 'could not be read to compare')" >> $T/verify.rows
+        bad=$((bad + 1)); continue
+    fi
+    printf 'ROW%syes%s%s%s%s%s%s bytes, every one the same\n' \
         "$TAB" "$TAB" "$dst" "$TAB" "$keeper" "$TAB" "$bytes" >> $T/verify.rows
     ok=$((ok + 1))
 done < $T/verify.work
@@ -148,13 +161,13 @@ done < $T/verify.work
 if [ "$bad" -eq 0 ]; then
     out "VERDICT${TAB}SAFE"
     if [ "$n" -eq 1 ]; then
-        out "SUMMARY${TAB}Safe to delete. The original is still on the server, untouched."
+        out "SUMMARY${TAB}Safe to delete. The copy we kept is still on the server, and every byte matches."
     else
-        out "SUMMARY${TAB}Safe to delete. All $n files here are copies, and all $n originals are still on the server."
+        out "SUMMARY${TAB}Safe to delete. All $n files here are copies, and every byte of each matches the copy we kept."
     fi
 else
     out "VERDICT${TAB}UNSAFE"
-    out "SUMMARY${TAB}Do not delete. $bad of $n files have no surviving original."
+    out "SUMMARY${TAB}Do not delete. $bad of $n files have no copy that matches them in full."
 fi
 out "COUNTS${TAB}$n${TAB}$ok${TAB}$bad${TAB}$IGNORED"
 cut -f1 $T/verify.ignored | sort | uniq -c | sort -rn | while read -r c r; do

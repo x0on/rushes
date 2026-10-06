@@ -2,7 +2,7 @@
 verify.sh), on a pretend drive, with a Mac's stat (BSD: -f, no -c) and the
 awk macOS has (original-awk, when installed). Run: python3 -m unittest test_mac_runner
 Nothing outside a temporary folder is touched."""
-import json, os, shutil, stat, sys, tempfile, unittest
+import json, os, shutil, stat, sys, tempfile, unittest, unittest.mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.join(HERE, "..", "app")
@@ -146,7 +146,95 @@ class MacJobs(unittest.TestCase):
         self.assertEqual(open(os.path.join(self.web, "holding-kb.txt")).read().split(), ["0", "0"])
         said = open(os.path.join(self.web, "activity.tsv")).read()
         self.assertIn("\tAna\tRemoved 1 duplicate copy on Drive into Recently Removed", said)
-        self.assertIn("\tAna\tDeleted for good everything in Recently Removed on Drive: 1 file", said)
+        self.assertIn("\tAna\tDeleted for good from Recently Removed on Drive: 1 file", said)
+
+    def test_delete_all_keeps_a_duplicate_whose_kept_copy_changed(self):
+        # Report #2: the copy that stays changed after the scan (same size): the one held may be
+        # the last good one. verify says so, and Delete All keeps it.
+        big = os.urandom(5000)
+        kept = self.put("Parks/A.mov", big); self.put("Card dumps/card 1/A.mov", big)
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        self.r.build_index(); self.r.job("find", {}); self.r.job("apply", {})
+        held = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/A.mov")
+        open(kept, "wb").write(b"B" * 5000)
+        self.r.job("verify", {})
+        self.assertIn("VERDICT\tUNSAFE", open(os.path.join(self.web, "verify-result.tsv")).read())
+        self.r.job("empty", {"WHO": "Ana"})
+        self.assertEqual(open(held, "rb").read(), big, "kept: it may be the last good copy")
+        self.assertIn(held, open(os.path.join(self.web, "dedupe-moves.tsv")).read(), "Recover still knows it")
+        self.assertIn("no longer the same as the copy that stays", open(os.path.join(self.web, "activity.tsv")).read())
+
+    def test_a_file_delete_all_could_not_delete_keeps_its_record(self):
+        # Report #5: one held file cannot be deleted; Recover must still know where it came from.
+        a = self.put("_Recently Removed/_media-cache/x.pek", b"1"); b = self.put("_Recently Removed/_media-cache/y.pek", b"2")
+        open(os.path.join(self.web, "cache-moves.tsv"), "w").write(f"{self.a}/x.pek\t{a}\n{self.a}/y.pek\t{b}\n")
+        self.r.removed_at("", 1000)
+        remove = os.remove
+        def refuse(p):
+            if p == a: raise PermissionError(1, "Operation not permitted")
+            remove(p)
+        with unittest.mock.patch.object(runner.os, "remove", side_effect=refuse):
+            self.r.empty(self.a, "", "Ana")
+        moves = open(os.path.join(self.web, "cache-moves.tsv")).read()
+        self.assertIn(a, moves); self.assertNotIn(b, moves)
+        self.assertEqual(self.r.removed_at(""), 1000, "what is left keeps its age")
+
+    def test_a_stuck_operation_is_not_started_again_beside_itself(self):
+        # Report #6: walked away from is not finished.
+        stuck, ran = __import__("threading").Event(), []
+        self.assertFalse(self.r.v("database copy", stuck.wait, 0.1))
+        self.assertFalse(self.r.v("database copy", lambda: ran.append(1)))
+        self.assertEqual(ran, [], "not started a second time while the first is still out")
+        self.assertIn("has not finished yet", self.log())
+        stuck.set(); self.r.pending["database copy"].join(2)
+        self.assertTrue(self.r.v("database copy", lambda: ran.append(1)))
+        self.assertEqual(ran, [1])
+
+    def test_delete_all_walks_away_from_a_read_that_stalls_and_keeps_the_file(self):
+        # Review of 0.12.5 (comment 2): a drive that lists folders but stalls reading a file.
+        big = os.urandom(5000)
+        self.put("Parks/A.mov", big); self.put("Card dumps/card 1/A.mov", big)
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        self.r.build_index(); self.r.job("find", {}); self.r.job("apply", {})
+        held = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/A.mov")
+        stuck = __import__("threading").Event()
+        self.r.quiet = 0.5
+        with unittest.mock.patch.object(runner.ts, "same_bytes", side_effect=lambda a, b, tick=None: stuck.wait()):
+            self.r.job("empty", {})
+            self.assertTrue(os.path.isfile(held), "not proven a duplicate: it stays")
+            self.assertIn(held, open(os.path.join(self.web, "dedupe-moves.tsv")).read())
+            self.assertIn("gave no data for 0.5s", self.log())
+            self.r.job("empty", {})                     # pressed again while the first read is still stuck
+            self.assertIn("not started again until it does", self.log())
+        stuck.set()
+
+    def test_pause_stops_a_long_read_between_pieces(self):
+        self.put("x.mov", b"1")
+        pieces = []
+        def endless(tick):
+            while True:
+                pieces.append(1); tick()
+                if len(pieces) == 3:
+                    open(os.path.join(self.web, "helper-control.json"), "w").write('{"paused": true}')
+                __import__("time").sleep(0.05)
+        done, _ = self.r.watched("a long read", endless)
+        self.assertFalse(done)
+        self.assertLess(len(pieces), 60, "stopped within a second or so of Pause")
+
+    def test_heavy_reading_waits_while_the_helper_copies(self):
+        self.put("x.mov", b"1")                      # the archive is there
+        st = os.path.join(self.web, "ingest-status.tsv")
+        open(st, "w").write("phase\tcopying\n")
+        self.assertTrue(self.r.copying())
+        waits = []
+        def sleep(_):
+            waits.append(1); open(st, "w").write("phase\twaiting\n")     # the copy finishes
+        with unittest.mock.patch.object(runner.time, "sleep", side_effect=sleep):
+            self.r.make_way()
+        self.assertEqual(waits, [1])
+        self.assertIn("waiting while copying uses the disk", self.log())
+        os.utime(st, (0, 0)); open(st, "a").close(); os.utime(st, (0, 0))
+        self.assertFalse(self.r.copying(), "a status nobody has renewed for ten minutes is not a copy")
 
     def test_nothing_moves_while_paused(self):
         p = self.put("a/x.mov", b"1"); self.put("b/x.mov", b"1")

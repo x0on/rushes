@@ -170,10 +170,12 @@ is the folder the archive machine's web server serves.
 - `ingest-done.txt`: what it finished;
 - `ingest-listed.txt`: folders it already split;
 - `nas-manifest.tsv`: its copy of the archive's file list;
-- `hash-cache.json`: fingerprints it already read;
+- `hash-cache.json`: fingerprints it already read (saved once per run; one not used
+  for 180 days, or whose file has changed since, is dropped);
 - `ingest-plan.tsv` and `ingest-copied.tsv`: the last run's plan and log;
 - `trace-originals-*.tsv`: originals it listed;
-- `proof.json`: checking progress;
+- `proof.json`: checking progress (saved at most every 30 seconds while checking,
+  and whenever it stops: after a crash, a few files are read again);
 - `where.json`: addresses for Rushes;
 - `shares.json`: where network shares live;
 - `helper-id`: the pairing ID;
@@ -345,8 +347,16 @@ move, rename), `db/pull-export.php` (the four downloads).
 ## Bringing footage in
 
 The helper works through its list in this order: cards, then tidy-ups, then
-folder copies, then describing. One thing at a time, with describing running
-beside the rest.
+folder copies, then describing. One thing at a time. Describing has a lane of
+its own, but **copying goes first at the disk**: both read and write the same
+archive, and a copy competing with the vision model would be slower, and longer
+at risk of a drive dropping mid-file. While the helper copies (a card, a
+folder, a tidy-up, a delivery), describing starts no folder, and a folder
+already being described is held still (its process stopped, the model kept in
+memory) and carries on where it was once the copy is done. Its status says
+"waiting while copying uses the disk". On a Mac, **Find duplicates** and
+**Delete All**, which read every byte of many files, wait the same way, and say
+so in the job's log (`make_way()` in `runner.py`).
 
 ### A camera card: Ingest
 
@@ -467,7 +477,8 @@ the first time it copies from a source, it first matches what is there:
    same size whose first and last megabyte match.
 
 Each match is written to a record ("copied before the record existed; matched
-by content"). After that, the copy skips those files. Nothing is moved. A Pause
+by size and both ends"). That record only says where to look: before a file
+counts as already here because of it, every byte is compared (below). Nothing is moved. A Pause
 stops it, and it carries on later. Once a source's match has finished, it is not
 run again. The page shows "step 1 of 2" or "step 2 of 2" and how much is left.
 
@@ -497,38 +508,59 @@ where this section says otherwise.
 - **Is it already in the archive?** This check is for folders only. A card is
   copied whole into its new folder.
   1. First the records: a file Rushes copied before, still there at the same
-     size, is not copied again.
+     size **and the same in every byte**, is not copied again.
   2. Then the archive's file list, by size. The helper downloads it from Rushes
      and keeps a copy, fetched again when it is more than 7 days old (or with
      `--refresh-manifest`). If Rushes cannot be reached, the old copy is used
      and it says so. What the helper copied since comes from its own records,
      and is forgotten there once a new list has it. A file whose size appears
      nowhere is new, and nothing needs to be read.
-  3. When the sizes match, Rushes reads the first and last megabyte of both files
-     and compares their fingerprints. With `--paranoid` it reads the whole
-     file. Fingerprints are cached, so a second look is almost free.
-- **Is there room?** Before starting a folder or a card, the helper checks free
-  space against a floor (5 TB by default). An external helper asks Rushes for
-  the free space, because a Mac misreads very large network volumes. If there is
-  not enough, it stops, and looks again every 5 minutes.
+  3. When the sizes match, Rushes reads the first and last megabyte of both
+     files: that only finds which files to look at. When those match too, it
+     reads **every byte** of both, and only then is the file "already here".
+     Two clips can share their size and both ends and differ in the middle; the
+     ends alone would leave footage out of the archive. This costs what reading
+     the file to copy it would; the writing is what is saved. Fingerprints are
+     remembered with each file's size, the time it last changed to the
+     nanosecond and its own number on the drive, so a second look reads only
+     what changed. (`--paranoid` is no longer needed: this is what always happens.)
+  4. When the copy starts, each "already here" is checked again, the same way:
+     the archive copy may have changed since the look.
+- **Is there room?** Before starting a folder or a card, and again before each
+  file, the helper checks free space against a floor (5 TB by default; on a
+  Mac, a share of the drive). An external helper asks Rushes for the free space,
+  because a Mac misreads very large network volumes (once a minute while
+  copying, taking off what it copied meanwhile). If there is not enough, it
+  stops, and looks again every 5 minutes.
 
 **Copying one file:**
 
-1. It is written under a temporary name (`….part`), in 8 MB pieces, while its
-   fingerprint is taken. The fingerprint is XXH3-128, or BLAKE2 on a computer
+1. It is written under a temporary name of its own (`….<random>.part`), in 8 MB
+   pieces, while its fingerprint is taken. That file is new: one already there
+   with a similar name is never opened, nor written through a shortcut. The fingerprint is XXH3-128, or BLAKE2 on a computer
    without the `xxhash` library.
 2. It is flushed to disk (fsync), and the date and permissions are copied.
 3. If the original changed while it was being read (size or modification time),
    the copy is thrown away.
 4. **It is read back from the archive and compared with the original's
    fingerprint.** On a Mac this read skips the computer's cache, so it really
-   comes from the disk. Only if they match does the file get its real name.
-5. A file already there, with the same name, size and content, counts as
+   comes from the disk. Only if they match does the file get its real name,
+   and only if nothing has that name by then: a file put there meanwhile (by
+   Finder, an editor, another copy) is never replaced. The operating system's
+   own "rename, but never over a file" is used (macOS `renamex_np`, Linux
+   `renameat2`); on a drive without it, a hard link; on one without either, a
+   look just before. The folder is then flushed too, so the name survives a
+   power cut as well as the bytes.
+5. **Every copy lands in the archive, where it really leads:** a folder in the
+   archive that is a shortcut (symlink) to somewhere else does not count as
+   inside, and nothing is copied through it. Tidy-ups move only where the path
+   really leads into the shelf.
+6. A file already there, with the same name, size and content, counts as
    "already here". Its content is **read in full**, both copies, before it
    counts: it may not be Rushes' own copy, and one dragged over in Finder can
    match at both ends and be broken in the middle. A *different* file with the
    same name is never overwritten: it is reported as a problem and left alone.
-6. Names are matched whichever way their accents are written (NFC or NFD).
+7. Names are matched whichever way their accents are written (NFC or NFD).
 
 **After each file,** it is added to the search catalogue within seconds and to
 the transfer's progress. The list of files still to add survives restarts, and
@@ -542,6 +574,7 @@ is retried every 10 seconds, up to every 5 minutes.
 - **If the source or the archive disconnects,** or someone presses Pause or Skip,
   the folder stops part-way. It resumes later: files already in place match and
   are not copied again, and a cut-off file was only a `.part` and is redone.
+  (The `.part` file is that copy's own; it is the only file a failed copy removes.)
 - **A full archive** stops the folder at once.
 - **A read or write that stops getting data.** A file can hang in the middle on
   a dying disk, and nothing can cut that short. So the helper watches: after 2
@@ -1084,11 +1117,27 @@ line per drive: how much is in it, since when, and **Delete All**. Rushes
 suggests keeping things a week, in case something was needed; the line says
 "suggested to keep 4 more days", then "ready to delete". Delete All is there
 all the time, with **Sure?** on the button, which says when the week is not
-over yet. Once confirmed, everything in that drive's Recently Removed is
-deleted for good (`empty()` in `runner.py`, the `empty` job), the space comes
-back at once, Recover forgets those files, and Activity says who did it and
-how much ("Deleted for good everything in Recently Removed on Drive: 1,280
-files (412.0 GB)"). On a NAS, Delete All is not there yet: empty `_duplicates`
+over yet. Once confirmed (`empty()` in `runner.py`, the `empty` job):
+
+- **a duplicate is deleted only if every byte of it is still the same as the
+  copy that stays.** Waiting a week proves nothing about that copy: if it
+  changed or broke since the scan, the one in Recently Removed may be the last
+  good one, and it stays, said in the job's log and in Activity. One that
+  cannot be read to compare stays too. The comparison is watched, not timed: it
+  goes on as long as data keeps coming, however big the file, and a drive that
+  gives no data for 2 minutes is walked away from (the file stays, Delete All
+  stops, and it counts as the archive not answering). Pause stops it within
+  seconds. Find duplicates reads the same way (`watched()` in `runner.py`);
+- cache files are deleted (editing software makes them again);
+- a file with no record of where it came from stays;
+- the space comes back at once, Recover forgets **only the files that were
+  deleted** (one that could not be deleted keeps its record, and its age), and
+  Activity says who did it, how much, and what was kept and why ("Deleted for
+  good from Recently Removed on Drive: 1,280 files (412.0 GB); 2 kept, 2 no
+  longer the same as the copy that stays").
+
+Check before deleting (`verify.sh`) answers the same way: safe only when the
+copy kept is there and every byte matches (`cmp`), never on size alone. On a NAS, Delete All is not there yet: empty `_duplicates`
 in File Station.
 
 **In the code:** `runner.sh` (the `scan`, `plan`, `apply`, `undo` and `verify`
@@ -1413,7 +1462,12 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   each such job is written in the log as not done.
 - Every touch of the archive has a time limit (20 s; the search update 2 min,
   the database copy 10 min). Three that do not answer in a row stop it
-  touching the archive until **Try again** in Manage, as on a NAS.
+  touching the archive until **Try again** in Manage, as on a NAS. Walked away
+  from is not finished: the operation may still happen when the drive answers.
+  So until it does, the same thing is not started again beside it (which would
+  pile work onto a stalled drive), and each time it would have been, that
+  counts as one more time the archive did not answer (`v()` and `pending` in
+  `runner.py`; the helper's own `within()` does the same).
 - **The file list** (`manifest.tsv` and `index.txt`) is one walk of the archive.
   macOS's own folders on a drive (`.Trashes`, `.Spotlight-V100`, …) and
   `@Recycle` are left out; symbolic links are not followed; a name with a tab

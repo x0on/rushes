@@ -27,6 +27,7 @@ Proxies are not here yet: those jobs are refused with a line in the log
 (ROADMAP.md → Order, 5).
 """
 import hashlib, json, os, re, shutil, subprocess, threading, time, urllib.request
+import transfer_state as ts          # the careful file operations (beside this file, in the app and in _rushes)
 
 HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.sh are beside this file
 
@@ -47,10 +48,16 @@ def archive_ok(a, web):
             and not a.startswith(bad) and a != web and not a.startswith(web + "/") and os.path.isdir(a))
 
 
+class Halted(Exception):
+    """A watched read stopped between pieces (Pause)."""
+
+
 class Runner:
     def __init__(self, web, url, limit=20):
         self.web, self.url, self.limit = web, url.rstrip("/"), limit
         self.busy = {}                                   # "upkeep" / "jobs": the thread doing it
+        self.pending = {}                                # what the archive was asked and has not answered yet → its thread
+        self.quiet = 120                                 # a long read with no data for this long is walked away from (watched)
 
     # ── small things ─────────────────────────────────────────────────────────
     def p(self, name):
@@ -112,7 +119,14 @@ class Runner:
 
     def v(self, what, fn, limit=None):
         """fn() in a thread, waited for at most `limit` seconds; one that has not
-        finished is walked away from and counted. True when it finished."""
+        finished is walked away from and counted. True when it finished.
+        Walked away from is not finished: it may still happen (a copy, a move).
+        Until it does, the same thing is not started again beside it."""
+        old = self.pending.get(what)
+        if old is not None and old.is_alive():
+            # Still out: not started again beside it, and counted as the archive not answering
+            return self.count_stall(f"{what}: the last one has not finished yet, so it is not started again until it does")
+        self.pending.pop(what, None)
         out = {}
         def go():
             try: out["ok"] = fn() is not False
@@ -122,15 +136,84 @@ class Runner:
         if not t.is_alive():
             if "why" in out: self.say(f"{what}: {out['why']}")
             return out.get("ok", False)
+        self.pending[what] = t
+        return self.count_stall(f"the archive did not answer within {limit or self.limit}s ({what})", what)
+
+    def watched(self, what, fn):
+        """A long read (every byte of a file) in a thread of its own: fn(tick), where tick() is
+        called after each piece read. Waited for as long as data keeps coming, however big the
+        file; one that gets no data for `quiet` seconds (a disk that answers what is in a folder
+        but stalls reading a file) is walked away from, counted as the archive not answering,
+        and not started again beside itself (pending). Pause stops it between pieces.
+        -> (finished, fn's answer); fn's own error (OSError: unreadable) is raised here."""
+        old = self.pending.get(what)
+        if old is not None and old.is_alive():
+            self.count_stall(f"{what}: the last read has not finished yet, so it is not started again until it does")
+            return False, None
+        self.pending.pop(what, None)
+        last, out, halt = [time.time()], {}, threading.Event()
+        def tick():
+            last[0] = time.time()
+            if halt.is_set():
+                raise Halted()
+        def go():
+            try: out["v"] = fn(tick)
+            except Halted: pass
+            except Exception as e: out["e"] = e
+        t = threading.Thread(target=go, daemon=True)
+        t.start()
+        while t.is_alive():
+            t.join(1)
+            if t.is_alive() and not self.may_v():
+                halt.set()                               # paused: stops at its next piece
+            if t.is_alive() and time.time() - last[0] > self.quiet:
+                self.pending[what] = t
+                self.count_stall(f"the archive gave no data for {self.quiet}s ({what})", what)
+                return False, None
+        if "e" in out:
+            raise out["e"]
+        return "v" in out, out.get("v")
+
+    def count_stall(self, said, what=""):
+        """One more time in a row the archive did not answer; the third stops touching it. -> False"""
+        what = what or said.split(":")[0]
         self.stalled = True
         try: n = int(open(self.p("video-stalls.txt")).read()) + 1
         except (OSError, ValueError): n = 1
         self.write("video-stalls.txt", str(n))
-        self.say(f"the archive did not answer within {limit or self.limit}s ({what}) — {n} in a row")
+        self.say(f"{said} — {n} in a row")
         if n >= 3 and not self.tripped():
             self.write("video-tripped.txt", f"{int(time.time())}\tthe archive did not answer {n} times in a row (last: {what})\n")
             self.say("STOPPED touching the archive until Try again is pressed in Manage")
         return False
+
+    # ── copying goes first ───────────────────────────────────────────────────
+    def copying(self):
+        """The helper is at work on the disks right now (its live status, ingest-status.tsv,
+        said in the last 10 minutes). Reading every byte of thousands of files beside it
+        (Find duplicates, Delete All's comparing) would slow the copy and keep it longer at
+        risk of a drive dropping mid-file."""
+        try:
+            if time.time() - os.path.getmtime(self.p("ingest-status.tsv")) > 600:
+                return False
+            with open(self.p("ingest-status.tsv")) as f:
+                phase = next((l.split("\t", 1)[1].strip() for l in f if l.startswith("phase\t")), "")
+        except OSError:
+            return False
+        return phase not in ("", "waiting", "idle", "paused", "stopped", "blocked", "done", "planned")
+
+    def make_way(self):
+        """Heavy reading waits while the helper copies, and says so; looked at every few seconds."""
+        if time.time() - getattr(self, "_way_at", 0) < 5:
+            return
+        said = False
+        while self.copying() and self.may_v():
+            if not said:
+                self.log("  waiting while copying uses the disk — this carries on after"); said = True
+            time.sleep(10)
+        self._way_at = time.time()
+        if said:
+            self.log("  the copy is done: carrying on")
 
     # ── drives that come and go ──────────────────────────────────────────────
     def settings(self):
@@ -355,7 +438,7 @@ class Runner:
         old, new = os.path.join(top, OLD_HOLD), os.path.join(top, HOLD)
         if not os.path.isdir(old) or os.path.islink(old) or os.path.exists(new):
             return
-        os.rename(old, new)
+        ts.rename_new(old, new)
         for log in [n for n in os.listdir(self.web) if n.startswith("dedupe-moves") or n == "cache-moves.tsv"]:
             try:
                 with open(self.p(log), encoding="utf-8", errors="surrogateescape") as f:
@@ -384,35 +467,82 @@ class Runner:
             return 0
 
     def empty(self, top, sfx, who):
-        """Delete All: everything in Recently Removed on the archive or that drive goes, for good.
+        """Delete All: what is in Recently Removed on the archive or that drive goes, for good.
         Only what is inside that folder; asked for by a person (Manage, with Sure?), never by itself.
-        The records of what moved there forget those files (Recover has nothing to bring back)."""
+        A duplicate goes only when every byte of it is still the same as the copy that stays:
+        if that copy changed or broke since the scan, the one here may be the last good one, and
+        it stays. Cache files go (editing software makes them again). A file with no record of
+        where it came from stays. Recover forgets only the files that were deleted."""
         h = self.hold(top)
         if not os.path.isdir(h) or os.path.islink(h):
             self.log("  Recently Removed is empty: nothing to delete"); return
-        n = b = 0
-        for root, dirs, files in os.walk(h, topdown=False):
-            for x in files:
-                p = os.path.join(root, x)
-                try:
-                    b += os.lstat(p).st_size; os.remove(p); n += 1
-                except OSError as e:
-                    self.log(f"  could not delete {p}: {e.strerror or e}")
-            for x in dirs:
-                try: os.rmdir(os.path.join(root, x))
-                except OSError: pass
-        for log in [x for x in os.listdir(self.web) if x.startswith("dedupe-moves") or x == "cache-moves.tsv"]:
+        logs = [x for x in os.listdir(self.web) if x.startswith("dedupe-moves") or x == "cache-moves.tsv"]
+        keeper, cache = {}, set()                    # held file -> the copy that stays; held cache files
+        for log in logs:
             try:
                 with open(self.p(log), encoding="utf-8", errors="surrogateescape") as f:
-                    keep = [l for l in f if not (l.split("\t") + ["", ""])[1].startswith(h + "/")]
+                    for line in f:
+                        x = line.rstrip("\n").split("\t")
+                        if len(x) < 2 or not x[1].startswith(h + "/"):
+                            continue
+                        if log == "cache-moves.tsv":
+                            cache.add(x[1])
+                        elif len(x) > 2 and x[2]:
+                            keeper[x[1]] = x[2]
+            except OSError:
+                pass
+        held = [os.path.join(r, x) for r, _, fs in os.walk(h) for x in fs]
+        gone, n, b, differ, unread, unknown, last, stopped = set(), 0, 0, 0, 0, 0, time.time(), False
+        self.log(f"  {len(held):,} files in {h}: each duplicate is compared with the copy that stays before it goes")
+        for i, p in enumerate(held, 1):
+            self.make_way()
+            if not self.may_v():
+                stopped = True; break
+            if time.time() - last > 30:
+                last = time.time()
+                self.log(f"progress: {i} of {len(held)} ({100 * i // max(len(held), 1)}%)")
+            if p in keeper:
+                done, same = self.watched("Delete All, comparing", lambda tick: ts.same_bytes(p, keeper[p], tick))
+                if not done:                             # paused, or the drive stopped giving data: this file stays
+                    stopped = True; break
+                if same is not True:
+                    if same is False: differ += 1
+                    else: unread += 1
+                    self.log(f"  kept {p}: " + ("it is not the same as the copy that stays any more" if same is False
+                                                else f"it or the copy that stays ({keeper[p]}) could not be read"))
+                    continue
+            elif p not in cache and "/_media-cache/" not in p:
+                unknown += 1
+                self.log(f"  kept {p}: no record of where it came from")
+                continue
+            try:
+                size = os.lstat(p).st_size; os.remove(p)
+                gone.add(p); n += 1; b += size
+            except OSError as e:
+                self.log(f"  could not delete {p}: {e.strerror or e}")
+        for r, ds, _ in os.walk(h, topdown=False):       # folders left empty
+            for x in ds:
+                try: os.rmdir(os.path.join(r, x))
+                except OSError: pass
+        for log in logs:                                 # Recover forgets only what is gone
+            try:
+                with open(self.p(log), encoding="utf-8", errors="surrogateescape") as f:
+                    keep = [l for l in f if (l.split("\t") + ["", ""])[1].rstrip("\n") not in gone]
                 self.write(log, "".join(keep))
             except OSError:
                 pass
-        self.removed_at(sfx, 0)
+        left = sum(len(fs) for _, _, fs in os.walk(h))
+        if not left:
+            self.removed_at(sfx, 0)                      # empty: no age; anything left keeps its own
         name = os.path.basename(top.rstrip("/")) or top
-        self.say(f"Delete All: {n} files deleted from {h} ({b / 1e9:,.1f} GB)")
-        self.activity("changed", f"Deleted for good everything in Recently Removed on {name}: {n:,} {'file' if n == 1 else 'files'}"
-                      + (f" ({b / 1e9:,.1f} GB)" if b >= 1e9 else ""), who)
+        why = ", ".join(t for t in (f"{differ:,} no longer the same as the copy that stays" if differ else "",
+                                     f"{unread:,} could not be compared" if unread else "",
+                                     f"{unknown:,} with no record of where they came from" if unknown else "",
+                                     "stopped part-way: copying was paused or the archive stopped answering" if stopped else "") if t)
+        self.say(f"Delete All: {n} files deleted from {h} ({b / 1e9:,.1f} GB)" + (f"; {left:,} kept ({why})" if left else ""))
+        self.activity("changed", f"Deleted for good from Recently Removed on {name}: {n:,} {'file' if n == 1 else 'files'}"
+                      + (f" ({b / 1e9:,.1f} GB)" if b >= 1e9 else "")
+                      + (f"; {left:,} kept, {why}" if left else ""), who)
 
     def job(self, action, f):
         a = self.arch()
@@ -528,7 +658,7 @@ class Runner:
     def scan(self):
         """Which files are the same, by every byte: files of one size (from the
         file list, so no walk), then their first and last 64 KB, then all of
-        them. A fingerprint is remembered with the file's size and date
+        them. A fingerprint is remembered with the file's size, date and own number
         (dup-hashes.tsv), so a scan again reads only what changed, and a scan
         stopped (paused, the drive gone) carries on where it was. The answer is
         results_duplicates.txt, in the form dedupe.sh reads (Czkawka's)."""
@@ -565,8 +695,8 @@ class Runner:
             pass
         keep, seen, unread, last, stopped = {}, 0, 0, time.time(), False
 
-        def fingerprint(path, size, part):
-            key = [str(size), str(int(os.stat(path).st_mtime))]
+        def fingerprint(path, size, part, tick=lambda: None):
+            key = [str(size), ts.file_key(os.stat(path))]   # size, date to the nanosecond, the file's own number
             got = cache.get(path)
             if not got or got[:2] != key:
                 got = cache[path] = key + ["", ""]           # new, or changed since: read again
@@ -578,7 +708,7 @@ class Runner:
                         h.update(f.read(65536)); f.seek(-65536, 2); h.update(f.read(65536))
                     else:
                         while chunk := f.read(4 << 20):
-                            h.update(chunk)
+                            h.update(chunk); tick()
                 if os.path.getsize(path) != size:
                     raise OSError("it changed while it was read")
                 got[i] = h.hexdigest()
@@ -589,10 +719,14 @@ class Runner:
             for part in (True, False):
                 split = {}
                 for path in paths:
+                    self.make_way()
                     if not self.may_v():
                         stopped = True; break
                     try:
-                        split.setdefault(fingerprint(path, size, part), []).append(path)
+                        done, fp = self.watched("Find duplicates, reading", lambda tick: fingerprint(path, size, part, tick))
+                        if not done:                     # paused, or the drive stopped giving data
+                            stopped = True; break
+                        split.setdefault(fp, []).append(path)
                     except OSError:
                         unread += 1
                     if time.time() - last > 30:
@@ -690,7 +824,8 @@ class Runner:
                 if os.path.exists(d):
                     continue
                 os.makedirs(os.path.dirname(d), exist_ok=True)
-                os.rename(f, d)
+                try: ts.rename_new(f, d)
+                except FileExistsError: continue    # something took that name meanwhile: left where it is
                 mv.write(f"{f}\t{d}\n"); moved += 1
         self.log(f"moved {moved} cache files" + (f"; {left} on the list are not caches by the rules now, and were left" if left else ""))
         if moved:
@@ -709,7 +844,8 @@ class Runner:
             src, _, dst = line.partition("\t")
             if os.path.isfile(dst) and not os.path.exists(src):
                 os.makedirs(os.path.dirname(src), exist_ok=True)
-                os.rename(dst, src); n += 1
+                try: ts.rename_new(dst, src); n += 1
+                except FileExistsError: pass        # something is in its old place already: left in Recently Removed
         self.log(f"recovered {n} cache files")
         return n
 
