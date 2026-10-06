@@ -67,6 +67,7 @@ WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
 # When Rushes was last asked for a newer app, and its answer (once a week, or Check for updates)
 UPCHECK = os.path.join(WDIR if WATCHER else DIR, "update-check.json")
 UPDATED = os.path.join(WDIR if WATCHER else DIR, "update-result.txt")   # how the last update went (release.app_update)
+UPDATE_NOW = os.path.join(WDIR if WATCHER else DIR, "update-now")        # the menu's Update, done in the window, where it shows
 FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 # The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
@@ -600,6 +601,7 @@ class Window:
     def __init__(self):
         self.lock = threading.Lock()
         self.quit = threading.Event()                    # before any thread that watches it
+        self.in_menu = False                             # the menu bar's own (menu, role), not a window
         self.remote, self.asking, self.asked = {}, None, 0.0     # what Rushes last said (ask_rushes)
         self.activity_at = 0.0
         self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
@@ -674,10 +676,38 @@ class Window:
                  else f"Up to date: {NAME} {app_version()} is the same version as Rushes.")
 
     def update_app(self):
+        """In the window: each step a line that turns while it happens and becomes a ✓
+        (release.app_update says them), then the new version's window in its place."""
         import release
-        v = release.app_update(self.source(), APP, say=lambda m: (log(m), self.set(said=m)), result=UPDATED)
+        if self.in_menu:                                 # from the menu bar: in the window, where it shows
+            open(UPDATE_NOW, "w").close()
+            subprocess.run(["open", "-n", APP])
+            return
+        started = time.time()
+        self.set(step="update", done=[], doing="Asking for the newest version …", said="")
+        def say(m):
+            log(m)
+            got = re.search(r"→ (\S+): downloading it from (.+?) …", m)
+            if got:
+                self.set(doing=f"Downloading {NAME} {got[1]} from {got[2]} …")
+            elif "checked" in m:
+                self.set(done=["Downloaded", "Checked: signed by the Rushes author"],
+                         doing=f"Putting the new {NAME} in place and starting it again …")
+        try:
+            v = release.app_update(self.source(), APP, say=say, result=UPDATED)
+        except Exception:
+            self.set(doing=""); raise
         if not v:
-            self.set(said=f"Already up to date: {NAME} {app_version()}.")
+            self.set(step="home", doing="", said=f"Already up to date: {NAME} {app_version()}.")
+            return
+        # The swap runs on its own (release.py): when it has written how it went, the new
+        # app is in place. Its window opens, saying so, and this one (the old app) goes.
+        for _ in range(120):
+            if os.path.exists(UPDATED) and os.path.getmtime(UPDATED) >= started:
+                break
+            time.sleep(0.5)
+        subprocess.run(["open", "-n", APP])
+        self.quit.set()
 
     def home(self):
         loaded, pid = service_running()
@@ -1202,6 +1232,10 @@ function draw() {
     b = '<h2>Installing</h2><ul class="did">' + (s.done || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
       (s.doing || s.busy ? '<p style="margin-top:10px"><span class="spin"></span>' + esc(s.doing || 'Working …') + '</p>' : '') + err;
     f = s.error ? btn('Try again', 'retry', true) : ''; break;
+  case 'update':
+    b = '<h2>Updating %NAME%</h2><ul class="did">' + (s.done || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
+      (s.doing ? '<p style="margin-top:10px"><span class="spin"></span>' + esc(s.doing) + '</p>' : '') + err;
+    f = s.error ? btn('Back', 'back-home', true) : ''; break;
   case 'fda':
     b = '<h2>One switch left: Full Disk Access</h2>' +
       '<p>macOS keeps apps away from network drives and other disks until you allow it. ' + (s.watcher ? 'Rushes Watcher needs that to read your projects and the files they use, wherever they are on this Mac — nothing more.'
@@ -1451,6 +1485,12 @@ async function poll() {
 def serve(port, key):
     w = Window()
     log(f"window opened ({w.s['step']})")
+    if w.s["step"] == "home":
+        if os.path.exists(UPDATE_NOW) and time.time() - os.path.getmtime(UPDATE_NOW) < 60:
+            os.remove(UPDATE_NOW)
+            w.act("update-app", {})                      # asked from the menu bar: done here, step by step
+        elif os.path.exists(UPDATED) and time.time() - os.path.getmtime(UPDATED) < 120:
+            w.set(said=update_said())                    # the window the update opened: how it went
 
     class H(http.server.BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -1548,7 +1588,7 @@ def role(name):
             for k, v in was.items():
                 if v is None: os.environ.pop(k, None)
                 else: os.environ[k] = v
-        w = m.Window(); w.said_at = 0
+        w = m.Window(); w.said_at = 0; w.in_menu = True
         _roles[name] = (m, w)
     return _roles[name]
 
@@ -1670,7 +1710,7 @@ def own_menu(w):
 
 def menu(port, key):
     w = Window()
-    w.said_at = 0
+    w.said_at = 0; w.in_menu = True
     seen = {"said": ""}
     cache = {"at": 0.0, "m": None}
     lock = threading.Lock()

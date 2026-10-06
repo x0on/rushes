@@ -413,12 +413,12 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
 /* ══ ⓘ: the explanation a page does not need to show all the time ════════
  * Hovered on a computer, tapped on a phone (it takes focus), read, gone. The
  * page itself says only names, states and buttons. */
-.info { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+.infotip { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
   border: 1px solid var(--line); color: var(--muted); font: italic 600 10.5px/1 Georgia, serif;
   cursor: help; position: relative; vertical-align: 1px; margin-left: 5px; flex: none;
   text-transform: none; letter-spacing: 0 }
-.info:hover, .info:focus { color: var(--fg); border-color: var(--muted); outline: none }
-.info:hover::after, .info:focus::after { content: attr(data-tip); position: absolute; left: -8px; top: calc(100% + 6px);
+.infotip:hover, .infotip:focus { color: var(--fg); border-color: var(--muted); outline: none }
+.infotip:hover::after, .infotip:focus::after { content: attr(data-tip); position: absolute; left: -8px; top: calc(100% + 6px);
   width: max-content; max-width: min(320px, 80vw); background: var(--fg); color: var(--bg);
   font: 12.5px/1.45 var(--font); padding: 8px 11px; border-radius: 8px; z-index: 40;
   white-space: normal; text-align: left; box-shadow: var(--shadow) }

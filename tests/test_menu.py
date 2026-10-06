@@ -136,6 +136,31 @@ class InstallWindowTests(unittest.TestCase):
         self.assertIn("Background service installed and started — it starts by itself when you log in", st["done"])
 
 
+class UpdateWindowTests(unittest.TestCase):
+    def test_update_shows_its_steps_in_the_window_and_opens_the_new_one(self):
+        m = front("Rushes", Path(tempfile.mkdtemp())); os.makedirs(m.DIR)
+        opened, seen = [], []
+        def app_update(url, app, say, result):
+            say("updating Rushes 0.12.9 → 0.12.10: downloading it from GitHub …"); seen.append(w.s["doing"])
+            say("Rushes 0.12.10 checked (signed by the Rushes author) — it is put in place and starts again in a few seconds")
+            seen.append(w.s["doing"]); Path(result).write_text("ok\t0.12.10\n")
+            return "0.12.10"
+        fake = type(sys)("release"); fake.app_update = app_update
+        run = lambda a, **k: opened.append(a)
+        with patch.dict(sys.modules, {"release": fake}), patch.object(m.subprocess, "run", side_effect=run), \
+             patch.object(m, "local", return_value={"archive": "/Volumes/Drive"}):
+            w = m.Window(); w.in_menu = True
+            w.update_app()                               # the menu: the window does it
+            self.assertTrue(os.path.exists(m.UPDATE_NOW))
+            self.assertEqual(opened.pop(), ["open", "-n", m.APP])
+            w = m.Window(); w.update_app()               # the window
+        self.assertEqual(seen, ["Downloading Rushes 0.12.10 from GitHub …",
+                                "Putting the new Rushes in place and starting it again …"])
+        self.assertEqual((w.s["step"], w.s["done"]), ("update", ["Downloaded", "Checked: signed by the Rushes author"]))
+        self.assertEqual(opened, [["open", "-n", m.APP]]); self.assertTrue(w.quit.is_set())
+        self.assertEqual(m.update_said(), "✓ Updated to 0.12.10")
+
+
 class OneCopyTests(unittest.TestCase):
     """Rushes runs from where it was put, one copy only (0.12.2: the disk image)."""
     def test_dragged_to_applications_it_stays_there_and_the_other_copy_is_found(self):

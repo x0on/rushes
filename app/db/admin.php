@@ -152,8 +152,14 @@ if (isset($_POST['_newpass'])) {
       <?php if (pass_is_default()): ?>
       <div class="banner warn">
         <div class="txt"><b>The admin password is still the default</b>
-          Anyone on this network can open this page and move your files.
-          Change it below &mdash; it takes ten seconds.</div>
+          <?php if (!on_mac()): ?>
+          Anyone on this network can open this page and move your files. Change it &mdash; it takes ten seconds.
+          <?php elseif (getenv('RUSHES_OTHERS') === '1'): ?>
+          Other devices are let in, but none can open Rushes until you change it. Only this Mac can now.
+          <?php else: ?>
+          Only this Mac can open Rushes now. Change it before you let other devices in.
+          <?php endif; ?></div>
+        <button class="btn" type="button" id="pwGo">Change the password</button>
       </div>
       <?php endif; ?>
 
@@ -237,7 +243,7 @@ if (isset($_POST['_newpass'])) {
         </div>
         <details class="fold" style="margin-top:12px">
           <summary>Never touched <span class="note" id="cKeepN"></span>
-            <span class="info" tabindex="0" data-tip="Someone's work, not cache: auto-saves you open when a project will not, project backups, Capture One's adjustments, Resolve's stills. Remove never moves them.">i</span></summary>
+            <span class="infotip" tabindex="0" data-tip="Someone's work, not cache: auto-saves you open when a project will not, project backups, Capture One's adjustments, Resolve's stills. Remove never moves them.">i</span></summary>
           <div class="panel" style="margin-top:8px"><div id="cKeep"></div></div>
         </details>
         <details class="fold" style="margin-top:8px">
@@ -465,7 +471,7 @@ foreach (watchers() as $k => $w) {
 
         <div class="panel" style="margin-top:14px">
           <header><b>Admin password</b></header>
-          <form method="post" style="padding:14px;max-width:360px">
+          <form method="post" action="#tools" style="padding:14px;max-width:360px">
             <?php if ($pw_said === 'ok'): ?>
               <div class="banner ok" style="margin-bottom:12px">
                 <div class="txt">Changed. It applies to the next sign-in.</div></div>
@@ -568,6 +574,10 @@ document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
   b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
 $('sideMore').onclick = function () { show('activity'); };
+// The password banner's button: Jobs and tools, at the form, typing in Current
+if ($('pwGo')) $('pwGo').onclick = function () {
+  show('tools'); $('op').scrollIntoView({ block: 'center' }); $('op').focus();
+};
 // ── duplicates: Find, look, Remove, Recover ─────────────────────────────────
 // One press finds them (which files are the same, then which copy stays: the runner's
 // "find"). Rushes chooses the copy that stays and says why; "Keep this one" chooses
@@ -657,7 +667,7 @@ function drawDup() {
     return '<div class="grp"><div class="grp-h"><b>' + esc(base(g.keep)) + '</b><span class="note">' + tb(g.size) + ' · ' +
       (g.moves.length + 1) + ' copies</span></div>' +
       '<div class="cp keep"><span class="tag">Keeps</span><span class="p">' + esc(rel(g.keep, r.root)) + '</span>' +
-        '<span class="info" tabindex="0" data-tip="' + esc(g.why) + '">i</span></div>' +
+        '<span class="infotip" tabindex="0" data-tip="' + esc(g.why) + '">i</span></div>' +
       g.moves.map(function (m) {
         return '<div class="cp"><span class="tag go">' + (r.done ? 'Removed' : 'Goes') + '</span><span class="p">' + esc(rel(m, r.root)) + '</span>' +
           (r.done ? '' : '<button class="lnk" data-keep="' + esc(g.keep) + '" data-pick="' + esc(m) + '">Keep this one</button>') + '</div>';
@@ -688,7 +698,7 @@ async function loadRemoved() {
   try { r = await (await fetch('removed.php?t=' + Date.now())).json(); } catch (e) { return; }
   if (r.error) return;
   const html = '<div class="panel rr"><header><b>Recently Removed</b>' +
-    '<span class="info" tabindex="0" data-tip="What Remove took out of the way, on the same drive, in a folder called _Recently Removed. Nothing in it is deleted until you press Delete All. Rushes suggests keeping it ' + r.wait_days + ' days, in case something was needed.">i</span></header>' +
+    '<span class="infotip" tabindex="0" data-tip="What Remove took out of the way, on the same drive, in a folder called _Recently Removed. Nothing in it is deleted until you press Delete All. Rushes suggests keeping it ' + r.wait_days + ' days, in case something was needed.">i</span></header>' +
     r.places.map(function (p) {
       const days = p.at ? Math.floor((Date.now() / 1000 - p.at) / 86400) : 0;
       const left = Math.max(0, r.wait_days - days);
@@ -1214,6 +1224,7 @@ async function load() {
 
   // Cards carry the detail the tiles cannot. Only what is true, in order.
   $('cards').innerHTML = (d.conditions || []).map(function (c, i) {
+    if (!c.title) return '';   // a tile on its own (the cache): nothing to say twice
     return '<div class="banner ' + esc(c.level === 'good' ? 'ok' : c.level) + '">' +
       '<div class="txt"><b>' + esc(c.title) + '</b>' + esc(c.body) +
       (c.help ? '<div class="code block">' + esc(c.help) + '</div>' : '') + '</div>' +

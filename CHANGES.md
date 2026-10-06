@@ -3,6 +3,22 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.10 — October 2026
+
+- **Updating shows itself:** Update to … (in the menu or the window) opens the
+  window, where each step turns and becomes a ✓ (downloading, checked as signed
+  by its author, putting it in place). The new version's window then opens by
+  itself and says ✓ Updated. Before, Rushes was still for a few seconds, quit
+  and came back, with nothing said.
+- **Overview's notes are drawn again:** the ⓘ's style (0.12.4) had taken over
+  every note of the plain kind ("Updating search", "Ready to index …"), drawing
+  it as a small circle. The cache has no note of its own any more: its tile says
+  it and opens Cache.
+- **The default password, said truly:** on a Mac, it says only this Mac can
+  open Rushes (other devices are refused until it is changed), and **Change the
+  password** goes straight to the form, ready to type. On a NAS it still says
+  anyone on the network can open it.
+
 ## 0.12.9 — October 2026
 
 - **The window says what it is doing while it does it:** each step of

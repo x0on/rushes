@@ -186,9 +186,7 @@ if ($junk && $junk['n'] > limit('cache_min_files', 100)) {
     $c[] = ['level' => 'info',
         'tile' => ['lab' => 'Rebuildable cache', 'big' => tb($junk['b']),
                    'sub' => number_format($junk['n']) . ' files'],
-        'title' => number_format($junk['n']) . ' cache files are taking up ' . tb($junk['b']),
-        'body' => 'Premiere and Capture One scratch files, sitting in the archive instead of on an editing machine. '
-                . 'They rebuild themselves from the originals, so nothing is lost by removing them.',
+        // ponytail: tile only, no card: the tile already says it and links to Cache
         'act' => ['cachejunk', 'Look at them']];
 }
 

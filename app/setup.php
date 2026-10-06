@@ -147,8 +147,8 @@ foreach ($local as $v) {
                 'folders' => array_map(fn($d) => ['name' => $d, 'path' => $v['path'] . '/' . $d],
                               array_values(array_filter($v['top'], fn($d) => !in_array($d, $noise, true))))];
 }
-// ⓘ: the explanation a section does not need to show all the time (tokens.css → .info)
-$tip   = fn($t) => '<span class="info" tabindex="0" data-tip="' . $e($t) . '">i</span>';
+// ⓘ: the explanation a section does not need to show all the time (tokens.css → .infotip)
+$tip   = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . $e($t) . '">i</span>';
 $N     = 0;                                   // sections are numbered as they show: a Mac has no Helper section
 $num   = function () use (&$N) { return sprintf('%02d', ++$N); };
 $open  = $said !== '' && $said !== 'ok';      // nothing saved: every section open, to see what to fix
@@ -596,7 +596,7 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             r.onchange = function () {
               document.getElementById('hExt').hidden = r.value !== 'external' || !r.checked; }; });
           // Copy and ⓘ in a section's one line do their own thing, not open the section
-          document.querySelectorAll('details.sec > summary button, details.sec > summary .info').forEach(function (x) {
+          document.querySelectorAll('details.sec > summary button, details.sec > summary .infotip').forEach(function (x) {
             x.addEventListener('click', function (ev) { ev.preventDefault(); }); });
         </script>
       </details>
