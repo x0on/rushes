@@ -239,5 +239,32 @@ $find = function (array $get) { $_GET = $get; ob_start(); include web_dir() . "/
 $r = $find(['in' => 'library']); $r2 = $find(['in' => 'library/sfx']); $r3 = $find(['q' => 'song', 'in' => 'library/music']);
 check($r['total'] === 1 && $r['rows'][0]['name'] === 'song.wav' && $r2['total'] === 0 && $r3['total'] === 1,
       'Search: the stock library is its own section, and a shoot with "Library" in its name is not in it');
+// What each file is (labels.php), on names from a real drive with every kind of media
+require_once web_dir() . '/db/labels.php';
+$out = ['mayor\'s message oct youtube.mp4' . "\t" . 900 => 'Mayor October/OUTPUT/Mayor\'s Message OCT youtube.mp4'];
+foreach ([
+    ['Mayor October/OUTPUT/Mayor\'s Message OCT youtube.mp4', 'deliverable'],
+    ['Mayor October/pumpkins-carved-and-uncarved-at-autumn-pumpkin-pat-2026-10-02-21-34-17-utc.mov', 'stock'],
+    ['MOSS MEDICAL/happy-upbeat-flow-2025-08-14-06-22-21-utc/File A 2-11_BearStockMusic - Happy Upbeat (Full Version).mp3', 'music'],
+    ['MICROMOBILITY/02-VIDEO/Sound FX/camera-flash-2025-08-27-06-26-33-utc/Camera Flash.wav', 'sfx'],
+    ['MOSS MEDICAL/classic-lower-thirds-for-after-effects-2025-07-16-06-35-04-utc/After Effects/Classic Lower Thirds.aep', 'template'],
+    ['Mayor October/openart-download/openart-video_1791222979906_ac8e11e5_1791222980489_bf769783.mp4', 'ai'],
+    ['Mayor October/youtube ENG.mp4', 'made_here'],
+    ['Mayor October/A091C007_261001QK_CANON.mp4', 'camera'],
+    ['Mayor October/DJI_0009.MOV', 'camera'],
+    ['THIS IS WAY/Mayor\'s Message OCT youtube.mp4', 'deliverable_reused'],
+    ['Doral__OpenGov Contracts Discussion_2026-07-24_shared_screen_with_speaker_view_rMCW1X+C.mp4', 'recording'],
+    ['Mayor October/Mayor\'s Message OCT  youtube.00_00_04_14.Still002.jpg', 'frame_grab'],
+    ['MILA/_9AR9023.NEF', 'photo'],
+    ['MICROMOBILITY/Shoots/20260205MicroMobility-Fondos.psd', 'design_editable'],
+    ['2015 Doral Logo - white.png', 'design'],
+    ['LOGOS/Simple and Elegant Logo Reveal/frames/frame_0001.png', 'image'],      // a logo-reveal pack's frame is not a logo
+    ['VOICE OVER/Ale1_mixdown.wav', 'voiceover'],
+    ['MAYOR LOGO/._intro.mov', ''],
+    ['canon-lut-201911/full-to-full-range/BT709.cube', ''],
+] as [$p, $want]) {
+    $got = label_of($p, $want === 'deliverable_reused' || $want === 'deliverable' ? 900 : 5, $out)[0];
+    check($got === $want, "labels: $p is " . ($want ?: 'ignored') . ($got === $want ? '' : " (got $got)"));
+}
 $_GET = [];
 echo "Server tests complete. Fixture: $root\n";

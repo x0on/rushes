@@ -133,11 +133,22 @@ require __DIR__ . '/config.php';
     <button class="nav" data-scope="" aria-current="page" title="every file the archive knows about"><span class="ico"><?= icon('everything') ?></span> Everything</button>
     <button class="nav" data-scope="ARCHIVE" title="finished shoots, kept"><span class="ico"><?= icon('archive') ?></span> Archive</button>
     <button class="nav" data-scope="PROJECTS" title="edits and project files"><span class="ico"><?= icon('projects') ?></span> Projects</button>
-    <button class="nav" data-scope="" data-in="deliverables" title="what editors exported into a project's Output folder"><span class="ico"><?= icon('video') ?></span> Deliverables</button>
-    <button class="nav" data-scope="" data-in="library" title="the stock library editors share: each file stored once"><span class="ico"><?= icon('library') ?></span> Stock library</button>
-    <button class="nav sub" data-scope="" data-in="library/music">Music</button>
+    <!-- What each file is, wherever it is (labels.php): from names, folders and sizes; nothing moved -->
+    <h2>What it is</h2>
+    <button class="nav" data-scope="" data-in="deliverables" title="finished videos: anything in an Output folder"><span class="ico"><?= icon('video') ?></span> Deliverables</button>
+    <button class="nav" data-scope="" data-in="library" title="bought or downloaded: stock footage, music, sound effects, templates, graphics"><span class="ico"><?= icon('library') ?></span> Stock library</button>
     <button class="nav sub" data-scope="" data-in="library/stock">Stock footage</button>
+    <button class="nav sub" data-scope="" data-in="library/music">Music</button>
     <button class="nav sub" data-scope="" data-in="library/sfx">Sound effects</button>
+    <button class="nav sub" data-scope="" data-in="library/templates">Templates</button>
+    <button class="nav sub" data-scope="" data-in="library/graphics">Graphics</button>
+    <button class="nav" data-scope="" data-in="ai" title="made with an AI tool (OpenArt …)"><span class="ico"><?= icon('ai') ?></span> AI-generated</button>
+    <button class="nav" data-scope="" data-in="made" title="intros, animations and other parts rendered for an edit"><span class="ico"><?= icon('project') ?></span> Graphics &amp; animation</button>
+    <button class="nav" data-scope="" data-in="camera" title="what the cameras and drones shot"><span class="ico"><?= icon('camera') ?></span> Camera footage</button>
+    <button class="nav" data-scope="" data-in="photos" title="photos and camera raws"><span class="ico"><?= icon('image') ?></span> Photos</button>
+    <button class="nav" data-scope="" data-in="design" title="flyers, logos and graphics: editable files (.psd, .ai) and finished ones"><span class="ico"><?= icon('design') ?></span> Design</button>
+    <button class="nav" data-scope="" data-in="voiceover" title="voice over recordings"><span class="ico"><?= icon('audio') ?></span> Voice over</button>
+    <button class="nav" data-scope="" data-in="recordings" title="Zoom and screen recordings"><span class="ico"><?= icon('video') ?></span> Recordings</button>
     <h2>Pulls</h2>
     <div id="pulls"></div>
     <a class="nav" href="/pull.php"><span class="ico"><?= icon('everything') ?></span> All pulls</a>

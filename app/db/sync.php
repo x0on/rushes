@@ -68,6 +68,8 @@ function sync_search(bool $force = false): array {
         meta_set('search_sync_state', 'current'); meta_set('search_sync_error', '');
         meta_set('search_sync_failures', '0');
         $db->exec('COMMIT');
+        // What each new file is (labels.php), now rather than at the first click in Search
+        try { require_once __DIR__ . '/labels.php'; labels_refresh($db); } catch (Throwable $e) {}
         return ['state' => 'updated'];
     } catch (Throwable $e) {
         try { $db->exec('ROLLBACK'); } catch (Throwable $ignored) {}

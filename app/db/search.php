@@ -2,7 +2,7 @@
 // search.php — the query endpoint. Returns JSON, not a 102 MB download.
 //
 //   search.php?q=DJI_0002&kind=video&limit=200&offset=0
-//   search.php?in=library/music          the stock library, or one part of it, with or without words
+//   search.php?in=library/music          a section by what files are (labels.php), with or without words
 //
 // Every word must match somewhere in the path, which is how the old page
 // behaved and what people expect. Counts per kind come back with the results
@@ -42,18 +42,16 @@ foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
 }
 if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
-// What editors exported into a project's Output folder (Rushes Watcher): the deliverables.
-if (($_GET['in'] ?? '') === 'deliverables' && shelf_chosen()) {
-    $where[] = "path LIKE ? ESCAPE '\\' AND path LIKE ? ESCAPE '\\'";
-    $esc = fn($s) => str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $s);
-    array_push($args, $esc(rtrim(archive_dir(), '/') . '/' . shelf_rel() . 'Projects/') . '%', '%/Output/%');
-}
-// The shared stock library (HOW-IT-WORKS.md → Projects in and out): Projects/Stock Library
-// on the shelf, beside the editors' folders; a section of its own.
-if (preg_match('#^library(?:/(music|stock|sfx))?$#', (string)($_GET['in'] ?? ''), $m)) {
-    $sub = ['music' => 'Music/', 'stock' => 'Stock footage/', 'sfx' => 'Sound effects/'][$m[1] ?? ''] ?? '';
-    $pre = rtrim(archive_dir(), '/') . '/' . shelf_rel() . "Projects/Stock Library/$sub";
-    $where[] = "path LIKE ? ESCAPE '\\'"; $args[] = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $pre) . '%';
+// What each file is (labels.php): Deliverables, the stock library and its parts, AI-generated,
+// Photos, Design … from names, folders and sizes, wherever the files are; nothing is moved.
+$in = (string)($_GET['in'] ?? '');
+if ($in !== '') {
+    require_once __DIR__ . '/labels.php';
+    if (!isset(LABEL_SHOWN[$in])) { echo json_encode(['error' => 'unknown section: ' . $in]); exit; }
+    labels_refresh();                                       // files new since the last look get theirs first
+    $want = LABEL_SHOWN[$in];
+    $where[] = 'files.path IN (SELECT path FROM labels WHERE label IN (' . implode(',', array_fill(0, count($want), '?')) . '))';
+    array_push($args, ...$want);
 }
 
 $sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';

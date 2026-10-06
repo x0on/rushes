@@ -220,6 +220,8 @@ function icon(string $name, float $w = 1.7): string {
         'everything' => '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/>',
         'archive'    => '<rect x="3" y="3.5" width="18" height="4.5" rx="1.4"/><path d="M5 8v11.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V8"/><path d="M10 12h4"/>',
         'projects'   => '<path d="M3 6.5A2 2 0 0 1 5 4.5h3.6l2 2.6H19a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+        'ai'         => '<path d="M12 3.5l1.8 4.7 4.7 1.8-4.7 1.8L12 16.5l-1.8-4.7L5.5 10l4.7-1.8z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
+        'design'     => '<path d="M4 20l4.2-1.1L19.6 7.5a2 2 0 0 0-2.8-2.8L5.4 16.1z"/><path d="M14.8 6.7l2.8 2.8"/>',
         'library'    => '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>',
         'search'     => '<circle cx="11" cy="11" r="6.8"/><path d="m20 20-3.9-3.9"/>',
         'overview'   => '<path d="M3.5 13a8.5 8.5 0 0 1 17 0"/><path d="M12 13l4.2-3.4"/><circle cx="12" cy="13" r="1.4" fill="currentColor" stroke="none"/><path d="M3.5 13v3.5h17V13"/>',

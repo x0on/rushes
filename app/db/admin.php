@@ -12,6 +12,8 @@ require_once __DIR__ . '/auth.php';
 require_sign_in();   // the whole page is behind the lock, not each button
 
 $pw_said = '';
+// ⓘ: the explanation the page does not need to show all the time (tokens.css → .infotip)
+$tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialchars($t, ENT_QUOTES) . '">i</span>';
 if (isset($_POST['_newpass'])) {
     $new = (string)$_POST['_newpass'];
     if (!pass_ok((string)($_POST['_oldpass'] ?? ''))) {
@@ -118,9 +120,7 @@ if (isset($_POST['_newpass'])) {
   .mo .ons span { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
   .mo .ons span.txt { background: var(--warn-bg); border-color: var(--warn) }
   .mo small { display: block; margin-top: 6px; color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .steps2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px }
-  .steps2 > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg) }
-  .steps2 p { margin: 6px 0 0; font-size: 13px; line-height: 1.5 }
+  #ptBox > summary::-webkit-details-marker { display: none }
   table.prep { width: 100%; border-collapse: collapse; font-size: 13px }
   table.prep th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
                   font-weight: 650; padding: 6px 8px; border-bottom: 1px solid var(--line) }
@@ -271,33 +271,31 @@ if (isset($_POST['_newpass'])) {
 
       <!-- ══ describe ══ -->
       <section id="pane-describe" hidden>
-        <!-- One job per folder, two steps in a fixed order, on two machines. -->
+        <!-- 1 the AI: is it here, and when it runs -->
         <div class="panel" style="margin-top:8px">
-          <header><b>Prepare folders</b> <span class="note">· so their footage plays in search and can be found by what is in it</span></header>
+          <header><b>AI</b> <span class="note">· describes every shot and writes down what is said, on the helper Mac; nothing is sent anywhere</span></header>
           <div style="padding:14px">
-            <div class="steps2">
-              <div><b>1 · Proxies</b> <span class="note">on the archive machine</span>
-                <p>A small, light copy of each video (H.264, at the setting below) that plays in any browser and reads much faster
-                  than the camera original. Describing finds the cuts and hears the sound in it, and takes its still
-                  pictures from the original, at full quality. Kept in their own folder, <code>PROXIES</code>, with the same paths as the
-                  originals, so nothing mixes with the footage. Made at low priority; a file that arrived in the last
-                  two hours waits for a later run, so nothing still being copied is touched.</p></div>
-              <div><b>2 · Descriptions</b> <span class="note">on the helper</span>
-                <p>Every shot — the cuts and the sound from its proxy, the pictures from the original at full quality: a sentence, the text on screen, shot size, people, light, themes
-                  and tags, and everything said, in the language it was said. Kept in <code>_rushes/analysis</code>;
-                  nothing in the archive is changed. It starts by itself when a folder's proxies are done.</p></div>
+            <div id="anTools"></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
+              <button class="btn quiet" id="anPause" type="button" hidden></button>
+              <span class="note" id="anPauseSaid"></span>
             </div>
-            <p class="note" style="margin:12px 0 8px">Add as many folders as you like: each shows at once what is in it and what is left to make.
-              They run one at a time, top to bottom, and the list below shows where each one is. Nothing is ever done twice,
-              so adding a folder again later only does what is new.</p>
+          </div>
+        </div>
+
+        <!-- 2 the folders: one job per folder, proxies on the archive machine, then descriptions on the helper -->
+        <div class="panel" style="margin-top:14px">
+          <header><b>Folders to describe</b><?= $tip('Two steps for each folder, in order. 1 · Proxies, on the archive machine: a small, light copy of each video (H.264) that plays in any browser, kept in their own folder, PROXIES, with the same paths as the originals; made at low priority, and a file that arrived in the last two hours waits, so nothing still being copied is touched. 2 · Descriptions, on the helper: every shot, a sentence, the text on screen, shot size, people, light, themes and tags, and everything said, in its language; the cuts and sound from the proxy, the pictures from the original at full quality. Kept in _rushes/analysis; nothing in the archive changes. Folders run one at a time, top to bottom; nothing is done twice, so adding a folder again only does what is new.') ?></header>
+          <div style="padding:14px">
+            <p class="note" style="margin:0 0 10px">Rushes makes a light copy of each video to play in Search, then the AI describes it.</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button class="btn quiet" id="prepChoose" type="button">Choose in Finder…</button>
+              <button class="btn" id="prepChoose" type="button">Choose in Finder…</button>
               <input id="prepPick" type="file" webkitdirectory hidden>
-              <input id="prepPath" placeholder="or type it: a folder in the archive, e.g. PARK COLLECTION"
-                     style="flex:1;min-width:260px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
+              <input id="prepPath" placeholder="or type a folder in the archive"
+                     style="flex:1;min-width:220px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
-              <button class="btn" id="prepGo" type="button">+ Add to the list</button>
-              <button class="btn quiet" data-px="proxy-stop" type="button">Stop proxies</button>
+              <button class="btn quiet" id="prepGo" type="button">+ Add</button>
+              <button class="btn quiet" data-px="proxy-stop" id="pxStop" type="button" hidden>Stop</button>
             </div>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
             <div id="pxState" class="note" style="margin-top:6px"></div>
@@ -305,11 +303,11 @@ if (isset($_POST['_newpass'])) {
           </div>
         </div>
 
-        <!-- How proxies are made: tested on this machine's own video chip, chosen here. -->
-        <div class="panel" style="margin-top:14px">
-          <header><b>Proxy settings</b> <span class="note">· how proxies are made on the archive machine: on its video chip or in software</span></header>
-          <div style="padding:14px">
-            <p id="ptNow" style="margin:0 0 8px"></p>
+        <!-- 3 proxy quality: folded, the default suits almost everyone -->
+        <details class="panel" id="ptBox" style="margin-top:14px">
+          <summary style="padding:12px 14px;cursor:pointer;list-style:none;display:flex;gap:8px;align-items:center">
+            <b>Proxy quality</b> <span class="note" id="ptNow"></span> <span class="note" style="margin-left:auto">Change</span></summary>
+          <div style="padding:0 14px 14px">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
               <select id="ptSet" style="padding:7px 10px;font:13.5px var(--font);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
                 <optgroup label="On the video chip — fast, the processor stays free">
@@ -324,31 +322,18 @@ if (isset($_POST['_newpass'])) {
                 </optgroup>
               </select>
               <button class="btn quiet" id="ptSave" type="button">Use this setting</button>
-              <span class="note">or test them on one of your clips first, below, and choose by eye</span>
+              <a href="#" class="note" id="ptGo">Test on a clip…</a><?= $tip('Pick one clip from the archive in Finder. Twenty seconds of it are made at each setting, and a still from each appears beside one from the original, at the same moment: choose by eye. Proxies made from then on use it; the ones already made stay as they are. Nothing is uploaded (Safari\'s button says Upload, but only the clip\'s name and size are read) and nothing in the archive changes. The test clips are kept in _rushes/proxy-test, to play full screen.') ?>
             </div>
-            <p class="note" style="margin:0 0 10px">Pick one clip from the archive in Finder. Twenty seconds of it are made at several sizes and
-              bitrates on the video chip, and a still from each appears below beside one from the original, at the same moment. Choose the
-              one you like: proxies made from then on use it (the ones already made stay as they are). Nothing is uploaded — Safari's button
-              says Upload, but only the clip's name and size are read — and nothing in the archive changes. The test clips are kept in
-              <code>_rushes/proxy-test</code> on VIDEO, to play full screen.</p>
-            <button class="btn" id="ptGo" type="button">Test proxy settings…</button>
             <input id="ptPick" type="file" accept="video/*,.mxf,.MXF,.mts,.MTS" hidden>
             <p class="note" id="ptSaid" style="margin:8px 0 0"></p>
             <div id="pxTest"></div>
           </div>
-        </div>
+        </details>
 
-        <!-- What the helper can describe with, and how far the archive has got. -->
+        <!-- 4 what has been described -->
         <div class="panel" style="margin-top:14px">
-          <header><b>Describing</b></header>
-          <div style="padding:14px">
-            <div id="anTools" class="note"></div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
-              <button class="btn quiet" id="anPause" type="button" hidden></button>
-              <span class="note" id="anPauseSaid"></span>
-            </div>
-            <div class="tiles" id="anTiles" style="margin-top:12px"></div>
-          </div>
+          <header><b>Described so far</b></header>
+          <div style="padding:14px"><div class="tiles" id="anTiles"></div></div>
         </div>
 
         <div class="panel" style="margin-top:14px">
@@ -1321,10 +1306,10 @@ let ptOpen = false, ptLast = '';        // the log stays as you left it; nothing
 function drawProxyTest(d) {
   const ps = d.proxy_setting || [720, 4], pt = d.proxy_test;
   const running = d.running === 'proxy-test', asked = (d.queued || []).includes('proxy-test');
-  $('ptNow').innerHTML = 'In use: <b>' + ps[0] + 'p ' + (ps[1] === 'sw' ? 'in software' : 'at ' + ps[1] + ' Mbit/s on the video chip') + '</b>';
+  $('ptNow').textContent = ps[0] + 'p · ' + (ps[1] === 'sw' ? 'in software' : ps[1] + ' Mbit/s on the video chip') + (ps.join(' ') === '720 4' ? ' (the default)' : '');
   if (document.activeElement !== $('ptSet')) $('ptSet').value = ps[0] + ' ' + ps[1];   // not while you are choosing
-  $('ptGo').disabled = running || asked;
-  $('ptGo').textContent = running ? 'Testing…' : asked ? 'Asked…' : 'Test proxy settings…';
+  $('ptGo').dataset.busy = running || asked ? '1' : '';
+  $('ptGo').textContent = running ? 'Testing…' : asked ? 'Asked…' : 'Test on a clip…';
   if (!pt && !running && !asked) { $('pxTest').innerHTML = ''; return; }
   const mb = {};                               // "720p at 4Mbit/s: 30 MB a minute" -> {"720-4M": 30}
   ((pt && pt.text) || '').replace(/(\d+)p at (\d+)Mbit\/s: (\d+) MB a minute/g, function (_, h, b, m) { mb[h + '-' + b + 'M'] = m; });
@@ -1368,7 +1353,7 @@ async function useSetting(v) {
 }
 $('ptSave').onclick = function () { this.disabled = true; this.textContent = 'Saving…'; const b = this;
   useSetting($('ptSet').value).then(function () { b.disabled = false; b.textContent = 'Use this setting'; }); };
-$('ptGo').onclick = function () { $('ptPick').value = ''; $('ptPick').click(); };
+$('ptGo').onclick = function (e) { e.preventDefault(); if (this.dataset.busy) return; $('ptPick').value = ''; $('ptPick').click(); };
 $('ptPick').onchange = async function () {
   const f = (this.files || [])[0], said = $('ptSaid');
   if (!f) return;
@@ -1389,7 +1374,8 @@ $('ptPick').onchange = async function () {
 function tcode(v) { v = Math.floor(v || 0); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); }
 function drawProxies(p) {
   const el = $('pxState');
-  if (!p) { el.textContent = 'Nothing planned yet. Add a folder to the list above; Jobs and tools → Plan proxies counts the whole archive.'; return; }
+  $('pxStop').hidden = !(p && ((p.state === 'building' && p.running) || p.state === 'planning'));   // Stop, only while something runs
+  if (!p) { el.textContent = ''; return; }        // the folder list says it
   const n = function (x) { return (+x || 0).toLocaleString(); };
   const size = function (gb) { gb = +gb || 0; return gb >= 1000 ? (gb / 1024).toFixed(1) + ' TB' : gb + ' GB'; };
   const when = p.ago == null ? '' : ' <span class="note">(' + (p.ago < 90 ? 'just now' : Math.round(p.ago / 60) + ' min ago') + ')</span>';
@@ -1448,7 +1434,7 @@ function drawDescribeTools(h) {
   descPaused = !!(h && h.describe_paused);
   // Always there: it is a switch Rushes keeps, so it works even while the helper is
   // away (it sees it when it is back).
-  const b = $('anPause'), on = !!(h && h.label);
+  const b = $('anPause'), on = !!(h && h.label && h.analysis && h.analysis.ready && !(h.describe && h.describe.phase === 'installing'));
   b.hidden = !on;
   if (on && !b.disabled) b.textContent = descPaused ? 'Resume describing' : 'Pause describing';
   if (on && !$('anPauseSaid').dataset.keep)
@@ -1465,12 +1451,13 @@ function drawDescribeTools(h) {
   $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'
     : d.phase === 'installing' ? '<b>Installing the AI on ' + esc(h.label) + '</b>' + steps()
     : !an.model ? 'The helper on <b>' + esc(h.label) + '</b> has not said yet whether it can describe footage.'
-    : an.ready ? '✓ The helper on <b>' + esc(h.label) + '</b> can describe footage' +
+    : an.ready ? '<b class="ok">✓ AI ready</b> on ' + esc(h.label) +
         '<span class="infotip" tabindex="0" data-tip="' + esc('Vision model ' + an.model + ', speech ' + (an.speech ? an.speech.split('/').pop() : 'off') +
           '. Both run on the helper Mac itself; nothing is sent anywhere.') + '">i</span>' +
-        '<div style="margin-top:10px">' + (h.describe_night
-          ? ask('describe-anytime', 'Describe at any time', true) + ' <span class="note">Only at night now (10 pm to 7 am)</span>'
-          : ask('describe-night', 'Describe only at night', true) + ' <span class="note">Any time now</span>') + '</div>'
+        '<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="note">When it runs</span> ' +
+          (h.describe_night ? ask('describe-anytime', 'Any time', true) + ask('describe-night', '✓ Only at night', false)
+                            : ask('describe-anytime', '✓ Any time', false) + ask('describe-night', 'Only at night', true)) +
+          '<span class="infotip" tabindex="0" data-tip="Only at night: describing waits for 10 pm and stops at 7 am, so the Mac is free during the day.">i</span></div>'
     : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
     : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
       '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +

@@ -3,6 +3,22 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.12 — October 2026
+
+- **Search knows what each file is:** a new "What it is" list — Deliverables,
+  the Stock library (stock footage, music, sound effects, templates, graphics),
+  AI-generated, Graphics & animation, Camera footage, Photos, Design, Voice
+  over, Recordings — wherever the files are. Rules only, from names, folders and
+  sizes, tried on a real drive of every kind of media: anything in an Output
+  folder is a deliverable; Envato's "…-utc" names and stock sites' names are
+  stock (the file type says footage, music or a template); OpenArt is
+  AI-generated; a video outside Output without a camera's name is a part made
+  for the edit; a finished video reused in another project is recognised. Nothing
+  is moved, so no project loses a link; macOS leftovers and LUTs are left out.
+- **Describe, simpler:** the AI first (ready, or Install; Any time or Only at
+  night; Pause), then the folders, then proxy quality folded away. The long
+  explanations are behind ⓘ; Stop shows only while something runs.
+
 ## 0.12.11 — October 2026
 
 - **Install the AI, with one button:** Manage → Describe installs what
