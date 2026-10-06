@@ -48,11 +48,16 @@ def archive_ok(a, web):
             and not a.startswith(bad) and a != web and not a.startswith(web + "/") and os.path.isdir(a))
 
 
+class Halted(Exception):
+    """A watched read stopped between pieces (Pause)."""
+
+
 class Runner:
     def __init__(self, web, url, limit=20):
         self.web, self.url, self.limit = web, url.rstrip("/"), limit
         self.busy = {}                                   # "upkeep" / "jobs": the thread doing it
         self.pending = {}                                # what the archive was asked and has not answered yet → its thread
+        self.quiet = 120                                 # a long read with no data for this long is walked away from (watched)
 
     # ── small things ─────────────────────────────────────────────────────────
     def p(self, name):
@@ -133,6 +138,41 @@ class Runner:
             return out.get("ok", False)
         self.pending[what] = t
         return self.count_stall(f"the archive did not answer within {limit or self.limit}s ({what})", what)
+
+    def watched(self, what, fn):
+        """A long read (every byte of a file) in a thread of its own: fn(tick), where tick() is
+        called after each piece read. Waited for as long as data keeps coming, however big the
+        file; one that gets no data for `quiet` seconds (a disk that answers what is in a folder
+        but stalls reading a file) is walked away from, counted as the archive not answering,
+        and not started again beside itself (pending). Pause stops it between pieces.
+        -> (finished, fn's answer); fn's own error (OSError: unreadable) is raised here."""
+        old = self.pending.get(what)
+        if old is not None and old.is_alive():
+            self.count_stall(f"{what}: the last read has not finished yet, so it is not started again until it does")
+            return False, None
+        self.pending.pop(what, None)
+        last, out, halt = [time.time()], {}, threading.Event()
+        def tick():
+            last[0] = time.time()
+            if halt.is_set():
+                raise Halted()
+        def go():
+            try: out["v"] = fn(tick)
+            except Halted: pass
+            except Exception as e: out["e"] = e
+        t = threading.Thread(target=go, daemon=True)
+        t.start()
+        while t.is_alive():
+            t.join(1)
+            if t.is_alive() and not self.may_v():
+                halt.set()                               # paused: stops at its next piece
+            if t.is_alive() and time.time() - last[0] > self.quiet:
+                self.pending[what] = t
+                self.count_stall(f"the archive gave no data for {self.quiet}s ({what})", what)
+                return False, None
+        if "e" in out:
+            raise out["e"]
+        return "v" in out, out.get("v")
 
     def count_stall(self, said, what=""):
         """One more time in a row the archive did not answer; the third stops touching it. -> False"""
@@ -462,7 +502,9 @@ class Runner:
                 last = time.time()
                 self.log(f"progress: {i} of {len(held)} ({100 * i // max(len(held), 1)}%)")
             if p in keeper:
-                same = ts.same_bytes(p, keeper[p])
+                done, same = self.watched("Delete All, comparing", lambda tick: ts.same_bytes(p, keeper[p], tick))
+                if not done:                             # paused, or the drive stopped giving data: this file stays
+                    stopped = True; break
                 if same is not True:
                     if same is False: differ += 1
                     else: unread += 1
@@ -653,7 +695,7 @@ class Runner:
             pass
         keep, seen, unread, last, stopped = {}, 0, 0, time.time(), False
 
-        def fingerprint(path, size, part):
+        def fingerprint(path, size, part, tick=lambda: None):
             key = [str(size), ts.file_key(os.stat(path))]   # size, date to the nanosecond, the file's own number
             got = cache.get(path)
             if not got or got[:2] != key:
@@ -666,7 +708,7 @@ class Runner:
                         h.update(f.read(65536)); f.seek(-65536, 2); h.update(f.read(65536))
                     else:
                         while chunk := f.read(4 << 20):
-                            h.update(chunk)
+                            h.update(chunk); tick()
                 if os.path.getsize(path) != size:
                     raise OSError("it changed while it was read")
                 got[i] = h.hexdigest()
@@ -681,7 +723,10 @@ class Runner:
                     if not self.may_v():
                         stopped = True; break
                     try:
-                        split.setdefault(fingerprint(path, size, part), []).append(path)
+                        done, fp = self.watched("Find duplicates, reading", lambda tick: fingerprint(path, size, part, tick))
+                        if not done:                     # paused, or the drive stopped giving data
+                            stopped = True; break
+                        split.setdefault(fp, []).append(path)
                     except OSError:
                         unread += 1
                     if time.time() - last > 30:

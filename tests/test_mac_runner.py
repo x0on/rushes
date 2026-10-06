@@ -190,6 +190,37 @@ class MacJobs(unittest.TestCase):
         self.assertTrue(self.r.v("database copy", lambda: ran.append(1)))
         self.assertEqual(ran, [1])
 
+    def test_delete_all_walks_away_from_a_read_that_stalls_and_keeps_the_file(self):
+        # Review of 0.12.5 (comment 2): a drive that lists folders but stalls reading a file.
+        big = os.urandom(5000)
+        self.put("Parks/A.mov", big); self.put("Card dumps/card 1/A.mov", big)
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        self.r.build_index(); self.r.job("find", {}); self.r.job("apply", {})
+        held = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/A.mov")
+        stuck = __import__("threading").Event()
+        self.r.quiet = 0.5
+        with unittest.mock.patch.object(runner.ts, "same_bytes", side_effect=lambda a, b, tick=None: stuck.wait()):
+            self.r.job("empty", {})
+            self.assertTrue(os.path.isfile(held), "not proven a duplicate: it stays")
+            self.assertIn(held, open(os.path.join(self.web, "dedupe-moves.tsv")).read())
+            self.assertIn("gave no data for 0.5s", self.log())
+            self.r.job("empty", {})                     # pressed again while the first read is still stuck
+            self.assertIn("not started again until it does", self.log())
+        stuck.set()
+
+    def test_pause_stops_a_long_read_between_pieces(self):
+        self.put("x.mov", b"1")
+        pieces = []
+        def endless(tick):
+            while True:
+                pieces.append(1); tick()
+                if len(pieces) == 3:
+                    open(os.path.join(self.web, "helper-control.json"), "w").write('{"paused": true}')
+                __import__("time").sleep(0.05)
+        done, _ = self.r.watched("a long read", endless)
+        self.assertFalse(done)
+        self.assertLess(len(pieces), 60, "stopped within a second or so of Pause")
+
     def test_heavy_reading_waits_while_the_helper_copies(self):
         self.put("x.mov", b"1")                      # the archive is there
         st = os.path.join(self.web, "ingest-status.tsv")
