@@ -119,6 +119,23 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(got["items"][-1], {"label": "Quit Rushes", "do": "quit"})
 
 
+class InstallWindowTests(unittest.TestCase):
+    def test_each_step_says_what_it_is_doing_and_all_set_knows_rushes_is_on_this_mac(self):
+        m = front("Rushes", Path(tempfile.mkdtemp()))
+        w = m.Window(); seen = []
+        with patch.object(m, "copy_to_applications", side_effect=lambda: seen.append(w.s["doing"]) or ""), \
+             patch.object(m, "local", return_value={"archive": "/Volumes/Drive"}), \
+             patch.object(m, "install_service", side_effect=lambda url: seen.append(w.s["doing"]) or True), \
+             patch.object(m, "has_full_disk_access", side_effect=lambda: seen.append(w.s["doing"]) or True), \
+             patch.object(m, "restart_service", side_effect=lambda: seen.append(w.s["doing"])):
+            w.install("http://127.0.0.1:8642")
+            st = w.state()
+        self.assertEqual(seen, ["Putting Rushes in Applications …", "Installing the background service …",
+                                "Checking Full Disk Access …", "Starting the background service again, with this version …"])
+        self.assertEqual((st["step"], st["doing"], st["local"]), ("all-set", "", True))
+        self.assertIn("Background service installed and started — it starts by itself when you log in", st["done"])
+
+
 class OneCopyTests(unittest.TestCase):
     """Rushes runs from where it was put, one copy only (0.12.2: the disk image)."""
     def test_dragged_to_applications_it_stays_there_and_the_other_copy_is_found(self):

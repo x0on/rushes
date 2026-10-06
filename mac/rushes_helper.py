@@ -603,7 +603,7 @@ class Window:
         self.remote, self.asking, self.asked = {}, None, 0.0     # what Rushes last said (ask_rushes)
         self.activity_at = 0.0
         self.s = {"step": "welcome", "url": saved_url(), "busy": "", "error": "", "said": "",
-                  "done": [], "waiting": False, "lan_asked": False}
+                  "done": [], "doing": "", "waiting": False, "lan_asked": False}
         if self.s["url"] and not WATCHER and not service_points_here() and was_helper():
             # Set up before 0.12, as Rushes Helper: this app takes its place, with the same settings
             self.s.update(step="install", done=["Rushes Helper is called Rushes now: it takes its place"])
@@ -630,6 +630,8 @@ class Window:
                  local_up=None if WATCHER else local_up())     # Open Rushes waits until Rushes answers
         if s["step"] == "home":
             s.update(self.home())
+        elif not WATCHER:
+            s["local"] = bool(local())                   # the pages before home say which kind of Mac this is
         return s
 
     def source(self):
@@ -976,10 +978,15 @@ class Window:
         self.install(url)
 
     def install(self, url):
+        # Each step says what it is doing before it starts (a line that turns, in the window),
+        # and becomes a ✓ when it is done: the window is never still while something happens.
+        def doing(line):
+            self.set(doing=line)
         def did(line):
             log(line)
             with self.lock:
-                self.s["done"] = self.s["done"] + [line]
+                self.s["done"] = self.s["done"] + [line]; self.s["doing"] = ""
+        doing(f"Putting {NAME} in Applications …")
         err = copy_to_applications()
         if err:
             raise RuntimeError(f"Could not copy {NAME} into {os.path.dirname(HOMEAPP)}: " + err)
@@ -995,21 +1002,25 @@ class Window:
         elif local():
             did("Rushes and everything it needs are inside this app: nothing to download")
         else:
+            doing("Downloading the copying and describing code from Rushes …")
             fetch_files(url)
             did("Downloaded the copying and describing code from Rushes")
+        doing("Installing the background service …")
         if not install_service(url):
             raise RuntimeError("macOS would not start the background service. The detail is in ~/Library/Logs/Rushes/setup.log")
         did("Background service installed and started — it starts by itself when you log in")
+        doing("Checking Full Disk Access …")
         if has_full_disk_access():
-            restart_service(); self.set(step="all-set")
+            doing("Starting the background service again, with this version …")
+            restart_service(); self.set(step="all-set", doing="")
         else:
-            self.set(step="fda", waiting=False); self._watch_access()
+            self.set(step="fda", waiting=False, doing=""); self._watch_access()
 
     def install_quietly(self, url):
         try:
             self.install(url)
         except Exception as e:
-            log(f"install: {e}"); self.set(error=str(e))
+            log(f"install: {e}"); self.set(error=str(e), doing="")
 
     def show_fda(self):
         """Settings at Full Disk Access, and the app in Finder to drag into the list."""
@@ -1021,8 +1032,9 @@ class Window:
             while self.s["step"] == "fda" and not self.quit.is_set():
                 if has_full_disk_access():
                     log("Full Disk Access is on")
+                    self.set(doing="Full Disk Access is on ✓ Starting the background service again, with it …")
                     restart_service()                    # so the running helper has it too
-                    self.set(step="all-set"); return
+                    self.set(step="all-set", doing=""); return
                 time.sleep(2)
         threading.Thread(target=watch, daemon=True).start()
 
@@ -1188,7 +1200,7 @@ function draw() {
     f = btn('Cancel', 'done') + btn('Open Local Network settings', 'network-settings') + btn('Try again', 'retry', true, !!s.busy); break;
   case 'install':
     b = '<h2>Installing</h2><ul class="did">' + (s.done || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
-      (s.busy ? '<p style="margin-top:10px"><span class="spin"></span>Working …</p>' : '') + err;
+      (s.doing || s.busy ? '<p style="margin-top:10px"><span class="spin"></span>' + esc(s.doing || 'Working …') + '</p>' : '') + err;
     f = s.error ? btn('Try again', 'retry', true) : ''; break;
   case 'fda':
     b = '<h2>One switch left: Full Disk Access</h2>' +
@@ -1196,7 +1208,8 @@ function draw() {
         : 'Rushes needs that to reach your drives: to read cards and drives when footage comes in, and to keep the archive and check its copies — nothing more.') + '</p>' +
       '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows %NAME%. Turn %NAME% on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications).</p>' +
       '<p class="muted">If System Settings opens somewhere else, type Full Disk Access into its search field, top left.</p>' +
-      (s.waiting ? '<div class="box"><span class="spin"></span>Waiting for the switch … this window moves on by itself the moment it is on.</div>' : '');
+      (s.doing ? '<div class="box"><span class="spin"></span>' + esc(s.doing) + '</div>'
+       : s.waiting ? '<div class="box"><span class="spin"></span>Waiting for the switch … this window moves on by itself the moment it is on.</div>' : '');
     f = btn('Later', 'later') + btn(s.waiting ? 'Show me where again' : 'Open System Settings', 'fda-open', true); break;
   case 'later':
     b = '<h2>Not finished yet</h2><p>%NAME% is installed and running, but it cannot reach the drives until Full Disk Access is on.</p><p>Open %NAME% again any time to finish; it starts right at that step.</p>';

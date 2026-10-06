@@ -3,6 +3,16 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.9 — October 2026
+
+- **The window says what it is doing while it does it:** each step of
+  installing announces itself on a line with a turning circle ("Restarting the
+  background service …") before it starts, and becomes a ✓ when it is done; the
+  same on the Full Disk Access page. It was still for a few seconds before.
+- **"All set" on a Mac where Rushes runs:** it said Rushes did "your Rushes
+  server's copying", the words for a Mac working for a NAS.
+- The first version that can arrive by **Update to …** from GitHub.
+
 ## 0.12.8 — October 2026
 
 - **Release files carry their version in their names** (`Rushes 0.12.8.zip`,
