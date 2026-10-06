@@ -2139,7 +2139,7 @@ def report_forever(every=20):
             py, model, speech = analysis_tools()
             stuck = watch_feeding() or _net_stuck[0] or (_looking[0] if late or (not at and _looking[0]) else "")
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
-                                           "an": ("ready" if py else "missing") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
+                                           "an": ("ready" if py else "missing" if apple_chip() else "nochip") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
                                            "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
                                            "host": platform.node(), "stuck": stuck}).encode()
             urllib.request.urlopen(NAS_URL + "/db/report.php", data=body, timeout=15).read()
@@ -2918,12 +2918,114 @@ def watch(root, every=20):
 # Rushes (analysis.python / .model / .whisper), with the machine's own install
 # as the default. analyze.py writes one description per file into the
 # archive's _rushes/analysis, and reports progress as "@@ {json}" lines.
+AI = HOME / "ai"        # what Install the AI puts on this Mac (Manage → Describe): its own Python, ffmpeg, the tools
+# Each download pinned and checked against its fingerprint before it is used.
+AI_GET = {
+    "python": ("https://github.com/astral-sh/python-build-standalone/releases/download/20250918/"
+               "cpython-3.12.11%2B20250918-aarch64-apple-darwin-install_only_stripped.tar.gz",
+               "559fb918c10f0cff226604257dcc390b391c87e6cbb2426824e99069c143e714"),
+    "ffmpeg":  ("https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-darwin-arm64.gz",
+                "6be74d6f449889c2e87a75873894f8520cad56c08ac76f2a628d85b0519daaca"),
+    "ffprobe": ("https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-darwin-arm64.gz",
+                "a4db76bafdb8529312e138fb55aaf143cad21b6d672e2634c9dd07ae83c6a310"),
+}
+AI_PACKAGES = ["mlx-vlm", "mlx-whisper", "scenedetect[opencv-headless]", "huggingface_hub"]
+NIGHT = (22, 7)         # ponytail: "only at night" is 10 pm to 7 am; a setting if anyone needs other hours
+
+
+def apple_chip():
+    return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
 def analysis_tools():
     a = SETTINGS.get("analysis") or {}
-    py = os.path.expanduser(a.get("python") or "~/archive-pilot/venv/bin/python")
+    # A Python set in Rushes, else one made by hand (~/archive-pilot/venv, before Install), else Install's
+    py = os.path.expanduser(a.get("python") or ("~/archive-pilot/venv/bin/python" if os.path.exists(
+        os.path.expanduser("~/archive-pilot/venv/bin/python")) else str(AI / "python" / "bin" / "python3")))
     local = os.path.expanduser("~/archive-pilot/qwen3vl8b")
     model = a.get("model") or (local if os.path.isdir(local) else "mlx-community/Qwen3-VL-8B-Instruct-4bit")
     return (py if os.path.exists(py) else ""), model, a.get("whisper", "mlx-community/whisper-large-v3-turbo")
+
+
+def install_ai():
+    """Install the AI (Manage → Describe), on this Mac: a Python of its own, ffmpeg
+    and ffprobe, the tools (pip) and the models. Each step is said in Describe
+    while it happens (turning) and becomes a ✓; a step already done is skipped,
+    so pressing it again finishes what is missing."""
+    import gzip, tarfile
+    done = []
+    def step(line):
+        print(f"  {line}"); status(phase="installing", note=line, done=" | ".join(done))
+    def ok(line):
+        print(f"  ✓ {line}"); done.append(line); status(phase="installing", note="", done=" | ".join(done))
+    def fetch(name, dest):
+        url, sha = AI_GET[name]
+        part, h = Path(str(dest) + ".part"), hashlib.sha256()
+        with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
+            while True:
+                b = r.read(1 << 20)
+                if not b: break
+                h.update(b); f.write(b)
+        if h.hexdigest() != sha:
+            part.unlink()
+            raise RuntimeError(f"the {name} download is not the one expected (its fingerprint differs): not used")
+        os.replace(part, dest)
+    def run(cmd):
+        # Minutes with nothing to say (pip, a model): the line keeps turning, never looks stuck
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        tail = []
+        def read():
+            for l in p.stdout:
+                tail[:] = (tail + [l.rstrip()])[-5:]
+        t = threading.Thread(target=read, daemon=True); t.start()
+        while p.poll() is None:
+            status(phase="installing", note=_note[0], done=" | ".join(done)); time.sleep(20)
+        t.join(5)
+        if p.returncode:
+            raise RuntimeError("; ".join(x for x in tail if x)[-300:] or f"stopped ({p.returncode})")
+    _note = [""]
+    def long_step(line):
+        _note[0] = line; step(line)
+    if not apple_chip():
+        raise RuntimeError("describing needs a Mac with an Apple chip")
+    AI.mkdir(parents=True, exist_ok=True)
+    py = AI / "python" / "bin" / "python3"
+    if not py.exists():
+        step("Downloading a Python for the AI (17 MB) …")
+        fetch("python", AI / "python.tar.gz")
+        with tarfile.open(AI / "python.tar.gz") as t:
+            t.extractall(AI, filter="data")            # makes AI/python
+        (AI / "python.tar.gz").unlink()
+        ok("A Python for the AI")
+    (AI / "bin").mkdir(exist_ok=True)
+    for n in ("ffmpeg", "ffprobe"):
+        b = AI / "bin" / n
+        if b.exists(): continue
+        step(f"Downloading {n} (19 MB) …")
+        fetch(n, AI / "bin" / (n + ".gz"))
+        with gzip.open(AI / "bin" / (n + ".gz")) as g, open(str(b) + ".part", "wb") as f:
+            shutil.copyfileobj(g, f)
+        os.chmod(str(b) + ".part", 0o755); os.replace(str(b) + ".part", b); (AI / "bin" / (n + ".gz")).unlink()
+        # An Apple chip runs only signed programs: signed here, for this Mac only (ad hoc)
+        subprocess.run(["codesign", "-s", "-", "-f", str(b)], capture_output=True)
+        ok(n)
+    long_step("Installing the AI tools (mlx-vlm, mlx-whisper, scenedetect) — a few minutes …")
+    run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", *AI_PACKAGES])
+    ok("The AI tools")
+    tools, model, whisper = analysis_tools()
+    for what, m in (("the vision model (about 6 GB)", model), ("the speech model (about 1.6 GB)", whisper)):
+        if os.path.isdir(m): continue                  # a model already on this Mac, in a folder
+        long_step(f"Downloading {what} — it takes a while …")
+        run([tools or str(py), "-c", "import sys; from huggingface_hub import snapshot_download; snapshot_download(sys.argv[1])", m])
+        ok(what[0].upper() + what[1:].split(" (")[0])
+    print("  the AI is installed ✓ describing can start")
+    status(phase="installed", note="", done=" | ".join(done))
+
+
+def _asked_install():
+    """When Install the AI was last pressed and done here: pressed once, done once (not again at each start)."""
+    try: return float((HOME / "ai-asked").read_text())
+    except (OSError, ValueError): return 0.0
 
 
 DESCRIBE_TRIES = 3
@@ -2946,12 +3048,25 @@ def describe_lane(every=20):
     said = ""
     while True:
         try:
+            asked = float(control().get("ai_install") or 0)
+            if asked > _asked_install():
+                (HOME / "ai-asked").write_text(str(asked))
+                print("\n=== installing the AI for describing (asked in Manage → Describe) ===")
+                try: install_ai()
+                except Exception as e:
+                    print(f"  ! the AI was not installed: {e}")
+                    status(phase="install-failed", note=str(e))
+                said = ""; continue
             if control().get("describe_paused"):
                 if said != "paused":
                     status(phase="paused", note="describing paused — Resume describing carries on"); said = "paused"
                 time.sleep(10); continue
             if stopped():                     # a share stopped answering: nothing until Try again
                 time.sleep(every); continue
+            if control().get("describe_night") and NIGHT[1] <= time.localtime().tm_hour < NIGHT[0]:
+                if said != "night":
+                    status(phase="waiting", note="describing waits for the night (10 pm to 7 am)"); said = "night"
+                time.sleep(60); continue
             if _copying.is_set():             # copying has the disk: no folder is started now
                 if said != "waiting" and _describe_jobs:
                     status(phase="waiting", note="describing waits while copying uses the disk"); said = "waiting"

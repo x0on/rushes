@@ -1256,6 +1256,7 @@ function draw() {
         '<p><b>Open Rushes</b> for Search, Ingest and Manage, in your browser: here, or from the menu bar icon. Open this window again any time to see what Rushes is doing, and what happened.</p>'
       : '<p>Rushes is set up on this Mac. It does your Rushes server\'s copying and describing in the background, starts when you log in, restarts itself if it stops, and keeps that code the same as the server\'s.</p>' +
         '<p>Rushes → Manage shows what it is doing, and so does this window: open it again any time.</p>') +
+      (s.watcher ? '' : '<p>Describing footage is optional: its AI is installed with one button, in Rushes → Manage → Describe.</p>') +
       '<p class="muted">macOS may show a notice that %NAME% can run in the background — that is this.</p>';
     f = s.watcher ? btn('Pair with Rushes', 'back-home', true) : btn('Done', 'done') + openBtn(s, true); break;
   // No row of buttons: the window is a place you visit, closed with its red dot. Open Rushes is in the side panel.

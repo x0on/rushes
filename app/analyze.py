@@ -118,7 +118,7 @@ def fingerprint(path, chunk=4 << 20):
 def tool(name):
     """ffmpeg/ffprobe: a background service has a bare PATH, so look where
     Homebrew puts them too. Also puts them on PATH for Whisper, which calls ffmpeg."""
-    for d in ("/opt/homebrew/bin", "/usr/local/bin"):
+    for d in (os.path.expanduser("~/archive-pilot/ai/bin"), "/opt/homebrew/bin", "/usr/local/bin"):   # Install the AI's, then Homebrew's
         if os.path.exists(os.path.join(d, name)) and d not in os.environ.get("PATH", ""):
             os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
     found = shutil.which(name)

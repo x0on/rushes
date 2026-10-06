@@ -318,7 +318,7 @@ function helper_volumes(): array {
         elseif ($f[0] === 'host') $host = $f[1] ?? '';
         elseif ($f[0] === 'stuck') $stuck = $f[1] ?? '';
         elseif ($f[0] === 'an' && ($f[1] ?? '') !== '')
-            $an = ['ready' => $f[1] === 'ready', 'model' => $f[2] ?? '', 'speech' => $f[3] ?? ''];
+            $an = ['ready' => $f[1] === 'ready', 'nochip' => $f[1] === 'nochip', 'model' => $f[2] ?? '', 'speech' => $f[3] ?? ''];
         elseif ($f[0] === 'vol' && count($f) === 9) {
             $vols[$f[1]] = ['path' => $f[1], 'name' => $f[2], 'total' => (int)$f[3],
                             'free' => (int)$f[4], 'card' => $f[5] === '1',

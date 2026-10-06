@@ -249,25 +249,25 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           <span class="chg">Change</span></summary>
         <div class="pick">
           <label class="opt"><input type="radio" name="shape" value="one_place" <?= $shape !== 'in_place' ? 'checked' : '' ?>>
-            <b>Bring everything to one place</b>
-            <small>Media is copied into this archive and organised on its shelves.
-                   One drive to back up, one place to look.</small></label>
+            <b>Bring everything to one place<?= $tip('Media is copied into this archive and organised on its shelves. One drive to back up, one place to look.') ?></b>
+            <small>Copied into this archive.</small></label>
           <label class="opt"><input type="radio" name="shape" value="in_place" <?= $shape === 'in_place' ? 'checked' : '' ?>>
-            <b>Leave media on its own drives</b>
-            <small>The drives in 03 keep their files where they are. Rushes lists each one, searches
-                   across all of them at once (an unplugged drive too, and says which to plug in),
-                   and lists a drive again whenever it comes back.</small></label>
+            <b>Leave media on its own drives<?= $tip('The drives in 03 keep their files where they are. Rushes lists each one, searches across all of them at once (an unplugged drive too, and says which to plug in), and lists a drive again whenever it comes back.') ?></b>
+            <small>Rushes lists them where they are.</small></label>
         </div>
       </details>
 
       <!-- ══ 02 the archive ══ -->
+      <?php // what the archive is follows 01 (the page's script swaps it when 01 changes)
+            $archTip = ['The drive your footage is copied to. Rushes keeps its records here too.',
+                        'Where Rushes keeps its records. Your footage stays on the drives in 03.']; ?>
       <?php $aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
             $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST);
             $aDrive = ''; foreach ($local as $v) if ($v['path'] === $aLoc) $aDrive = $v['name'];
             $aNum = !on_mac() && filter_var(trim($aHost, '[]'), FILTER_VALIDATE_IP);     // a number: the warning shows, so open
             $aDone = $aLoc !== '' && (on_mac() || $aUrl !== '') && !$aNum; ?>
       <details class="grp sec"<?= $open || !$aDone ? ' open' : '' ?>>
-        <summary><h2><span><?= $num() ?> /</span> This archive<?= $tip('The collection everything is measured against.') ?></h2>
+        <summary><h2><span><?= $num() ?> /</span> This archive<span id="archTip"><?= $tip($shape === 'in_place' ? $archTip[1] : $archTip[0]) ?></span></h2>
           <span class="val"><?= $e($s['name'] ?? 'Rushes') ?> &middot; <?= $e($aDrive ?: basename($aLoc)) ?> &middot; <?= $e($aUrl ?: $here) ?>
             <button type="button" class="ghost" data-copy="<?= $e($aUrl ?: $here) ?>">Copy</button></span>
           <span class="chg">Change</span></summary>
@@ -596,8 +596,13 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
             r.onchange = function () {
               document.getElementById('hExt').hidden = r.value !== 'external' || !r.checked; }; });
           // Copy and ⓘ in a section's one line do their own thing, not open the section
-          document.querySelectorAll('details.sec > summary button, details.sec > summary .infotip').forEach(function (x) {
+          document.querySelectorAll('details.sec > summary button, details.sec > summary .infotip, label.opt .infotip').forEach(function (x) {
             x.addEventListener('click', function (ev) { ev.preventDefault(); }); });
+          // What "This archive" is follows the choice in 01, as it is picked
+          const ARCH = <?= json_encode($archTip) ?>;
+          document.querySelectorAll('[name=shape]').forEach(function (r) {
+            r.addEventListener('change', function () {
+              document.querySelector('#archTip .infotip').dataset.tip = ARCH[r.value === 'in_place' ? 1 : 0]; }); });
         </script>
       </details>
 

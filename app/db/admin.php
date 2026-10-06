@@ -127,6 +127,7 @@ if (isset($_POST['_newpass'])) {
   table.prep td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top }
   table.prep .ok { color: var(--ok) } table.prep .busy { color: var(--accent-text); font-weight: 600 }
   table.prep .bad { color: var(--warn) } table.prep .dim { color: var(--faint) }
+  #anTools .ok { color: var(--ok) } #anTools > div { margin-top: 4px } #anTools .spin { margin-right: 6px }
   .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
@@ -1453,13 +1454,41 @@ function drawDescribeTools(h) {
   if (on && !$('anPauseSaid').dataset.keep)
     $('anPauseSaid').textContent = descPaused ? 'Paused — nothing more is described until Resume. Files already described are kept; copying carries on.'
       : h.describe && h.describe.phase === 'analysing' ? 'Pause stops it after the file it is on; that file is done again on Resume.' : '';
-  const an = (h && h.analysis) || {};
+  const an = (h && h.analysis) || {}, d = (h && h.describe) || {};
+  const steps = function () {        // Install the AI, step by step: each a ✓, the one under way turning
+    return (d.done ? d.done.split(' | ').map(function (x) { return '<div class="ok">✓ ' + esc(x) + '</div>'; }).join('') : '') +
+      (d.note ? '<div><span class="spin"></span>' + esc(d.note) + '</div>' : '');
+  };
+  const ask = function (act, label, quiet) {
+    return '<button class="btn' + (quiet ? ' quiet' : '') + '" type="button" data-an="' + act + '">' + label + '</button>';
+  };
   $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'
+    : d.phase === 'installing' ? '<b>Installing the AI on ' + esc(h.label) + '</b>' + steps()
     : !an.model ? 'The helper on <b>' + esc(h.label) + '</b> has not said yet whether it can describe footage.'
-    : an.ready ? '✓ The helper on <b>' + esc(h.label) + '</b> can describe footage · vision model <b>' + esc(an.model) +
-                 '</b> · speech <b>' + esc(an.speech ? an.speech.split('/').pop() : 'off') + '</b>'
-    : '<span class="warnline" style="display:block">The helper on <b>' + esc(h.label) + '</b> does not have the analysis ' +
-      'tools installed, so nothing can be described there yet.</span>';
+    : an.ready ? '✓ The helper on <b>' + esc(h.label) + '</b> can describe footage' +
+        '<span class="infotip" tabindex="0" data-tip="' + esc('Vision model ' + an.model + ', speech ' + (an.speech ? an.speech.split('/').pop() : 'off') +
+          '. Both run on the helper Mac itself; nothing is sent anywhere.') + '">i</span>' +
+        '<div style="margin-top:10px">' + (h.describe_night
+          ? ask('describe-anytime', 'Describe at any time', true) + ' <span class="note">Only at night now (10 pm to 7 am)</span>'
+          : ask('describe-night', 'Describe only at night', true) + ' <span class="note">Any time now</span>') + '</div>'
+    : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
+    : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
+      '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +
+      '<span class="infotip" tabindex="0" data-tip="A vision model that says what each shot shows, and a speech model that writes down what is said. About 8 GB, downloaded once, and run on that Mac itself: nothing is sent anywhere.">i</span></div>' +
+      '<div style="margin-top:10px">' + ask('ai-install', d.phase === 'install-failed' ? 'Try again' : 'Install the AI (about 8 GB)') + '</div>';
+  $('anTools').querySelectorAll('[data-an]').forEach(function (b) {
+    b.onclick = async function () {
+      const act = b.dataset.an; b.disabled = true; b.textContent = 'Asking…';
+      try {
+        const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: act }) })).json();
+        $('anPauseSaid').textContent = r.error ? 'Did not happen: ' + r.error
+          : act === 'ai-install' ? 'Asked ✓ The helper starts within a minute; each step shows here.'
+          : act === 'describe-night' ? 'Only at night ✓ Describing waits for 10 pm, and stops at 7 am.'
+          : 'Any time ✓ Describing carries on whenever there is something to describe.';
+      } catch (e) { $('anPauseSaid').textContent = 'Could not reach the archive: ' + e.message; }
+      $('anPauseSaid').dataset.keep = '1'; setTimeout(function () { delete $('anPauseSaid').dataset.keep; }, 8000);
+    };
+  });
 }
 async function loadAnalysis() {
   try {

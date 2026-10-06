@@ -1229,3 +1229,20 @@ class ScriptUpdateTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class InstallAITests(unittest.TestCase):
+    """Install the AI (Manage → Describe): a download that is not the one expected is never used."""
+    def test_a_download_with_the_wrong_fingerprint_is_not_used(self):
+        import io
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        spec = importlib.util.spec_from_file_location('rushes_ingest_ai', APP / 'ingest.py')
+        m = importlib.util.module_from_spec(spec)
+        with patch('urllib.request.urlopen', side_effect=OSError('offline')): spec.loader.exec_module(m)
+        m.AI = Path(tmp.name) / 'ai'; said = []
+        with patch.object(m, 'apple_chip', return_value=True), patch.object(m, 'status', side_effect=lambda **k: said.append(k)), \
+             patch('urllib.request.urlopen', return_value=io.BytesIO(b'not python')):
+            with self.assertRaisesRegex(RuntimeError, 'fingerprint'):
+                m.install_ai()
+        self.assertEqual(list(m.AI.iterdir()), [])                       # nothing kept, not even a part
+        self.assertEqual(said[0]['note'], 'Downloading a Python for the AI (17 MB) …')

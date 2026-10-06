@@ -3,6 +3,20 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.11 — October 2026
+
+- **Install the AI, with one button:** Manage → Describe installs what
+  describing needs on the helper Mac (a Python of its own, ffmpeg, the tools,
+  the vision and speech models; about 8 GB), each step turning and becoming a ✓.
+  Every download is checked against its fingerprint; a step already done is
+  skipped. No Terminal. A Mac with an Intel chip is told describing needs an
+  Apple one. All set mentions it in one line.
+- **Describe only at night:** a switch in Describe; describing then waits for
+  10 pm and stops at 7 am.
+- **Setup, simpler:** 01's two choices say one line each (the rest behind ⓘ),
+  and "This archive" says what it is for the choice made: the drive footage is
+  copied to, or where Rushes keeps its records while footage stays on its drives.
+
 ## 0.12.10 — October 2026
 
 - **Updating shows itself:** Update to … (in the menu or the window) opens the

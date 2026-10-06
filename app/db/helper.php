@@ -153,7 +153,8 @@ if ($act === 'inbox-done') {
     @unlink("$dir/batch.tsv"); @unlink("$dir/meta.json"); @rmdir("$dir/files"); @rmdir("$dir/fp"); @rmdir($dir);
     out(['ok' => !is_dir($dir)]);
 }
-$switch = in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge'], true);
+$switch = in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge',
+                           'ai-install', 'describe-night', 'describe-anytime'], true);
 if (!may_act((string)($_POST['pass'] ?? '')) && !($switch && helper_pairing() !== 'other'))
     bail(403, $switch ? 'sign in first, or press it in the paired Rushes Helper' : 'sign in first');
 // Look for new versions of Rushes' own files in _rushes (the runner, next minute)
@@ -174,6 +175,10 @@ if ($act === 'pause' || $act === 'resume') {
     $c['paused'] = $act === 'pause';
 } elseif ($act === 'describe-pause' || $act === 'describe-resume') {
     $c['describe_paused'] = $act === 'describe-pause';  // the describing lane only; copying carries on
+} elseif ($act === 'ai-install') {
+    $c['ai_install'] = time();                         // the helper installs the AI for describing, once, saying each step
+} elseif ($act === 'describe-night' || $act === 'describe-anytime') {
+    $c['describe_night'] = $act === 'describe-night';  // describing waits for 10 pm to 7 am
 } elseif ($act === 'reconnect-off' || $act === 'reconnect-on') {
     $c['no_reconnect'] = $act === 'reconnect-off';     // the helper stops (or starts) connecting dropped shares by itself
 } elseif ($act === 'check-pause' || $act === 'check-resume') {
@@ -210,7 +215,8 @@ if ($act === 'pause' || $act === 'resume') {
 }
 $c['by'] = $act; $c['at'] = time();
 if (!helper_control_save($c)) bail(500, 'Could not save — is the web folder writable?');
-$said = ['pause' => 'Paused copying', 'resume' => 'Let copying carry on', 'describe-pause' => 'Paused describing footage',
+$said = ['pause' => 'Paused copying', 'resume' => 'Let copying carry on', 'describe-pause' => 'Paused describing footage', 'ai-install' => 'Asked the helper to install the AI for describing',
+         'describe-night' => 'Describing only at night', 'describe-anytime' => 'Describing at any time',
          'describe-resume' => 'Let describing footage carry on', 'check-pause' => 'Paused checking copies', 'check-resume' => 'Let checking copies carry on',
          'reconnect-off' => 'Turned off reconnecting network drives by itself', 'reconnect-on' => 'Turned on reconnecting network drives by itself',
          'skip' => 'Took a folder out of the transfer: ' . basename((string)($_POST['path'] ?? ''))][$act] ?? '';
