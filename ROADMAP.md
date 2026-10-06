@@ -89,6 +89,17 @@ that NAS; the Mac app has to prove each part again.
 - **A NAS still calls Recently Removed `_duplicates`**, and has no Delete All
   (`runner.sh`); describing on a NAS skips only the old name (`analyze.py`,
   signed code: changed with the next signed release).
+- **From the safety review (0.12.5), still to do:**
+  - a record of each move written before the move, not after (a power cut
+    between a move and its record leaves the file moved and Recover not
+    knowing it);
+  - the containment check is made just before a write, not on the folder the
+    write uses (a folder swapped for a shortcut in that instant is not caught);
+  - a NAS (`runner.sh`, `dedupe.sh`) still has its own copies of these
+    decisions; they should come from the same code as a Mac's;
+  - without `xxhash` (an older app), copies are still checked, but no ASC MHL
+    proof is written and the background checking of older copies does not run;
+  - `ingest.py` does too many things in one file.
 - **Activity's names are typed, not proven:** a name asked once in each
   browser. Personal sign-ins can come with Watchers on a server (step 4).
 
