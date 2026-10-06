@@ -127,6 +127,18 @@ if (isset($_POST['_newpass'])) {
   table.prep td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top }
   table.prep .ok { color: var(--ok) } table.prep .busy { color: var(--accent-text); font-weight: 600 }
   table.prep .bad { color: var(--warn) } table.prep .dim { color: var(--faint) }
+  #anTools .sw { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; border-radius: 11px; border: 0; padding: 0;
+                 background: var(--line); position: relative; cursor: pointer; flex: none }
+  #anTools .sw:after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+                       background: #fff; transition: left .15s }
+  #anTools .sw.on { background: var(--accent) } #anTools .sw.on:after { left: 18px }
+  #anTools .sw.big { width: 52px; height: 30px; border-radius: 15px } #anTools .sw.big:after { width: 26px; height: 26px }
+  #anTools .sw.big.on:after { left: 24px }
+  #anTools .sw:disabled { opacity: .45; cursor: default } #anTools .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+  #anTools .aimain { display: flex; align-items: center; gap: 14px }
+  #anTools .aimain .t { flex: 1; min-width: 0 } #anTools .aimain .t b { font-size: 16px }
+  #anTools .aimain .t small, #anTools .airow small { display: block; margin-top: 2px; color: var(--muted) }
+  #anTools .airow { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line) }
   #anTools .ok { color: var(--ok) } #anTools > div { margin-top: 4px } #anTools .spin { margin-right: 6px }
   .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
@@ -1435,12 +1447,7 @@ function drawDescribeTools(h) {
   descPaused = !!(h && h.describe_paused);
   // Always there: it is a switch Rushes keeps, so it works even while the helper is
   // away (it sees it when it is back).
-  const b = $('anPause'), on = !!(h && h.label && h.analysis && h.analysis.ready && !(h.describe && h.describe.phase === 'installing'));
-  b.hidden = !on;
-  if (on && !b.disabled) b.textContent = descPaused ? 'Resume describing' : 'Pause describing';
-  if (on && !$('anPauseSaid').dataset.keep)
-    $('anPauseSaid').textContent = descPaused ? 'Paused — nothing more is described until Resume. Files already described are kept; copying carries on.'
-      : h.describe && h.describe.phase === 'analysing' ? 'Pause stops it after the file it is on; that file is done again on Resume.' : '';
+  $('anPause').hidden = true;                     // the main switch, in the card, starts and pauses it
   const an = (h && h.analysis) || {}, d = (h && h.describe) || {};
   const steps = function () {        // Install the AI, step by step: each a ✓, the one under way turning
     return (d.done ? d.done.split(' | ').map(function (x) { return '<div class="ok">✓ ' + esc(x) + '</div>'; }).join('') : '') +
@@ -1452,13 +1459,21 @@ function drawDescribeTools(h) {
   $('anTools').innerHTML = !h || !h.label ? 'No helper is set up yet (Setup → 04 Helper).'
     : d.phase === 'installing' ? '<b>Installing the AI on ' + esc(h.label) + '</b>' + steps()
     : !an.model ? 'The helper on <b>' + esc(h.label) + '</b> has not said yet whether it can describe footage.'
-    : an.ready ? '<b class="ok">✓ AI ready</b> on ' + esc(h.label) +
-        '<span class="infotip" tabindex="0" data-tip="' + esc('Vision model ' + an.model + ', speech ' + (an.speech ? an.speech.split('/').pop() : 'off') +
-          '. Both run on the helper Mac itself; nothing is sent anywhere.') + '">i</span>' +
-        '<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="note">When it runs</span> ' +
-          (h.describe_night ? ask('describe-anytime', 'Any time', true) + ask('describe-night', '✓ Only at night', false)
-                            : ask('describe-anytime', '✓ Any time', false) + ask('describe-night', 'Only at night', true)) +
-          '<span class="infotip" tabindex="0" data-tip="Only at night: describing waits for 10 pm and stops at 7 am, so the Mac is free during the day.">i</span></div>'
+    // Ready: one main switch (describing on, or paused) with what it is doing now; the schedule a small switch below
+    : an.ready ? '<div class="aimain">' +
+        '<button class="sw big' + (descPaused ? '' : ' on') + '" role="switch" aria-checked="' + !descPaused + '" aria-label="Describing" data-an="' +
+          (descPaused ? 'describe-resume' : 'describe-pause') + '" title="' + (descPaused ? 'Start describing' : 'Pause describing') + '"></button>' +
+        '<div class="t"><b>' + (descPaused ? 'Paused' : 'Describing') + '</b><small>' + esc(
+          descPaused ? 'Nothing more is described until you switch it on. What is done is kept; copying carries on.'
+          : d.phase === 'analysing' ? 'Now: ' + (d.label || d.source || '') + (d.of ? ' · ' + d.n + ' of ' + d.of : '') + ' — switching off stops after the file it is on'
+          : d.note ? d.note.charAt(0).toUpperCase() + d.note.slice(1)
+          : 'On: folders on the list below are described as soon as their proxies are made') + '</small></div>' +
+        '<span class="ok" style="white-space:nowrap">✓ AI ready<span class="infotip" tabindex="0" data-tip="' + esc('On ' + h.label + '. Vision model ' + an.model + ', speech ' +
+          (an.speech ? an.speech.split('/').pop() : 'off') + '. Both run on that Mac itself; nothing is sent anywhere.') + '">i</span></span></div>' +
+      '<div class="airow"><button class="sw' + (h.describe_night ? ' on' : '') + '" role="switch" aria-checked="' + !!h.describe_night +
+          '" aria-label="Only at night" data-an="' + (h.describe_night ? 'describe-anytime' : 'describe-night') + '"></button>' +
+        '<div class="t">Only at night<small>' + (h.describe_night ? '10 pm to 7 am: the Mac is free during the day'
+          : 'Off: any time there is something to describe') + '</small></div></div>'
     : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
     : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
       '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +
@@ -1466,15 +1481,19 @@ function drawDescribeTools(h) {
       '<div style="margin-top:10px">' + ask('ai-install', d.phase === 'install-failed' ? 'Try again' : 'Install the AI (about 8 GB)') + '</div>';
   $('anTools').querySelectorAll('[data-an]').forEach(function (b) {
     b.onclick = async function () {
-      const act = b.dataset.an; b.disabled = true; b.textContent = 'Asking…';
+      const act = b.dataset.an; b.disabled = true;
+      if (b.classList.contains('sw')) b.classList.toggle('on'); else b.textContent = 'Asking…';     // a switch moves at once
       try {
         const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: act }) })).json();
         $('anPauseSaid').textContent = r.error ? 'Did not happen: ' + r.error
           : act === 'ai-install' ? 'Asked ✓ The helper starts within a minute; each step shows here.'
           : act === 'describe-night' ? 'Only at night ✓ Describing waits for 10 pm, and stops at 7 am.'
-          : 'Any time ✓ Describing carries on whenever there is something to describe.';
+          : act === 'describe-anytime' ? 'Any time ✓ Describing carries on whenever there is something to describe.'
+          : act === 'describe-pause' ? 'Paused ✓ It stops after the file it is on; what is done is kept. Copying carries on.'
+          : 'On ✓ It carries on with the next file within a few seconds.';
       } catch (e) { $('anPauseSaid').textContent = 'Could not reach the archive: ' + e.message; }
       $('anPauseSaid').dataset.keep = '1'; setTimeout(function () { delete $('anPauseSaid').dataset.keep; }, 8000);
+      load();                                        // the card again, as the helper now has it
     };
   });
 }

@@ -3,7 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.14 — October 2026
+## 0.12.15 — October 2026
+
+- **Describe's AI card, simpler:** one main switch, Describing or Paused, with
+  what it is doing now beside it ("Now: MICROMOBILITY · 12 of 73"); the schedule
+  is a small switch below it, Only at night (10 pm to 7 am), off meaning any time.
+  The separate buttons are gone.
+
+## 0.12.14 — October 2026 (built, not released)
 
 - **No copy of what is already light:** before making a proxy, Rushes reads the
   video. An MP4 or MOV in H.264, at most 1080p and 10 Mbit/s, with sound a
