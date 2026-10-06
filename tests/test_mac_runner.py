@@ -353,3 +353,28 @@ class MacProxies(MacJobs):
         # asked again: nothing is made twice
         self.r.job("proxy-build", {"QUERY": "Parks"}); self.r.busy["proxies"].join(60)
         self.assertIn("1 already made", open(os.path.join(self.web, "proxy.log")).read())
+
+    def test_a_light_video_is_used_as_it_is(self):
+        """An AI or stock download (H.264, 720p, a few Mbit/s, AAC) needs no copy: it plays as it is."""
+        import subprocess, time
+        light = os.path.join(self.a, "AI", "openart-video_1.mp4"); os.makedirs(os.path.dirname(light))
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=1280x720:d=1", "-f", "lavfi", "-i", "sine=d=1",
+                        "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-b:v", "2M", "-c:a", "aac", light], check=True)
+        old = time.time() - 3 * 3600; os.utime(light, (old, old))
+        with unittest.mock.patch.object(self.r, "ffmpeg", return_value=shutil.which("ffmpeg")):
+            self.r.job("proxy-build", {"QUERY": "AI"}); self.r.busy["proxies"].join(60)
+            st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+            self.assertEqual((st["state"], st["ok"], st["asis"]), ("done", "1", "1"))
+            self.assertFalse(os.path.exists(os.path.join(self.a, "PROXIES", "AI", "openart-video_1.mp4")), "no copy of a light file")
+            made = open(os.path.join(self.web, "proxy-made.tsv")).read()
+            self.assertTrue(made.startswith(light + "\t") and made.rstrip("\n").endswith("\t1") and "h264" in made)
+            self.r.job("proxy-build", {"QUERY": "AI"}); self.r.busy["proxies"].join(60)     # not looked at again
+            self.assertEqual(open(os.path.join(self.web, "proxy-made.tsv")).read(), made)
+        # what is not light: HEVC, 4K, a heavy bitrate, sound a browser cannot play
+        for report in ("Video: hevc (Main), yuv420p(tv), 1920x1080 bitrate: 3000 kb/s Audio: aac",
+                       "Video: h264 (High), yuv420p(tv), 3840x2160 bitrate: 9000 kb/s Audio: aac",
+                       "Video: h264 (High), yuv420p(tv), 1920x1080 bitrate: 45000 kb/s Audio: aac",
+                       "Video: h264 (High), yuv420p(tv), 1920x1080 bitrate: 8000 kb/s Audio: pcm_s16le",
+                       "Video: h264 (High 10), yuv420p10le(tv), 1920x1080 bitrate: 8000 kb/s"):
+            self.assertFalse(runner.Runner.light(report, "x.mp4"), report)
+        self.assertFalse(runner.Runner.light("Video: h264 (High), yuv420p(tv), 1280x720 bitrate: 4000 kb/s", "x.mxf"))

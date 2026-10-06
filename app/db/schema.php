@@ -99,7 +99,8 @@ function db_init(): void {
     $have = [];
     $cols = $db->query('PRAGMA table_info(media)');
     while ($c = $cols->fetchArray(SQLITE3_ASSOC)) $have[] = $c['name'];
-    foreach (['recorded', 'timecode', 'reel', 'camera'] as $c)
+    // asis: no proxy made, the original is light enough to play as it is (runner.py's light())
+    foreach (['recorded', 'timecode', 'reel', 'camera', 'asis'] as $c)
         if (!in_array($c, $have, true)) $db->exec("ALTER TABLE media ADD COLUMN $c TEXT");
 
     // ── copies: where else each file exists (git-annex's idea) ──

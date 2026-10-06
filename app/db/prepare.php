@@ -50,19 +50,19 @@ function media_import(): array {
     if ($at > filesize($src)) $at = 0;                // the file was started again
     $h = fopen($src, 'r'); fseek($h, $at);
     $id  = $db->prepare('SELECT id FROM files WHERE path = ?');
-    $put = $db->prepare('INSERT OR REPLACE INTO media (file_id,width,height,fps,codec,duration,proxy_at,recorded,timecode,reel,camera)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    $put = $db->prepare('INSERT OR REPLACE INTO media (file_id,width,height,fps,codec,duration,proxy_at,recorded,timecode,reel,camera,asis)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     $n = 0; $lost = 0;
     $db->exec('BEGIN');
     while (($l = fgets($h)) !== false) {
         if (!str_ends_with($l, "\n")) break;          // still being written: next time
         $at += strlen($l);
-        [$path, $ts, $probe] = array_pad(explode("\t", rtrim($l, "\n"), 3), 3, '');
+        [$path, $ts, $probe, $asis] = array_pad(explode("\t", rtrim($l, "\n"), 4), 4, '');
         $id->bindValue(1, $path); $r = $id->execute()->fetchArray(SQLITE3_NUM); $id->reset();
         if (!$r) { $lost++; continue; }                // ponytail: not in search yet; its proxy still exists, only the details are missing
         $p = media_probe($probe);
         foreach ([$r[0], $p['width'], $p['height'], $p['fps'], $p['codec'], $p['duration'], (int)$ts,
-                  $p['recorded'], $p['timecode'], $p['reel'], $p['camera']] as $i => $v)
+                  $p['recorded'], $p['timecode'], $p['reel'], $p['camera'], $asis === '1' ? '1' : null] as $i => $v)
             $put->bindValue($i + 1, $v);
         $put->execute(); $put->reset(); $n++;
     }
@@ -86,14 +86,14 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     require_once __DIR__ . '/schema.php';
     $root = rtrim(archive_dir(), '/'); $px = "$root/PROXIES";
     // a range, not LIKE, so the path index answers it
-    $st = db()->prepare('SELECT path, bytes FROM files WHERE path >= ? AND path < ?');
+    $st = db()->prepare('SELECT path, bytes, m.asis FROM files LEFT JOIN media m ON m.file_id = files.id WHERE path >= ? AND path < ?');
     $st->bindValue(1, "$root/$rel/"); $st->bindValue(2, "$root/$rel" . '0');     // '0' sorts right after '/'
     $r = $st->execute();
     $p = ['videos' => 0, 'have' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => []];
     while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) {
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
         $p['videos']++; $p['bytes'] += (int)$x[1];
-        if ($look && is_file(preg_replace('/\.[^.\/]*$/', '.mp4', $px . substr($x[0], strlen($root))))) $p['have']++;
+        if ($x[2] === '1' || ($look && is_file(preg_replace('/\.[^.\/]*$/', '.mp4', $px . substr($x[0], strlen($root)))))) $p['have']++;   // light enough to play as it is, or its proxy
         else $p['to_read'] += (int)$x[1];
     }
     if (!$look) return $p;

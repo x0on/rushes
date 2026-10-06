@@ -266,5 +266,14 @@ foreach ([
     $got = label_of($p, $want === 'deliverable_reused' || $want === 'deliverable' ? 900 : 5, $out)[0];
     check($got === $want, "labels: $p is " . ($want ?: 'ignored') . ($got === $want ? '' : " (got $got)"));
 }
+// A light video used as it is (runner.py): no proxy, the original plays, and its folder counts it as done
+require_once web_dir() . '/db/prepare.php';
+$talk = "$arch/Shoots/Library talk/talk.mov";
+file_put_contents(web_dir() . '/proxy-made.tsv', "$talk\t" . time() . "\tDuration: 00:00:05.00 Video: h264 (High), yuv420p, 1280x720, 25 fps\t1\n");
+meta_set('proxy_made_at', '0'); media_import();
+check(db()->querySingle("SELECT asis FROM media m JOIN files f ON f.id = m.file_id WHERE f.path = '" . SQLite3::escapeString($talk) . "'") === '1'
+      && prepare_plan('Shoots/Library talk', true)['have'] === 1, 'a light video is used as it is: no proxy, and its folder counts it as done');
+$_GET = ['p' => $talk]; ob_start(); include web_dir() . '/db/play.php'; $played = ob_get_clean();
+check($played === 'tk', 'Search plays a light video from the original itself');
 $_GET = [];
 echo "Server tests complete. Fixture: $root\n";

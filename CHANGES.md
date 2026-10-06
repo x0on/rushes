@@ -3,7 +3,15 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.13 — October 2026
+## 0.12.14 — October 2026
+
+- **No copy of what is already light:** before making a proxy, Rushes reads the
+  video. An MP4 or MOV in H.264, at most 1080p and 10 Mbit/s, with sound a
+  browser plays (most AI-generated and stock downloads, web exports) gets no
+  proxy: Search plays the original itself, the folder counts it as done, and
+  describing reads it directly. Describe says how many were used as they are.
+
+## 0.12.13 — October 2026 (built, not released)
 
 - **Proxies on a Mac:** Rushes on a Mac makes its own proxies now, for the
   folders on Describe's list (and Jobs and tools → Make proxies), on the Mac's

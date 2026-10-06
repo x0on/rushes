@@ -456,6 +456,12 @@ class Runner:
         with open(self.p("proxy.log"), "a") as f:
             f.write(line + "\n")
 
+    @staticmethod
+    def ledger(report):
+        return " ".join(l for l in report.splitlines() if re.search(
+            r"Duration:|Video:|Audio:|creation_time|modification_date|timecode|reel_name|model|make|product_name|company_name|encoder", l)
+            ).replace("\t", " ")[:4000]
+
     def proxy_running(self):
         t = self.busy.get("proxies")
         return bool(t and t.is_alive())
@@ -480,6 +486,23 @@ class Runner:
                                 "-c:v", "h264_videotoolbox", "-f", "null", "-"], capture_output=True, text=True)
             self._engine = (r.returncode == 0, (r.stderr.strip().splitlines() or [""])[-1][:160])
         return self._engine
+
+    def probe(self, ff, src):
+        """ffmpeg's own report of a file: what it is, and what the camera wrote inside it."""
+        return subprocess.run([ff, "-hide_banner", "-nostdin", "-i", src], capture_output=True, text=True).stderr
+
+    @staticmethod
+    def light(report, src):
+        """Already light enough to play as it is (an AI or stock download, a web export): an MP4 or MOV
+        in H.264, 8-bit, at most 1080p and 10 Mbit/s, with sound a browser plays (AAC, MP3) or none.
+        Its proxy would only be a copy of it: it is used as it is. H.264 only: every browser plays it."""
+        if not src.lower().endswith((".mp4", ".mov", ".m4v")):
+            return False
+        v = re.search(r"Video: (\w+)([^\n]*?), (\d{2,5})x(\d{2,5})", report)
+        br = re.search(r"bitrate: (\d+) kb/s", report)
+        sound = re.findall(r"Audio: (\w+)", report)
+        return bool(v and v[1] == "h264" and re.search(r"yuv(j)?420p[,(]", v[2] + ",") and int(v[4]) <= 1080
+                    and br and int(br[1]) <= 10000 and all(a in ("aac", "mp3") for a in sound))
 
     def encode(self, ff, src, out, h, b, engine):
         """One proxy: on the media engine, else in software. -> (made, how). Stop ends it at once."""
@@ -534,6 +557,9 @@ class Runner:
                 out = os.path.join(proot, os.path.splitext(os.path.relpath(src, a))[0] + ".mp4")
                 if os.path.exists(out): have += 1
                 else: plan.append((src, out))
+        try: asis = {l.split("\t")[0] for l in open(self.p("proxy-made.tsv")) if l.rstrip("\n").endswith("\t1")}
+        except OSError: asis = set()
+        have += sum(1 for s, _ in plan if s in asis); plan = [(s, o) for s, o in plan if s not in asis]
         size = lambda x: os.path.getsize(x) if os.path.exists(x) else 0
         h, b = self.proxy_setting()
         engine, why = self.media_engine(ff)
@@ -549,7 +575,7 @@ class Runner:
         if free < need:                                  # said once, plainly, instead of failing file after file
             self.proxy_state(state="no-room", only=only, need=int(need), free=free); runs("no-room", 0, 0, 0, len(plan))
             self.plog(f"not enough room for the proxies: about {need / 1e9:,.0f} GB needed, {free / 1e9:,.0f} GB free"); return
-        total, ok, failed, later, n = len(plan), 0, 0, 0, 0
+        total, ok, failed, later, n, used = len(plan), 0, 0, 0, 0, 0
         count = {"video chip": 0, "software": 0}
         self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {only or 'the whole archive'}: {total} proxies to make, {have} already made · "
                   + ("on the media engine" if hw == "1" else "in software") + f" · {h}p · {ff}")
@@ -567,7 +593,12 @@ class Runner:
             except OSError:
                 failed += 1; continue
             self.proxy_state(state="building", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
-                             file=os.path.relpath(src, a), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"])
+                             file=os.path.relpath(src, a), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
+            report = self.probe(ff, src)
+            if self.light(report, src):              # no proxy: the original plays as it is
+                with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\t1\n")
+                with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"{src}\t{src}\tused as it is\n")
+                used += 1; ok += 1; continue
             os.makedirs(os.path.dirname(out), exist_ok=True)
             tmp, t0 = out + ".part.mp4", time.time()      # never a playable-looking half file
             made, how = self.encode(ff, src, tmp, h, b, hw == "1")
@@ -576,10 +607,7 @@ class Runner:
                 with open(self.p("proxy-speed.tsv"), "a") as f: f.write(f"{size(src)}\t{int(time.time() - t0)}\t{how}\n")
                 with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"{src}\t{out}\t{how}\n")
                 # What the original is and what the camera wrote inside it, read once here (the media ledger)
-                r = subprocess.run([ff, "-hide_banner", "-nostdin", "-i", src], capture_output=True, text=True)
-                probe = " ".join([l for l in r.stderr.splitlines() if re.search(
-                    r"Duration:|Video:|creation_time|modification_date|timecode|reel_name|model|make|product_name|company_name|encoder", l)][:24])
-                with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{probe.replace(chr(9), ' ')}\n")
+                with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\n")
             else:
                 if self.proxy_halt.is_set():
                     continue                             # Stop: said at the top of the next turn
@@ -596,9 +624,10 @@ class Runner:
             self.proxy_state(state="stopped", only=only, done=n, total=total, ok=ok, failed=failed, later=later)
             runs("stopped", ok, failed, later, total); self.plog(f"stopped from Manage after {ok} proxies"); return
         self.proxy_state(state="done", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
-                         chip=count["video chip"], mixed=0, soft=count["software"])
+                         chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
         runs("done", ok, failed, later, total)
-        self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  built {ok} proxies, {failed} failed, {later} left for a later run (still arriving)")
+        self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  built {ok - used} proxies, {used} light enough to play as they are, "
+                  f"{failed} failed, {later} left for a later run (still arriving)")
 
     # ── the queue ────────────────────────────────────────────────────────────
     def jobs(self):

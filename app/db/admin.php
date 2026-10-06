@@ -1399,7 +1399,7 @@ function drawProxies(p) {
     : p.state === 'building' && p.running
       ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made' +
         (p.hw === '1' ? ' (' + n(p.chip) + ' on ' + CHIP + (+p.mixed ? ', ' + n(p.mixed) + ' read by the processor' : '') + (+p.soft ? ', ' + n(p.soft) + ' in software' : '') + ')' : ' in software') +
-        ' · ' + n(p.failed) + ' failed · ' +
+        (+p.asis ? ' · ' + n(p.asis) + ' played as they are' : '') + ' · ' + n(p.failed) + ' failed · ' +
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
     : p.state === 'building'
       ? '<span class="warnline" style="display:block">The proxy build stopped without finishing (the machine restarted?) at ' +
@@ -1407,7 +1407,7 @@ function drawProxies(p) {
     : p.state === 'stopped'
       ? 'Stopped from Manage at ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made. Start now (in the list above) carries on from there.'
     : p.state === 'done'
-      ? '✓ Finished · ' + n(p.ok) + ' made · ' + n(p.failed) + ' failed' + (+p.later ? ' · ' + n(p.later) + ' were still arriving: they are made by themselves on a run two hours later' : '')
+      ? '✓ Finished · ' + n(p.ok - (+p.asis || 0)) + ' made' + (+p.asis ? ' · ' + n(p.asis) + ' light enough to play as they are (no copy needed)' : '') + ' · ' + n(p.failed) + ' failed' + (+p.later ? ' · ' + n(p.later) + ' were still arriving: they are made by themselves on a run two hours later' : '')
     : esc(p.state || '');
 }
 // Stop proxies: a runner job, asked twice on the button.
