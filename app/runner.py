@@ -33,6 +33,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.s
 SKIP = {"@Recycle", ".Trashes", ".Spotlight-V100", ".fseventsd", ".DocumentRevisions-V100",
         ".TemporaryItems", ".DS_Store_cache"}
 TRIM = ("helper.log", "proxy.log", "proxy-built.tsv", "proxy-built.tsv.err", "proxy-speed.tsv", "proxy-failed.tsv", "php-errors.log")
+# Where Remove puts duplicate copies and caches on the archive and on each drive, nothing deleted:
+# Recently Removed, as in Photos (Manage → Duplicates and Cache say so). Called _duplicates before
+# 0.12.4: that folder is renamed by itself (migrate_holding), and the records of what moved follow.
+HOLD, OLD_HOLD = "_Recently Removed", "_duplicates"
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
 
@@ -73,11 +77,12 @@ class Runner:
     def say(self, line):
         self.log(time.strftime("%Y-%m-%d %H:%M:%S  ") + line)
 
-    def activity(self, kind, text):
-        """One line in Activity (db/activity.php reads activity.tsv): drives coming and going."""
+    def activity(self, kind, text, who=""):
+        """One line in Activity (db/activity.php reads activity.tsv): drives coming and going, and
+        what a job asked for in Manage did (who: the name of whoever asked, from the job)."""
         try:
             with open(self.p("activity.tsv"), "a") as f:
-                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{kind}\t\t{text}\n")
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{kind}\t{who}\t{text}\n")
         except OSError:
             pass
 
@@ -338,9 +343,81 @@ class Runner:
         if not os.path.exists(self.p("job-status.txt")):
             self.write("job-status.txt", "idle\n")
 
+    def hold(self, top):
+        """Recently Removed on the archive or a drive, renamed from _duplicates the first time."""
+        self.migrate_holding(top)
+        return os.path.join(top, HOLD)
+
+    def migrate_holding(self, top):
+        """_duplicates (before 0.12.4) becomes Recently Removed, on the same drive: a rename,
+        so nothing is copied. The records of what moved (dedupe-moves*.tsv, cache-moves.tsv)
+        are rewritten to the new place, so Recover still finds every file."""
+        old, new = os.path.join(top, OLD_HOLD), os.path.join(top, HOLD)
+        if not os.path.isdir(old) or os.path.islink(old) or os.path.exists(new):
+            return
+        os.rename(old, new)
+        for log in [n for n in os.listdir(self.web) if n.startswith("dedupe-moves") or n == "cache-moves.tsv"]:
+            try:
+                with open(self.p(log), encoding="utf-8", errors="surrogateescape") as f:
+                    t = f.read()
+                if old + "/" in t:
+                    self.write(log, t.replace(old + "/", new + "/"))
+            except OSError:
+                pass
+        self.say(f"{old} is called {HOLD} now (renamed, nothing moved)")
+
+    def removed_at(self, sfx, when=None):
+        """When something last went into Recently Removed (removed-at<drive>.txt): its age is said in Manage."""
+        if when is not None:
+            self.write(f"removed-at{sfx}.txt", f"{int(when)}\n")
+        try:
+            return int(open(self.p(f"removed-at{sfx}.txt")).read().split()[0])
+        except (OSError, ValueError, IndexError):
+            return 0
+
+    def lines(self, name):
+        """How many files a record of moves names (its # lines are notes, not files)."""
+        try:
+            with open(self.p(name), encoding="utf-8", errors="surrogateescape") as f:
+                return sum(1 for l in f if l.strip() and not l.startswith("#"))
+        except OSError:
+            return 0
+
+    def empty(self, top, sfx, who):
+        """Delete All: everything in Recently Removed on the archive or that drive goes, for good.
+        Only what is inside that folder; asked for by a person (Manage, with Sure?), never by itself.
+        The records of what moved there forget those files (Recover has nothing to bring back)."""
+        h = self.hold(top)
+        if not os.path.isdir(h) or os.path.islink(h):
+            self.log("  Recently Removed is empty: nothing to delete"); return
+        n = b = 0
+        for root, dirs, files in os.walk(h, topdown=False):
+            for x in files:
+                p = os.path.join(root, x)
+                try:
+                    b += os.lstat(p).st_size; os.remove(p); n += 1
+                except OSError as e:
+                    self.log(f"  could not delete {p}: {e.strerror or e}")
+            for x in dirs:
+                try: os.rmdir(os.path.join(root, x))
+                except OSError: pass
+        for log in [x for x in os.listdir(self.web) if x.startswith("dedupe-moves") or x == "cache-moves.tsv"]:
+            try:
+                with open(self.p(log), encoding="utf-8", errors="surrogateescape") as f:
+                    keep = [l for l in f if not (l.split("\t") + ["", ""])[1].startswith(h + "/")]
+                self.write(log, "".join(keep))
+            except OSError:
+                pass
+        self.removed_at(sfx, 0)
+        name = os.path.basename(top.rstrip("/")) or top
+        self.say(f"Delete All: {n} files deleted from {h} ({b / 1e9:,.1f} GB)")
+        self.activity("changed", f"Deleted for good everything in Recently Removed on {name}: {n:,} {'file' if n == 1 else 'files'}"
+                      + (f" ({b / 1e9:,.1f} GB)" if b >= 1e9 else ""), who)
+
     def job(self, action, f):
         a = self.arch()
-        moving = action in ("plan", "apply", "undo", "verify", "scan", "cacheclean", "cache-undo", "holding")
+        who = re.sub(r"[\x00-\x1f]", " ", f.get("WHO", ""))[:40]
+        moving = action in ("plan", "apply", "undo", "verify", "scan", "find", "empty", "cacheclean", "cache-undo", "holding")
         if moving and (a is None or not self.may_v()):
             self.log("  the archive is not there, copying is paused, or it stopped after not answering — nothing was done")
             return
@@ -352,7 +429,13 @@ class Runner:
                 try: os.remove(self.p(n))
                 except OSError: pass
             self.log("  the archive may be reached again — the next minute tries it")
-        elif action in ("plan", "apply", "undo", "verify"):
+        elif action == "empty":
+            r = self.root(f)
+            if r is None:
+                self.log("  that drive is not plugged in (or not in Setup any more) — nothing was done"); return
+            self.empty(*r, who)
+            self.refresh()
+        elif action in ("plan", "apply", "undo", "verify", "find"):
             # The archive, or one drive kept where it is: each its own plan, moves and holding folder.
             r = self.root(f)
             if r is None:
@@ -367,21 +450,37 @@ class Runner:
                 if ".." in q:
                     self.log("  refused a folder with .. in it"); return
                 self.script("verify.sh", [q] if q else [], PLAN=files["PLAN"], MOVES=self.p(f"dedupe-moves{sfx}.tsv"),
-                            OUT=self.p(f"verify-result{sfx}.tsv"), HOLD=top + "/_duplicates", ARCH=top)
+                            OUT=self.p(f"verify-result{sfx}.tsv"), HOLD=self.hold(top), ARCH=top)
                 return
-            # never trust the queue file (as runner.sh): only these, only inside the archive (or that drive)
+            if action == "find":
+                # Find duplicates: one press, two steps the person never has to tell apart
+                # (which files are the same, then which copy stays and which go)
+                self.scan()
+                action = "plan"
+            # never trust the queue file (as runner.sh): only these, only inside the archive (or that drive).
+            # Which copy stays is Rushes' own choice (the shelf's copy over a card dump's); a person changes it
+            # per group, in the plan itself (db/dupgroups.php), not with a setting.
             keep = f.get("KEEP_SIDE") if f.get("KEEP_SIDE") in ("project", "card", "short", "oldest") else "project"
-            dest = f.get("DEST", "") if not sfx else ""
-            if not dest.startswith(top + "/") or ".." in dest.split("/"):
-                dest = top + "/_duplicates"
+            log, dest = f"dedupe-moves{sfx}.tsv", self.hold(top)
+            before = self.lines(log)
             self.script("dedupe.sh", {"plan": [], "apply": ["--apply"], "undo": ["--undo"]}[action],
-                        KEEP_SIDE=keep, DEST=dest, LOG=self.p(f"dedupe-moves{sfx}.tsv"), **files)
+                        KEEP_SIDE=keep, DEST=dest, LOG=self.p(log), **files)
+            name = os.path.basename(top.rstrip("/")) or top
+            if action == "apply":
+                n = self.lines(log) - before
+                if n > 0:
+                    self.removed_at(sfx, time.time())
+                self.activity("changed", f"Removed {n:,} duplicate {'copy' if n == 1 else 'copies'} on {name} into Recently Removed (nothing deleted)", who)
+            elif action == "undo":
+                self.activity("changed", f"Recovered the duplicate copies in Recently Removed on {name}: back where they were", who)
             if action != "plan":
                 self.refresh()
         elif action == "scan":
             self.scan()
         elif action in ("cacheclean", "cache-undo"):
-            (self.cache_clean if action == "cacheclean" else self.cache_undo)()
+            n = (self.cache_clean if action == "cacheclean" else self.cache_undo)()
+            self.activity("changed", f"Removed {n:,} cache files into Recently Removed (nothing deleted; editing software rebuilds them)"
+                          if action == "cacheclean" else f"Recovered {n:,} cache files from Recently Removed", who)
             self.refresh()
         elif action == "holding":
             self.holding()
@@ -412,16 +511,18 @@ class Runner:
         self.log(f"  free space: {u.free / 1e9:,.1f} GB")
 
     def holding(self):
-        """How much sits in each holding folder: what emptying it would give back
-        (holding-kb.txt for the archive, holding-kb-<drive>.txt for each drive plugged in)."""
+        """How much sits in Recently Removed on the archive and each drive plugged in: what
+        Delete All would give back (holding-kb<drive>.txt: KB, then files; removed-at says since when)."""
         for top, sfx in [(self.arch(), "")] + [(d["path"], "-" + drive_key(d)) for d in self.drives() if d["connected"]]:
-            h, kb = os.path.join(top, "_duplicates"), 0
+            h, kb, n = self.hold(top), 0, 0
             for root, _, files in os.walk(h):
-                for n in files:
-                    try: kb += os.lstat(os.path.join(root, n)).st_size // 1024
+                for x in files:
+                    try: kb += os.lstat(os.path.join(root, x)).st_size // 1024; n += 1
                     except OSError: pass
-            self.write(f"holding-kb{sfx}.txt", f"{kb}\n")
-            self.log(f"holding folder{' on ' + top if sfx else ''}: {kb / 1e6:,.1f} GB")
+            if n and not self.removed_at(sfx):
+                self.removed_at(sfx, time.time())      # there before its age was noted (renamed from _duplicates): from now
+            self.write(f"holding-kb{sfx}.txt", f"{kb} {n}\n")
+            self.log(f"Recently Removed{' on ' + top if sfx else ''}: {kb / 1e6:,.1f} GB")
 
     # ── duplicates: the scan ─────────────────────────────────────────────────
     def scan(self):
@@ -440,7 +541,7 @@ class Runner:
         roots.sort(key=lambda r: -len(r[1]))
         def root_of(path):
             return next((r for r in roots if path.startswith(r[1] + "/")), None)
-        skip = tuple(r[1] + x for r in roots for x in ("/_duplicates/", "/_rushes/"))
+        skip = tuple(r[1] + x for r in roots for x in (f"/{HOLD}/", f"/{OLD_HOLD}/", "/_rushes/"))
         by_size, listed = {}, set()
         with open(self.p("manifest.tsv"), encoding="utf-8", errors="surrogateescape") as m:
             for line in m:
@@ -559,54 +660,43 @@ class Runner:
                 return "delete" if g.get("rebuilds") else "sweep"
         return ""
 
-    def own_drives(self):
-        try:
-            with open(self.p("settings.json")) as f:
-                return json.load(f).get("archive", {}).get("own") is True
-        except (OSError, ValueError, AttributeError):
-            return False
-
     def cache_clean(self):
-        """Every file on cache-files.txt that the rules still call a cache: deleted
-        when the archive is a person's own drives and that kind rebuilds itself
-        (cache-deleted.tsv says what went), moved into _duplicates/_media-cache
-        otherwise (cache-moves.tsv, so Put them back can)."""
+        """Remove: every file on cache-files.txt that the rules still call a cache goes into
+        Recently Removed/_media-cache on its own drive (cache-moves.tsv, so Recover can).
+        Never deleted here: that is Delete All, pressed by a person. -> how many moved."""
         a = self.arch()
         # the archive, and each drive kept where it is and plugged in: each its own holding folder
         tops = sorted([a] + [d["path"] for d in self.drives() if d["connected"]], key=len, reverse=True)
-        own, moved, deleted, left = self.own_drives(), 0, 0, 0
+        moved, left = 0, 0
         try:
             paths = open(self.p("cache-files.txt"), encoding="utf-8", errors="surrogateescape").read().splitlines()
         except OSError:
-            self.log("  no list: press Move them out in Manage → Cache"); return
-        self.log("deleting caches that rebuild themselves, moving the rest to _duplicates/_media-cache" if own
-                 else "moving cache files to _duplicates/_media-cache")
-        with open(self.p("cache-moves.tsv"), "a", encoding="utf-8", errors="surrogateescape") as mv, \
-             open(self.p("cache-deleted.tsv"), "a", encoding="utf-8", errors="surrogateescape") as gone:
+            self.log("  no list: press Remove in Manage → Cache"); return 0
+        holds = {t: self.hold(t) for t in tops}
+        self.log(f"moving cache files into {HOLD}/_media-cache")
+        with open(self.p("cache-moves.tsv"), "a", encoding="utf-8", errors="surrogateescape") as mv:
             for i, f in enumerate(paths):
                 if i % 250 == 0:
                     self.log(f"progress: {i} of {len(paths)} ({100 * i // max(len(paths), 1)}%)")
                 # never from the recycle bin (that would undelete it) or a holding folder itself
                 top = next((t for t in tops if f.startswith(t + "/")), None)
-                if (top is None or "/@Recycle/" in f or f.startswith(top + "/_duplicates/")
+                if (top is None or "/@Recycle/" in f or f.startswith(holds[top] + "/") or f.startswith(top + f"/{OLD_HOLD}/")
                         or ".." in f.split("/") or not os.path.isfile(f) or os.path.islink(f)):
                     continue
                 rule = self.cache_rule(f)
                 if rule not in ("sweep", "delete"):
                     left += 1; continue
-                if own and rule == "delete":
-                    size = os.path.getsize(f)
-                    os.remove(f)
-                    gone.write(f"{int(time.time())}\t{size}\t{f}\n"); deleted += 1
-                    continue
-                d = top + "/_duplicates/_media-cache/" + f[len(top) + 1:]
+                d = holds[top] + "/_media-cache/" + f[len(top) + 1:]
                 if os.path.exists(d):
                     continue
                 os.makedirs(os.path.dirname(d), exist_ok=True)
                 os.rename(f, d)
                 mv.write(f"{f}\t{d}\n"); moved += 1
-        self.log(f"moved {moved} cache files" + (f", deleted {deleted} that rebuild themselves" if own else "")
-                 + (f"; {left} on the list are not caches by the rules now, and were left" if left else ""))
+        self.log(f"moved {moved} cache files" + (f"; {left} on the list are not caches by the rules now, and were left" if left else ""))
+        if moved:
+            for t in tops:
+                self.removed_at("" if t == a else "-" + next((drive_key(d) for d in self.drives() if d["path"] == t), ""), time.time())
+        return moved
 
     def cache_undo(self):
         """Every cache file still in the holding folder goes back where it was. Deleted ones cannot: they rebuild."""
@@ -621,6 +711,7 @@ class Runner:
                 os.makedirs(os.path.dirname(src), exist_ok=True)
                 os.rename(dst, src); n += 1
         self.log(f"put back {n} cache files")
+        return n
 
     def build_manifest(self):
         """size<TAB>path for every file on the archive (manifest.tsv). A folder

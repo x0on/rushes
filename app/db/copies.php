@@ -41,7 +41,7 @@ if (!empty($_POST['done'])) {
     // For Overview: how much is kept twice, how much only here, and where.
     // Rushes' own folders and proxies are not footage, so they are not counted.
     $root = SQLite3::escapeString(rtrim($to, '/'));
-    $not = "path NOT LIKE '$root/_rushes/%' AND path NOT LIKE '$root/PROXIES/%' AND path NOT LIKE '$root/_duplicates/%'
+    $not = "path NOT LIKE '$root/_rushes/%' AND path NOT LIKE '$root/PROXIES/%' AND path NOT LIKE '$root/_duplicates/%' AND path NOT LIKE '$root/_Recently Removed/%'
             AND path NOT LIKE '%/@Recycle/%' AND path NOT LIKE '%/ascmhl/%'";
     $q = $db->query("SELECT CASE WHEN c.n > 0 THEN 'twice' WHEN c.n = 0 THEN 'lost' ELSE 'never' END s,
                             COUNT(*), COALESCE(SUM(f.bytes), 0), COALESCE(f.dept, '')

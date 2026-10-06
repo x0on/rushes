@@ -71,9 +71,10 @@ class MacJobs(unittest.TestCase):
         self.assertEqual(len(plan), 1, plan)
         self.assertEqual(plan[0].split("\t")[1:], [copy, kept])
         self.r.job("apply", {"KEEP_SIDE": "short", "DEST": "/etc"})               # a holding folder outside: refused
-        moved = os.path.join(self.a, "_duplicates", "Card dumps/card 1/clip A.mov")
+        moved = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/clip A.mov")
         self.assertTrue(os.path.isfile(moved) and not os.path.exists(copy) and os.path.isfile(kept))
-        self.assertGreater(int(open(os.path.join(self.web, "holding-kb.txt")).read()), 0)
+        self.assertEqual(open(os.path.join(self.web, "holding-kb.txt")).read().split()[1], "1", "one file in Recently Removed")
+        self.assertGreater(int(open(os.path.join(self.web, "removed-at.txt")).read()), 0, "since when: its age is said")
         self.assertNotIn(copy, open(os.path.join(self.web, "index.txt")).read())
         self.r.job("verify", {})
         self.assertIn("VERDICT\tSAFE", open(os.path.join(self.web, "verify-result.tsv")).read(), self.log())
@@ -100,23 +101,52 @@ class MacJobs(unittest.TestCase):
     def test_caches_moved_aside_on_a_shared_archive_and_put_back(self):
         cfa, auto, cos, cop = self.caches()
         self.r.job("cacheclean", {})
-        hold = os.path.join(self.a, "_duplicates", "_media-cache")
+        hold = os.path.join(self.a, "_Recently Removed", "_media-cache")
         self.assertTrue(os.path.isfile(os.path.join(hold, "Edit/Media Cache Files/a.cfa")) and not os.path.exists(cfa))
         self.assertTrue(os.path.isfile(auto) and os.path.isfile(cos), "auto-save and Capture One's edits are never touched")
         self.assertFalse(os.path.exists(cop))
         self.r.job("cache-undo", {})
         self.assertTrue(os.path.isfile(cfa) and os.path.isfile(cop))
 
-    def test_caches_deleted_on_a_persons_own_drives(self):
-        s = json.load(open(os.path.join(self.web, "settings.json"))); s["archive"]["own"] = True
+    def test_caches_are_never_deleted_by_themselves_even_on_own_drives(self):
+        s = json.load(open(os.path.join(self.web, "settings.json"))); s["archive"]["own"] = True     # the old switch: no longer read
         json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
         cfa, auto, cos, cop = self.caches()
-        self.r.job("cacheclean", {})
-        self.assertFalse(os.path.exists(cfa) or os.path.exists(cop))
-        self.assertFalse(os.path.exists(os.path.join(self.a, "_duplicates")))
-        self.assertTrue(os.path.isfile(auto) and os.path.isfile(cos))
-        gone = open(os.path.join(self.web, "cache-deleted.tsv")).read()
-        self.assertIn(cfa, gone); self.assertIn(cop, gone); self.assertNotIn("passwd", gone)
+        self.r.job("cacheclean", {"WHO": "Ana"})
+        hold = os.path.join(self.a, "_Recently Removed", "_media-cache")
+        self.assertTrue(os.path.isfile(os.path.join(hold, "Edit/Media Cache Files/a.cfa")), "moved into Recently Removed, not deleted")
+        self.assertFalse(os.path.exists(os.path.join(self.web, "cache-deleted.tsv")))
+        said = open(os.path.join(self.web, "activity.tsv")).read()
+        self.assertIn("\tAna\tRemoved 2 cache files into Recently Removed", said)
+
+    def test_the_old_holding_folder_becomes_recently_removed_and_recover_still_works(self):
+        big = os.urandom(5000)
+        kept = self.put("Parks/A.mov", big); old = self.put("_duplicates/Cards/A.mov", big)
+        open(os.path.join(self.web, "dedupe-moves.tsv"), "w").write(f"{self.a}/Cards/A.mov\t{old}\t5000\n")
+        self.r.holding()
+        new = os.path.join(self.a, "_Recently Removed", "Cards/A.mov")
+        self.assertTrue(os.path.isfile(new) and not os.path.exists(os.path.join(self.a, "_duplicates")), "renamed, on the same drive")
+        self.assertIn(new, open(os.path.join(self.web, "dedupe-moves.tsv")).read(), "the record of what moved follows it")
+        self.r.job("undo", {})
+        self.assertTrue(os.path.isfile(os.path.join(self.a, "Cards/A.mov")), "Recover finds it in its new place")
+
+    def test_delete_all_deletes_only_recently_removed_when_asked(self):
+        big = os.urandom(5000)
+        kept = self.put("Parks/A.mov", big); copy = self.put("Card dumps/card 1/A.mov", big)    # the longer path goes
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")    # run.php writes them
+        self.r.build_index(); self.r.job("find", {})
+        self.assertEqual(len(open(os.path.join(self.web, "dedupe-plan.tsv")).read().splitlines()), 1, "Find: scan and plan in one")
+        self.r.job("apply", {"WHO": "Ana"})
+        gone = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/A.mov")
+        self.assertTrue(os.path.isfile(gone))
+        self.r.job("empty", {"WHO": "Ana"})
+        self.assertFalse(os.path.exists(gone), "deleted, for good")
+        self.assertTrue(os.path.isfile(kept), "the copy kept is never touched")
+        self.assertNotIn(gone, open(os.path.join(self.web, "dedupe-moves.tsv")).read(), "Recover forgets what is gone")
+        self.assertEqual(open(os.path.join(self.web, "holding-kb.txt")).read().split(), ["0", "0"])
+        said = open(os.path.join(self.web, "activity.tsv")).read()
+        self.assertIn("\tAna\tRemoved 1 duplicate copy on Drive into Recently Removed", said)
+        self.assertIn("\tAna\tDeleted for good everything in Recently Removed on Drive: 1 file", said)
 
     def test_nothing_moves_while_paused(self):
         p = self.put("a/x.mov", b"1"); self.put("b/x.mov", b"1")
@@ -197,9 +227,9 @@ class Drives(MacJobs):
         src = os.path.join(self.vol, "Films 1")
         self.r.job("plan", {"KEEP_SIDE": "short", "DRIVE": src})
         self.r.job("apply", {"KEEP_SIDE": "short", "DRIVE": src})
-        self.assertTrue(os.path.isfile(os.path.join(src, "_duplicates", "A long folder/clip.mov")) and os.path.isfile(a))
+        self.assertTrue(os.path.isfile(os.path.join(src, "_Recently Removed", "A long folder/clip.mov")) and os.path.isfile(a))
         self.assertTrue(os.path.isfile(on_drive), "the copy on another drive than the archive's stays")
-        self.assertGreater(int(open(os.path.join(self.web, f"holding-kb-UUID-ONE.txt")).read()) + 1, 0)
+        self.assertEqual(open(os.path.join(self.web, "holding-kb-UUID-ONE.txt")).read().split()[1], "1", "the drive's own Recently Removed")
         self.r.job("verify", {"DRIVE": src})
         self.assertIn("VERDICT\tSAFE", open(os.path.join(self.web, "verify-result-UUID-ONE.tsv")).read())
         self.r.job("undo", {"DRIVE": src})

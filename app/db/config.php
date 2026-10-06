@@ -91,8 +91,6 @@ function s_path(string $key, string $fallback = ''): string {
 function web_dir(): string     { return s_path('archive.web',   '/share/Web'); }
 // Rushes inside the Rushes app, on the Mac whose drive is the archive (HOW-IT-WORKS.md → Rushes on this Mac)
 function on_mac(): bool        { return (settings()['archive']['runs_on'] ?? '') === 'mac'; }
-// …and that archive is the person's own drives, not one a team shares: caches that rebuild are deleted, not moved aside
-function own_drives(): bool    { return on_mac() && (settings()['archive']['own'] ?? false) === true; }
 function archive_dir(): string { return s_path('archive.local', '/share/VIDEO'); }
 // Drives that come and go (Setup 01: Leave media on its own drives): what the
 // runner last saw of each (drives.json: name, ID, where it is, plugged in or

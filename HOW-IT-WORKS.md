@@ -146,7 +146,7 @@ is the folder the archive machine's web server serves.
 - `ARCHIVE/` (where copied folders land, until a tidy-up moves them);
 - your departments' folders on the shelf (`organise.shelves`);
 - `PROXIES/` (proxies, with the same paths as the originals);
-- `_duplicates/` (the holding folder);
+- `_Recently Removed/` (what Remove put out of the way; `_duplicates/` before 0.12.4, and on a NAS);
 - `_rushes/`, holding Rushes' records:
   - `origin/` (a record of every copy, move and check);
   - `analysis/` (one description per file, with its stills);
@@ -236,7 +236,7 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | `duplicates.never_keep`, `duplicates.card_dumps` | this archive's own folders whose copies are never kept, and where whole cards were once copied (chosen in Manage → Duplicates, from the folders the copies are in). What is true for every archive is in `rules.json → duplicates.never_keep`. |
 | `organise.shape` | `one_place`, or `in_place`: the drives in `sources` are listed where they are ([Drives that come and go](#drives-that-come-and-go)) |
 | `limits.disk_stop_free`, `limits.disk_warn_free` | stop copying below this free space (5 TB), and warn below this (8 TB). They override `rules.json`. |
-| `rules.json → conditions` | when Overview warns: runner silent 3 min, a copy stalled 15 min, more than 100 cache files, more than 1 GB in the holding folder |
+| `rules.json → conditions` | when Overview warns: runner silent 3 min, a copy stalled 15 min, more than 100 cache files, more than 1 GB in Recently Removed |
 | `proof.check_every_days` | how often each folder of the archive is read again (90) |
 | `analysis.python`, `analysis.model`, `analysis.whisper` | the Python and the models used for describing. By default, a `venv` and a `qwen3vl8b` folder in `~/archive-pilot` if they exist, otherwise the models by name. |
 
@@ -263,7 +263,7 @@ remember footage.
 
 - Narrow by kind: video, photos, audio, projects, sidecar files, other.
 - **Show 200 more** loads the next results.
-- Files sitting in the holding folder show as "moved aside".
+- Files sitting in Recently Removed show as "moved aside".
 - Links work: `?q=` opens a search, and `?pull=` makes a pull the current one.
 
 When footage has been described, a panel called **In the footage** shows the
@@ -1000,9 +1000,22 @@ descriptions follow), and in `ingest.py` `tidy()`, `untidy()`, `move_proxy()`,
 
 ### Duplicates
 
-Rushes finds files that are the same file, keeps one, and moves the others into
-the holding folder (`_duplicates`). The folder structure is kept, so anything
-can be put back.
+Rushes finds files that are the same file, keeps one, and **Remove** puts the
+others in **Recently Removed** (below). The folder structure is kept, so
+anything can be recovered.
+
+**Manage → Duplicates** has one button to start: **Find duplicates**. It does
+the scan and the plan (1 and 2 below) one after the other, and moves nothing.
+Then the page leads with what it found ("7.1 GB in 3 extra copies") and the
+files that exist more than once, the biggest first: the copy Rushes keeps,
+marked **Keeps**, with an ⓘ saying why (on the shelf, where it belongs; the
+others are in folders that only pass files through; the shortest path; or
+your choice), and the copies that would go. **Keep this one** beside any
+other copy makes it the one that stays, in the plan itself
+(`db/dupgroups.php`); the other copies go instead. A chip per top folder shows
+one folder's copies at a time. **Remove** carries out the plan (3), **Recover**
+undoes it (4), **Find again** looks again. Nobody has to choose a rule first:
+Rushes keeps the shelf's copy over a card dump's.
 
 1. **The scan** compares every file by content. On a NAS it is done by
    Czkawka, a separate duplicate finder running in a container on the archive
@@ -1015,49 +1028,68 @@ can be put back.
    stopped by Pause copying, or by the drive going, carries on where it was.
    Files it cannot read are left out and counted. The answer is written in
    Czkawka's form, so everything after it is the same on both.
-   - **Scan the archive** (Manage → Duplicates) starts it, after asking twice.
-     It takes hours, and other jobs wait meanwhile (the upkeep does not).
+   - **Find duplicates** (Manage → Duplicates) starts it, after asking twice.
+     It takes hours the first time, and other jobs wait meanwhile (the upkeep
+     does not).
    - It needs a container called `czkawka` with the archive mounted as
      `/storage`; its results are copied out with `docker cp`. Without the
      container, the job says so and does nothing.
    - The runner's comments show how to schedule it weekly.
-2. **Look for duplicates** (Manage → Duplicates) works out which copy to keep,
-   and shows the plan. It moves nothing.
+2. **The plan** works out which copy to keep (`dedupe.sh`, the second half of
+   Find duplicates). It moves nothing.
    - Each copy gets a weight from the rules, and the lightest copy is kept.
      The rules are written for the script when you press the button
      (`dedupe-rules.tsv`), and the plan lists them first:
      - for every archive, from `rules.json`: the recycle bin (1000), `Copied_…`
        folders (400), Premiere's Media Cache (300), doubled extensions in
        capitals such as `.MXF.MXF` (200);
-     - for this archive, chosen in Manage → Duplicates under **Where the copies
-       are** (the top folders holding the most copies, from the last look, each
-       Normal, Stopover or Whole cards): stopovers, whose copies are never kept
-       (500), and folders of whole cards (450).
-   - **Which copy is kept** is chosen above the buttons: the one on the shelf
-     (the default; card dumps lose), the card dump (the shelf's copy loses), the
-     shortest path, or the oldest file (slower: it reads every copy's date). If
-     no card-dump folders are set, the first two prefer neither side, and the
-     plan says so. Between equal weights, the shorter path wins.
+     - for this archive, from `settings.json → duplicates` (set before 0.12.4 in
+       Manage, kept): stopovers, whose copies are never kept (500), and folders
+       of whole cards (450).
+   - **Which copy is kept** is Rushes' own choice: the one on the shelf (card
+     dumps lose; `KEEP_SIDE=project`). Between equal weights, the shorter path
+     wins. A person changes it per group with **Keep this one**, not with a
+     setting (`dedupe.sh` still takes `card`, `short` and `oldest`, unused by
+     the pages).
    - Copies in the recycle bin are never kept and never moved.
    - Numbered image-sequence frames are never moved, even when identical,
      because removing one breaks the sequence.
-3. **Move the copies aside** moves exactly the plan you were shown, as long as
+3. **Remove** moves exactly the plan you were shown, as long as
    it was made from the same scan and with the same choice. Otherwise it plans
    again first.
    - If the rules changed since the plan was made, it plans again too.
    - Before moving each file, it checks the file still exists at the size the
      scan saw, and that the copy being kept is there.
    - Every move is written to a log that is added to, never emptied.
-4. **Put them back** returns every file still in the holding folder.
-5. **Check the holding folder** goes through every file in it.
+4. **Recover** returns every duplicate copy still in Recently Removed.
+5. **Check Recently Removed** (Jobs and tools) goes through every file in it.
    - For each, it checks that its twin (the copy kept) is still in the archive
      at the same size. The answer is SAFE only if every file has its twin.
    - It names the files that do not.
    - It ignores editing caches, the recycle bin, and system clutter, and says
      which rule ignored what.
 
-Rushes never empties the holding folder. Emptying it is your step, after the
-check says SAFE.
+### Recently Removed
+
+Where **Remove** puts duplicate copies and caches, on the same drive (a rename,
+so nothing is copied): `_Recently Removed` at the top of the archive, and of
+each drive kept where it is. It was called `_duplicates` before 0.12.4; that
+folder is renamed by itself the first time the Mac app looks
+(`migrate_holding()`), and the records of what moved follow it, so Recover
+still finds every file. (A NAS's `runner.sh` still uses `_duplicates`.)
+
+**Rushes never deletes anything by itself; when a person decides to, Rushes
+does it.** Duplicates and Cache both end with a **Recently Removed** box, one
+line per drive: how much is in it, since when, and **Delete All**. Rushes
+suggests keeping things a week, in case something was needed; the line says
+"suggested to keep 4 more days", then "ready to delete". Delete All is there
+all the time, with **Sure?** on the button, which says when the week is not
+over yet. Once confirmed, everything in that drive's Recently Removed is
+deleted for good (`empty()` in `runner.py`, the `empty` job), the space comes
+back at once, Recover forgets those files, and Activity says who did it and
+how much ("Deleted for good everything in Recently Removed on Drive: 1,280
+files (412.0 GB)"). On a NAS, Delete All is not there yet: empty `_duplicates`
+in File Station.
 
 **In the code:** `runner.sh` (the `scan`, `plan`, `apply`, `undo` and `verify`
 jobs; on a Mac `runner.py`: `job()`, `scan()`), `dedupe.sh`, `verify.sh`, `run.php` and `db/config.php`
@@ -1072,23 +1104,22 @@ and `.ims` files, Capture One's cache folders, and others. They are listed in
 **Manage → Cache** shows how much there is, with examples. It counts from the
 catalogue, so it takes a second rather than a sweep of the archive. Things that
 look like clutter but are not (such as Premiere's Auto-Save, an edit's only
-rescue after a crash) are shown as "left alone" and are never on the move list.
+rescue after a crash) are shown under "Never touched" and are never on the move list.
 
-- **Move them out** moves them into `_duplicates/_media-cache/`, keeping their
-  paths. Every move is written to `cache-moves.tsv`. It never takes anything
-  from the recycle bin (that would undelete it) or from the holding folder
-  itself.
-- **Put them back** returns every cache file still in the holding folder.
-- **On a Mac, a person's own drives** (Manage → Cache → **These are my own
-  drives**, off at first): the kinds `rules.json` marks `rebuilds` (Premiere's
-  cache, Media Cache folders, Capture One's cache, Resolve's CacheClip) are
-  deleted instead, which gives the space back at once, and each is written to
-  `cache-deleted.tsv` (when, size, path); the button says **Clear them out**.
-  Moving them aside would free nothing on a drive one person owns. On an
-  archive a team shares, leave it off.
+The page leads with how much there is ("3.9 GB of cache, in 2,410 files"),
+with **Remove** and **Recover**; what is never touched is folded under
+**Never touched**, with an ⓘ.
+
+- **Remove** moves them into `_Recently Removed/_media-cache/` on their own
+  drive, keeping their paths. Every move is written to `cache-moves.tsv`. It
+  never takes anything from the recycle bin (that would undelete it) or from
+  Recently Removed itself. Nothing is deleted: that is **Delete All**, pressed
+  by a person (Recently Removed, above). (Before 0.12.4, a switch, These are
+  my own drives, deleted caches at once; it is gone: one way everywhere.)
+- **Recover** returns every cache file still in Recently Removed.
 - On a Mac, each file is checked against `rules.json` again just before it
-  is moved or deleted (`cache_rule()` in `runner.py`): the list is only where
-  to look, and anything under Left alone is never touched.
+  is moved (`cache_rule()` in `runner.py`): the list is only where to look,
+  and anything under Never touched is never touched.
 - **Left alone** includes Capture One's adjustments (`.cos`, `.coa`,
   `.comask`, `CaptureOne/Settings…`) and Resolve's gallery stills
   (`.gallery`): they are someone's work, not a cache, and nothing makes them
@@ -1132,8 +1163,8 @@ is something to do:
 | The NAS is not picking up jobs | the runner has been silent for 3 minutes |
 | The archive is full enough to stop copying, or Running low on space | free space is below the floor, or below the warning |
 | Search needs a check, will update again, is updating, or is ready to index | the catalogue's state. The last one has **Build the first file list**. |
-| N cache files are taking up … | more than 100 cache files (**Move them out**) |
-| … is waiting in the holding folder | more than 1 GB there, as last measured (after a job that moves files, or the `holding` job). **Check it is safe**, or "safe" once checked. |
+| N cache files are taking up … | more than 100 cache files (**Look at them**: Manage → Cache) |
+| … is waiting in Recently Removed | more than 1 GB there, as last measured (after a job that moves files, or the `holding` job). **Check it is safe**, or "safe" once checked. |
 | Moving the old server over: d of n folders | a server's folders are listed but not all copied |
 | The helper is not running | a transfer is waiting and the helper has gone quiet |
 | Rushes stopped reaching the VIDEO share by itself | the breaker tripped (**Try again**) |
@@ -1208,7 +1239,7 @@ Buttons for running things by hand, each asking twice:
 
 - Rebuild the file list;
 - Rebuild search;
-- Check the holding folder;
+- Check Recently Removed;
 - Measure free space;
 - Plan proxies (counts what is missing, makes nothing);
 - Test the video chip.
@@ -1232,8 +1263,8 @@ already open files on the archive: the descriptions (`_rushes/analysis`, JSON),
 the record of every copy and move (`_rushes/origin`), the copy proofs (ASC MHL).
 
 A few jobs exist only for scripts and have no button: `reindex`, `holding`
-(measures the holding folder), `organize-undo`, and checking one folder or file
-in the holding folder. A page can start them only when signed in.
+(measures Recently Removed), `organize-undo`, and checking one folder or file
+in Recently Removed. A page can start them only when signed in.
 
 ### Setup
 
@@ -1255,7 +1286,7 @@ Each section saves with **Save settings**.
   drive kept where it is, each line also says whether it is plugged in (or
   since when not), and what is on it: files and size, footage, editing
   caches, copies (from the last duplicates scan) and what waits in its
-  holding folder.
+  Recently Removed.
 - **04 Helper:**
   - **built in**, or **external** with its name, and where it sees the archive;
   - whether it is running, and how many drives it sees;
@@ -1339,7 +1370,7 @@ with **Where Rushes is…**, at the foot of its window: the same step, where
   replaced, and the app puts its pages in again each time it starts, so an
   updated app brings its pages with it);
 - writes `settings.json` there: the archive, the web folder, the address
-  (`http://127.0.0.1:8642`), the helper built in, the holding folder
+  (`http://127.0.0.1:8642`), the helper built in, Recently Removed
   `_duplicates` on the archive;
 - pairs the helper with this Rushes (`helper-id.php`): they are the same app;
 - writes `local.json` beside it (the archive, the port, other devices on or
@@ -1377,7 +1408,7 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   the move, putting back and the check are `dedupe.sh` and `verify.sh`, as on
   a NAS, written so they run with a Mac's own tools too), and the editing
   caches ([Editing caches](#editing-caches)). After anything that moves files,
-  the file list is made again and the holding folder measured. Proxies are
+  the file list is made again and Recently Removed measured. Proxies are
   not made on a Mac yet, and the old layout's undo has nothing to undo there:
   each such job is written in the log as not done.
 - Every touch of the archive has a time limit (20 s; the search update 2 min,
@@ -1458,7 +1489,7 @@ yet.
   within one drive are moved aside within that drive, into its own
   `_duplicates`, never from one drive to another (Manage → Duplicates →
   **Where**: the archive or a drive, each with its own plan, moves, check and
-  holding folder: `dedupe-plan-<ID>.tsv`, `dedupe-moves-<ID>.tsv`,
+  Recently Removed: `dedupe-plan-<ID>.tsv`, `dedupe-moves-<ID>.tsv`,
   `verify-result-<ID>.tsv`, `holding-kb-<ID>.txt`). The same file on two
   drives is often the only backup: it is counted (`dup-across.txt`,
   `dup-summary.json`), said in Duplicates, and left alone.
@@ -2040,14 +2071,16 @@ Rushes Helper reads the clipboard and where downloaded files came from.
 
 ## What Rushes deletes or moves
 
-Rushes never deletes your footage, the originals or their copies. Duplicates
-and caches are **moved** to the holding folder, and only you empty it.
+Rushes never deletes anything by itself. Duplicates and caches are **moved**
+to Recently Removed, and deleted only when a person presses **Delete All**
+there (after Sure?; Rushes suggests waiting a week). Then it deletes them, and
+Activity says who did.
 
 ### What it moves
 
 - **A file list that looks incomplete** (less than half the last one) is kept
   aside as `manifest-rejected.tsv`; the last list stays.
-- **Duplicates and caches** into `_duplicates`, and back on **Put them back**.
+- **Duplicates and caches** into `_Recently Removed`, and back on **Recover**; deleted only on **Delete All**.
 - **A tidy-up** moves copied footage onto the shelf, with its proxies, and back
   on Put back. Copy proofs whose footage all moved go to `_rushes/ascmhl-moved`.
 - **`ingest.py --undo`** moves the last run's copies to `ARCHIVE/_rollback`.

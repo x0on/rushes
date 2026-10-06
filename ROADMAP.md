@@ -86,6 +86,9 @@ that NAS; the Mac app has to prove each part again.
   the next signed release). It also takes an update only with the same app ID,
   so a Rushes 0.12 tried before the app had its own ID (`org.rushes.helper`)
   is replaced by hand, once.
+- **A NAS still calls Recently Removed `_duplicates`**, and has no Delete All
+  (`runner.sh`); describing on a NAS skips only the old name (`analyze.py`,
+  signed code: changed with the next signed release).
 - **Activity's names are typed, not proven:** a name asked once in each
   browser. Personal sign-ins can come with Watchers on a server (step 4).
 

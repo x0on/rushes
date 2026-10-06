@@ -111,7 +111,7 @@ $e     = fn($x) => htmlspecialchars((string)$x);
 
 // What is on a drive kept where it is (Setup 01, in place), from the catalogue and the
 // last duplicates scan: what is footage, what is editing cache, what is a copy, and what
-// waits in its holding folder — what could go, before anything moves.
+// waits in its Recently Removed — what could go, before anything moves.
 function drive_report(array $d): array {
     require_once __DIR__ . '/db/schema.php';
     $p = rtrim($d['path'], '/') . '/'; $L = strlen($p);
@@ -125,7 +125,7 @@ function drive_report(array $d): array {
     $gb = fn($b) => $b >= 1e12 ? round($b / 1e12, 1) . ' TB' : ($b >= 1e9 ? round($b / 1e9, 1) . ' GB' : round($b / 1e6) . ' MB');
     $line = number_format($r['n']) . ' files, ' . $gb($r['b']) . ': footage ' . $gb($r['v']) . ', editing caches ' . $gb($cache)
           . ($dup ? ', copies ' . $gb($dup['bytes']) . ' (' . number_format($dup['copies']) . ($dup['copies'] === 1 ? ' file' : ' files') . ', from the last scan)' : ', copies: not scanned yet')
-          . ($hold ? ' · in its holding folder: ' . $gb($hold) : '');
+          . ($hold ? ' · in Recently Removed: ' . $gb($hold) : '');
     return ['files' => (int)$r['n'], 'line' => $line];
 }
 

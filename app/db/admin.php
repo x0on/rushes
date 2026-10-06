@@ -54,6 +54,26 @@ if (isset($_POST['_newpass'])) {
   .transfer-summary .job-percent small { font-size:14px; font-weight:500; color:var(--muted) }
   .transfer-summary p { margin:5px 0; line-height:1.5 }
   .side .ev { padding: 9px 14px }
+  .big-head { padding: 16px 18px }
+  .bh { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap }
+  .bh .t { flex: 1 1 280px; min-width: 0 }
+  .bh-n { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin-bottom: 2px }
+  .big-head .btns { margin-top: 12px }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px }
+  .chips button { font: 12.5px var(--font); border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+    border-radius: 14px; padding: 3px 11px; cursor: pointer }
+  .chips button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg) }
+  .grp { padding: 10px 14px; border-top: 1px solid var(--line) } .grp:first-child { border-top: 0 }
+  .grp-h { display: flex; gap: 10px; align-items: baseline } .grp-h b { flex: 1; min-width: 0; overflow-wrap: anywhere }
+  .cp { display: flex; gap: 10px; align-items: center; padding: 3px 0 3px 2px; font-size: 12.5px }
+  .cp .p { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--muted) }
+  .cp.keep .p { color: var(--fg) }
+  .tag { font-size: 11px; font-weight: 650; border-radius: 9px; padding: 1px 8px; background: var(--ok-bg); color: var(--ok); white-space: nowrap }
+  .tag.go { background: var(--raised); color: var(--muted) }
+  .cp .lnk { font-size: 12px; white-space: nowrap }
+  .rr { margin-top: 18px }
+  .rr .row { gap: 12px; flex-wrap: wrap } .rr .nm small { display: block; color: var(--muted); white-space: normal }
+  details.fold > summary { cursor: pointer; color: var(--muted); font-size: 13px }
   .actk { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: 10px; vertical-align: middle }
   .actk button { font: 12px var(--font); border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 12px; padding: 1px 9px; cursor: pointer }
   .actk button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg) }
@@ -178,82 +198,53 @@ if (isset($_POST['_newpass'])) {
       </section>
 
       <!-- ══ duplicates ══ -->
-      <!-- Two steps, never one: look first, then move. Nothing is ever deleted,
-           so 'put them back' is always available. -->
+      <!-- Find, look, Remove, Recover (HOW-IT-WORKS.md → Duplicates): Rushes chooses which copy
+           stays and says why; a person can choose another, per group. Remove puts the other copies
+           in Recently Removed; nothing is deleted until someone presses Delete All. -->
       <section id="pane-duplicates" hidden>
-        <div class="panel" style="margin-top:8px">
-          <header><b>Files that are the same file</b></header>
-          <div style="padding:14px">
-            <p class="note" style="margin:0 0 12px">Same content, not same name. Size first,
-              then the ends of the file where two sizes collide. Copies move to the holding
-              folder &mdash; the space comes back when you empty it, not before.</p>
-            <!-- Drives kept where they are (Setup 01): each is tidied on its own, into its own holding folder -->
-            <label class="f" id="dupDriveBox" style="max-width:520px;margin:0 0 12px" hidden><span>Where</span>
-              <select id="dupDrive"></select>
-              <small>Copies move aside within one drive, into its own holding folder, never from one drive to another.
-                <span id="dupAcross"></span></small></label>
-            <label class="f" style="max-width:520px;margin:0 0 12px"><span>Which copy is kept</span>
-              <select id="keepSide">
-                <option value="project">The one on the shelf (your projects) &mdash; card dumps lose</option>
-                <option value="card">The card dump &mdash; the shelf's copy loses</option>
-                <option value="short">The shortest path, wherever it is</option>
-                <option value="oldest">The oldest file (reads every copy's date: slower)</option>
-              </select>
-              <small>Whatever you pick, copies in the recycle bin, <code>Copied_</code> folders, caches and the
-                folders below marked as a stopover are never the one kept. Moving uses the plan you looked at, with this choice.</small></label>
-            <div class="btns">
-              <button class="btn quiet" data-t="scan">1 &middot; Scan the archive (hours)</button>
-              <button class="btn" data-t="plan">2 &middot; Look for duplicates</button>
-              <button class="btn quiet" data-t="apply">3 &middot; Move the copies aside</button>
-              <button class="btn quiet" data-t="undo">Put them back</button>
-            </div>
+        <div class="panel big-head" style="margin-top:8px">
+          <div class="bh">
+            <div class="t"><div class="bh-n" id="dHead">Duplicates</div><div class="note" id="dSub"></div></div>
+            <!-- Drives kept where they are (Setup 01): each looked at on its own, with its own Recently Removed -->
+            <select id="dupDrive" aria-label="Where" hidden></select>
           </div>
+          <div class="btns" id="dBtns"></div>
+          <p class="note" id="dSaid" style="margin:8px 0 0"></p>
         </div>
-        <!-- Where the copies are: the archive's own folders, asked about here, where it matters. -->
-        <div class="panel" style="margin-top:14px">
-          <header><b>Where the copies are</b> <span class="note" id="dwBuilt"></span></header>
-          <div style="padding:14px 14px 4px">
-            <p class="note" style="margin:0 0 6px">The archive's folders that hold the most duplicate copies. For each one,
-              say what it is, and the copy that stays is the one in the right place:
-              <b>Normal</b>, the usual rules decide; <b>Stopover</b>, files only sit there for a while, so its copy goes
-              when the clip is also somewhere else; <b>Whole cards</b>, cards copied as they were, so the copy on your
-              shelf stays. A change counts from the next <b>2 &middot; Look for duplicates</b>, which shows what it does
-              before anything moves.</p>
-          </div>
-          <div id="dwRows"><div class="empty">Looking&hellip;</div></div>
+        <div class="chips" id="dFolders" hidden></div>
+        <div class="panel" id="dList" style="margin-top:12px" hidden>
+          <div id="dGroups"></div>
+          <div class="btns" style="padding:10px 14px" id="dMoreBox" hidden><button class="btn quiet" id="dMore">Show more</button></div>
         </div>
+        <div id="rrDup"></div>
       </section>
 
       <!-- ══ cache ══ -->
-      <!-- Files editing software rebuilds by itself. Counted from the search
-           database, so it takes a second, not a sweep of the whole share. -->
+      <!-- Files editing software rebuilds by itself. Counted from the search database, so it
+           takes a second. Remove puts them in Recently Removed, like duplicate copies. -->
       <section id="pane-cache" hidden>
-        <div class="panel" style="margin-top:8px">
-          <header><b>Rebuildable cache</b><span class="n" id="cTotal"></span></header>
+        <div class="panel big-head" style="margin-top:8px">
+          <div class="bh"><div class="t"><div class="bh-n" id="cHead">Counting&hellip;</div>
+            <div class="note" id="cSub">Editing software makes these again from the originals when it needs them.</div></div></div>
+          <div class="btns">
+            <button class="btn" id="cMove" disabled>Remove</button>
+            <button class="btn quiet" id="cBack">Recover</button>
+          </div>
+          <p class="note" id="cSaid" style="margin:8px 0 0"></p>
+        </div>
+        <div class="panel" style="margin-top:12px">
           <div id="cRows"><div class="empty">Counting&hellip;</div></div>
         </div>
-        <div class="panel" id="cOwnBox" style="margin-top:12px" hidden>
-          <div class="row"><span class="nm">These are my own drives</span>
-            <button class="btn quiet" id="cOwn">…</button></div>
-          <p class="note" style="margin:0;padding:0 14px 12px">On: caches that rebuild themselves are deleted, which gives
-            the space back at once; what went is written down (cache-deleted.tsv). Off: everything is moved to the
-            holding folder, as on an archive a team shares. Either way, nothing under Left alone is ever touched.</p>
-        </div>
-        <div class="btns" style="margin-top:12px">
-          <button class="btn" id="cMove" disabled>Move them out</button>
-          <button class="btn quiet" id="cBack" title="Every cache file still in the holding folder goes back where it was">Put them back</button>
-          <span class="note" id="cNote">They go to the holding folder, not the bin. Editing software rebuilds
-            them from the originals, so nothing is lost; the space comes back when you empty that folder.</span>
-        </div>
-
-        <div class="panel" style="margin-top:18px">
-          <header><b>Left alone</b><span class="n">never moved</span></header>
-          <div id="cKeep"></div>
-        </div>
-        <details style="margin-top:14px">
-          <summary class="note" style="cursor:pointer">A few examples of what would move</summary>
-          <div id="cEx" class="code block" style="white-space:pre;overflow-x:auto"></div>
+        <details class="fold" style="margin-top:12px">
+          <summary>Never touched <span class="note" id="cKeepN"></span>
+            <span class="info" tabindex="0" data-tip="Someone's work, not cache: auto-saves you open when a project will not, project backups, Capture One's adjustments, Resolve's stills. Remove never moves them.">i</span></summary>
+          <div class="panel" style="margin-top:8px"><div id="cKeep"></div></div>
         </details>
+        <details class="fold" style="margin-top:8px">
+          <summary>A few examples of what would move</summary>
+          <div id="cEx" class="code block" style="white-space:pre;overflow-x:auto;margin-top:8px"></div>
+        </details>
+        <div id="rrCache"></div>
       </section>
 
       <!-- ══ activity ══ -->
@@ -536,6 +527,7 @@ const tb  = function (b) {
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
 let pane = 'overview', latestTransfer = null, quiet = 0;
+let lastRunning = '';                 // the job the runner says it is doing (state.php)
 // Activity's filter: everything, or one kind (activity.php names them)
 let actKind = 'all';
 document.querySelectorAll('#actKinds button').forEach(function (b) {
@@ -568,75 +560,164 @@ function show(which) {
   $('cards').hidden = (which !== 'overview');
   $('repeats').hidden = (which !== 'overview');
   $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
-  if (which === 'cache') loadCache();
-  if (which === 'duplicates') loadWhere();
+  if (which === 'cache') { loadCache(); loadRemoved(); }
+  if (which === 'duplicates') { loadDup(); loadRemoved(); }
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
 }
 document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
   b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
 $('sideMore').onclick = function () { show('activity'); };
-// The fixed buttons in Duplicates use the same path as everything
-// else: confirm, ask, watch it happen in the side column.
-// Where the copies are: each top folder with what it is, chosen with one press, and said.
-async function loadWhere() {
+// ── duplicates: Find, look, Remove, Recover ─────────────────────────────────
+// One press finds them (which files are the same, then which copy stays: the runner's
+// "find"). Rushes chooses the copy that stays and says why; "Keep this one" chooses
+// another, in the plan itself. Remove puts the other copies in Recently Removed.
+let dupFolder = '', dupOffset = 0, dupData = null, dupWasRunning = false;
+const rel = function (p, root) { return root && p.indexOf(root) === 0 ? p.slice(root.length) : p; };
+const base = function (p) { return String(p || '').split('/').pop(); };
+async function job(action, extra) {
+  const ask = Object.assign({ action: action }, extra || {});
+  if ($('dupDrive').value && ['find', 'plan', 'apply', 'undo', 'empty'].includes(action) && !('drive' in ask)) ask.drive = $('dupDrive').value;
+  const j = await (await fetch('../run.php', { method: 'POST', body: new URLSearchParams(ask) })).json();
+  if (j.error) throw new Error(j.error);
+  busy = action; setTimeout(load, 1200);
+  return j;
+}
+const DUPJOBS = ['find', 'scan', 'plan', 'apply', 'undo'];
+async function loadDup(more) {
+  if (!more) dupOffset = 0;
   let r;
-  try { r = await (await fetch('dupfolders.php?t=' + Date.now() + '&drive=' + encodeURIComponent($('dupDrive').value || ''))).json(); } catch (e) { $('dwRows').innerHTML = '<div class="empty">Could not ask the archive.</div>'; return; }
-  if (r.error) { $('dwRows').innerHTML = '<div class="empty">' + esc(r.error) + '</div>'; return; }
+  try {
+    r = await (await fetch('dupgroups.php?t=' + Date.now() + '&offset=' + dupOffset + '&limit=40&folder=' + encodeURIComponent(dupFolder) +
+      '&drive=' + encodeURIComponent($('dupDrive').value || ''))).json();
+  } catch (e) { $('dHead').textContent = 'Could not ask the archive'; return; }
+  if (r.error) { $('dHead').textContent = r.error; return; }
+  dupData = more && dupData ? Object.assign(r, { groups: dupData.groups.concat(r.groups) }) : r;
   // the drives kept where they are: the archive or one of them, each with its own plan
   const sel = $('dupDrive'), was = sel.value;
-  $('dupDriveBox').hidden = !(r.drives || []).length;
+  sel.hidden = !(r.drives || []).length;
   sel.innerHTML = '<option value="">The archive</option>' + (r.drives || []).map(function (d) {
-    return '<option value="' + esc(d.source) + '"' + (d.connected ? '' : ' disabled') + '>' + esc(d.name) +
-      (d.connected ? '' : ' (not plugged in)') + '</option>'; }).join('');
+    return '<option value="' + esc(d.source) + '"' + (d.connected ? '' : ' disabled') + '>' + esc(d.name) + (d.connected ? '' : ' (not plugged in)') + '</option>'; }).join('');
   sel.value = was;
-  $('dupAcross').textContent = r.across && r.across.sets ? r.across.files.toLocaleString() + ' files are the same on more than one drive (' +
-    r.across.sets.toLocaleString() + ' sets): left alone, since a copy on another drive is often the only backup.' : '';
-  $('dwBuilt').textContent = r.built ? (r.done ? 'from the tidy-up of ' + r.built + ': already moved' : 'from the look on ' + r.built) : '';
-  const head = r.done ? '<p class="note" style="margin:0;padding:10px 14px;border-top:1px solid var(--line)"><b>That tidy-up is done:</b> ' +
-    'these copies were already moved to the holding folder. They show here so you can see where duplicates come from. ' +
-    'Press 2 · Look for duplicates to see whether any are left.</p>' : '';
-  if (!r.folders.length) { $('dwRows').innerHTML = '<div class="empty">Nothing yet: press 2 · Look for duplicates, and the folders with copies show here.</div>'; return; }
-  const KINDS = [['normal', 'Normal'], ['stopover', 'Stopover'], ['cards', 'Whole cards']];
-  $('dwRows').innerHTML = head + r.folders.map(function (f) {
-    const n = function (k, one, many) { return k.toLocaleString() + (k === 1 ? one : many); };
-    const what = r.done
-      ? (f.move ? n(f.move, ' copy was', ' copies were') + ' moved out of here' + (f.bytes >= 1048576 ? ' (' + tb(f.bytes) + ')' : '') : 'nothing was moved from here') +
-        ' · ' + n(f.stay || 0, ' copy', ' copies') + ' kept here'
-      : (f.move ? n(f.move, ' copy', ' copies') + ' would move from here' + (f.bytes >= 1048576 ? ' (' + tb(f.bytes) + ')' : '') : 'nothing would move from here') +
-        ' · ' + n(f.stay || 0, ' copy stays', ' stay') + ' here';
-    return '<div class="row" style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)">' +
-      '<div style="flex:1 1 240px;min-width:0"><b>' + esc(f.name) + '</b><div class="note">' + esc(what) + '</div></div>' +
-      (f.kind === 'shelf' ? '<span class="note">your shelf (Reorganize)</span>' :
-        '<div class="seg" role="group" aria-label="What ' + esc(f.name) + ' is">' + KINDS.map(function (k) {
-          return '<button type="button" class="btn quiet' + (f.kind === k[0] ? ' on' : '') + '" aria-pressed="' + (f.kind === k[0]) +
-            '" data-dw="' + esc(f.name) + '" data-k="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>') +
-      '</div>';
-  }).join('') + '<p class="note" id="dwSaid" style="margin:8px 14px 12px"></p>';
-  $('dwRows').querySelectorAll('[data-dw]').forEach(function (b) {
+  drawDup();
+}
+function drawDup() {
+  const r = dupData; if (!r) return;
+  const running = DUPJOBS.includes(lastRunning) || DUPJOBS.includes(busy);
+  const t = r.total || { files: 0, bytes: 0, groups: 0 };
+  const btn = function (id, label, go) { return '<button class="btn' + (go ? '' : ' quiet') + '" id="' + id + '">' + label + '</button>'; };
+  let head, sub, btns = '';
+  if (running) {
+    head = lastRunning === 'apply' ? 'Removing the copies…' : lastRunning === 'undo' ? 'Recovering the copies…' : 'Finding duplicates…';
+    sub = (lastRunning === 'find' || lastRunning === 'scan') ? 'Files of the same size are read to see which are the same: the first time can take hours on a big archive, minutes after. Nothing moves. The column on the right shows how far.' : 'The column on the right shows how far.';
+  } else if (!r.built) {
+    head = 'Find files that are the same file'; sub = 'Same content, whatever the name. Rushes looks, shows what it found, and nothing moves until you press Remove.';
+    btns = btn('dFind', 'Find duplicates', true);
+  } else if (r.done) {
+    head = t.files.toLocaleString() + (t.files === 1 ? ' copy is' : ' copies are') + ' in Recently Removed';
+    sub = 'From the look on ' + r.built + '. Recover puts them back where they were; Delete All, below, gives the space back.';
+    btns = btn('dRecover', 'Recover') + btn('dFind', 'Find again');
+  } else if (!t.files) {
+    head = 'No duplicates ✓'; sub = 'Looked on ' + r.built + '.'; btns = btn('dFind', 'Find again');
+  } else {
+    head = '<span class="num">' + tb(t.bytes) + '</span> in ' + t.files.toLocaleString() + ' extra ' + (t.files === 1 ? 'copy' : 'copies');
+    sub = t.groups.toLocaleString() + ' files exist more than once (found ' + r.built + '). Rushes keeps one copy of each and says why; ' +
+          'choose another with Keep this one. Remove puts the others in Recently Removed: nothing is deleted.';
+    btns = btn('dRemove', 'Remove ' + t.files.toLocaleString() + (t.files === 1 ? ' copy' : ' copies'), true) + btn('dFind', 'Find again');
+  }
+  $('dHead').innerHTML = head; $('dSub').textContent = sub; $('dBtns').innerHTML = btns;
+  if ($('dFind')) $('dFind').onclick = function () {
+    if (!sure(this, 'Find duplicates: reads files of the same size to see which are the same. Moves nothing.', 'dup:find')) return;
+    const b = this; b.disabled = true; b.textContent = 'asked…';
+    job('find').then(function () { $('dSaid').textContent = 'Asked ✓ Finding starts within a minute.'; dupWasRunning = true; })
+      .catch(function (e) { b.disabled = false; b.textContent = 'Find duplicates'; $('dSaid').textContent = 'Did not happen: ' + e.message; });
+  };
+  if ($('dRemove')) $('dRemove').onclick = function () {
+    if (!sure(this, 'Every extra copy goes to Recently Removed, on the same drive. Nothing is deleted; Recover puts them back.', 'dup:remove')) return;
+    const b = this; b.disabled = true; b.textContent = 'asked…';
+    job('apply').then(function () { $('dSaid').textContent = 'Asked ✓ Removing starts within a minute; Activity says when it is done.'; dupWasRunning = true; })
+      .catch(function (e) { b.disabled = false; $('dSaid').textContent = 'Did not happen: ' + e.message; });
+  };
+  if ($('dRecover')) $('dRecover').onclick = function () {
+    if (!sure(this, 'Every duplicate copy in Recently Removed goes back where it was.', 'dup:recover')) return;
+    const b = this; b.disabled = true; b.textContent = 'asked…';
+    job('undo').then(function () { $('dSaid').textContent = 'Asked ✓ They go back within a minute.'; dupWasRunning = true; })
+      .catch(function (e) { b.disabled = false; $('dSaid').textContent = 'Did not happen: ' + e.message; });
+  };
+  // where the copies are: a chip per top folder, to look at one at a time
+  const fs = (r.folders || []);
+  $('dFolders').hidden = running || !t.files || fs.length < 2;
+  $('dFolders').innerHTML = '<button data-f="" aria-pressed="' + (dupFolder === '') + '">Everywhere</button>' + fs.map(function (f) {
+    return '<button data-f="' + esc(f.name) + '" aria-pressed="' + (dupFolder === f.name) + '">' + esc(f.name) + ' · ' + f.files.toLocaleString() + '</button>'; }).join('');
+  $('dFolders').querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { dupFolder = b.dataset.f; loadDup(); }; });
+  // the groups: the copy kept, why, and the others
+  const gs = r.groups || [];
+  $('dList').hidden = running || !gs.length;
+  $('dGroups').innerHTML = gs.map(function (g, i) {
+    return '<div class="grp"><div class="grp-h"><b>' + esc(base(g.keep)) + '</b><span class="note">' + tb(g.size) + ' · ' +
+      (g.moves.length + 1) + ' copies</span></div>' +
+      '<div class="cp keep"><span class="tag">Keeps</span><span class="p">' + esc(rel(g.keep, r.root)) + '</span>' +
+        '<span class="info" tabindex="0" data-tip="' + esc(g.why) + '">i</span></div>' +
+      g.moves.map(function (m) {
+        return '<div class="cp"><span class="tag go">' + (r.done ? 'Removed' : 'Goes') + '</span><span class="p">' + esc(rel(m, r.root)) + '</span>' +
+          (r.done ? '' : '<button class="lnk" data-keep="' + esc(g.keep) + '" data-pick="' + esc(m) + '">Keep this one</button>') + '</div>';
+      }).join('') + '</div>';
+  }).join('');
+  $('dMoreBox').hidden = gs.length >= t.groups || !gs.length || !!dupFolder && gs.length >= (fs.find(function (f) { return f.name === dupFolder; }) || {}).files;
+  $('dGroups').querySelectorAll('[data-pick]').forEach(function (b) {
     b.onclick = async function () {
-      b.disabled = true;
+      b.disabled = true; b.textContent = 'choosing…';
       try {
-        const x = await (await fetch('dupfolders.php', { method: 'POST', body: new URLSearchParams({ folder: b.dataset.dw, kind: b.dataset.k }) })).json();
+        const x = await (await fetch('dupgroups.php', { method: 'POST', body: new URLSearchParams({ action: 'keep', keep: b.dataset.keep,
+          pick: b.dataset.pick, drive: $('dupDrive').value || '' }) })).json();
         if (x.error) throw new Error(x.error);
-        await loadWhere();
-        $('dwSaid').textContent = b.dataset.dw + ' is now: ' + b.textContent + ' ✓ Press 2 · Look for duplicates to see what that changes; nothing moves until 3.';
-      } catch (e) { b.disabled = false; $('dwSaid').textContent = 'Did not happen: ' + e.message; }
+        $('dSaid').textContent = 'Keeps ' + base(b.dataset.pick) + ' there instead ✓ The other copies go when you press Remove.';
+        loadDup();
+      } catch (e) { b.disabled = false; b.textContent = 'Keep this one'; $('dSaid').textContent = 'Did not happen: ' + e.message; }
     };
   });
 }
+$('dMore').onclick = function () { dupOffset = (dupData && dupData.groups.length) || 0; loadDup(true); };
+$('dupDrive').onchange = function () { dupFolder = ''; loadDup(); loadRemoved(); };
 
-$('dupDrive').onchange = loadWhere;
-document.querySelectorAll('#pane-duplicates [data-t]')
-  .forEach(function (b) { b.onclick = function () { act(b.dataset.t, b); }; });
+// ── Recently Removed: on each drive, how much and since when; Delete All ─────
+// Nothing in it is deleted by itself. A week is suggested; Delete All is always there,
+// with Sure? saying when the week is not over yet.
+async function loadRemoved() {
+  let r;
+  try { r = await (await fetch('removed.php?t=' + Date.now())).json(); } catch (e) { return; }
+  if (r.error) return;
+  const html = '<div class="panel rr"><header><b>Recently Removed</b>' +
+    '<span class="info" tabindex="0" data-tip="What Remove took out of the way, on the same drive, in a folder called _Recently Removed. Nothing in it is deleted until you press Delete All. Rushes suggests keeping it ' + r.wait_days + ' days, in case something was needed.">i</span></header>' +
+    r.places.map(function (p) {
+      const days = p.at ? Math.floor((Date.now() / 1000 - p.at) / 86400) : 0;
+      const left = Math.max(0, r.wait_days - days);
+      const when = !p.files ? 'Empty' : (p.at ? 'removed ' + (days < 1 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago') : '') +
+        (p.ready ? ' · ready to delete' : ' · suggested to keep ' + left + ' more ' + (left === 1 ? 'day' : 'days'));
+      return '<div class="row"><span class="nm">' + esc(p.name) + '<small>' + (p.files ? tb(p.bytes) + ' · ' + p.files.toLocaleString() + ' files · ' : '') + esc(when) + '</small></span>' +
+        (p.files && r.mac ? '<button class="btn quiet" data-empty="' + esc(p.drive) + '" data-ready="' + (p.ready ? 1 : 0) + '" data-left="' + left + '" data-name="' + esc(p.name) +
+          '" data-size="' + esc(tb(p.bytes)) + '">Delete All</button>' : '') + '</div>';
+    }).join('') + '</div>';
+  ['rrDup', 'rrCache'].forEach(function (id) { $(id).innerHTML = html; });
+  document.querySelectorAll('[data-empty]').forEach(function (b) {
+    b.onclick = function () {
+      const what = 'Deletes everything in Recently Removed on ' + b.dataset.name + ' (' + b.dataset.size + '), for good: it cannot be recovered.' +
+        (b.dataset.ready === '1' ? '' : ' Rushes suggests waiting ' + b.dataset.left + ' more ' + (b.dataset.left === '1' ? 'day' : 'days') + '.');
+      if (!sure(b, what, 'empty:' + b.dataset.empty)) return;
+      b.disabled = true; b.textContent = 'asked…';
+      job('empty', { drive: b.dataset.empty }).then(function () { b.textContent = 'Asked ✓ deleting within a minute'; setTimeout(loadRemoved, 5000); })
+        .catch(function (e) { b.disabled = false; b.textContent = 'Delete All'; oops(e.message); });
+    };
+  });
+}
 
 // ── asking for work ────────────────────────────────────────────────────────
 const ASK = {
   scan:     <?= on_mac() ? json_encode('Read the files that have the same size as another, every byte, to find the ones that are the same (on this Mac). Hours for a big archive the first time, minutes after: what was read is remembered. Pausing copying stops it, and it carries on next time. Moves nothing.')
                  : json_encode('Read every file in the archive to find the ones that are the same (Czkawka, in its container). Hours for a big archive; other jobs wait meanwhile. Moves nothing.') ?>,
   plan:     'Look through the archive for files that are the same file. Moves nothing.',
-  apply:    'Move every duplicate copy to the holding folder. Nothing is deleted, and this can be undone.',
-  undo:     'Put everything in the holding folder back where it came from.',
+  apply:    'Every extra copy goes to Recently Removed. Nothing is deleted; Recover puts them back.',
+  undo:     'Every duplicate copy in Recently Removed goes back where it was.',
   'organize-undo':  'Put back the files the old date-based layout moved.',
   import:   'Rebuild search from the file list. Seconds to minutes.',
   'gpu-test': 'Measure what the video chip can do: test encodes and one real clip, a few minutes. Writes a report; makes no video files. Downloads a public ffmpeg container image.',
@@ -644,7 +725,7 @@ const ASK = {
   'proxy-build': 'Make the missing proxies, in the background on the archive machine. It takes hours to days; stopping and starting again loses nothing.',
   'proxy-stop':  'Stop making proxies. The one being made is thrown away; everything finished is kept.',
   manifest: 'Write down every file and its size, then rebuild search. A few minutes.',
-  verify:   'Check every file in the holding folder still has a twin in the archive. Moves nothing.',
+  verify:   'Check every file in Recently Removed still has a twin in the archive. Moves nothing.',
   df:       'Measure free space.'
 };
 
@@ -663,7 +744,7 @@ async function act(name, btn) {
     setTimeout(function () { btn.textContent = was; btn.disabled = false; load(); }, 3000);
     return;
   }
-  if (name === 'cachejunk') { return moveCache(btn); }
+  if (name === 'cachejunk') { show('cache'); return; }
   if (name === 'scripts') {
     // Asked on the button itself, no pop-up: press again within 5 seconds.
     if (!btn.dataset.sure) {
@@ -679,13 +760,12 @@ async function act(name, btn) {
     } catch (e) { btn.textContent = 'Could not reach the archive'; }
     setTimeout(load, 3000); return;
   }
-  if (name === '#transfers'){ show('transfers'); return; }
+  if (name.charAt(0) === '#'){ show(name.slice(1)); return; }      // a card's button that opens a section
   if (ASK[name] && !sure(btn, ASK[name], 'act:' + name)) return;
   const was = btn.textContent;
   btn.disabled = true; btn.textContent = 'asked…';
   try {
     const ask = { action: name };
-    if (name === 'plan' || name === 'apply') ask.keep_side = $('keepSide').value;   // run.php checks it again
     if (['plan', 'apply', 'undo', 'verify'].includes(name) && $('dupDrive').value) ask.drive = $('dupDrive').value;
     const j = await (await fetch('../run.php', { method: 'POST',
       body: new URLSearchParams(ask) })).json();
@@ -706,12 +786,12 @@ document.querySelectorAll('#exports a').forEach(function (a) {
   });
 });
 
-// ── cache ──────────────────────────────────────────────────────────────────
+// ── cache: Remove and Recover, as for duplicates ─────────────────────────────
 async function loadCache() {
   try {
     const d = await (await fetch('junk.php?json=1&t=' + Date.now())).json();
     const n = d.total.files, b = d.total.bytes;        // each file once, even when two groups name it
-    $('cTotal').textContent = n.toLocaleString() + ' files · ' + tb(b);
+    $('cHead').innerHTML = n ? '<span class="num">' + tb(b) + '</span> of cache, in ' + n.toLocaleString() + (n === 1 ? ' file' : ' files') : 'No cache to remove ✓';
     $('cRows').innerHTML = d.sweep.map(function (x) {
       return '<div class="row' + (x.files ? '' : ' dim') + '"><span class="nm">' + esc(x.label) + '</span>' +
         '<span class="n">' + x.files.toLocaleString() + '</span><span class="sz">' + tb(x.bytes) + '</span></div>';
@@ -721,67 +801,38 @@ async function loadCache() {
         (x.why ? '<small>' + esc(x.why) + '</small>' : '') + '</span>' +
         '<span class="n">' + x.files.toLocaleString() + '</span><span class="sz">' + tb(x.bytes) + '</span></div>';
     }).join('');
+    $('cKeepN').textContent = '(' + d.keep.length + ' kinds, ' + d.keep.reduce(function (a, x) { return a + x.files; }, 0).toLocaleString() + ' files)';
     $('cEx').textContent = d.examples.join('\n') || 'Nothing to move.';
     $('cMove').disabled = !n;
     $('nCache').textContent = n ? tb(b) : '';
-    // On a Mac, the person's own drives: caches that rebuild are deleted (runner.py → cache_clean)
-    $('cOwnBox').hidden = !d.mac; cacheOwn = !!d.own;
-    $('cOwn').textContent = d.own ? 'On — turn off' : 'Off — turn on';
-    $('cMove').textContent = d.own ? 'Clear them out' : 'Move them out';
-    if (d.own) $('cNote').textContent = 'Deleted, for good: editing software makes them again from the originals when it needs them. The space comes back at once.';
   } catch (e) {
     $('cRows').innerHTML = '<div class="empty">Could not count the cache: ' + esc(e.message) + '</div>';
   }
 }
-let cacheOwn = false;
-$('cMove').onclick = function () { moveCache(this); };
-$('cOwn').onclick = async function () {
-  const b = this; b.disabled = true;
-  try {
-    const j = await (await fetch('junk.php', { method: 'POST', body: new URLSearchParams({ own: cacheOwn ? '0' : '1' }) })).json();
-    if (j.error) oops(j.error);
-    else b.textContent = j.own ? 'On ✓ caches that rebuild will be deleted' : 'Off ✓ caches will be moved aside';
-  } catch (e) { oops('could not do that: ' + e.message); }
-  setTimeout(function () { b.disabled = false; loadCache(); }, 2500);
-};
-// Undo for "Move them out": asked twice on the button itself, then a job.
-$('cBack').onclick = async function () {
-  const b = this;
-  if (!b.dataset.sure) {
-    b.dataset.sure = '1'; b.textContent = 'Sure? Put every cache file back';
-    setTimeout(function () { delete b.dataset.sure; b.textContent = 'Put them back'; }, 5000); return;
-  }
-  delete b.dataset.sure; b.disabled = true; b.textContent = 'asked…';
-  try {
-    const j = await (await fetch('../run.php', { method: 'POST', body: new URLSearchParams({ action: 'cache-undo' }) })).json();
-    if (j.error) { oops(j.error); } else { b.textContent = 'Asked ✓ The runner puts them back within a minute (Activity shows it)'; }
-  } catch (e) { oops('could not do that: ' + e.message); }
-  setTimeout(function () { b.disabled = false; b.textContent = 'Put them back'; load(); }, 4000);
-};
-
-// Two calls behind one button: work out which files are rebuildable scratch,
-// then move them. They go to the holding folder, not the bin.
-async function moveCache(btn) {
-  if (!sure(btn, cacheOwn ? 'Caches that rebuild themselves are deleted, for good; the rest go to the holding folder. ' +
-      'Editing software makes them again from the originals when it needs them.'
-      : 'They go to the holding folder, not the bin; the space comes back when you empty that folder. ' +
-      'Editing software rebuilds them from the originals, so nothing is lost.', 'cache-out')) return;
-  const was = btn.textContent;
+// Remove: work out which files are cache now, then move them, into Recently Removed
+$('cMove').onclick = async function () {
+  const btn = this;
+  if (!sure(btn, 'They go to Recently Removed, on the same drive: nothing is deleted, and Recover puts them back. ' +
+      'Editing software makes them again from the originals when it needs them.', 'cache-out')) return;
   btn.disabled = true; btn.textContent = 'listing them…';
   try {
     const r = await fetch('junk.php?write=1&t=' + Date.now());
     if (!r.ok) throw new Error('junk.php said ' + r.status);
     btn.textContent = 'asked…';
-    const j = await (await fetch('../run.php', { method: 'POST',
-      body: new URLSearchParams({ action: 'cacheclean' }) })).json();
-    if (j.error) { oops(j.error); btn.disabled = false; btn.textContent = was; return; }
-    busy = 'cacheclean';
-  } catch (e) {
-    oops('could not do that: ' + e.message);
-    btn.disabled = false; btn.textContent = was;
-  }
-  setTimeout(load, 1200);
-}
+    await job('cacheclean');
+    $('cSaid').textContent = 'Asked ✓ Removing starts within a minute; Activity says when it is done.';
+  } catch (e) { $('cSaid').textContent = 'Did not happen: ' + e.message; }
+  setTimeout(function () { btn.textContent = 'Remove'; btn.disabled = false; }, 4000);
+};
+// Recover: every cache file in Recently Removed goes back where it was
+$('cBack').onclick = async function () {
+  const b = this;
+  if (!sure(b, 'Every cache file in Recently Removed goes back where it was.', 'cache-back')) return;
+  b.disabled = true; b.textContent = 'asked…';
+  try { await job('cache-undo'); $('cSaid').textContent = 'Asked ✓ They go back within a minute; Activity says when it is done.'; }
+  catch (e) { $('cSaid').textContent = 'Did not happen: ' + e.message; }
+  setTimeout(function () { b.disabled = false; b.textContent = 'Recover'; }, 4000);
+};
 
 function oops(msg) {
   $('err').hidden = false;
@@ -1108,6 +1159,12 @@ async function load() {
   catch (e) { oops('The archive is not answering.'); return; }
   if (d.error) { oops(d.error); return; }
   $('err').hidden = true;
+  // A Duplicates or Cache job that has just finished: what it found or moved, at once
+  const was = lastRunning; lastRunning = d.running || '';
+  if (was && !lastRunning && (pane === 'duplicates' || pane === 'cache')) {
+    if (pane === 'duplicates') loadDup(); else loadCache();
+    loadRemoved();
+  } else if (pane === 'duplicates' && was !== lastRunning) drawDup();
 
   secs = (d.sections || []).filter(x => x.state !== 'done');
   ticked = new Set([...ticked].filter(p => secs.some(x => x.path === p)));
@@ -1211,7 +1268,7 @@ async function load() {
   drawMove(d);
 
   $('tools').innerHTML = [['manifest', 'Rebuild the file list'], ['import', 'Rebuild search'],
-    ['verify', 'Check the holding folder'], ['df', 'Measure free space'], ['proxy-plan', 'Plan proxies (changes nothing)'],
+    ['verify', 'Check Recently Removed'], ['df', 'Measure free space'], ['proxy-plan', 'Plan proxies (changes nothing)'],
     ['gpu-test', 'Test the video chip (changes nothing, about a minute)']]
     .map(function (a) { return '<button class="btn quiet" data-t="' + a[0] + '">' + a[1] + '</button>'; })
     .join('');
@@ -1221,7 +1278,7 @@ async function load() {
 
   // Every tool says where it is: asked, running, finished — and the video
   // chip test shows its result right here.
-  const TOOL = {manifest: 'Rebuild the file list', import: 'Rebuild search', verify: 'Check the holding folder', df: 'Measure free space',
+  const TOOL = {manifest: 'Rebuild the file list', import: 'Rebuild search', verify: 'Check Recently Removed', df: 'Measure free space',
     'proxy-plan': 'Plan proxies', 'proxy-build': 'Make proxies', 'gpu-test': 'Test the video chip', 'proxy-test': 'Test proxy settings', scan: 'Find duplicates'};
   const tq = d.queued || [];
   $('toolState').innerHTML =

@@ -344,7 +344,7 @@ function draw() {
       '<span class="n">' + g.rows.length.toLocaleString() + ' file' +
       (g.rows.length === 1 ? '' : 's') + (gb ? ' · ' + tb(gb) : '') + '</span></header>';
     g.rows.forEach(function (r) {
-      const moved = r.path.indexOf('/_duplicates/') > -1;
+      const moved = r.path.indexOf('/_duplicates/') > -1 || r.path.indexOf('/_Recently Removed/') > -1;
       const k = r.kind || 'other';
       html += '<div class="row pick' + (moved ? ' dim' : '') + '" data-p="' + esc(r.path) + '">' +
         '<span class="thumb k-' + esc(k) + '">' + (ICON[k] || ICON.file || '') + '</span>' +

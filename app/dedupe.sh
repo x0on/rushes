@@ -79,7 +79,7 @@ if [ "$MODE" = "--apply" ] && [ -f "$PLAN" ] && [ "$PLAN" -nt "$RESULTS" ] && [ 
 fi
 
 if [ "$REUSE" = 0 ]; then
-[ -f "$RULES" ] || { echo "no rules at $RULES — press Look for duplicates in Manage, which writes them"; exit 1; }
+[ -f "$RULES" ] || { echo "no rules at $RULES — press Find duplicates in Manage, which writes them"; exit 1; }
 echo "which copy is never kept (from rules.json and Setup):"
 awk -F"$TAB" -v ks="$KEEP_SIDE" '{
     if ($2 == "card")    { if (ks != "project") next; w = "card dump, loses to the project copy" }

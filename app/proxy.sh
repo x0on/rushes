@@ -194,7 +194,7 @@ list | awk -v OFS="$TAB" -v share="$SHARE" -v proot="$PROXY_ROOT" -v only="$ONLY
     # the index and find both give full paths: make them relative to the share
     if (index(rel, share "/") == 1) rel = substr(rel, length(share) + 2)
     if (only != "" && index(rel, only "/") != 1) next
-    if (rel ~ /^(PROXIES|_duplicates)\//) next
+    if (rel ~ /^(PROXIES|_duplicates|_Recently Removed)\//) next
     if (rel ~ /(^|\/)@Recycle\//) next
     if (rel !~ /\.(mxf|MXF|mov|MOV|mp4|MP4|avi|AVI|mts|MTS|m4v|M4V|braw|BRAW|r3d|R3D)$/) next
     src = share "/" rel

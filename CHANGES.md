@@ -3,7 +3,22 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.3 — October 2026 (being tried on a Mac)
+## 0.12.4 — October 2026 (being tried on a Mac)
+
+- **Duplicates, as in Photos:** one button, **Find duplicates**; then what it
+  found, biggest first: the copy Rushes keeps and why, and **Keep this one**
+  beside any other. **Remove**, **Recover**. No rule to choose first.
+- **Cache in the same shape:** how much, **Remove**, **Recover**; what is never
+  touched folded away. The "my own drives" switch is gone: nothing is
+  deleted by itself.
+- **Recently Removed:** where Remove puts things (the folder `_duplicates` is
+  renamed by itself, and Recover still finds everything). How much, since
+  when, a week suggested, then **Delete All**, with Sure?; Activity says who
+  deleted what.
+- **One scroll bar** on Manage's pages: what sits above a page makes it
+  shorter, never the window longer.
+
+## 0.12.3 — October 2026
 
 - **The name is asked before anything else,** over the page, until it is given
   (no Not now): Activity can then say who did everything. Asked once per

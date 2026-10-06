@@ -17,18 +17,6 @@
 require __DIR__ . '/schema.php';
 header('Content-Type: text/plain');
 
-// On a Mac: are these the person's own drives (caches deleted) or a team's archive
-// (moved aside)? Manage → Cache asks; signed in only.
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['own'])) {
-    require_once __DIR__ . '/auth.php';
-    header('Content-Type: application/json');
-    if (!may_act((string)($_POST['pass'] ?? ''))) { http_response_code(403); exit(json_encode(['error' => 'sign in first'])); }
-    if (!on_mac()) { http_response_code(400); exit(json_encode(['error' => 'Only Rushes on a Mac deletes caches; here they are moved aside.'])); }
-    $s = settings(); $s['archive']['own'] = $_POST['own'] === '1';
-    if (!save_settings($s)) { http_response_code(500); exit(json_encode(['error' => 'Could not save — is the web folder writable?'])); }
-    exit(json_encode(['own' => $s['archive']['own']]));
-}
-
 // sweep: regenerated from the originals, safe to move out.
 // What counts as rebuildable scratch, and what is crash recovery that must never
 // be swept, both come from rules.json. Somebody using different editing software
@@ -74,7 +62,7 @@ if (($_GET['json'] ?? '') === '1') {
         $q = $db->query("SELECT path FROM files WHERE " . implode(' OR ', $sqls) . " LIMIT 6");
         while ($r = $q->fetchArray(SQLITE3_ASSOC)) $ex[] = substr($r['path'], strlen(archive_dir()) + 1);
     }
-    echo json_encode(['sweep' => $sweep, 'keep' => $keep, 'examples' => $ex, 'mac' => on_mac(), 'own' => own_drives(),
+    echo json_encode(['sweep' => $sweep, 'keep' => $keep, 'examples' => $ex, 'mac' => on_mac(),
                       'total' => ['files' => (int)$all['n'], 'bytes' => (int)$all['b']]], JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -105,7 +93,7 @@ while ($r = $q->fetchArray(SQLITE3_ASSOC)) echo '  ' . $r['path'] . "\n";
 
 if (($_GET['write'] ?? '') !== '1') {
     echo "\nNothing written. Add ?write=1 to prepare the list,\n";
-    echo "then press \"Move them out\" in Manage → Cache to move it aside.\n";
+    echo "then press \"Remove\" in Manage → Cache to put it in Recently Removed.\n";
     exit;
 }
 
@@ -126,5 +114,5 @@ while ($r = $q->fetchArray(SQLITE3_ASSOC)) { fwrite($fh, $r['path'] . "\n"); $n+
 fclose($fh);
 
 printf("\nwrote %s paths to %s\n", number_format($n), $out);
-echo "Nothing has moved yet. Manage -> Cache -> \"Move them out\".\n";
-echo "They go to the holding folder first, same as everything else.\n";
+echo "Nothing has moved yet. Manage -> Cache -> \"Remove\".\n";
+echo "They go to Recently Removed first, same as everything else.\n";

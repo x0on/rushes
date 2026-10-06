@@ -10,7 +10,8 @@
 header('Content-Type: application/json');
 
 
-$allowed = ['plan', 'apply', 'undo', 'reindex', 'cacheclean', 'df',
+// find: Find duplicates (which files are the same, then the plan) in one press; empty: Delete All in Recently Removed
+$allowed = ['plan', 'apply', 'undo', 'find', 'empty', 'reindex', 'cacheclean', 'df',
             // the old date-based layout: only its undo is left (see organize.sh)
             'organize-undo', 'scan', 'manifest', 'holding',
             'cache-undo', 'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test', 'proxy-remake', 'reset-breaker'];
@@ -21,7 +22,9 @@ require_once __DIR__ . '/db/auth.php';
 $action    = $_POST['action']    ?? '';
 $pass      = $_POST['pass']      ?? '';
 $keep_side = $_POST['keep_side'] ?? 'project';
-$dest      = $_POST['dest']      ?? archive_dir() . '/_duplicates';
+// Recently Removed: where Remove puts copies (on a NAS still its old name, _duplicates: runner.sh)
+$HOLD      = on_mac() ? '_Recently Removed' : '_duplicates';
+$dest      = $_POST['dest']      ?? archive_dir() . "/$HOLD";
 $stills    = ($_POST['stills'] ?? '0') === '1' ? '1' : '0';
 $exclude   = preg_replace('/[^A-Za-z0-9 ,_.\/-]/', '', $_POST['exclude'] ?? '');
 // letters of any language (Fútbol, Año), digits, and a few marks; the runner checks again
@@ -45,13 +48,20 @@ if (!in_array($action, $allowed, true)) {
     exit;
 }
 
+// Delete All is done by the Rushes app's own runner; a NAS's runner.sh does not have it yet
+if ($action === 'empty' && !on_mac()) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Delete All is not on a NAS yet: empty the _duplicates folder in File Station.']);
+    exit;
+}
+
 if (!in_array($keep_side, ['project', 'card', 'short', 'oldest'], true)) {
     $keep_side = 'project';
 }
 
 // destination must stay inside the video share
 if (strpos($dest, archive_dir() . '/') !== 0 || strpos($dest, '..') !== false) {
-    $dest = archive_dir() . '/_duplicates';
+    $dest = archive_dir() . "/$HOLD";
 }
 $dest = rtrim($dest, '/');
 
@@ -59,26 +69,31 @@ if (!is_dir($QUEUE)) { @mkdir($QUEUE, 0777, true); }
 
 // Which copy of a duplicate is never kept: written for dedupe.sh from
 // rules.json and Manage → Duplicates now, so the plan follows what the settings say today.
-if (in_array($action, ['plan', 'apply'], true) && dedupe_rules_write() === null) {
+if (in_array($action, ['plan', 'apply', 'find'], true) && dedupe_rules_write() === null) {
     http_response_code(500);
     echo json_encode(['error' => 'could not write dedupe-rules.tsv — is the web folder writable?']);
     exit;
 }
 
-$file = $QUEUE . '/' . date('Ymd-His') . '-' . substr(md5(uniqid('', true)), 0, 6) . '.job';
-$body = "ACTION=$action\nKEEP_SIDE=$keep_side\nDEST=$dest\nSTILLS=$stills\nEXCLUDE=$exclude\nQUERY=$query\n"
-      . ($drive !== '' && preg_match('/^[^\r\n=]+$/', $drive) ? "DRIVE=$drive\n" : '');
-
-if (@file_put_contents($file, $body) === false) {
-    http_response_code(500);
-    echo json_encode(['error' => 'could not write job file — is the queue folder in the web folder writable?']);
-    exit;
+// Who asked: the name this browser was given, so Activity says who removed, recovered or deleted
+require_once __DIR__ . '/db/activity.php';
+$who = preg_replace('/[\r\n=]+/', ' ', activity_who());
+// A NAS's runner.sh knows scan and plan, not find: the two, one after the other
+$jobs = $action === 'find' && !on_mac() ? ['scan', 'plan'] : [$action];
+foreach ($jobs as $i => $one) {
+    $file = $QUEUE . '/' . date('Ymd-His') . "-$i" . substr(md5(uniqid('', true)), 0, 6) . '.job';
+    $body = "ACTION=$one\nKEEP_SIDE=$keep_side\nDEST=$dest\nSTILLS=$stills\nEXCLUDE=$exclude\nQUERY=$query\nWHO=$who\n"
+          . ($drive !== '' && preg_match('/^[^\r\n=]+$/', $drive) ? "DRIVE=$drive\n" : '');
+    if (@file_put_contents($file, $body) === false) {
+        http_response_code(500);
+        echo json_encode(['error' => 'could not write job file — is the queue folder in the web folder writable?']);
+        exit;
+    }
 }
 
 // Said in Activity: who asked for what (the jobs that change something, not the looks)
-$said = ['apply' => 'Moved duplicate copies into the holding folder (nothing deleted)', 'undo' => 'Put duplicate copies back where they were',
-         'cacheclean' => 'Moved cache files that rebuild themselves into the holding folder', 'cache-undo' => 'Put cache files back',
-         'organize-undo' => 'Undid the old date-based layout', 'verify' => 'Asked for every copy to be checked',
+// (Remove, Recover and Delete All are said by the runner when done, with how many: runner.py)
+$said = ['organize-undo' => 'Undid the old date-based layout', 'verify' => 'Asked for every copy to be checked',
          'proxy-build' => 'Started making previews', 'proxy-stop' => 'Stopped making previews'][$action] ?? '';
-if ($said !== '') { require_once __DIR__ . '/db/activity.php'; activity_add('changed', $said . ($drive !== '' ? ' · on ' . basename($drive) : '')); }
+if ($said !== '') activity_add('changed', $said . ($drive !== '' ? ' · on ' . basename($drive) : ''));
 echo json_encode(['queued' => $action, 'runs_within' => '60 seconds']);

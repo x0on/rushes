@@ -189,10 +189,10 @@ if ($junk && $junk['n'] > limit('cache_min_files', 100)) {
         'title' => number_format($junk['n']) . ' cache files are taking up ' . tb($junk['b']),
         'body' => 'Premiere and Capture One scratch files, sitting in the archive instead of on an editing machine. '
                 . 'They rebuild themselves from the originals, so nothing is lost by removing them.',
-        'act' => ['cachejunk', 'Move them out']];
+        'act' => ['cachejunk', 'Look at them']];
 }
 
-// the holding folder
+// Recently Removed (the archive's): what Remove put out of the way, waiting for Delete All
 $hold = (int)@file_get_contents("$WEB/holding-kb.txt") * 1024;
 if ($hold > limit('holding_min_bytes', 1073741824)) {
     $verdict = null;
@@ -206,11 +206,11 @@ if ($hold > limit('holding_min_bytes', 1073741824)) {
         meta_set('verify_verdict', json_encode(['at' => $vm, 'verdict' => $verdict]));
     }
     $c[] = ['level' => $verdict === 'SAFE' ? 'good' : 'info',
-        'title' => tb($hold) . ' is waiting in the holding folder',
+        'title' => tb($hold) . ' is in Recently Removed',
         'body' => $verdict === 'SAFE'
-            ? 'Checked: every file in there has a surviving twin on the archive. Deleting it is how you get the space back.'
-            : 'Files moved aside by the cleanup. Check them before deleting — the space only comes back once they are gone.',
-        'act' => ['verify', $verdict === 'SAFE' ? 'Check again' : 'Check it is safe']];
+            ? 'Checked: every duplicate in there has a surviving twin on the archive. Delete All, in Duplicates or Cache, gives the space back.'
+            : 'What Remove took out of the way, nothing deleted yet. Delete All, in Duplicates or Cache, gives the space back; Rushes suggests waiting a week.',
+        'act' => $verdict === 'SAFE' ? ['#duplicates', 'Open Duplicates'] : ['verify', 'Check it is safe']];
 }
 
 // bringing footage in
