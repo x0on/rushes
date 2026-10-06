@@ -1906,7 +1906,7 @@ launcher) update from inside the app, since 0.9.2. Where a newer one is found:
 - **Rushes running inside the app, on this Mac** (0.12.7): there is no other
   Rushes to ask, so it looks at the releases of Rushes on GitHub
   (`RELEASES` in `release.py`): the newest release's version, and its
-  `Rushes.zip`. Before 0.12.7 it asked itself, and always said it was up to date.
+  `Rushes 0.12.8.zip` (the version in its name). Before 0.12.7 it asked itself, and always said it was up to date.
 - **A Rushes elsewhere** (a NAS, or the Mac an editor's Watcher reports to):
   Rushes has one version number for everything (`app/VERSION`), so the version
   that Rushes is, is the one offered. The app comes from Rushes

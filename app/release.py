@@ -43,7 +43,8 @@ FILES = ("analyze.py", "ingest.py", "release.py", "transfer_state.py")
 # is taken only when the new app is signed with exactly this one.
 APP_CERT_SHA256 = "74bc21677be17b1aa348e67ea1d5912ddca4a27f1d133264ad43f5d4c988b6c5"
 # Where new versions of the Mac apps are published: this repository's releases on
-# GitHub (tag v0.12.8, with Rushes.zip, Rushes.Watcher.zip and the .dmg attached).
+# GitHub (tag v0.12.8, with "Rushes 0.12.8.zip", "Rushes Watcher 0.12.8.zip" and
+# "Rushes 0.12.8.dmg" attached).
 # A fork that publishes its own apps puts its own here, and its certificate above.
 RELEASES = "x0on/rushes"
 
@@ -264,9 +265,11 @@ def app_update(url, app, say=print, check_only=False, result=""):
             try:
                 if assets is None:
                     _, assets = latest_release(theirs)
-                z = (name + ".zip").replace(" ", ".")
-                if z not in assets:
-                    raise RuntimeError(f"the release has no {z}")
+                # "Rushes 0.12.8.zip" (every build carries its version in its name), or "Rushes.zip"
+                z = next((n for n in (f"{name} {theirs}.zip".replace(" ", "."), f"{name}.zip".replace(" ", "."))
+                          if n in assets), "")
+                if not z:
+                    raise RuntimeError(f"the release has no {name} {theirs}.zip")
                 fetch(assets[z], "GitHub"); got = True
             except Exception as e:
                 why.append(str(e))

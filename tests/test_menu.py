@@ -206,11 +206,11 @@ class AppUpdateTests(unittest.TestCase):
                 if "helper.php?app=" in u: raise OSError("404 Not Found")
                 if "/releases/tags/v0.12.8" in u:
                     return io.BytesIO(json.dumps({"tag_name": "v0.12.8", "assets": [
-                        {"name": "Rushes.Watcher.zip", "browser_download_url": "https://gh.test/Rushes.Watcher.zip"}]}).encode())
+                        {"name": "Rushes.Watcher.0.12.8.zip", "browser_download_url": "https://gh.test/Rushes.Watcher.0.12.8.zip"}]}).encode())
                 return io.BytesIO(b"not a zip")
             with patch("urllib.request.urlopen", side_effect=mac), self.assertRaises(RuntimeError) as e:
                 release.app_update("http://rushes.test", str(app), say=lambda m: None)
-            self.assertIn("https://gh.test/Rushes.Watcher.zip", asked, asked)
+            self.assertIn("https://gh.test/Rushes.Watcher.0.12.8.zip", asked, asked)
             self.assertIn("could not", str(e.exception))      # here no macOS to unpack it: said, nothing changed
             with patch("urllib.request.urlopen", side_effect=__import__("urllib.error").error.HTTPError("u", 404, "Not Found", {}, None)), \
                  self.assertRaises(RuntimeError) as e:

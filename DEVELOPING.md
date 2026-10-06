@@ -187,13 +187,14 @@ The apps update from the releases of this repository on GitHub (`RELEASES` in
 `app/release.py`). For each version handed out, after the pull request is merged:
 
 1. Build both apps (`mac/build.py`, `mac/build.py watcher`), sign them with the
-   Rushes certificate, and zip each signed app: `Rushes.zip` (holding
-   `Rushes.app`) and `Rushes Watcher.zip` (holding `Rushes Watcher.app`). Make the
+   Rushes certificate, and zip each signed app: `Rushes 0.12.8.zip` (holding
+   `Rushes.app`) and `Rushes Watcher 0.12.8.zip` (holding `Rushes Watcher.app`):
+   every build carries its version in its name. Make the
    disk image for new installs (`mac/dmg.py`).
 2. On GitHub: Releases → Draft a new release. Tag `v` and the version
    (`v0.12.8`), on `main`. Title "Rushes 0.12.8"; the notes are that version's
    part of CHANGES.md.
-3. Attach `Rushes.zip`, `Rushes Watcher.zip` and `Rushes 0.12.8.dmg`, and
+3. Attach the two zips and `Rushes 0.12.8.dmg`, and
    Publish. GitHub shows the spaces in names as dots; the apps look for them so.
 
 An app only takes a release signed with the certificate whose fingerprint is
