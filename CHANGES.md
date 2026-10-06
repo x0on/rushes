@@ -3,7 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.1 — October 2026 (being tried on a Mac)
+## 0.12.2 — October 2026 (being tried on a Mac)
+
+- **One copy, one window:** Rushes runs from where it was dragged, and the copy
+  it made in the home folder's Applications before goes to the Trash. Opened
+  again, its window comes to the front instead of a second one.
+
+## 0.12.1 — October 2026
 
 - **Rushes comes as a disk image** (`Rushes 0.12.1.dmg`): open it, and drag
   Rushes onto Applications, as Mac apps usually come. Each build carries its

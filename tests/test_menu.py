@@ -119,6 +119,29 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(got["items"][-1], {"label": "Quit Rushes", "do": "quit"})
 
 
+class OneCopyTests(unittest.TestCase):
+    """Rushes runs from where it was put, one copy only (0.12.2: the disk image)."""
+    def test_dragged_to_applications_it_stays_there_and_the_other_copy_is_found(self):
+        import plistlib
+        with tempfile.TemporaryDirectory() as t:
+            m = front("Rushes", Path(t))                      # RUSHES_APP: /Applications/Rushes.app
+            self.assertEqual(m.HOMEAPP, "/Applications/Rushes.app", "dragged into Applications: run from there")
+            self.assertEqual(m.other_copy(), "", "no service yet: no other copy")
+            os.makedirs(os.path.dirname(m.PLIST))
+            with open(m.PLIST, "wb") as f:                    # set up before from Applications in the home folder
+                plistlib.dump({"ProgramArguments": [f"{t}/Applications/Rushes.app/Contents/MacOS/Rushes", "--service"]}, f)
+            self.assertEqual(m.other_copy(), f"{t}/Applications/Rushes.app", "the copy the service ran is the one to retire")
+            with open(m.PLIST, "wb") as f:
+                plistlib.dump({"ProgramArguments": ["/Applications/Rushes.app/Contents/MacOS/Rushes", "--service"]}, f)
+            self.assertEqual(m.other_copy(), "", "the service runs this copy: nothing to retire")
+        with tempfile.TemporaryDirectory() as t, patch.dict(os.environ, {"RUSHES_NAME": "Rushes", "HOME": t,
+                                                                          "RUSHES_APP": "/Volumes/Rushes 0.12.2/Rushes.app"}):
+            spec = importlib.util.spec_from_file_location("front_dmg", HERE.parent / "mac/rushes_helper.py")
+            m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+            self.assertIn(m.HOMEAPP, ("/Applications/Rushes.app", f"{t}/Applications/Rushes.app"),
+                          "opened from the disk image: it goes into Applications")
+
+
 class AppUpdateTests(unittest.TestCase):
     def test_newer_on_rushes_is_offered_in_the_menu(self):
         import plistlib

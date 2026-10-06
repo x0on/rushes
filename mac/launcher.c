@@ -34,6 +34,7 @@
 #include <time.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <dlfcn.h>
 #include <pthread.h>
@@ -256,6 +257,35 @@ static void refresh(id self, SEL cmd, id d) {
     }
 }
 
+// One window, never two: opened again (from Finder, the Dock, the menu bar's Open
+// window, or a second copy of the app), the window already open is brought to the
+// front instead. Its process is noted in ~/Library/Application Support/<name>/window.pid
+// and is believed only while it is this same app (its bundle ID), so a stale note
+// is harmless. 1: brought to the front, nothing more to do.
+static char winpid_[PATH_MAX] = "";
+static void forget_window(void) { if (*winpid_) unlink(winpid_); }
+static int window_already_open(void) {
+    const char *h = getenv("HOME");
+    if (!h) return 0;
+    char dir[PATH_MAX]; snprintf(dir, sizeof dir, "%s/Library/Application Support/%s", h, NAME);
+    mkdir(dir, 0755);
+    snprintf(winpid_, sizeof winpid_, "%s/window.pid", dir);
+    int pid = 0; FILE *f = fopen(winpid_, "r");
+    if (f) { if (fscanf(f, "%d", &pid) != 1) pid = 0; fclose(f); }
+    if (pid > 0 && pid != getpid() && kill(pid, 0) == 0 && objc_up()) {
+        id ra = ((id (*)(id, SEL, int))msg)(C("NSRunningApplication"), sel("runningApplicationWithProcessIdentifier:"), pid);
+        id mine = m0(m0(C("NSBundle"), "mainBundle"), "bundleIdentifier");
+        if (ra && mine && strcmp(utf8(m0(ra, "bundleIdentifier")), utf8(mine)) == 0) {
+            ((signed char (*)(id, SEL, unsigned long))msg)(ra, sel("activateWithOptions:"), 3);   // all its windows, in front
+            *winpid_ = 0;                                  // that window's note, not ours to remove
+            return 1;
+        }
+    }
+    if ((f = fopen(winpid_, "w"))) { fprintf(f, "%d\n", (int)getpid()); fclose(f); }
+    atexit(forget_window);
+    return 0;
+}
+
 // Opened again from Finder while it runs: the window, as an instance of its own.
 static signed char reopen(id self, SEL cmd, id a, signed char v) {
     (void)self; (void)cmd; (void)a; (void)v;
@@ -375,6 +405,8 @@ int main(int argc, char **argv) {
         snprintf(port_s, sizeof port_s, "%d", port);
         snprintf(addr, sizeof addr, "http://127.0.0.1:%d/%s/", port, key);
     }
+
+    if (port && ui && window_already_open()) return 0;      // one window: the open one comes to the front
 
     char **args = calloc((size_t)argc + 6, sizeof *args);
     int k = 0;

@@ -44,7 +44,23 @@ LABEL = "org.rushes.watcher" if WATCHER else "org.rushes.app"
 # Before 0.12 the app was Rushes Helper, org.rushes.helper: its background service is retired when Rushes is set up
 OLD_PLIST = os.path.join(HOME, "Library", "LaunchAgents", "org.rushes.helper.plist")
 PLIST = os.path.join(HOME, "Library", "LaunchAgents", LABEL + ".plist")
-HOMEAPP = os.path.join(HOME, "Applications", NAME + ".app")
+
+
+def _home_app():
+    """Where the app lives for good, the copy the background service runs: where the
+    person put it (Applications, or Applications in the home folder: dragged there from
+    the disk image), or else Applications when this Mac lets it be written, or else
+    Applications in the home folder (a Mac where the person is not an administrator).
+    One copy, never two."""
+    here = os.path.realpath(APP)
+    tops = ("/Applications", os.path.join(HOME, "Applications"))
+    if os.path.dirname(here) in tops:
+        return here
+    top = tops[0] if os.access(tops[0], os.W_OK) else tops[1]
+    return os.path.join(top, NAME + ".app")
+
+
+HOMEAPP = _home_app()
 WORKLOG = os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")      # what the work itself says
 # Rushes Watcher's own notes: its pairing (config.json), what it is doing (now.json), Pause watching (paused)
 WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
@@ -96,6 +112,19 @@ def service_points_here():
         return p.get("ProgramArguments", [""])[0].startswith(HOMEAPP + "/")
     except (OSError, plistlib.InvalidFileException):
         return False
+
+
+def other_copy():
+    """Another copy of this app that the background service runs (set up from there
+    before, such as Applications in the home folder before 0.12.2): this one, where the
+    person put it, takes its place, and that copy goes to the Trash. "" when there is none."""
+    try:
+        with open(PLIST, "rb") as f:
+            prog = plistlib.load(f).get("ProgramArguments", [""])[0]
+    except (OSError, plistlib.InvalidFileException):
+        return ""
+    app = prog.split("/Contents/MacOS/")[0]
+    return app if app.endswith("/" + NAME + ".app") and os.path.realpath(app) != os.path.realpath(HOMEAPP) else ""
 
 
 def was_helper():
@@ -421,30 +450,34 @@ def restart_service():
 
 
 def copy_to_applications():
-    """The background service runs the copy in Applications (in your home
-    folder): a place that stays put — not Downloads, and not the temporary
-    copy macOS runs a downloaded app from. Copied, then setup simply carries
+    """The background service runs the copy in Applications (HOMEAPP: where the
+    person put it, or Applications): a place that stays put — not Downloads, not the
+    disk image, and not the temporary copy macOS runs a downloaded app from. A copy
+    the service ran before, anywhere else, goes to the Trash. Copied, then setup simply carries
     on in this same window."""
-    here = os.path.realpath(APP)
-    if here == os.path.realpath(HOMEAPP):
-        return ""
-    log(f"copying the app from {here} to {HOMEAPP}")
-    os.makedirs(os.path.dirname(HOMEAPP), exist_ok=True)
-    if os.path.exists(HOMEAPP):
-        subprocess.run(["rm", "-rf", HOMEAPP])
-    r = subprocess.run(["ditto", here, HOMEAPP], capture_output=True, text=True)
-    if r.returncode:
-        return r.stderr.strip() or "ditto failed"
-    # Called "Rushes Helper" before 0.12: those copies go to the Trash, so they are never opened by mistake
-    for was in (os.path.join(os.path.dirname(HOMEAPP), "Rushes Helper.app"), "/Applications/Rushes Helper.app"):
-        if not WATCHER and was != HOMEAPP and os.path.isdir(was):
+    here, old = os.path.realpath(APP), other_copy()        # old: asked before the service is pointed here
+    if here != os.path.realpath(HOMEAPP):
+        log(f"copying the app from {here} to {HOMEAPP}")
+        os.makedirs(os.path.dirname(HOMEAPP), exist_ok=True)
+        if os.path.exists(HOMEAPP):
+            subprocess.run(["rm", "-rf", HOMEAPP])
+        r = subprocess.run(["ditto", here, HOMEAPP], capture_output=True, text=True)
+        if r.returncode:
+            return r.stderr.strip() or "ditto failed"
+        # It came from the download that was already allowed to open.
+        subprocess.run(["xattr", "-dr", "com.apple.quarantine", HOMEAPP], capture_output=True)
+    # Never two copies: the one the service ran before (anywhere else), and Rushes Helper
+    # (its name before 0.12), go to the Trash, so neither is ever opened by mistake
+    olds = [old] if old else []
+    if not WATCHER:
+        olds += [os.path.join(top, "Rushes Helper.app") for top in ("/Applications", os.path.join(HOME, "Applications"))]
+    for was in olds:
+        if os.path.isdir(was) and os.path.realpath(was) != os.path.realpath(HOMEAPP):
             try:
-                os.rename(was, os.path.join(HOME, ".Trash", f"Rushes Helper {int(time.time())}.app"))
-                log(f"the old {was} went to the Trash (it is Rushes now)")
+                os.rename(was, os.path.join(HOME, ".Trash", f"{os.path.basename(was)[:-4]} {int(time.time())}.app"))
+                log(f"the other copy, {was}, went to the Trash: {NAME} runs from {HOMEAPP}")
             except OSError as e:
-                log(f"the old {was} is still there ({e}): it can go to the Trash")
-    # It came from the download that was already allowed to open.
-    subprocess.run(["xattr", "-dr", "com.apple.quarantine", HOMEAPP], capture_output=True)
+                log(f"the other copy, {was}, is still there ({e}): it can go to the Trash")
     return ""
 
 
@@ -573,6 +606,11 @@ class Window:
         if self.s["url"] and not WATCHER and not service_points_here() and was_helper():
             # Set up before 0.12, as Rushes Helper: this app takes its place, with the same settings
             self.s.update(step="install", done=["Rushes Helper is called Rushes now: it takes its place"])
+            threading.Thread(target=lambda: self.install_quietly(self.s["url"]), daemon=True).start()
+        elif self.s["url"] and other_copy():
+            # Set up from another copy (Applications in the home folder, before 0.12.2): this copy,
+            # where the person put it, takes its place with the same settings and permissions
+            self.s.update(step="install", done=[f"{NAME} runs from {os.path.dirname(HOMEAPP)} now: the copy in {os.path.dirname(other_copy())} goes to the Trash"])
             threading.Thread(target=lambda: self.install_quietly(self.s["url"]), daemon=True).start()
         elif self.s["url"] and service_points_here() and has_full_disk_access():
             self.s["step"] = "home"
@@ -937,8 +975,8 @@ class Window:
                 self.s["done"] = self.s["done"] + [line]
         err = copy_to_applications()
         if err:
-            raise RuntimeError(f"Could not copy {NAME} into Applications in your home folder: " + err)
-        did(f"{NAME} is in Applications, in your home folder")
+            raise RuntimeError(f"Could not copy {NAME} into {os.path.dirname(HOMEAPP)}: " + err)
+        did(f"{NAME} is in {'Applications' if HOMEAPP.startswith('/Applications/') else 'Applications, in your home folder'}")
         if WATCHER:
             # Its code is inside the app; only where Rushes is, kept for it (paired in its window, next).
             os.makedirs(WDIR, exist_ok=True)
@@ -1149,7 +1187,7 @@ function draw() {
     b = '<h2>One switch left: Full Disk Access</h2>' +
       '<p>macOS keeps apps away from network drives and other disks until you allow it. ' + (s.watcher ? 'Rushes Watcher needs that to read your projects and the files they use, wherever they are on this Mac — nothing more.'
         : 'Rushes needs that to reach your drives: to read cards and drives when footage comes in, and to keep the archive and check its copies — nothing more.') + '</p>' +
-      '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows %NAME%. Turn %NAME% on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications in your home folder).</p>' +
+      '<p><b>Open System Settings</b> below: it opens at Full Disk Access, and Finder shows %NAME%. Turn %NAME% on in the list. If it is not in the list, drag it from the Finder window into the list (or press + and pick it from Applications).</p>' +
       '<p class="muted">If System Settings opens somewhere else, type Full Disk Access into its search field, top left.</p>' +
       (s.waiting ? '<div class="box"><span class="spin"></span>Waiting for the switch … this window moves on by itself the moment it is on.</div>' : '');
     f = btn('Later', 'later') + btn(s.waiting ? 'Show me where again' : 'Open System Settings', 'fda-open', true); break;
@@ -1172,7 +1210,7 @@ function draw() {
     b = '<h2>Remove %NAME% from this Mac?</h2><p>It stops, and no longer starts at login. ' + (s.watcher ? 'Projects already sent stay in the archive.' : 'The archive and its footage stay; anything half-copied carries on if you set it up again.') + '</p>';
     f = btn('Cancel', 'back-home') + btn('Remove', 'remove-yes', true); break;
   case 'removed':
-    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag %NAME% from Applications (in your home folder) to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ' +
+    b = '<div class="big">✓</div><h2>Removed</h2><p>It will not start again.</p><p>To finish, drag %NAME% from Applications to the Trash, and switch it off in Full Disk Access. Its notes stay until you delete them: ' +
       (s.watcher ? '~/Library/Application Support/Rushes Watcher (its pairing and what it delivered) and ~/Library/Logs/Rushes Watcher. Projects keep their “Rushes backups” folders.'
         : '~/archive-pilot (its progress and pairing), ~/Library/Application Support/Rushes and ~/Library/Logs/Rushes.') + '</p>';
     f = btn('Done', 'done', true); break;

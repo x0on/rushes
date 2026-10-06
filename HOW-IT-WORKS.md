@@ -1301,6 +1301,17 @@ row of buttons at the bottom: the window is closed with its red dot. While
 setting up, the side panel shows the steps instead. Rushes Watcher's window
 has the same shape, with Overview, Activity, Work and Help.
 
+**One copy, one window.** It comes as a disk image (`Rushes 0.12.2.dmg`): drag
+Rushes onto Applications. It runs from wherever it was put (Applications, or
+Applications in the home folder); opened from somewhere else (the disk image,
+Downloads), it puts itself in Applications, or in the home folder's
+Applications on a Mac where the person cannot write to Applications
+(`_home_app()`). A copy the background service ran before, anywhere else, goes
+to the Trash when it is set up (`other_copy()`), so there are never two. Opened
+again while its window is open (Finder, the Dock, the menu bar, another copy),
+the open window comes to the front instead of a second one
+(`window_already_open()` in the launcher).
+
 Rushes Helper is a Mac app with its own Python inside. Opened from Finder, it
 shows one window. Started by macOS in the background, it runs the helper, and
 shows its icon in the menu bar. Rushes Watcher, for editors' computers, is
