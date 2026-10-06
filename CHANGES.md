@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.8 — October 2026
+
+- **Release files carry their version in their names** (`Rushes 0.12.8.zip`,
+  `Rushes Watcher 0.12.8.zip`, `Rushes 0.12.8.dmg`); the app looks for its
+  version's zip. The first release published on GitHub.
+
 ## 0.12.7 — October 2026
 
 - **The menu bar menu, cleaner:** what it is doing now and the last thing that
