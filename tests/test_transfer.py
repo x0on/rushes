@@ -308,6 +308,34 @@ class CopyTests(unittest.TestCase):
             self.assertEqual(self.run_copy(), 0)
         self.assertEqual((self.dest / 'a.mov').read_bytes(), b'a' * 10)
 
+    def test_remembered_fingerprints_stay_bounded(self):
+        # Workload review: hash-cache.json is written whole every run; nothing ever left it.
+        m = self.mod; m.load_cache()
+        f = self.archive / 'a.mov'; f.write_bytes(b'one')
+        today = int(time.time() // 86400)
+        m._cache.update({f'F|{f}|3|1700000000': 'abc',                         # before 0.12.5: never matches again
+                         f'F2|{f}|3|1|1': ['abc', today],                       # this file before it changed
+                         f'F2|{self.archive}/gone.mov|3|1|1': ['abc', today - 400],  # not used for over a year
+                         f'F2|{self.archive}/other.mov|3|1|1': ['abc', today - 10]})  # recent, untouched: kept
+        m.digest(str(f), full=True)
+        m.save_cache()
+        kept = json.loads(m.CACHE.read_text())
+        self.assertEqual(sorted(k.split('|')[1].rsplit('/', 1)[1] for k in kept), ['a.mov', 'other.mov'], kept)
+        self.assertEqual(m.digest(str(f), full=True), kept[next(k for k in kept if 'a.mov' in k)][0])
+
+    def test_a_card_checked_once_is_not_read_again_next_time(self):
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        self.assertEqual(self.run_copy(), 0)
+        self.assertEqual(self.run_copy(), 0)                  # read in full once: both copies
+        opened = []
+        real = open
+        def watch(path, *a, **k):
+            if str(path).endswith('a.mov'): opened.append(str(path))
+            return real(path, *a, **k)
+        with patch('builtins.open', side_effect=watch):
+            self.assertEqual(self.run_copy(), 0)
+        self.assertEqual(opened, [], 'unchanged since: its remembered fingerprints answer')
+
     def test_missing_source_never_becomes_a_completed_empty_job(self):
         self.source.rmdir()
         self.run_copy()

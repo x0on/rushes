@@ -305,14 +305,29 @@ def load_manifest(refresh=False):
     return by_size
 
 
-_cache = {}
+# Remembered fingerprints (hash-cache.json, on this computer): key -> [fingerprint,
+# the day it was last used]. Saved whole once per run, so what it keeps stays
+# bounded: on saving, a fingerprint not used for CACHE_DAYS goes, and so does one
+# whose file has changed since (another key for the same file was used this run).
+# Keys from before 0.12.5 (date to the second only) never match again: they go too.
+CACHE_DAYS = 180
+_cache, _used = {}, set()
 def load_cache():
     global _cache
     try: _cache = json.loads(CACHE.read_text())
     except Exception: _cache = {}
 def save_cache():
-    try: CACHE.write_text(json.dumps(_cache))
-    except Exception: pass
+    today = int(time.time() // 86400)
+    fresh = {k.rsplit("|", 3)[0] for k in _used}            # "F2|path": files read this run
+    keep = {k: v for k, v in _cache.items()
+            if k[1:3] == "2|" and isinstance(v, list) and today - v[1] <= CACHE_DAYS
+            and (k in _used or k.rsplit("|", 3)[0] not in fresh)}
+    _cache.clear(); _cache.update(keep)
+    try:
+        tmp = CACHE.with_suffix(".part")
+        tmp.write_text(json.dumps(_cache)); os.replace(tmp, CACHE)
+    except Exception:
+        pass
 
 
 _HEARTBEAT = lambda: None     # set while copying, so a long hash still reports progress
@@ -446,8 +461,11 @@ def digest(path, full=False):
     time it changed to the nanosecond and its own number on the drive (ts.file_key)."""
     try: st = os.stat(path)
     except OSError: return None
-    key = f"{'F' if full else 'P'}|{path}|{ts.file_key(st)}"
-    if key in _cache: return _cache[key]
+    key = f"{'F' if full else 'P'}2|{path}|{ts.file_key(st)}"
+    _used.add(key)
+    if key in _cache and isinstance(_cache[key], list):
+        _cache[key][1] = int(time.time() // 86400)
+        return _cache[key][0]
     h = hashlib.blake2b(digest_size=16)
     try:
         fed(path)                                # before the open: an open can hang too
@@ -463,8 +481,8 @@ def digest(path, full=False):
         return None
     finally:
         fed()
-    _cache[key] = h.hexdigest()
-    return _cache[key]
+    _cache[key] = [h.hexdigest(), int(time.time() // 86400)]
+    return _cache[key][0]
 
 
 def same_file(src, other):
@@ -3383,6 +3401,7 @@ def main():
         if stopped: break
         retry = retry_next
     log.close()
+    save_cache()                             # fingerprints read while copying: not read again next time
     for e in WALK_ERRORS:                    # what could not even be listed
         failed += 1
         print(f"  ! could not read {getattr(e, 'filename', '') or 'a folder'}: {e.strerror or e}")
