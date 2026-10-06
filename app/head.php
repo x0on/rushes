@@ -148,43 +148,58 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   </div>
 </nav>
 
-<!-- Asked once in each browser, in the page, never in a pop-up: a name, not an account
-     (db/activity.php). Anyone can type any name; editors' computers are known by their pairing. -->
-<div class="whobar" id="whoBar" hidden>
-  <form id="whoForm">
-    <label for="whoName"><b>Who is using Rushes here?</b> Your name goes beside what you do, in Activity: a pull you make,
-      one you download, a switch you turn. It is kept in this browser only.</label>
-    <span class="whorow"><input id="whoName" maxlength="40" autocomplete="name" placeholder="Your name">
-      <button class="btn" type="submit">That's me</button>
-      <button class="btn quiet" type="button" id="whoLater">Not now</button></span>
+<!-- Asked once in each browser, before anything else: a name, not an account
+     (db/activity.php). The page waits behind it until a name is given; it is kept in
+     this browser (the rushes_who cookie), so each person types it once per computer
+     or phone. Anyone can type any name; editors' computers are known by their pairing. -->
+<div class="whoveil" id="whoBar" role="dialog" aria-modal="true" aria-labelledby="whoTitle" hidden>
+  <form class="whocard" id="whoForm">
+    <h2 id="whoTitle">Who is using Rushes here?</h2>
+    <p>Your name goes beside what you do, in Activity: a pull you make, one you download, a switch you turn.
+      It is kept in this browser only, so it is asked once.</p>
+    <input id="whoName" maxlength="40" autocomplete="name" placeholder="Your name" aria-label="Your name">
+    <div class="whorow"><button class="btn quiet" type="button" id="whoLater" hidden>Cancel</button>
+      <button class="btn" type="submit">That's me</button></div>
   </form>
 </div>
 <style>
-.whobar { border-bottom: 1px solid var(--line); background: var(--raised); padding: 10px 16px }
-.whobar form { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; font-size: 13px }
-.whobar label { flex: 1 1 320px; min-width: 0; color: var(--muted) } .whobar label b { color: var(--fg) }
-.whorow { display: flex; gap: 8px; flex-wrap: wrap } .whorow input { width: 12em; padding: 6px 9px; font: inherit;
-  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg) }
+.whoveil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px;
+  background: rgba(10, 14, 14, .62); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px) }
+.whoveil[hidden] { display: none }
+.whocard { width: 100%; max-width: 420px; background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 14px; padding: 24px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); display: grid; gap: 12px }
+.whocard h2 { margin: 0; font-size: 19px } .whocard p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5 }
+.whocard input { width: 100%; padding: 10px 12px; font: inherit; font-size: 16px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--raised); color: var(--fg) }
+.whorow { display: flex; gap: 8px; justify-content: flex-end }
 </style>
 <script>
 (function () {
   var bar = document.getElementById('whoBar'), btn = document.getElementById('hWho'), inp = document.getElementById('whoName');
+  var later = document.getElementById('whoLater');
   var name = (document.cookie.match(/(?:^|; )rushes_who=([^;]*)/) || [])[1];
   name = name ? decodeURIComponent(name) : '';
-  var later = false; try { later = sessionStorage.getItem('rushes_who_later') === '1'; } catch (e) {}
   function show() { btn.textContent = name || 'Who?'; btn.title = name ? 'You are ' + name + ' here: press to change it' : 'Say who you are, for Activity'; }
+  // open: the page waits behind it; with a name already given, it can be cancelled
+  function ask() {
+    bar.hidden = false; later.hidden = !name; inp.value = name;
+    document.documentElement.style.overflow = 'hidden';
+    setTimeout(function () { inp.focus(); }, 0);
+  }
+  function close() { bar.hidden = true; document.documentElement.style.overflow = ''; }
   show();
-  bar.hidden = !!name || later;
-  btn.onclick = function () { bar.hidden = !bar.hidden; if (!bar.hidden) { inp.value = name; inp.focus(); } };
-  document.getElementById('whoLater').onclick = function () { bar.hidden = true; try { sessionStorage.setItem('rushes_who_later', '1'); } catch (e) {} };
+  if (!name) ask();
+  btn.onclick = ask;
+  later.onclick = close;
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !bar.hidden && name) close(); });
   document.getElementById('whoForm').onsubmit = function (e) {
     e.preventDefault();
     var n = inp.value.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 40);
-    if (!n) { inp.focus(); return; }
+    if (!n) { inp.focus(); inp.placeholder = 'Type your name first'; return; }
     // said in Activity first (while the old name is still the cookie), then kept
     fetch('/db/activity.php', {method: 'POST', body: new URLSearchParams({action: 'hello', name: n})}).catch(function () {}).then(function () {
       document.cookie = 'rushes_who=' + encodeURIComponent(n) + '; max-age=31536000; path=/; SameSite=Lax';
-      name = n; show(); bar.hidden = true;
+      name = n; show(); close();
       btn.textContent = '✓ ' + n; setTimeout(show, 2500);       // seen to have happened
     });
   };

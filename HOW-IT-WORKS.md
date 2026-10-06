@@ -1181,10 +1181,12 @@ It is two records read together:
   or plugged in again.
 
 **Who.** Rushes has one password, not accounts, so a name is asked once in
-each browser: a bar under the top of the page, "Who is using Rushes here?",
-never a pop-up. The name is kept in that browser (the `rushes_who` cookie) and
-goes beside what is done from it; **Who?** (or your name) at the top changes
-it, and so does the phone menu. Giving a name is itself a line ("Started using
+each browser, before anything else: "Who is using Rushes here?" over the page,
+which waits behind it until a name is given (there is no Not now: a record of
+who did what needs everyone in it). The name is kept in that browser (the
+`rushes_who` cookie, on that computer or phone only) and goes beside what is
+done from it; **Who?** (or your name) at the top asks again, with Cancel, and
+so does the phone menu. Giving a name is itself a line ("Started using
 Rushes on a phone"). The name also fills in "Your name" when making a pull and
 uploading from a phone. Editors' computers are known by the name they were
 paired with, and the Rushes app on a Mac by the name of whoever is signed in

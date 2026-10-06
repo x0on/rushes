@@ -3,7 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.2 — October 2026 (being tried on a Mac)
+## 0.12.3 — October 2026 (being tried on a Mac)
+
+- **The name is asked before anything else,** over the page, until it is given
+  (no Not now): Activity can then say who did everything. Asked once per
+  browser.
+
+## 0.12.2 — October 2026
 
 - **One copy, one window:** Rushes runs from where it was dragged, and the copy
   it made in the home folder's Applications before goes to the Trash. Opened
