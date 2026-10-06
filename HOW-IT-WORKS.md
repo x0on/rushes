@@ -1900,10 +1900,24 @@ or when it has no list yet.
 - When Rushes Helper is first set up, it downloads the same files and checks
   them the same way, with the `release.py` inside the app.
 
-**The apps themselves** (Rushes Helper and Rushes Watcher: the window, Python,
-the launcher) update from Rushes too, since 0.9.2. Rushes has one version
-number for everything (`app/VERSION`), so when Rushes is newer than an app, the
-app on the archive (`_rushes/Rushes Helper.zip`, `Rushes Watcher.zip`) is too.
+**The apps themselves** (Rushes and Rushes Watcher: the window, Python, the
+launcher) update from inside the app, since 0.9.2. Where a newer one is found:
+
+- **Rushes running inside the app, on this Mac** (0.12.7): there is no other
+  Rushes to ask, so it looks at the releases of Rushes on GitHub
+  (`RELEASES` in `release.py`): the newest release's version, and its
+  `Rushes.zip`. Before 0.12.7 it asked itself, and always said it was up to date.
+- **A Rushes elsewhere** (a NAS, or the Mac an editor's Watcher reports to):
+  Rushes has one version number for everything (`app/VERSION`), so the version
+  that Rushes is, is the one offered. The app comes from Rushes
+  (`_rushes/Rushes.zip`, `Rushes Watcher.zip` on the archive), or, when Rushes
+  does not have it, from that same version's release on GitHub.
+
+Downloaded by the app itself, the new app is not marked as from the internet,
+so macOS does not stop it the way it stops a `.dmg` opened from a browser:
+nothing to download, open or allow. (The first time an app replaces itself,
+macOS may ask to allow it under Privacy & Security → App Management. If it
+refuses, the menu says so and the version in place is kept.)
 
 - **Only when the person says so.** An app never updates itself. Once a week
   it asks Rushes whether there is a newer version (remembered on the Mac, so a
@@ -1917,7 +1931,9 @@ app on the archive (`_rushes/Rushes Helper.zip`, `Rushes Watcher.zip`) is too.
   the app already running, so a server cannot change it). Then a small script
   of its own puts it in place of the old one (the old one back if that fails)
   and starts it again. Settings, pairing and the macOS permissions stay: it is
-  the same signed app. Each step is in the log, and the window and menu say it.
+  the same signed app. Each step is in the log, and the window and menu say it;
+  after it starts again, the menu says "✓ Updated to …", or why not
+  (`update-result.txt`, written by that script).
 - Opened from Downloads, a new app is still set up as on the first day.
 
 - The Terminal command in Setup (`curl … ?install | sh`) downloads the new app

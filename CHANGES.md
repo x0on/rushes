@@ -3,6 +3,21 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.7 — October 2026
+
+- **The menu bar menu, cleaner:** what it is doing now and the last thing that
+  happened (from Activity, not its log); **Open Rushes** once, and **Show the
+  Rushes window** for the app's own window; the switches; Show the log,
+  Collect diagnostics and Ask for help in a **Help** submenu; the version with
+  **Check for updates**; **Quit**, which says when it stops a copy.
+- **Updates from inside the app, from GitHub:** Rushes running on a Mac looks
+  at Rushes's releases on GitHub for a newer version, and **Update to …**
+  downloads it, checks it is signed by the Rushes author, puts it in place and
+  starts it again: no .dmg to download, no "Apple could not verify". A Watcher
+  takes its Rushes's version from GitHub when its Rushes does not have the app.
+  Before, Rushes on a Mac asked itself and always said it was up to date.
+- After an update, the menu says it worked, or why not.
+
 ## 0.12.6 — October 2026 (the review of 0.12.5, and a workload review)
 
 - **A failed copy takes no space off the count:** near the free-space floor, a
