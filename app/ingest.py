@@ -22,22 +22,25 @@ How it avoids reading 40 TB to answer "do we already have this?":
      and serves it over HTTP. Nothing is read over the network to get it.
   2. A source file whose size appears nowhere in that manifest is new by
      definition — copied without hashing anything.
-  3. Only when sizes collide do we hash: the first and last 1 MB (the whole
-     file with --paranoid). Hashes are cached, so a second run is nearly free.
+  3. Only when sizes collide do we read: the first and last 1 MB to find the
+     candidates, then every byte of the ones whose ends match. Fingerprints
+     are remembered, so a second run reads only what changed.
   4. Every copy is read back and compared with the original before it gets
      its real name, and recorded in an ASC MHL file beside it.
 
 Same shape as everything else: preview, look, apply, log, undo.
 """
 
-import argparse, errno, hashlib, json, os, platform, re, shutil, socket, subprocess, sys, threading, time, unicodedata
+import argparse, errno, hashlib, json, os, platform, re, shutil, signal, socket, subprocess, sys, threading, time, unicodedata
 import importlib.util, urllib.parse, urllib.request
 from collections import defaultdict
 from pathlib import Path
 try:
-    # Beside this file in _rushes: saved progress for each transfer, and the
-    # search updates still waiting to be accepted by Rushes.
+    # Beside this file in _rushes: saved progress for each transfer, the
+    # search updates still waiting to be accepted by Rushes, and the careful
+    # file operations every copy and move goes through (ts.*).
     from transfer_state import TransferState
+    import transfer_state as ts
 except ImportError:
     sys.exit("transfer_state.py is missing. It must sit beside ingest.py in _rushes.")
 
@@ -120,10 +123,10 @@ ARCHIVE   = os.environ.get("ARCHIVE", NAS_MOUNT + "/ARCHIVE")
 # once per file that has a size match in the archive, and with 30 of 40 TB
 # already present, that is most of them.
 HEAD_TAIL = 1024 * 1024              # 1 MB from each end
-# Reading a whole file to confirm a match costs the same as copying it. With
-# exact byte size plus the first and last megabyte already matching, a false
-# match on real footage is not a thing that happens. Off unless asked for.
-PARANOID  = os.environ.get("PARANOID", "") not in ("", "0")
+# The size and the first and last megabyte only find which archive files to
+# compare; a file counts as already here only when every byte matches
+# (already_here). Reading a whole file costs what copying it would in reading,
+# but leaving out footage the archive does not have would cost the footage.
 # _rushes on the archive: where the helper keeps its records (history,
 # sections, origin records, the list of folders with copy proofs). Its live
 # status is not written here: it goes to Rushes over the network (status()).
@@ -145,12 +148,16 @@ def checkpoints():
     return _CHECKPOINTS
 
 # ── two lanes ──────────────────────────────────────────────────────────────
-# Copying (the main loop) and describing (a thread of its own) run side by
-# side: one uses the network, the other this Mac's chip reading proxies. Each
+# Copying (the main loop) and describing (a thread of its own) take turns at
+# the disk: both read and write the same archive, and a copy competing with the
+# vision model for it would be slower, and longer at risk of a drive dropping
+# mid-copy. Copying goes first: while it runs, describing does not start a
+# folder, and one already started is held still (and carries on after). Each
 # has its own Pause and its own live status; they share a few files, so writes
 # to those take turns.
 _lane = threading.local()          # .name == "describe" in the describing lane
 _describing = threading.Event()    # set while a folder is being described
+_copying = threading.Event()       # set while the copying lane works on the disk (run_self)
 _io = threading.Lock()             # history, the done list: one writer at a time
 _describe_jobs = []                # (folder, asked) — the queue's describing jobs, in order
 
@@ -378,14 +385,20 @@ def copy_verified(src, dest, size, on_bytes=None, also=None):
     destination and compared, and only then given its real name, so an
     interrupted or bad copy never looks like a finished file.
     also: another fingerprint to take on the same read (a delivery's own).
+    The temporary file is new and this copy's alone, and the real name is
+    given only if nothing has it by then: a file there is never replaced.
+    Every copy lands in the archive, where it really leads (shortcuts followed).
     -> (fingerprint, algo). Raises OSError and leaves nothing behind."""
+    if not ts.inside(dest, NAS_MOUNT):
+        raise OSError(f"{dest} does not lead into the archive (a shortcut to somewhere else?) — not copied")
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    tmp = dest + ".part"
     h, algo = new_fingerprint()              # the original's fingerprint, taken while reading it anyway
     before = os.stat(src)
+    tmp = None
     try:
         fed(src)
-        with open(src, "rb") as fi, open(tmp, "wb") as fo:
+        fo, tmp = ts.new_part(dest)
+        with open(src, "rb") as fi, fo:
             while True:
                 buf = fi.read(8 << 20)
                 if not buf: break
@@ -404,9 +417,10 @@ def copy_verified(src, dest, size, on_bytes=None, also=None):
             raise OSError("the original changed while it was being copied (still being written?)")
     except BaseException:
         fed()
-        # No half-copied file is ever left behind, whatever stopped it.
-        try: os.remove(tmp)
-        except OSError: pass
+        # No half-copied file is ever left behind, whatever stopped it (only its own).
+        if tmp:
+            try: os.remove(tmp)
+            except OSError: pass
         raise
     if os.path.getsize(tmp) != size:
         os.remove(tmp)
@@ -415,15 +429,24 @@ def copy_verified(src, dest, size, on_bytes=None, also=None):
         raise OSError("size mismatch after copy")
     if read_back(tmp) != h.hexdigest():      # the copy, read back from where it landed
         os.remove(tmp); raise OSError("the copy did not match the original byte for byte")
-    os.rename(tmp, dest)
+    try:
+        ts.rename_new(tmp, dest)
+    except FileExistsError:
+        os.remove(tmp)
+        raise OSError(errno.EEXIST, "a file of that name appeared there while it was being copied — left untouched")
+    except BaseException:
+        try: os.remove(tmp)
+        except OSError: pass
+        raise
     return h.hexdigest(), algo
 
 
 def digest(path, full=False):
-    """Hash the ends of a file, or all of it. Cached by path+size+mtime."""
+    """Hash the ends of a file, or all of it. Remembered with the file's size, the
+    time it changed to the nanosecond and its own number on the drive (ts.file_key)."""
     try: st = os.stat(path)
     except OSError: return None
-    key = f"{'F' if full else 'P'}|{path}|{st.st_size}|{int(st.st_mtime)}"
+    key = f"{'F' if full else 'P'}|{path}|{ts.file_key(st)}"
     if key in _cache: return _cache[key]
     h = hashlib.blake2b(digest_size=16)
     try:
@@ -444,8 +467,17 @@ def digest(path, full=False):
     return _cache[key]
 
 
+def same_file(src, other):
+    """True only when every byte of the two is the same (remembered fingerprints
+    of the whole files, ts.file_key). Unreadable is never the same."""
+    a = digest(src, full=True)
+    return a is not None and a == digest(other, full=True)
+
+
 def already_here(src, size, by_size):
-    """-> path of the identical NAS file, or None. Hashes only on size collision."""
+    """-> path of the identical NAS file, or None. The size, then the first and
+    last MB, only find which files to look at; every byte decides. Footage the
+    archive does not have is never left out because its ends look familiar."""
     candidates = by_size.get(size)
     if not candidates:
         return None                                   # unique size = new, no I/O
@@ -456,9 +488,8 @@ def already_here(src, size, by_size):
         return None                             # unreadable: never "the same"
     for c in local:
         _HEARTBEAT()
-        if digest(c) == sp:                     # same size, same first and last MB
-            if not PARANOID or digest(src, True) == digest(c, True):
-                return c
+        if digest(c) == sp and same_file(src, c):     # ends alike: then every byte
+            return c
     return None
 
 
@@ -967,7 +998,10 @@ def trace(src_root, archive):
             for c in by_size.get(size, []):
                 if digest(c) == digest(p):
                     match = c; break
-            if match: o.add("traced", match, p, size, "copied before the record existed; matched by content")
+            # ponytail: matched by size and the ends only (reading both in full would double a
+            # trace). The record only says where to look: before it lets a file count as already
+            # here, the origin shortcut compares every byte (main → known).
+            if match: o.add("traced", match, p, size, "copied before the record existed; matched by size and both ends")
             else:     o.add("untraced", "", p, size, "no identical original found")
             if i % 20 == 0:
                 trace_paused()
@@ -1152,7 +1186,7 @@ def mhl_follow(pairs, o, why):
         to = os.path.join(str(STATUS), "ascmhl-moved", os.path.relpath(r, NAS_MOUNT), time.strftime("%Y%m%d-%H%M%S"))
         try:
             os.makedirs(os.path.dirname(to), exist_ok=True)
-            os.rename(os.path.join(r, MHL), to)
+            ts.rename_new(os.path.join(r, MHL), to)
             o.add("proof kept", os.path.join(r, MHL), to, 0, "its footage all moved; the record is kept here")
         except OSError as e:
             print(f"  ! left the record in {r} ({e})")
@@ -1408,7 +1442,7 @@ def move_proxy(old, new, o):
         return
     try:
         os.makedirs(os.path.dirname(b), exist_ok=True)
-        os.rename(a, b)
+        ts.rename_new(a, b)
         o.add("proxy moved", a, b, os.path.getsize(b), "follows its original")
     except OSError as e:
         o.add("proxy not moved", a, b, 0, str(e))
@@ -1441,7 +1475,7 @@ def clear_out(paths, stop, o, examples=None):
                         o.add("note", here, there, 0, "its words were added to the note already there")
                     else:
                         size = os.path.getsize(here)
-                        os.rename(here, there)
+                        ts.rename_new(here, there)
                         o.add("moved", here, there, size, "the folder's note")
                     left = []
                 except OSError:
@@ -1558,9 +1592,11 @@ def tidy(plan_id):
             o.add("skipped", old, new, size, "not there any more")
         elif os.path.lexists(new):
             o.add("skipped", old, new, size, "a file of that name is already there — left where it was")
+        elif not ts.inside(new, shelf) or not ts.inside(old, root):
+            o.add("skipped", old, new, size, "a folder on the way is a shortcut that leads outside the archive — left where it was")
         else:
             try:
-                within("tidy", 30, lambda: (os.makedirs(os.path.dirname(new), exist_ok=True), os.rename(old, new)))
+                within("tidy", 30, lambda: (os.makedirs(os.path.dirname(new), exist_ok=True), ts.rename_new(old, new)))   # never over a file that appeared there
                 unstalled()
                 o.add("moved", old, new, size, src)
                 move_proxy(old, new, o)
@@ -1627,7 +1663,7 @@ def untidy(name):
         else:
             try:
                 os.makedirs(os.path.dirname(old), exist_ok=True)
-                os.rename(new, old)
+                ts.rename_new(new, old)
                 o.add("moved", new, old, size, "undo"); back.append((new, old)); mb += size
                 move_proxy(new, old, o)
             except OSError as e:
@@ -2889,6 +2925,10 @@ def describe_lane(every=20):
                 time.sleep(10); continue
             if stopped():                     # a share stopped answering: nothing until Try again
                 time.sleep(every); continue
+            if _copying.is_set():             # copying has the disk: no folder is started now
+                if said != "waiting" and _describe_jobs:
+                    status(phase="waiting", note="describing waits while copying uses the disk"); said = "waiting"
+                time.sleep(5); continue
             with _io:
                 jobs = list(_describe_jobs)
                 done = set(DONE.read_text().splitlines()) if DONE.exists() else set()
@@ -2949,14 +2989,30 @@ def describe_folder(path, asked=""):
     status(phase="analysing", source=path, label=name, step="loading the model")
     t0, done, stopped = time.time(), {}, ""
     last = dict(phase="analysing", source=path, label=name, step="loading the model")
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    # Its own process group: caffeinate and the analysis under it are held, carried on
+    # and stopped together.
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+                         start_new_session=hasattr(os, "killpg"))
+    def tell(sig):
+        try: os.killpg(p.pid, sig)
+        except (AttributeError, OSError): pass
     def beat():
-        # Listening to a long file, or loading the model, says nothing for
-        # minutes: the page is told again every minute that it is still at it.
+        # Copying started meanwhile: the analysis is held still (it keeps its place
+        # and the model in memory) until the copy is done, and says so. And listening
+        # to a long file, or loading the model, says nothing for minutes: the page is
+        # told again every minute that it is still at it.
         _lane.name = "describe"
+        held, said = False, time.time()
         while p.poll() is None:
-            time.sleep(60)
-            if p.poll() is None: status(**last)
+            time.sleep(2)
+            if _copying.is_set() != held and hasattr(signal, "SIGSTOP"):
+                held = not held
+                tell(signal.SIGSTOP if held else signal.SIGCONT)
+                print(f"  describing {'held while copying uses the disk' if held else 'carries on: the copy is done'}", flush=True)
+                status(**(dict(last, step="waiting while copying uses the disk") if held else last))
+            elif p.poll() is None and time.time() - said > 60:
+                said = time.time(); status(**(dict(last, step="waiting while copying uses the disk") if held else last))
+        if held: tell(signal.SIGCONT)
     threading.Thread(target=beat, daemon=True).start()
     for line in p.stdout:
         if line.startswith("@@ "):
@@ -2975,7 +3031,11 @@ def describe_folder(path, asked=""):
         c = control()                         # Pause describing stops it between lines; a file part-done is redone
         if c.get("describe_paused") or path in c.get("skip", []):
             stopped = "describing paused" if c.get("describe_paused") else "skipped from Manage"
-            p.terminate(); break
+            if hasattr(os, "killpg"):
+                tell(signal.SIGCONT); tell(signal.SIGTERM)    # the whole group, held or not
+            else:
+                p.terminate()
+            break
     rc = p.wait()
     secs = time.time() - t0
     if stopped:
@@ -2996,12 +3056,15 @@ def run_self(*args):
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i"] + cmd       # awake while this step runs, and only then
     t0 = time.time()
+    _copying.set()                             # describing makes way (describe_lane, describe_folder)
     try:
         rc = subprocess.run(cmd, check=False).returncode
     except KeyboardInterrupt:
         raise
     except Exception as e:
         print(f"  that section failed to start: {e}"); rc = -1
+    finally:
+        _copying.clear()
     # A step that fails the moment it starts would otherwise be retried at
     # once, for ever, as fast as the machine can go. Wait before the next try.
     if rc not in (0, 130) and time.time() - t0 < 10:
@@ -3033,8 +3096,7 @@ def main():
     ap.add_argument("--refresh-manifest", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--paranoid", action="store_true",
-                    help="also read every matching file end to end (slow: "
-                         "costs as much as copying it)")
+                    help="no longer needed: every match is read end to end")
     ap.add_argument("--sections", metavar="DIR", nargs="+",
                     help="list the folders under each DIR as sections, with sizes; "
                          "adds to the list rather than replacing it")
@@ -3044,8 +3106,6 @@ def main():
                     help="stay open and run whatever Ingest and Manage queue up")
     a = ap.parse_args()
 
-    if a.paranoid:
-        globals()["PARANOID"] = True
     if a.selftest: return selftest()
     if a.watch:
         if not SETTINGS:
@@ -3066,8 +3126,7 @@ def main():
                  "Stop the helper (Ctrl-C) and start it again with the command from Setup.")
     # The one boundary every copy must respect: it lands inside the archive.
     # Whatever went wrong upstream, a copy aimed anywhere else stops here.
-    inside = lambda p: os.path.abspath(p) == os.path.abspath(NAS_MOUNT) or \
-        os.path.abspath(p).startswith(os.path.abspath(NAS_MOUNT) + os.sep)
+    inside = lambda p: ts.inside(p, NAS_MOUNT)   # where it really leads, shortcuts followed
     for where in ([a.into] if a.into else [a.root] if (a.source or a.trace) else []):
         if not inside(where):
             print(f"Refused: {where} is not inside the archive ({NAS_MOUNT}). Nothing copied.")
@@ -3118,7 +3177,7 @@ def main():
     mirror = os.path.join(a.root, src_name)
 
     print(f"walking {a.source} …  "
-          f"({'full-file confirm' if PARANOID else 'size + first and last MB'})")
+          "(a file counts as already here only when every byte matches)")
     status(phase="looking", source=a.source, label=label, note="deciding what is missing")
     new = dups = 0; new_bytes = dup_bytes = 0
     t0 = time.time()
@@ -3137,8 +3196,8 @@ def main():
             match = None
             if not a.into:
                 k = known.get(src)
-                if k and os.path.exists(k[0]) and os.path.getsize(k[0]) == size:
-                    match = k[0]             # the record says it is already here
+                if k and os.path.isfile(k[0]) and os.path.getsize(k[0]) == size and same_file(src, k[0]):
+                    match = k[0]             # the record says where, and every byte agrees
                 else:
                     match = already_here(src, size, by_size)
             if match:
@@ -3215,6 +3274,8 @@ def main():
     proof = []                            # (copy, size, xxh128): this run's ASC MHL record
     top = a.into or os.path.join(mirror, os.path.relpath(a.source, src_root))
 
+    room = [None, 0.0]                    # free space on the archive, and when it was asked
+
     def bring(f):
         """One file from the plan: -> "copied" or "already", or raises OSError."""
         nonlocal copied, copied_b, done_b
@@ -3232,6 +3293,8 @@ def main():
         if f[0] == "skip":               # identical file already in the archive
             if not os.path.isfile(dest) or os.path.getsize(dest) != size:
                 raise OSError("its match in the archive is not there any more")
+            if not same_file(src, dest):     # the plan may be older than the files: asked again
+                raise OSError("its match in the archive is not the same any more — copied on the next run")
             kind, note = "already", "not copied — this is where it already is"
         elif os.path.exists(dest):
             # A file of that name already there counts only if it is the same file,
@@ -3243,6 +3306,15 @@ def main():
                 raise OSError("a different file with this name is already there — left untouched")
             kind, note = "already", "there from an earlier run"
         else:
+            # The reserve is kept file by file, not only when the folder starts: the
+            # free space is asked once a minute (an external helper asks Rushes) and
+            # what is copied meanwhile is taken off it.
+            if time.time() - room[1] > 60:
+                room[:] = [free_bytes(NAS_MOUNT), time.time()]
+            if room[0] is not None:
+                if room[0] - size < FLOOR:
+                    raise OSError(errno.ENOSPC, f"only {room[0] / 1024 ** 3:.0f} GB free, and the floor is {FLOOR / 1024 ** 3:.0f} GB")
+                room[0] -= size
             progress(name, force=True)
             def moved(n):
                 nonlocal done_b

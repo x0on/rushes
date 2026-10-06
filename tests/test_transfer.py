@@ -1,5 +1,5 @@
 """Run with: python3 -m unittest discover -s tests -v. No NAS or network used."""
-import importlib.util
+import contextlib, importlib.util
 import io, threading, time
 import json
 import os
@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 APP = Path(__file__).resolve().parents[1] / 'app'
+os.environ.setdefault('FLOOR_GB', '0')        # a test's temporary folder is not a 5 TB archive
 sys.path.insert(0, str(APP))
 from transfer_state import TransferState
 
@@ -52,6 +53,36 @@ class OutboxTests(unittest.TestCase):
         self.assertEqual(self.cp.counts('another-job', '/source')['done_bytes'], 0)
 
 
+class SafeStorageTests(unittest.TestCase):
+    """transfer_state's careful operations, on every path a drive may take."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.d = Path(self.tmp.name)
+        import transfer_state as ts; self.ts = ts
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_rename_new_never_replaces_whichever_way_the_drive_allows(self):
+        for how in ('system', 'link', 'look'):
+            a, b = self.d / f'a-{how}', self.d / f'b-{how}'
+            a.write_bytes(b'new'); b.write_bytes(b'old')
+            with contextlib.ExitStack() as drive:
+                if how != 'system': drive.enter_context(patch.object(self.ts, '_rename_excl', return_value=False))
+                if how == 'look': drive.enter_context(patch.object(self.ts.os, 'link', side_effect=OSError(45, 'not supported')))
+                with self.assertRaises(FileExistsError): self.ts.rename_new(str(a), str(b))
+                self.assertEqual(b.read_bytes(), b'old', how)
+                b.unlink(); self.ts.rename_new(str(a), str(b))
+                self.assertEqual(b.read_bytes(), b'new', how); self.assertFalse(a.exists(), how)
+
+    def test_same_bytes_and_inside(self):
+        (self.d / 'x').write_bytes(b'abc'); (self.d / 'y').write_bytes(b'abd')
+        self.assertFalse(self.ts.same_bytes(str(self.d / 'x'), str(self.d / 'y')))
+        self.assertIsNone(self.ts.same_bytes(str(self.d / 'x'), str(self.d / 'missing')), 'unreadable is never the same')
+        (self.d / 'arch').mkdir(); os.symlink('/tmp', self.d / 'arch' / 'link')
+        self.assertTrue(self.ts.inside(str(self.d / 'arch' / 'new' / 'f'), str(self.d / 'arch')))
+        self.assertFalse(self.ts.inside(str(self.d / 'arch' / 'link' / 'f'), str(self.d / 'arch')))
+
+
 class CopyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -91,13 +122,13 @@ class CopyTests(unittest.TestCase):
     def test_a_file_that_fails_once_is_tried_again_and_lands(self):
         (self.source / 'a.mov').write_bytes(b'a' * 10)
         (self.source / 'b.mov').write_bytes(b'b' * 20)
-        rename = os.rename
+        rename = self.mod.ts.rename_new                # the copy's last step: its real name
         calls = [0]
         def hiccup(src, dst):
             calls[0] += 1
             if calls[0] == 2: raise OSError('network hiccup')
             return rename(src, dst)
-        with patch.object(self.mod.os, 'rename', side_effect=hiccup), patch.object(self.mod.time, 'sleep'):
+        with patch.object(self.mod.ts, 'rename_new', side_effect=hiccup), patch.object(self.mod.time, 'sleep'):
             self.assertEqual(self.run_copy(), 0)
         self.assertEqual(self.reports[-1]['phase'], 'done')
         self.assertEqual(self.reports[-1]['failed'], 0)
@@ -117,7 +148,7 @@ class CopyTests(unittest.TestCase):
         with patch.object(self.mod, 'read_back', side_effect=once_bad), patch.object(self.mod.time, 'sleep'):
             self.assertEqual(self.run_copy(), 0)
         self.assertEqual((self.dest / 'a.mov').read_bytes(), b'a' * 10)
-        self.assertFalse((self.dest / 'a.mov.part').exists())
+        self.assertEqual(list(self.dest.glob('*.part')), [])
         h, algo = self.mod.new_fingerprint(); h.update(b'a' * 10); want = f'{algo} {h.hexdigest()}'
         record = ''.join(p.read_text() for p in (self.archive / '_rushes' / 'origin').glob('*.tsv'))
         self.assertIn(f'verified {want}', record)
@@ -136,7 +167,7 @@ class CopyTests(unittest.TestCase):
             self.run_copy()
         # Neither version is kept this run, nothing half-copied is left, and the
         # record says why; the next run lists it at its new size and copies it.
-        self.assertFalse((self.dest / 'a.mov.part').exists())
+        self.assertEqual(list(self.dest.glob('*.part')), [])
         self.assertFalse((self.dest / 'a.mov').exists())
         record = ''.join(p.read_text() for p in (self.archive / '_rushes' / 'origin').glob('*.tsv'))
         self.assertIn('the original has changed since it was listed', record)
@@ -165,15 +196,15 @@ class CopyTests(unittest.TestCase):
         (self.source / 'a.mov').write_bytes(b'a' * 10)
         (self.source / 'b.mov').write_bytes(b'b' * 20)
         away = self.root / 'away'
-        rename = os.rename
+        rename = self.mod.ts.rename_new
         calls = [0]
         def unplug(src, dst):
             calls[0] += 1
             if calls[0] == 2:
-                rename(self.source, away)             # the share drops mid-copy
+                os.rename(self.source, away)          # the share drops mid-copy
                 raise OSError('network disconnected')
             return rename(src, dst)
-        with patch.object(self.mod.os, 'rename', side_effect=unplug):
+        with patch.object(self.mod.ts, 'rename_new', side_effect=unplug):
             self.assertEqual(self.run_copy(), 1)
         self.assertEqual(self.reports[-1]['phase'], 'interrupted')
         self.assertLess(self.reports[-1]['done_bytes'], 30)
@@ -203,6 +234,66 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(self.reports[-1]['failed'], 1)
         self.assertEqual((self.dest / 'a.mov').read_bytes(), b'aaaaYbbbb')
 
+    # ── the safety review (0.12.5): each finding, reproduced ──
+    def test_same_ends_different_middle_is_not_already_here(self):
+        # Report #1: two 3 MB files, identical first and last MB, a different middle.
+        self.mod.HEAD_TAIL = 1024 * 1024
+        ends = os.urandom(1024 * 1024)
+        a = self.root / 'src.mov'; a.write_bytes(ends + b'A' * 1024 * 1024 + ends)
+        b = self.archive / 'old.mov'; b.write_bytes(ends + b'B' * 1024 * 1024 + ends)
+        self.assertIsNone(self.mod.already_here(str(a), a.stat().st_size, {a.stat().st_size: [str(b)]}))
+        b.write_bytes(a.read_bytes())
+        self.assertEqual(self.mod.already_here(str(a), a.stat().st_size, {a.stat().st_size: [str(b)]}), str(b))
+
+    def test_an_old_temporary_file_is_not_overwritten(self):
+        # Report #3: a file already called a.mov.part is someone's, not the copy's.
+        (self.source / 'a.mov').write_bytes(b'new footage')
+        self.dest.mkdir(); (self.dest / 'a.mov.part').write_bytes(b'somebody else')
+        self.assertEqual(self.run_copy(), 0)
+        self.assertEqual((self.dest / 'a.mov.part').read_bytes(), b'somebody else')
+        self.assertEqual((self.dest / 'a.mov').read_bytes(), b'new footage')
+
+    def test_a_file_that_appears_while_copying_is_not_replaced(self):
+        # Report #3: another writer creates the final name during the read-back.
+        (self.source / 'a.mov').write_bytes(b'new footage')
+        read_back = self.mod.read_back
+        def meanwhile(path):
+            (self.dest / 'a.mov').write_bytes(b'from Finder')
+            return read_back(path)
+        with patch.object(self.mod, 'read_back', side_effect=meanwhile), patch.object(self.mod.time, 'sleep'):
+            self.run_copy()
+        self.assertEqual((self.dest / 'a.mov').read_bytes(), b'from Finder')
+        self.assertEqual(self.reports[-1]['failed'], 1)
+        self.assertEqual(list(self.dest.glob('*.part')), [], 'its own temporary file is cleaned up')
+
+    def test_a_shortcut_inside_the_archive_does_not_lead_a_copy_outside(self):
+        # Report #4: archive/shoot is a symlink to a folder outside the archive.
+        outside = self.root / 'outside'; outside.mkdir()
+        os.symlink(outside, self.dest)
+        (self.source / 'clip.mov').write_bytes(b'x')
+        args = ['ingest.py','--source',str(self.source),'--into',str(self.dest),'--apply']
+        with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit): self.mod.main()
+        self.assertEqual(list(outside.iterdir()), [])
+        with self.assertRaises(OSError):
+            self.mod.copy_verified(str(self.source / 'clip.mov'), str(self.dest / 'clip.mov'), 1)
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_a_remembered_fingerprint_does_not_outlive_a_change(self):
+        # Report: same size, changed within the same second: the full fingerprint is read again.
+        a = self.source / 'a.mov'; a.write_bytes(b'footage!')
+        there = self.archive / 'a.mov'; there.write_bytes(b'footage!')
+        self.assertTrue(self.mod.same_file(str(a), str(there)))
+        st = there.stat(); there.write_bytes(b'damaged!')
+        os.utime(there, ns=(st.st_atime_ns, st.st_mtime_ns + 1))
+        self.assertFalse(self.mod.same_file(str(a), str(there)))
+
+    def test_the_free_space_floor_is_kept_file_by_file(self):
+        (self.source / 'a.mov').write_bytes(b'a' * 10)
+        with patch.object(self.mod, 'FLOOR', 10 ** 18):
+            self.assertEqual(self.run_copy(), 1)
+        self.assertFalse((self.dest / 'a.mov').exists())
+
     def test_missing_source_never_becomes_a_completed_empty_job(self):
         self.source.rmdir()
         self.run_copy()
@@ -231,11 +322,11 @@ class CopyTests(unittest.TestCase):
         (self.source / 'a.mov').write_bytes(b'a' * 10)
         (self.source / 'b.mov').write_bytes(b'b' * 20)
         state = {'paused': False}
-        rename = os.rename
+        rename = self.mod.ts.rename_new
         def press_pause_after_first(src, dst):
             rename(src, dst); state['paused'] = True       # someone presses Pause mid-folder
         with patch.object(self.mod, 'control', side_effect=lambda: dict(state)), \
-             patch.object(self.mod.os, 'rename', side_effect=press_pause_after_first):
+             patch.object(self.mod.ts, 'rename_new', side_effect=press_pause_after_first):
             self.assertEqual(self.run_copy(), 1)
         self.assertEqual(self.reports[-1]['phase'], 'paused')
         self.assertEqual(len([p for p in self.dest.iterdir() if p.name != 'ascmhl']), 1)   # beside the proof of it
@@ -783,6 +874,42 @@ class DescribeLaneTests(unittest.TestCase):
         self.assertFalse((m.STATUS / "describe-status.tsv").exists())
         self.assertFalse((m.STATUS / "ingest-status.tsv").exists())
         self.assertIn("paused", pushed[0])
+
+
+    def test_it_does_not_start_a_folder_while_copying_uses_the_disk(self):
+        m = self.mod
+        m._describe_jobs[:] = [(str(self.archive), "")]
+        pushed = []
+        m._copying.set()
+        try:
+            with patch.object(m, "_push", side_effect=lambda text, lane="": pushed.append(text)):
+                self.assertEqual(self.run_lane({}, sleeps=3), [])
+        finally:
+            m._copying.clear()
+        self.assertIn("waits while copying", pushed[-1])
+
+    @unittest.skipUnless(os.path.isdir("/proc/self"), "reads a process's state from /proc")
+    def test_a_folder_being_described_is_held_still_while_a_copy_runs(self):
+        m = self.mod
+        script = ("import json,time\n"
+                  "for i in range(30): print('@@ ' + json.dumps({'file': str(i), 'n': i, 'of': 30}), flush=True); time.sleep(0.2)\n"
+                  "print('@@ ' + json.dumps({'finished': True, 'done': 30}), flush=True)\n")
+        real, seen = m.subprocess.Popen, {}
+        def popen(cmd, **kw):
+            seen["p"] = real([sys.executable, "-c", script], **kw); return seen["p"]
+        def state():
+            return open(f"/proc/{seen['p'].pid}/stat").read().rsplit(")", 1)[1].split()[0]
+        def copy_meanwhile():
+            time.sleep(1); m._copying.set()
+            time.sleep(4); seen["held"] = state()
+            m._copying.clear()
+        threading.Thread(target=copy_meanwhile, daemon=True).start()
+        with patch.object(m, "analysis_tools", return_value=(sys.executable, "", "")), \
+             patch.object(m.subprocess, "Popen", side_effect=popen), patch.object(m, "control", return_value={}), \
+             patch("sys.stdout", new_callable=io.StringIO) as out:
+            self.assertEqual(m.describe_folder(str(self.archive)), 0, "it carries on and finishes after the copy")
+        self.assertEqual(seen["held"], "T", "held still (stopped) while copying used the disk")
+        self.assertIn("held while copying uses the disk", out.getvalue())
 
 
 class StallTests(unittest.TestCase):
