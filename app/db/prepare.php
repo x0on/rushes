@@ -148,6 +148,8 @@ function prepare_save(array $list): bool {
 // A proxy build is running only if the process in proxy.pid really is proxy.sh:
 // the number can outlive its job and belong to another program later.
 function proxy_alive(): bool {
+    // On a Mac the runner makes them (runner.py) and leaves a heartbeat while it does: there is no /proc
+    if (on_mac()) return time() - (int)@file_get_contents(web_dir() . '/proxy-alive.txt') < 60;
     $pid = (int)@file_get_contents(web_dir() . '/proxy.pid');
     return $pid > 0 && str_contains((string)@file_get_contents("/proc/$pid/cmdline"), 'proxy.sh');
 }

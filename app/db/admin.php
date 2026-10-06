@@ -310,7 +310,7 @@ if (isset($_POST['_newpass'])) {
           <div style="padding:0 14px 14px">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px">
               <select id="ptSet" style="padding:7px 10px;font:13.5px var(--font);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
-                <optgroup label="On the video chip — fast, the processor stays free">
+                <optgroup label="<?= on_mac() ? 'On the Mac\'s media engine' : 'On the video chip' ?> — fast, the processor stays free">
                   <option value="720 4">720p · 4 Mbit/s — about 30 MB a minute (the default)</option>
                   <option value="720 6">720p · 6 Mbit/s — about 45 MB a minute</option>
                   <option value="1080 4">1080p · 4 Mbit/s — about 30 MB a minute</option>
@@ -322,7 +322,7 @@ if (isset($_POST['_newpass'])) {
                 </optgroup>
               </select>
               <button class="btn quiet" id="ptSave" type="button">Use this setting</button>
-              <a href="#" class="note" id="ptGo">Test on a clip…</a><?= $tip('Pick one clip from the archive in Finder. Twenty seconds of it are made at each setting, and a still from each appears beside one from the original, at the same moment: choose by eye. Proxies made from then on use it; the ones already made stay as they are. Nothing is uploaded (Safari\'s button says Upload, but only the clip\'s name and size are read) and nothing in the archive changes. The test clips are kept in _rushes/proxy-test, to play full screen.') ?>
+              <a href="#" class="note" id="ptGo"<?= on_mac() ? ' hidden' : '' ?>>Test on a clip…</a><?= on_mac() ? '' : $tip('Pick one clip from the archive in Finder. Twenty seconds of it are made at each setting, and a still from each appears beside one from the original, at the same moment: choose by eye. Proxies made from then on use it; the ones already made stay as they are. Nothing is uploaded (Safari\'s button says Upload, but only the clip\'s name and size are read) and nothing in the archive changes. The test clips are kept in _rushes/proxy-test, to play full screen.') ?>
             </div>
             <input id="ptPick" type="file" accept="video/*,.mxf,.MXF,.mts,.MTS" hidden>
             <p class="note" id="ptSaid" style="margin:8px 0 0"></p>
@@ -533,6 +533,7 @@ document.querySelectorAll('#actKinds button').forEach(function (b) {
 // ── moving between sections ────────────────────────────────────────────────
 // Where the minute's work runs: inside Rushes Helper on a Mac (HOW-IT-WORKS.md → Rushes on this Mac), or the server's runner
 const ON_MAC = <?= on_mac() ? 'true' : 'false' ?>, WHERE = ON_MAC ? 'on this Mac' : 'on the server';
+const CHIP = ON_MAC ? "the Mac's media engine" : 'the video chip';      // what makes the proxies
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
                  duplicates: 'Duplicates', describe: 'Describe',
                  activity: 'Activity', tools: 'Jobs and tools', projects: "Editors' projects" };
@@ -1306,7 +1307,7 @@ let ptOpen = false, ptLast = '';        // the log stays as you left it; nothing
 function drawProxyTest(d) {
   const ps = d.proxy_setting || [720, 4], pt = d.proxy_test;
   const running = d.running === 'proxy-test', asked = (d.queued || []).includes('proxy-test');
-  $('ptNow').textContent = ps[0] + 'p · ' + (ps[1] === 'sw' ? 'in software' : ps[1] + ' Mbit/s on the video chip') + (ps.join(' ') === '720 4' ? ' (the default)' : '');
+  $('ptNow').textContent = ps[0] + 'p · ' + (ps[1] === 'sw' ? 'in software' : ps[1] + ' Mbit/s on ' + CHIP) + (ps.join(' ') === '720 4' ? ' (the default)' : '');
   if (document.activeElement !== $('ptSet')) $('ptSet').value = ps[0] + ' ' + ps[1];   // not while you are choosing
   $('ptGo').dataset.busy = running || asked ? '1' : '';
   $('ptGo').textContent = running ? 'Testing…' : asked ? 'Asked…' : 'Test on a clip…';
@@ -1392,12 +1393,12 @@ function drawProxies(p) {
       ? (p.only ? '<b>' + esc(p.only) + '</b>: ' : 'Whole archive: ') +
         '<b>' + n(p.videos) + ' videos</b> · ' + n(p.have) + ' already have a proxy · <b>' + n(p.missing) + ' to make</b>' +
         (+p.missing ? ', about ' + size(p.source_gb) + ' to read' : '') + ' · ' +
-        (p.hw === '1' ? 'with the hardware encoder (QuickSync), fast' : 'in software, which is slow') + when +
-        (p.hw !== '1' && p.hw_why ? '<br><span class="note">Why not the video chip: ' + esc(p.hw_why) + '.' +
+        (p.hw === '1' ? 'on ' + CHIP + ', fast' : 'in software, which is slower') + when +
+        (p.hw !== '1' && p.hw_why ? '<br><span class="note">Why not ' + CHIP + ': ' + esc(p.hw_why) + '.' +
           (p.cpu ? ' Processor: ' + esc(p.cpu) + '.' : '') + '</span>' : '')
     : p.state === 'building' && p.running
       ? '<b>Making proxies</b>' + (p.only ? ' for ' + esc(p.only) : '') + ' · ' + n(p.done) + ' of ' + n(p.total) + ' · ' + n(p.ok) + ' made' +
-        (p.hw === '1' ? ' (' + n(p.chip) + ' on the video chip' + (+p.mixed ? ', ' + n(p.mixed) + ' read by the processor' : '') + (+p.soft ? ', ' + n(p.soft) + ' in software' : '') + ')' : ' in software') +
+        (p.hw === '1' ? ' (' + n(p.chip) + ' on ' + CHIP + (+p.mixed ? ', ' + n(p.mixed) + ' read by the processor' : '') + (+p.soft ? ', ' + n(p.soft) + ' in software' : '') + ')' : ' in software') +
         ' · ' + n(p.failed) + ' failed · ' +
         n(p.later) + ' left for later (still arriving)<br>now: ' + esc(p.file || '')
     : p.state === 'building'

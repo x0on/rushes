@@ -3,6 +3,18 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.13 — October 2026
+
+- **Proxies on a Mac:** Rushes on a Mac makes its own proxies now, for the
+  folders on Describe's list (and Jobs and tools → Make proxies), on the Mac's
+  media engine, at low priority, in software when a file needs it. Same records
+  as on a NAS, so each folder's describing starts by itself once its proxies are
+  made, and Search gets what the original is (size, frame rate, camera). Before,
+  a folder said "Starting…" for ever. No ffmpeg on the Mac: the same pinned one
+  Install the AI uses is downloaded once, checked against its fingerprint.
+- Proxy quality says "the Mac's media engine" on a Mac; the clip test (the
+  NAS's) is not offered there yet.
+
 ## 0.12.12 — October 2026
 
 - **Search knows what each file is:** a new "What it is" list — Deliverables,

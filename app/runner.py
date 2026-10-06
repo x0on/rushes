@@ -23,10 +23,10 @@ minute's work); only what a drive on this computer needs:
 
 Every touch of the archive has a time limit, and three stalls in a row stop
 it touching the archive until Try again — the same breaker as runner.sh.
-Proxies are not here yet: those jobs are refused with a line in the log
-(ROADMAP.md → Order, 5).
+Proxies are made here too (proxies(), as proxy.sh does on a NAS, with the
+same records), on the Mac's media engine, in software when it cannot.
 """
-import hashlib, json, os, re, shutil, subprocess, threading, time, urllib.request
+import hashlib, json, os, platform, re, shutil, subprocess, threading, time, urllib.request
 import transfer_state as ts          # the careful file operations (beside this file, in the app and in _rushes)
 
 HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.sh are beside this file
@@ -38,6 +38,8 @@ TRIM = ("helper.log", "proxy.log", "proxy-built.tsv", "proxy-built.tsv.err", "pr
 # Recently Removed, as in Photos (Manage → Duplicates and Cache say so). Called _duplicates before
 # 0.12.4: that folder is renamed by itself (migrate_holding), and the records of what moved follow.
 HOLD, OLD_HOLD = "_Recently Removed", "_duplicates"
+VIDEO_EXT = (".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d")     # the same list as proxy.sh
+RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
 
@@ -325,6 +327,15 @@ class Runner:
         self.write("helper-builtin.txt", "running\n")
         load = " ".join(f"{x:.2f}" for x in os.getloadavg())
         self.write("load.txt", f"{int(time.time())}\t{load}\t{int(time.time() - t0)}\n")
+        # Folders being prepared (Manage → Describe): Rushes writes the next one needing
+        # proxies into proxy-next.txt (prepare.php); started here when none are being made.
+        try: nxt = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", open(self.p("proxy-next.txt")).readline().strip())[:200]
+        except OSError: nxt = ""
+        if nxt and ".." not in nxt and self.may_v() and not self.proxy_running():
+            try: os.remove(self.p("proxy-next.txt"))
+            except OSError: pass
+            self.say(f"making proxies for {nxt}")
+            self.proxy_start(nxt)
         for name, fn in (("upkeep", self.upkeep), ("jobs", self.jobs)):
             if not (self.busy.get(name) and self.busy[name].is_alive()):      # the last one still at it: left alone
                 self.busy[name] = threading.Thread(target=self.guarded, args=(name, fn), daemon=True)
@@ -396,6 +407,198 @@ class Runner:
                 except Exception:
                     pass                                 # refused: as it should be
         self.write("exposed.txt", "".join(x + "\n" for x in out))
+
+    # ── proxies, on this Mac (proxy.sh on a NAS): the same records, so Rushes reads them the same ──
+    # proxy-status.txt (what the page shows), proxy-folders.tsv (each folder's runs: what starts its
+    # describing), proxy-made.tsv (the media ledger), proxy-built.tsv, proxy-speed.tsv, proxy-failed.tsv.
+    def ffmpeg(self):
+        for d in (os.path.expanduser("~/archive-pilot/ai/bin"), "/opt/homebrew/bin", "/usr/local/bin"):
+            if os.access(os.path.join(d, "ffmpeg"), os.X_OK):
+                return os.path.join(d, "ffmpeg")
+        return shutil.which("ffmpeg")
+
+    # The same pinned ffmpeg Install the AI brings (ingest.py AI_GET), checked against its fingerprint
+    FFMPEG_GET = ("https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-darwin-arm64.gz",
+                  "6be74d6f449889c2e87a75873894f8520cad56c08ac76f2a628d85b0519daaca")
+
+    def get_ffmpeg(self, only):
+        """No ffmpeg on this Mac: the pinned one, downloaded once, so nobody opens Terminal. -> its path, or None."""
+        import gzip
+        if platform.system() != "Darwin" or platform.machine() != "arm64":
+            return None
+        d = os.path.expanduser("~/archive-pilot/ai/bin"); os.makedirs(d, exist_ok=True)
+        dest, part, h = os.path.join(d, "ffmpeg"), os.path.join(d, "ffmpeg.gz.part"), hashlib.sha256()
+        self.proxy_state(state="planning", only=only, step="downloading ffmpeg, the tool that makes proxies (19 MB), once")
+        try:
+            with urllib.request.urlopen(self.FFMPEG_GET[0], timeout=60) as r, open(part, "wb") as f:
+                for b in iter(lambda: r.read(1 << 20), b""):
+                    h.update(b); f.write(b)
+            if h.hexdigest() != self.FFMPEG_GET[1]:
+                raise OSError("the download is not the one expected (its fingerprint differs): not used")
+            with gzip.open(part) as g, open(dest + ".part", "wb") as f:
+                shutil.copyfileobj(g, f)
+            os.chmod(dest + ".part", 0o755); os.replace(dest + ".part", dest)
+            subprocess.run(["codesign", "-s", "-", "-f", dest], capture_output=True)    # an Apple chip runs only signed programs
+            self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  downloaded ffmpeg ✓ {dest}")
+            return dest
+        except Exception as e:
+            self.plog(f"could not download ffmpeg: {e}")
+            return None
+        finally:
+            try: os.remove(part)
+            except OSError: pass
+
+    def proxy_state(self, **kv):
+        self.write("proxy-status.txt", f"at\t{int(time.time())}\n" + "".join(f"{k}\t{v}\n" for k, v in kv.items()))
+        self.write("proxy-alive.txt", f"{int(time.time())}\n")       # the heartbeat: a run is going (prepare.php)
+
+    def plog(self, line):
+        with open(self.p("proxy.log"), "a") as f:
+            f.write(line + "\n")
+
+    def proxy_running(self):
+        t = self.busy.get("proxies")
+        return bool(t and t.is_alive())
+
+    def proxy_start(self, only):
+        self.proxy_halt = threading.Event()
+        self.write("proxy-alive.txt", f"{int(time.time())}\n")
+        self.busy["proxies"] = threading.Thread(target=self.guarded, args=("proxies", lambda: self.proxies(only, build=True)), daemon=True)
+        self.busy["proxies"].start()
+
+    def proxy_setting(self):
+        """Manage → Describe → Proxy quality: height and Mbit/s, or "sw" (software). 720p at 4 otherwise."""
+        try: h, b = open(self.p("proxy-setting.txt")).read().split()[:2]
+        except (OSError, ValueError): h, b = "720", "4"
+        if h not in ("720", "1080") or b not in ("4", "6", "sw"): h, b = "720", "4"
+        return int(h), b
+
+    def media_engine(self, ff):
+        """Can this ffmpeg use the Mac's media engine (VideoToolbox)? One tiny frame, tried."""
+        if getattr(self, "_engine", None) is None:
+            r = subprocess.run([ff, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=320x240:d=0.2",
+                                "-c:v", "h264_videotoolbox", "-f", "null", "-"], capture_output=True, text=True)
+            self._engine = (r.returncode == 0, (r.stderr.strip().splitlines() or [""])[-1][:160])
+        return self._engine
+
+    def encode(self, ff, src, out, h, b, engine):
+        """One proxy: on the media engine, else in software. -> (made, how). Stop ends it at once."""
+        nice = ["nice", "-n", "15"] if shutil.which("nice") else []      # copies, search and editors come first
+        audio = ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
+        tries = []
+        if engine and b != "sw":
+            tries.append(("video chip", ["-hwaccel", "videotoolbox", "-i", src, "-vf", f"scale=-2:{h}", "-c:v", "h264_videotoolbox",
+                                         "-b:v", f"{b}M", "-maxrate", f"{int(b) * 3 // 2}M"]))
+        tries.append(("software", ["-i", src, "-vf", f"scale=-2:{h}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]))
+        err = ""
+        for how, args in tries:
+            if self.proxy_halt.is_set():
+                return False, how
+            self.proxy_proc = subprocess.Popen(nice + [ff, "-nostdin", "-loglevel", "error", "-y", *args, *audio, out],
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            while self.proxy_proc.poll() is None:            # the heartbeat while a long file is made
+                self.write("proxy-alive.txt", f"{int(time.time())}\n")
+                try: self.proxy_proc.wait(10)
+                except subprocess.TimeoutExpired: pass
+            rc, err = self.proxy_proc.returncode, self.proxy_proc.stderr.read(); self.proxy_proc = None
+            with open(self.p("proxy-built.tsv.err"), "a") as f: f.write(err)
+            if rc == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+                return True, how
+            try: os.remove(out)
+            except OSError: pass
+        self.last_err = (err.strip().splitlines() or ["ffmpeg stopped"])[-1][:200]
+        return False, tries[-1][0]
+
+    def proxies(self, only, build):
+        """Plan (what is missing) or build the proxies of one folder (or the whole archive)."""
+        a = self.arch()
+        if a is None:
+            self.plog("the archive is not there: no proxies"); return
+        self.proxy_state(state="planning", only=only, step="listing the videos in the folder")
+        ff = self.ffmpeg() or self.get_ffmpeg(only)
+        if not ff:
+            self.proxy_state(state="no-ffmpeg"); self.plog("no ffmpeg on this Mac, and it could not be downloaded (proxy.log says why)")
+            return
+        root = os.path.join(a, only) if only else a
+        if not os.path.isdir(root):
+            self.proxy_state(state="no-folder", only=only); return
+        proot = os.path.join(a, "PROXIES")
+        plan, have, videos = [], 0, 0
+        for d, dirs, files in os.walk(root):
+            dirs[:] = sorted(x for x in dirs if x not in SKIP and not x.startswith(".")
+                             and not (d == a and x in ("PROXIES", HOLD, OLD_HOLD, "_rushes")))
+            for n in sorted(files):
+                if n.startswith(".") or not n.lower().endswith(VIDEO_EXT):
+                    continue
+                src = os.path.join(d, n); videos += 1
+                out = os.path.join(proot, os.path.splitext(os.path.relpath(src, a))[0] + ".mp4")
+                if os.path.exists(out): have += 1
+                else: plan.append((src, out))
+        size = lambda x: os.path.getsize(x) if os.path.exists(x) else 0
+        h, b = self.proxy_setting()
+        engine, why = self.media_engine(ff)
+        hw = "1" if engine and b != "sw" else "0"
+        if not build:
+            self.proxy_state(state="planned", only=only, have=have, missing=len(plan), source_gb=round(sum(size(s) for s, _ in plan) / 2**30),
+                             hw=hw, height=h, videos=videos, hw_why="" if engine else f"this ffmpeg cannot use the Mac's media engine ({why})",
+                             cpu=platform.processor() or platform.machine(), ffmpeg=ff)
+            return
+        runs = lambda st, ok, failed, later, total: open(self.p("proxy-folders.tsv"), "a").write(
+            f"{only}\t{st}\t{ok}\t{failed}\t{later}\t{total}\t{int(time.time())}\n")
+        need, free = sum(size(s) for s, _ in plan) * 0.05 + 2e9, shutil.disk_usage(a).free
+        if free < need:                                  # said once, plainly, instead of failing file after file
+            self.proxy_state(state="no-room", only=only, need=int(need), free=free); runs("no-room", 0, 0, 0, len(plan))
+            self.plog(f"not enough room for the proxies: about {need / 1e9:,.0f} GB needed, {free / 1e9:,.0f} GB free"); return
+        total, ok, failed, later, n = len(plan), 0, 0, 0, 0
+        count = {"video chip": 0, "software": 0}
+        self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {only or 'the whole archive'}: {total} proxies to make, {have} already made · "
+                  + ("on the media engine" if hw == "1" else "in software") + f" · {h}p · {ff}")
+        os.makedirs(proot, exist_ok=True)
+        for src, out in plan:
+            n += 1
+            if self.proxy_halt.is_set():
+                self.proxy_state(state="stopped", only=only, done=n - 1, total=total, ok=ok, failed=failed, later=later)
+                runs("stopped", ok, failed, later, total); self.plog(f"stopped from Manage after {ok} proxies"); return
+            if os.path.exists(out):
+                continue
+            try:
+                if time.time() - os.path.getmtime(src) < RECENT:
+                    later += 1; continue
+            except OSError:
+                failed += 1; continue
+            self.proxy_state(state="building", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
+                             file=os.path.relpath(src, a), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"])
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            tmp, t0 = out + ".part.mp4", time.time()      # never a playable-looking half file
+            made, how = self.encode(ff, src, tmp, h, b, hw == "1")
+            if made:
+                os.replace(tmp, out); count[how] += 1; ok += 1
+                with open(self.p("proxy-speed.tsv"), "a") as f: f.write(f"{size(src)}\t{int(time.time() - t0)}\t{how}\n")
+                with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"{src}\t{out}\t{how}\n")
+                # What the original is and what the camera wrote inside it, read once here (the media ledger)
+                r = subprocess.run([ff, "-hide_banner", "-nostdin", "-i", src], capture_output=True, text=True)
+                probe = " ".join([l for l in r.stderr.splitlines() if re.search(
+                    r"Duration:|Video:|creation_time|modification_date|timecode|reel_name|model|make|product_name|company_name|encoder", l)][:24])
+                with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{probe.replace(chr(9), ' ')}\n")
+            else:
+                if self.proxy_halt.is_set():
+                    continue                             # Stop: said at the top of the next turn
+                failed += 1
+                err = getattr(self, "last_err", "")
+                with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"FAILED\t{src}\n")
+                with open(self.p("proxy-failed.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{err.replace(chr(9), ' ')}\n")
+                if "Permission denied" in err or "No space left" in err:   # nothing can be written: stop once, saying why
+                    self.proxy_state(state="stopped", only=only, done=n, total=total, ok=ok, failed=failed, why=err)
+                    runs("stopped", ok, failed, later, total); self.plog(f"stopped: the proxies cannot be written — {err}"); return
+            if n % 25 == 0:
+                self.plog(f"progress: {n} of {total}")
+        if self.proxy_halt.is_set():
+            self.proxy_state(state="stopped", only=only, done=n, total=total, ok=ok, failed=failed, later=later)
+            runs("stopped", ok, failed, later, total); self.plog(f"stopped from Manage after {ok} proxies"); return
+        self.proxy_state(state="done", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
+                         chip=count["video chip"], mixed=0, soft=count["software"])
+        runs("done", ok, failed, later, total)
+        self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  built {ok} proxies, {failed} failed, {later} left for a later run (still arriving)")
 
     # ── the queue ────────────────────────────────────────────────────────────
     def jobs(self):
@@ -619,8 +822,31 @@ class Runner:
             self.log(f"  {a}: {u.free / 1e9:,.1f} GB free of {u.total / 1e9:,.1f} GB")
         elif action == "organize-undo":
             self.log("  the old date-based layout was never used on this computer: nothing to put back")
+        elif action in ("proxy-plan", "proxy-build", "proxy-remake", "proxy-stop"):
+            q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", f.get("QUERY", "")).strip("/")[:200]
+            if ".." in q:
+                self.log("  refused a folder with .. in it"); return
+            if action == "proxy-plan":
+                self.proxies(q, build=False)
+            elif action == "proxy-stop":
+                if self.proxy_running():
+                    self.proxy_halt.set()
+                    if getattr(self, "proxy_proc", None): self.proxy_proc.terminate()
+                    self.log("  asked the proxy build to stop")
+                else:
+                    self.log("  no proxy build was running")
+            elif self.proxy_running():
+                self.log("  proxies are already being made (detail in proxy.log)")
+            else:
+                # Remake: that folder's proxies thrown away first (derived files, only inside PROXIES)
+                d = os.path.join(a or "", "PROXIES", q)
+                if action == "proxy-remake" and q and a and os.path.isdir(d) and os.path.realpath(d).startswith(os.path.realpath(os.path.join(a, "PROXIES")) + "/"):
+                    shutil.rmtree(d, ignore_errors=True)
+                    self.log(f"  threw away the proxies of {q} — making them again with the setting in use")
+                self.proxy_start(q)
+                self.log("  making proxies in the background: progress in Manage → Describe, detail in proxy.log")
         elif action != "refused":
-            # ponytail: proxies come with the app's own describing (ROADMAP.md → Order, 5)
+            # ponytail: Test the video chip and Test proxy settings are the NAS's (runner.sh)
             self.log(f"  {action}: not on this computer yet — nothing was done")
 
     def script(self, name, args, **env):

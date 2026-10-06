@@ -326,3 +326,30 @@ class Drives(MacJobs):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
+class MacProxies(MacJobs):
+    """Proxies made on a Mac for a folder on the list (runner.py), with the records proxy.sh keeps on a NAS."""
+    def test_a_folder_on_the_list_gets_its_proxies_and_its_records(self):
+        import subprocess, time
+        clip = os.path.join(self.a, "Parks", "2026", "A001C002.mov"); os.makedirs(os.path.dirname(clip))
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=1280x720:d=1", "-f", "lavfi", "-i", "sine=d=1",
+                        "-shortest", "-c:v", "mpeg4", "-c:a", "aac", clip], check=True)
+        old = time.time() - 3 * 3600; os.utime(clip, (old, old))                 # not still arriving
+        self.put("Parks/2026/notes.txt", b"not a video")
+        self.put("Parks/2026/._A001C002.mov", b"macOS leftover")
+        open(os.path.join(self.web, "proxy-next.txt"), "w").write("Parks\n")
+        with unittest.mock.patch.object(self.r, "ffmpeg", return_value=shutil.which("ffmpeg")):
+            self.r.minute(); self.r.busy["proxies"].join(60)
+        out = os.path.join(self.a, "PROXIES", "Parks", "2026", "A001C002.mp4")
+        st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+        self.assertTrue(os.path.getsize(out) > 0, "the proxy is made, beside nothing of the footage")
+        self.assertEqual((st["state"], st["ok"], st["failed"]), ("done", "1", "0"))
+        self.assertEqual(open(os.path.join(self.web, "proxy-folders.tsv")).read().split("\t")[:3], ["Parks", "done", "1"])
+        self.assertIn("Duration:", open(os.path.join(self.web, "proxy-made.tsv")).read())          # the media ledger
+        self.assertFalse(os.path.exists(os.path.join(self.web, "proxy-next.txt")))
+        self.assertFalse([f for f in os.listdir(os.path.dirname(out)) if f.endswith(".part.mp4")])
+        # asked again: nothing is made twice
+        self.r.job("proxy-build", {"QUERY": "Parks"}); self.r.busy["proxies"].join(60)
+        self.assertIn("1 already made", open(os.path.join(self.web, "proxy.log")).read())
