@@ -170,10 +170,12 @@ is the folder the archive machine's web server serves.
 - `ingest-done.txt`: what it finished;
 - `ingest-listed.txt`: folders it already split;
 - `nas-manifest.tsv`: its copy of the archive's file list;
-- `hash-cache.json`: fingerprints it already read;
+- `hash-cache.json`: fingerprints it already read (saved once per run; one not used
+  for 180 days, or whose file has changed since, is dropped);
 - `ingest-plan.tsv` and `ingest-copied.tsv`: the last run's plan and log;
 - `trace-originals-*.tsv`: originals it listed;
-- `proof.json`: checking progress;
+- `proof.json`: checking progress (saved at most every 30 seconds while checking,
+  and whenever it stops: after a crash, a few files are read again);
 - `where.json`: addresses for Rushes;
 - `shares.json`: where network shares live;
 - `helper-id`: the pairing ID;
@@ -1121,7 +1123,11 @@ over yet. Once confirmed (`empty()` in `runner.py`, the `empty` job):
   copy that stays.** Waiting a week proves nothing about that copy: if it
   changed or broke since the scan, the one in Recently Removed may be the last
   good one, and it stays, said in the job's log and in Activity. One that
-  cannot be read to compare stays too;
+  cannot be read to compare stays too. The comparison is watched, not timed: it
+  goes on as long as data keeps coming, however big the file, and a drive that
+  gives no data for 2 minutes is walked away from (the file stays, Delete All
+  stops, and it counts as the archive not answering). Pause stops it within
+  seconds. Find duplicates reads the same way (`watched()` in `runner.py`);
 - cache files are deleted (editing software makes them again);
 - a file with no record of where it came from stays;
 - the space comes back at once, Recover forgets **only the files that were

@@ -3,6 +3,18 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.6 — October 2026 (the review of 0.12.5, and a workload review)
+
+- **A failed copy takes no space off the count:** near the free-space floor, a
+  retry was stopped as "full" when it was not.
+- **Delete All and Find duplicates watch their long reads:** as long as data
+  keeps coming, however big the file; no data for 2 minutes and the read is
+  walked away from, the file stays, and Pause stops it within seconds.
+- **The checker saves its place at most every 30 seconds**, not after every
+  file: 1,000 files checked wrote 90 MB of progress before, 91 KB now.
+- **Remembered fingerprints stay bounded,** and those read while copying are
+  kept, so a card checked once is not read again.
+
 ## 0.12.5 — October 2026 (a safety round, from an outside review)
 
 Each change has a test that does what the review did to show the problem.
