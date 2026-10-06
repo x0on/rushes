@@ -207,6 +207,27 @@ static void opened(id self, SEL cmd, id m) { (void)self; (void)cmd; (void)m; wak
 // from Rushes, a "!" beside it when it needs someone.
 static id logo_;
 typedef struct { double w, h; } Size;
+// The menu's lines, in order; one with "items" opens a submenu of its own (Help).
+static void fill(id menu, id items) {
+    unsigned long n = items ? ((unsigned long (*)(id, SEL))msg)(items, sel("count")) : 0;
+    for (unsigned long k = 0; k < n; k++) {
+        id it = ((id (*)(id, SEL, unsigned long))msg)(items, sel("objectAtIndex:"), k);
+        if (m1(it, "objectForKey:", str("sep"))) { m1(menu, "addItem:", m0(C("NSMenuItem"), "separatorItem")); continue; }
+        id doo = m1(it, "objectForKey:", str("do")), on = m1(it, "objectForKey:", str("on")), sub = m1(it, "objectForKey:", str("items"));
+        id mi = item(utf8(m1(it, "objectForKey:", str("label"))), doo ? "pick:" : NULL, "");
+        if (doo) { m1(mi, "setTarget:", target_); m1(mi, "setRepresentedObject:", doo); }
+        if (sub) {
+            id sm = m0(m0(C("NSMenu"), "alloc"), "init");
+            mb(sm, "setAutoenablesItems:", 0);
+            fill(sm, sub);
+            m1(mi, "setSubmenu:", sm); m0(sm, "autorelease");
+        }
+        mb(mi, "setEnabled:", doo || sub ? 1 : 0);
+        if (on) ((void (*)(id, SEL, long))msg)(mi, sel("setState:"), ((signed char (*)(id, SEL))msg)(on, sel("boolValue")) ? 1 : 0);
+        m1(menu, "addItem:", mi); m0(mi, "autorelease");    // the menu keeps it; drawn again every few seconds, never piled up
+    }
+}
+
 static void refresh(id self, SEL cmd, id d) {
     (void)self; (void)cmd;
     id button = m0(status_, "button");
@@ -245,16 +266,7 @@ static void refresh(id self, SEL cmd, id d) {
         m1(menu_, "addItem:", item(quit, "terminate:", ""));
         return;
     }
-    for (unsigned long k = 0; k < n; k++) {
-        id it = ((id (*)(id, SEL, unsigned long))msg)(items, sel("objectAtIndex:"), k);
-        if (m1(it, "objectForKey:", str("sep"))) { m1(menu_, "addItem:", m0(C("NSMenuItem"), "separatorItem")); continue; }
-        id doo = m1(it, "objectForKey:", str("do")), on = m1(it, "objectForKey:", str("on"));
-        id mi = item(utf8(m1(it, "objectForKey:", str("label"))), doo ? "pick:" : NULL, "");
-        if (doo) { m1(mi, "setTarget:", target_); m1(mi, "setRepresentedObject:", doo); }
-        mb(mi, "setEnabled:", doo ? 1 : 0);
-        if (on) ((void (*)(id, SEL, long))msg)(mi, sel("setState:"), ((signed char (*)(id, SEL))msg)(on, sel("boolValue")) ? 1 : 0);
-        m1(menu_, "addItem:", mi);
-    }
+    fill(menu_, items);
 }
 
 // One window, never two: opened again (from Finder, the Dock, the menu bar's Open

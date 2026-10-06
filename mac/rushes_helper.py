@@ -66,6 +66,7 @@ WORKLOG = os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")      # 
 WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
 # When Rushes was last asked for a newer app, and its answer (once a week, or Check for updates)
 UPCHECK = os.path.join(WDIR if WATCHER else DIR, "update-check.json")
+UPDATED = os.path.join(WDIR if WATCHER else DIR, "update-result.txt")   # how the last update went (release.app_update)
 FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 # The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
@@ -631,18 +632,23 @@ class Window:
             s.update(self.home())
         return s
 
+    def source(self):
+        """Where a newer app is looked for: Rushes running inside this app has nobody
+        to ask but GitHub's releases (""); otherwise the Rushes it works with."""
+        return "" if not WATCHER and local() else self.s["url"]
+
     def newer(self, now=False):
-        """A newer Rushes Helper (or Watcher) on Rushes, offered, never installed by
-        itself: the person decides. Rushes is asked once a week (remembered on
-        this computer), or at once with Check for updates. Only for the copy in
-        Applications, which is the one the background service runs."""
+        """A newer Rushes (or Watcher), offered, never installed by itself: the person
+        decides. Asked once a week (remembered on this computer), or at once with
+        Check for updates. Only for the copy in Applications, which is the one the
+        background service runs."""
         c = read_json(UPCHECK)
         if now or time.time() - c.get("at", 0) > 7 * 86400:
             c["at"] = time.time()                        # a failed question waits a week too, unless asked
             try:
                 import release
                 same = os.path.realpath(APP) == os.path.realpath(HOMEAPP)
-                c["newer"] = release.app_update(self.s["url"], APP, check_only=True) if same else ""
+                c["newer"] = release.app_update(self.source(), APP, check_only=True) if same else ""
             except Exception as e:
                 if now: raise
             try:
@@ -662,13 +668,14 @@ class Window:
     def check_updates(self):
         v = self.newer(now=True)
         self.set(said=f"Rushes {v} is ready. Update to {v} when you choose: nothing changes until you do." if v
+                 else f"Up to date: {NAME} {app_version()} is the newest release." if not self.source()
                  else f"Up to date: {NAME} {app_version()} is the same version as Rushes.")
 
     def update_app(self):
         import release
-        v = release.app_update(self.s["url"], APP, say=lambda m: (log(m), self.set(said=m)))
+        v = release.app_update(self.source(), APP, say=lambda m: (log(m), self.set(said=m)), result=UPDATED)
         if not v:
-            self.set(said=f"Already up to date: {NAME} {app_version()}, the same as Rushes.")
+            self.set(said=f"Already up to date: {NAME} {app_version()}.")
 
     def home(self):
         loaded, pid = service_running()
@@ -1256,7 +1263,8 @@ const said = s => (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + 
 const head = (h, sub) => '<h2>' + h + '</h2><p class="sub">' + sub + '</p>';
 // A newer version on Rushes: one button, it puts itself in place and starts again.
 const upd = s => s.newer ? '<div class="box"><div class="row"><div class="t"><b>Rushes ' + esc(s.newer) + ' is ready</b><small>This is ' +
-  esc(s.version) + '. The update comes from your Rushes, signed by its author; settings, pairing and permissions stay.</small></div>' +
+  esc(s.version) + '. ' + (s.local ? 'It comes from Rushes\'s releases on GitHub' : 'It comes from your Rushes') +
+  ', and is taken only if signed by its author. Settings, pairing and permissions stay; nothing to download or open.</small></div>' +
   btn('Update to ' + s.newer, 'update-app', true, !!s.busy) + '</div></div>' : '';
 
 // Activity (db/activity.php): what came in, what went out, what changed, and who did it
@@ -1343,7 +1351,7 @@ function home(s) {
       '<div class="row">' + btn('Open Setup', 'open-setup') + '</div></div>';
   case 'help':
     return head('Help', 'Help happens in the open, with only what you choose to share.') + said(s) + upd(s) + '<div class="box">' +
-      '<div class="row"><div class="t">Updates<small>' + (L ? 'Rushes and all its parts come inside this app, signed by its author, and change only when you press Update.'
+      '<div class="row"><div class="t">Updates<small>' + (L ? 'Rushes and all its parts come inside this app, signed by its author. Check for updates looks at Rushes\'s releases on GitHub (github.com/x0on/rushes); it changes only when you press Update.'
         : 'This Mac keeps its copying and describing code the same as your Rushes server\'s (' + esc(s.url) + ', never anywhere else). The app itself changes only when you press Update.') +
         ' This is ' + esc(s.version) + '.</small></div>' + btn('Check for updates', 'check-updates', false, !!s.busy) + '</div>' +
       '<div class="row"><div class="t">Collect diagnostics<small>One text file on your Desktop, to read before you send it to anyone: versions, switches, what Rushes did lately. ' +
@@ -1547,29 +1555,50 @@ def menu_state(w):
         o = m.own_menu(ow); tag = n.split()[-1].lower() + "-"
         items += [{"sep": True}, {"label": n.upper()}]
         items += [dict(i, do=tag + i["do"]) if "do" in i else i for i in o["items"][:-2]
-                  if i.get("do") not in ("open-rushes", "ask-help")]        # those once, in the first section
+                  if i.get("do") != "open-rushes" and "items" not in i]   # Open Rushes and Help once, in the first section
         if o["state"] == "attention" and me["state"] != "attention":
             me.update(state="attention", tip=o["tip"])
     me["items"] = items + [{"sep": True}, {"label": "Quit " + " and ".join(names), "do": "quit-all"}]
     return me
 
 
+def update_said():
+    """How the last update went, said for half an hour after it (the update script writes it)."""
+    try:
+        if time.time() - os.path.getmtime(UPDATED) > 1800:
+            return ""
+        ok, v, *why = open(UPDATED).read().rstrip("\n").split("\t")
+    except (OSError, ValueError):
+        return ""
+    if ok == "ok":
+        return f"✓ Updated to {v}"
+    return (f"! {v} could not be put in place ({' '.join(why)[:60]}); {app_version()} kept. If macOS asked about it, "
+            "allow Rushes in System Settings → Privacy & Security → App Management, then Update again.")
+
+
 def own_menu(w):
+    """The menu bar menu, top to bottom: what it is doing now and the last thing that
+    happened; opening Rushes; the switches; Help (rarely used, in a submenu); its
+    version and updates; Quit."""
     s = dict(w.s); s.update(w.home())
     info = lambda t: {"label": t}
-    # the last lines it wrote, each from its start: the date goes (the time stays), a long one ends in "…"
-    day = lambda l: l[11:] if re.match(r"\d{4}-\d\d-\d\d \d", l) else l
-    items, lately = [], [(lambda t: t if len(t) <= 80 else t[:79] + "…")(day(l)) for l in (s.get("log") or [])[-4:]]
+    short = lambda t, n=70: t if len(t) <= n else t[:n - 1] + "…"
     said = s.get("said") if time.time() - w.said_at < 30 else ""
+    err = s.get("error") if time.time() - getattr(w, "error_at", 0) < 60 else ""
+    items, busy = [], False
     if WATCHER:
         n = s.get("now") or {}
         st = "paused" if s.get("paused") else ("unpaired" if not s.get("paired") else n.get("state") or "idle")
         icon = {"paused": "pause.circle", "unpaired": "exclamationmark.triangle", "offline": "wifi.exclamationmark",
                 "watching": "eye", "delivering": "arrow.up.circle", "pointing": "arrow.triangle.branch"}.get(st, "film")
         head = WATCHING.get(st, st) + (f" · {n['note']}" if n.get("note") and st not in ("idle", "paused") else "")
-        items += [info(head)] + ([info("✓ " + said)] if said else []) + [{"sep": True}, info("Lately:")]
-        items += [info("   " + l) for l in lately] or [info("   nothing yet")]
-        items += [{"sep": True},
+        busy = st == "delivering"
+        items += [info(head)] + ([info("✓ " + said)] if said else [])
+        # its last line that says something happened (its log is its activity), the date gone, the time kept
+        last = [l for l in (s.get("log") or []) if re.match(r"\d{4}-\d\d-\d\d \d", l)][-1:]
+        items += [info("   Last: " + short(l[11:16] + "  " + l[20:].strip())) for l in last]
+        items += [{"sep": True}, {"label": "Open Rushes", "do": "open-rushes"}, {"label": f"Show the {NAME} window", "do": "open-window"},
+                  {"sep": True},
                   {"label": "Watch projects", "do": "watch-resume" if s.get("paused") else "watch-pause", "on": not s.get("paused")}]
         if not s.get("paired"):
             items.append({"label": f"Pair with Rushes… (in the window)", "do": "open-window"})
@@ -1589,7 +1618,14 @@ def own_menu(w):
         if d.get("phase") == "analysing":
             items.append(info(f"Describing {d.get('label', '')}" + (f" · {d.get('n')} of {d.get('of')}" if d.get("of") else "")))
         if said: items.append(info("✓ " + said))
-        items += [{"sep": True}, info("Lately:")] + ([info("   " + l) for l in lately] or [info("   nothing yet")]) + [{"sep": True}]
+        # the last thing that happened, from Activity (what people and Rushes did), not its log
+        for e in (s.get("activity") or [])[:1]:
+            at = str(e.get("at", ""))
+            when = at[11:16] if at[:10] == time.strftime("%Y-%m-%d") else at[5:10].replace("-", "/")
+            items.append(info("   Last: " + short(f"{when}  {e.get('text', '')}" + (f" ({e['who']})" if e.get("who") else ""))))
+        items += [{"sep": True},
+                  {"label": "Starting Rushes …"} if s.get("local_up") is False else {"label": "Open Rushes", "do": "open-rushes"},
+                  {"label": f"Show the {NAME} window", "do": "open-window"}, {"sep": True}]
         # a switch: ticked when on; choosing it turns it the other way (Rushes keeps these, so not while unreachable)
         sw = lambda label, on_, ids: dict({"label": label, "on": bool(on_)}, **({"do": ids[1] if on_ else ids[0]} if up else {}))
         items += [sw("Copy footage", not s.get("paused"), ("resume", "pause")),
@@ -1603,15 +1639,16 @@ def own_menu(w):
             items.append({"label": "Try again", "do": "try-again"})
         if s.get("pairing") != "this" and not s.get("local"):
             items.append({"label": "Pair with Rushes… (in the window)", "do": "open-window"})
-    items += [{"sep": True}, info(f"{NAME} {app_version()} · Rushes: {s.get('url') or 'not set up'}")]
-    items.append({"label": f"Update to {s['newer']}", "do": "update-app"} if s.get("newer")
-                 else {"label": "Check for updates", "do": "check-updates"})
-    items += [
-              {"label": "Starting Rushes …"} if s.get("local_up") is False else {"label": "Open Rushes", "do": "open-rushes"},
-              {"label": "Show the log", "do": "show-log"},
-              {"label": "Collect diagnostics", "do": "diagnostics"}, {"label": "Ask for help…", "do": "ask-help"},
-              {"label": f"Open {NAME}…", "do": "open-window"}, {"sep": True},
-              {"label": f"Quit {NAME}", "do": "quit"}]
+    items += [info("! " + short(err, 90))] if err else []
+    items += [info(u) for u in [update_said()] if u]
+    items += [{"sep": True},
+              {"label": "Help", "items": [{"label": "Show the log", "do": "show-log"},
+                                          {"label": "Collect diagnostics", "do": "diagnostics"},
+                                          {"label": "Ask for help…", "do": "ask-help"}]},
+              {"label": f"Update to {s['newer']}", "do": "update-app"} if s.get("newer")
+              else {"label": f"{NAME} {app_version()} — Check for updates", "do": "check-updates"},
+              {"sep": True},
+              {"label": f"Quit {NAME}" + (" — stops what it is doing" if busy else ""), "do": "quit"}]
     # what the launcher's icon shows (the Rushes mark): dimmed when paused or cut off, "!" when it needs you
     state = {"pause.circle": "paused", "wifi.exclamationmark": "offline", "exclamationmark.triangle": "attention",
              "film": "ok"}.get(icon, "busy")
@@ -1631,6 +1668,8 @@ def menu(port, key):
             if force or time.time() - cache["at"] > 30:
                 if w.s.get("said") != seen["said"]:
                     seen["said"] = w.s.get("said"); w.said_at = time.time()
+                if w.s.get("error") != seen.get("error"):
+                    seen["error"] = w.s.get("error"); w.error_at = time.time()
                 try: cache["m"] = menu_state(w)
                 except Exception as e:
                     cache["m"] = {"icon": "exclamationmark.triangle", "tip": f"{NAME}: {e}",

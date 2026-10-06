@@ -177,7 +177,63 @@ class AppUpdateTests(unittest.TestCase):
         with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")), \
              patch.object(m.Window, "newer", return_value=""):
             got = serve(m)("menu?fresh=1")
-        self.assertIn({"label": "Check for updates", "do": "check-updates"}, got["items"])
+        self.assertIn("check-updates", [i.get("do") for i in got["items"]])
+        upd = next(i for i in got["items"] if i.get("do") == "check-updates")
+        self.assertTrue(upd["label"].startswith("Rushes ") and upd["label"].endswith("— Check for updates"), upd)
+
+    def test_rushes_on_this_mac_looks_on_github_for_the_newest_release(self):
+        import plistlib
+        sys.path.insert(0, str(HERE.parent / "app")); import release
+        with tempfile.TemporaryDirectory() as t:
+            app = Path(t) / "Rushes.app"; (app / "Contents").mkdir(parents=True)
+            (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "0.12.7",
+                "CFBundleIdentifier": "org.rushes.app", "CFBundleExecutable": "Rushes"}))
+            asked = []
+            def gh(q, timeout=None):
+                asked.append(getattr(q, "full_url", q))
+                return io.BytesIO(json.dumps({"tag_name": "v0.12.8", "assets": [
+                    {"name": "Rushes.zip", "browser_download_url": "https://github.com/x0on/rushes/releases/download/v0.12.8/Rushes.zip"}]}).encode())
+            with patch("urllib.request.urlopen", side_effect=gh):
+                self.assertEqual(release.app_update("", str(app), check_only=True), "0.12.8")
+            self.assertEqual(asked, ["https://api.github.com/repos/x0on/rushes/releases/latest"])
+            # A Watcher asks its Rushes which version; that Rushes has no app to give: that version's release on GitHub
+            (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "0.12.7",
+                "CFBundleIdentifier": "org.rushes.watcher", "CFBundleExecutable": "Rushes Watcher"}))
+            asked.clear()
+            def mac(q, timeout=None):
+                u = getattr(q, "full_url", q); asked.append(u)
+                if u.endswith("?version"): return io.BytesIO(b"0.12.8")
+                if "helper.php?app=" in u: raise OSError("404 Not Found")
+                if "/releases/tags/v0.12.8" in u:
+                    return io.BytesIO(json.dumps({"tag_name": "v0.12.8", "assets": [
+                        {"name": "Rushes.Watcher.zip", "browser_download_url": "https://gh.test/Rushes.Watcher.zip"}]}).encode())
+                return io.BytesIO(b"not a zip")
+            with patch("urllib.request.urlopen", side_effect=mac), self.assertRaises(RuntimeError) as e:
+                release.app_update("http://rushes.test", str(app), say=lambda m: None)
+            self.assertIn("https://gh.test/Rushes.Watcher.zip", asked, asked)
+            self.assertIn("could not", str(e.exception))      # here no macOS to unpack it: said, nothing changed
+            with patch("urllib.request.urlopen", side_effect=__import__("urllib.error").error.HTTPError("u", 404, "Not Found", {}, None)), \
+                 self.assertRaises(RuntimeError) as e:
+                release.latest_release()
+            self.assertIn("no release", str(e.exception))
+
+    def test_the_menu_in_order_one_open_help_in_a_submenu_and_what_an_update_did(self):
+        m = front("Rushes", Path(tempfile.mkdtemp()))
+        os.makedirs(os.path.dirname(m.UPDATED), exist_ok=True)
+        Path(m.UPDATED).write_text("ok\t0.12.8\n")
+        with patch.object(m, "launchctl", return_value=m.subprocess.CompletedProcess([], 1, "", "")), \
+             patch.object(m.Window, "newer", return_value=""):
+            got = serve(m)("menu?fresh=1")
+        labels = [i.get("label") for i in got["items"]]
+        self.assertEqual(sum(1 for l in labels if l and l.startswith("Open Rushes")), 1, labels)
+        self.assertIn("Show the Rushes window", labels)
+        self.assertNotIn("Lately:", labels)
+        self.assertIn("✓ Updated to 0.12.8", labels)
+        help_ = next(i for i in got["items"] if i.get("label") == "Help")
+        self.assertEqual([i["label"] for i in help_["items"]], ["Show the log", "Collect diagnostics", "Ask for help…"])
+        self.assertTrue(plain(got), got)
+        Path(m.UPDATED).write_text("failed\t0.12.8\tOperation not permitted\n")
+        self.assertIn("App Management", m.update_said())
 
 
 class BundledCodeTests(unittest.TestCase):
