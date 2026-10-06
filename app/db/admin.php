@@ -8,7 +8,7 @@
 // state.php works all of that out. This file renders it and sends instructions
 // back. It decides nothing about media.
 $NAV = 'admin';
-require __DIR__ . '/auth.php';
+require_once __DIR__ . '/auth.php';
 require_sign_in();   // the whole page is behind the lock, not each button
 
 $pw_said = '';

@@ -15,7 +15,7 @@
 // ponytail: a form that rewrites one JSON file, behind the admin lock.
 $NAV = 'admin';
 require __DIR__ . '/db/config.php';
-require __DIR__ . '/db/auth.php';
+require_once __DIR__ . '/db/auth.php';
 require_sign_in();
 
 $said  = '';

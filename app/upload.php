@@ -58,25 +58,23 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
       (Reorganize → 00). It moves nothing and takes a minute.</p>
     <p style="margin:12px 0 0"><a class="btn" href="/structure.php">Open Reorganize</a></p></div>
 <?php else: ?>
+  <!-- Two things to say, as for a card in Ingest: the department and what it was. Who is
+       the name this browser was given (the bar at the top); the day comes from the files,
+       shown, with a way to change it. Same place in the archive as a card: <dept>/<year>/<day event>. -->
   <section class="card" id="s1">
-    <h2><span>01 /</span> Who you are</h2>
-    <label class="f"><span>Your name: it goes with the files, so everyone knows who brought them</span>
-      <input type="text" id="who" maxlength="60" autocomplete="name" placeholder="e.g. Maria Lopez"></label>
-  </section>
-
-  <section class="card" id="s2">
-    <h2><span>02 /</span> What the shoot was</h2>
+    <h2><span>01 /</span> What the shoot was</h2>
     <label class="f"><span><?= $e(shelf_word()) ?></span>
       <select id="dept"><option value="">Pick one…</option>
         <?php foreach ($depts as $d): ?><option><?= $e($d) ?></option><?php endforeach; ?></select></label>
     <label class="f"><span>What it was</span>
       <input type="text" id="event" maxlength="80" placeholder="e.g. Kite Festival"></label>
-    <label class="f"><span>The day it was shot (from the files; change it if it is wrong)</span>
-      <input type="date" id="date"></label>
+    <p class="note" id="dayLine">The day it was shot comes from the files, once they are chosen.</p>
+    <label class="f" id="dateBox" hidden><span>The day it was shot</span><input type="date" id="date"></label>
+    <p class="note" id="whoLine"></p>
   </section>
 
   <section class="card" id="s3">
-    <h2><span>03 /</span> The photos and videos</h2>
+    <h2><span>02 /</span> The photos and videos</h2>
     <div class="pick">
       <input type="file" id="files" multiple accept="image/*,video/*" hidden>
       <button class="btn" type="button" id="choose">Choose files</button>
@@ -153,11 +151,27 @@ window.__sha256 = sha256;            // for the page's own check, below, and the
 
 // ── what is chosen ──────────────────────────────────────────────────────────
 let picked = [], running = false;
-$('who').value = store.get('rushes-uploader') || (decodeURIComponent((document.cookie.match(/(?:^|; )rushes_who=([^;]*)/) || [])[1] || ''));     // or the name this browser was given (head.php)
+// Who: the name this browser was given (head.php's bar, the rushes_who cookie), read
+// each time, so a name given or changed at the top counts at once
+const who = function () { return decodeURIComponent((document.cookie.match(/(?:^|; )rushes_who=([^;]*)/) || [])[1] || ''); };
+function showWho() {
+  const n = who();
+  $('whoLine').innerHTML = n ? 'Uploading as <b>' + esc(n) + '</b> · <button class="lnk" type="button" id="whoChange">not you?</button>'
+    : '<b>Say who you are first:</b> your name goes with the files. <button class="lnk" type="button" id="whoChange">Give your name</button>';
+  $('whoChange').onclick = function () { const b = document.getElementById('hWho'); if (b) { b.click(); window.scrollTo(0, 0); } };
+}
+setInterval(function () { showWho(); ready(); }, 1500);
+// The day: from the files, shown in words; "change" opens the date for a day that is wrong
+const nice = function (d) { return new Date(d + 'T12:00').toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'}); };
+function showDay() {
+  if (!$('date').value) return;
+  $('dayLine').innerHTML = 'Shot on <b>' + esc(nice($('date').value)) + '</b> (from the files)' + ($('dateBox').hidden ? ' · <button class="lnk" type="button" id="dayChange">change</button>' : '');
+  if ($('dayChange')) $('dayChange').onclick = function () { $('dateBox').hidden = false; showDay(); $('date').focus(); };
+}
 // Safari can restart a page (short of memory, often while the iPhone prepares a big
 // video from Photos): the form comes back as it was, and an upload that was cut off
 // says how to carry on. A page cannot keep the chosen files; choosing them again resumes.
-['dept', 'event', 'date'].forEach(function (i) { const v = store.get('rushes-up-' + i); if (v && !$(i).value) $(i).value = v; });
+['dept', 'event'].forEach(function (i) { const v = store.get('rushes-up-' + i); if (v && !$(i).value) $(i).value = v; });
 if (store.get('rushes-upload')) setTimeout(function () {
   say('An upload was cut off. Choose the same files again and press Upload: it carries on from what already arrived.', true); }, 0);
 $('choose').onclick = function () { $('files').click(); };
@@ -175,15 +189,16 @@ $('files').onchange = function () {
     return '<div class="file" id="f' + i + '"><span class="n">' + esc(f.name) + '</span><span class="s">' + size(f.size) + '</span>' +
       (w ? '<span class="w">' + esc(w) + '</span>' : '') + '<div class="bar"><i style="width:0%"></i></div></div>';
   }).join('');
-  if (picked.length && !$('date').value) $('date').value = day(Math.min.apply(null, picked.map(function (f) { return f.lastModified || Date.now(); })));
+  if (picked.length) { $('date').value = day(Math.min.apply(null, picked.map(function (f) { return f.lastModified || Date.now(); }))); showDay(); }
   ready();
 };
 function ready() {
-  const ok = picked.length && $('who').value.trim() && $('dept').value && $('event').value.trim() && $('date').value;
+  const ok = picked.length && who() && $('dept').value && $('event').value.trim() && $('date').value;
   $('go').disabled = !ok || running;
 }
-['who', 'dept', 'event', 'date'].forEach(function (i) {
-  $(i).oninput = $(i).onchange = function () { store.set(i === 'who' ? 'rushes-uploader' : 'rushes-up-' + i, $(i).value); ready(); }; });
+['dept', 'event'].forEach(function (i) { $(i).oninput = $(i).onchange = function () { store.set('rushes-up-' + i, $(i).value); ready(); }; });
+$('date').oninput = $('date').onchange = function () { showDay(); ready(); };
+showWho();
 
 // ── sending ─────────────────────────────────────────────────────────────────
 const say = function (t, bad) { $('said').textContent = t; $('said').className = 'said' + (bad ? ' bad' : ''); };
@@ -202,7 +217,7 @@ async function ask(url, opts) {                      // carries on through a dro
   }
 }
 $('go').onclick = async function () {
-  running = true; ready(); store.set('rushes-uploader', $('who').value.trim());
+  running = true; ready();
   const total = picked.reduce(function (a, f) { return a + f.size; }, 0);
   let sent = 0, t0 = Date.now();
   $('total').hidden = false;
@@ -222,7 +237,7 @@ $('go').onclick = async function () {
     if (s) say('Carrying on with the upload you started…');
     else {
       say('Starting…');
-      s = await ask('/db/upload.php', { method: 'POST', body: new URLSearchParams({ action: 'start', uploader: $('who').value.trim(),
+      s = await ask('/db/upload.php', { method: 'POST', body: new URLSearchParams({ action: 'start', uploader: who(),
         dept: $('dept').value, event: $('event').value.trim(), date: $('date').value,
         files: JSON.stringify(picked.map(function (f) { return { name: f.name, size: f.size, mtime: Math.floor((f.lastModified || 0) / 1000) }; })) }) });
       if (s.error) throw new Error(s.error);
@@ -255,7 +270,7 @@ $('go').onclick = async function () {
 // ── the receipt ─────────────────────────────────────────────────────────────
 function receipt(batch, fin) {
   const when = new Date(), ev = $('event').value.trim();
-  const rows = [['Uploaded by', $('who').value.trim()], ['Shoot', ev + ' · ' + $('dept').value + ' · ' + $('date').value],
+  const rows = [['Uploaded by', who()], ['Shoot', ev + ' · ' + $('dept').value + ' · ' + $('date').value],
                 ['Files', fin.files + ' (' + size(fin.bytes) + ')'], ['Where', fin.into], ['When', when.toLocaleString()],
                 ['In the archive', 'putting them in…']];
   const draw = function () { $('rlist').innerHTML = rows.map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join(''); };

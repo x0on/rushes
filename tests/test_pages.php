@@ -40,8 +40,10 @@ check(raid_said("md1 : active raid5 sdh3[8] sda3[0]\n      54613148160 blocks [8
 check(count($s['repeats'] ?? []) === 5 && $s['repeats'][0][0] === 'The runner on the archive machine', 'Overview lists what runs by itself (rule 5)');
 check($s['copy']['phase'] === 'copying' && $s['copy']['rate'] === 100 && $s['copy']['file'] === 'A001.MXF', 'live helper detail comes through');
 check($s['transfer'] && $s['transfer']['folders'] === 1, 'the saved transfer comes through beside it');
-check(!array_filter($s['recent'], fn($r) => $r['files'] === 0 && $r['what'] === 'brought over'), 'empty retries stay out of Activity');
-check((bool)array_filter($s['recent'], fn($r) => $r['what'] === 'moved onto the shelf'), 'tidy-ups keep their own words');
+check($s['recent'] === [], 'Activity (with people\'s names) is not handed to anyone who is not signed in');
+$act = activity_list();                                         // db/activity.php: what Manage and the app show
+check(!array_filter($act, fn($r) => str_contains($r['text'], 'from Parks into')), 'empty retries stay out of Activity');
+check((bool)array_filter($act, fn($r) => $r['kind'] === 'changed' && str_starts_with($r['text'], 'Tidy-up moved 3 files onto the shelf')), 'tidy-ups keep their own words');
 check(count($s['ingests']) === 2 && $s['ingests'][0]['state'] === 'done' && $s['ingests'][0]['failed'] === 0 && $s['ingests'][1]['failed'] === 1,
       'a landed card says how many files could not be copied (Ingest says safe to format only at none)');
 
