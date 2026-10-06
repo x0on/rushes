@@ -314,9 +314,10 @@ like any other.
    app answers only its own Mac until the person turns on **other devices**;
    then it answers the network too, and asks for a password on anything that
    is not that Mac.
-   On a Mac, Rushes Helper and Rushes Watcher come as a disk image (.dmg)
+   On a Mac, Rushes and Rushes Watcher come as a disk image (.dmg)
    with the app beside an Applications folder to drag it onto, as Mac apps
-   usually do, not a zip. Installing is once per computer, by the person or by
+   usually do, not a zip (*built, 0.12.1: `mac/dmg.py`; the zip stays for
+   updates from Rushes*). Installing is once per computer, by the person or by
    IT (a signed, notarized app can be pushed by the office's device
    management); Rushes never installs anything on a computer by itself.
    After that, updates come from Rushes, when the person presses Update.

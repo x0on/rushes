@@ -397,10 +397,14 @@ Photos and video from a phone (or any computer), without a card: **Upload**
 anyone who can reach Rushes; on the office network, or from elsewhere through a
 VPN (INSTALL.md).
 
-- **Who, what, which day.** Your name (remembered on that phone, never an
-  account), the department and what the shoot was, and the day, filled in from
-  the files and changeable. Rushes works out the folder, as for a card:
+- **Two things to say, as for a card in Ingest:** the department and what
+  the shoot was. Who is the name that phone's browser was given (Activity →
+  Who; "Uploading as Ana · not you?"), never an account; the day comes from the
+  files, shown in words ("Shot on Tue, Oct 6, 2026"), with **change** for a day
+  that is wrong. Rushes works out the folder, as for a card:
   `<shelf>/<department>/<year>/<date> <what it was>`.
+- **On the phone's Home Screen** (Safari → Share → Add to Home Screen), Upload
+  opens like an app. Away from the office it needs the VPN, like all of Rushes.
 - **Nothing is changed or made smaller.** The files go up exactly as the
   browser hands them over, 4K and ProRes included. The page says to choose
   them from **Files**: from the Photo Library an iPhone may convert or shrink a

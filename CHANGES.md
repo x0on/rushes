@@ -3,7 +3,16 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.0 — October 2026 (being tried on a Mac)
+## 0.12.1 — October 2026 (being tried on a Mac)
+
+- **Rushes comes as a disk image** (`Rushes 0.12.1.dmg`): open it, and drag
+  Rushes onto Applications, as Mac apps usually come. Each build carries its
+  number in its name.
+- **Upload from a phone asks what Ingest asks:** the department and what it
+  was. The name is the one the phone's browser was given; the day comes from
+  the files, shown, and can be changed.
+
+## 0.12.0 — October 2026
 
 - **Rushes on a Mac, with the archive on a drive it sees** (the first step of
   the Mac app, ROADMAP.md → Order 1): in Rushes Helper's setup, **Choose the

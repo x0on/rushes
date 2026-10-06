@@ -149,9 +149,9 @@ changed in [CHANGES.md](CHANGES.md): the middle number for something new, the
 last for a fix. 1.0 is when everything listed under Version 1 in the
 [roadmap](ROADMAP.md) is built.
 
-## Building Rushes Helper and Rushes Watcher
+## Building Rushes and Rushes Watcher
 
-`mac/build.py` builds `mac/out/Rushes Helper.app` and its zip, from Linux or a
+`mac/build.py` builds `mac/out/Rushes.app` and its zip, from Linux or a
 Mac; `mac/build.py watcher` builds `Rushes Watcher.app` the same way. Put each
 zip on the archive in `_rushes`, where Setup offers them for download. It needs:
 
@@ -164,6 +164,16 @@ zip on the archive in `_rushes`, where Setup offers them for download. It needs:
 - `rcodesign` (apple-codesign);
 - optionally, the `xxhash` wheels for both processors in `mac/`. Without them,
   copies are fingerprinted with BLAKE2 instead of XXH3.
+
+**For people, the app comes as a disk image:** `mac/dmg.py "mac/out/Rushes.app"
+"Rushes 0.12.1.dmg"` packs the signed app with an Applications shortcut, an arrow
+and one line saying to drag it there. Run it after signing: the app goes in as it
+is. It runs on Linux too (macOS's `hdiutil` does not): the volume is an ISO 9660
+image with Rock Ridge, which keeps names, permissions and symlinks, made a
+compressed `.dmg` by `dmg` from libdmg-hfsplus (built with zlib; on the PATH or
+beside `dmg.py` as `dmg-<arch>`). It needs `pip install pycdlib ds-store mac-alias
+pillow`. **Every build gets a new number** (`app/VERSION`) and carries it in its
+file name, so two builds are never mistaken for each other.
 
 It signs with the certificate in `RUSHES_SIGN_KEY` and `RUSHES_SIGN_CERT` when
 those are set, ad hoc otherwise. Keep the signing key out of the repository
