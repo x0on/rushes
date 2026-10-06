@@ -1212,9 +1212,18 @@ def _proof_state():                       # the checker's place in its work, on 
     except (OSError, ValueError): return {}
 
 
-def _proof_save(st):
+_proof_saved = [0.0]
+
+def _proof_save(st, every=0):
+    """The checker's place, kept on this computer. Saved whole, so after each
+    file it is saved at most every `every` seconds: after a crash a few files
+    are read again (checking only reads), instead of the whole growing list
+    being written again for every file checked."""
+    if every and time.time() - _proof_saved[0] < every:
+        return
     tmp = HOME / "proof.json.part"
     tmp.write_text(json.dumps(st)); os.replace(tmp, HOME / "proof.json")
+    _proof_saved[0] = time.time()
 
 
 def _older_todo():
@@ -1287,7 +1296,7 @@ def check_some(budget=300):
                 except OSError:
                     if not os.path.isdir(STATUS): _proof_save(st); return True   # the archive went away: later
                     res["away"] += 1
-                items.pop(0); _proof_save(st)
+                items.pop(0); _proof_save(st, every=30)
             secs = time.time() - res["t0"]
             if res["ok"]:
                 try:
@@ -1375,7 +1384,7 @@ def check_some(budget=300):
                 cur["tries"][rel] = cur["tries"].get(rel, 0) + 1
                 if cur["tries"][rel] < 3: _proof_save(st); return True     # a blip: that file again next time
                 cur["done"].append([rel, 0, "", f"could not be read ({e.strerror or e})"])
-            seen.add(rel); _proof_save(st)
+            seen.add(rel); _proof_save(st, every=30)
         read = [d for d in cur["done"] if d[2]]
         try:
             mhl_write(root, [(os.path.join(root, r), s, h, a, "") for r, s, h, a in read],

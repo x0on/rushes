@@ -817,6 +817,32 @@ class ProofTests(unittest.TestCase):
             m.check_some()
         self.assertEqual([q.get('copies', [''])[0] for u, q in self.posted if u.endswith('/db/copies.php')], [''])
 
+    def test_the_checker_does_not_rewrite_its_whole_place_for_every_file(self):
+        # Workload review: proof.json was written whole after every file, so the bytes written
+        # grew with the square of the files checked (500 files of 1 KB: 8.7 MB written).
+        m = self.mod
+        (self.archive / 'old').mkdir(); (self.source / 'old').mkdir()
+        def run(n):
+            todo = []
+            for i in range(n):
+                a, o = self.archive / 'old' / f'{n}-{i}.mov', self.source / 'old' / f'{n}-{i}.mov'
+                a.write_bytes(b'x' * 1024); o.write_bytes(b'x' * 1024); todo.append([str(a), str(o)])
+            (m.HOME / 'proof.json').unlink(missing_ok=True)
+            written, replace = [0, 0], os.replace
+            def counted(src, dst):
+                if str(dst).endswith('proof.json'): written[0] += os.path.getsize(src); written[1] += 1
+                return replace(src, dst)
+            with patch.object(m, 'control', return_value={}), patch.object(m, '_push'), patch('sys.stdout', new_callable=io.StringIO), \
+                 patch.object(m, 'new_fingerprint', side_effect=lambda: (__import__('hashlib').blake2b(digest_size=16), 'xxh128')), \
+                 patch.object(m, '_older_todo', return_value={str(self.archive / 'old'): todo}), patch.object(m, 'mhl_write'), \
+                 patch.object(m, 'history'), patch.object(m.os, 'replace', side_effect=counted):
+                if hasattr(m, '_proof_saved'): m._proof_saved[0] = 0.0      # a fresh start of the checker
+                m.check_some(budget=60)
+            return written
+        small, big = run(100), run(1000)
+        self.assertLess(big[1], 10, f'saved {big[1]} times for 1,000 files')
+        self.assertLess(big[0], 15 * small[0], f'{big[0]:,} bytes for 1,000 files against {small[0]:,} for 100: it grows with the files, not their square')
+
     def test_the_checker_proves_older_copies_then_finds_damage(self):
         self.setUp2(); m = self.mod
         good, bad = self.source / 'good.mov', self.source / 'bad.mov'
