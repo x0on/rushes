@@ -73,7 +73,6 @@ def iso(src, out, volume):
     def name(isdir):                              # ISO names are only placeholders: Rock Ridge has the real ones
         n[0] += 1
         return f"{'D' if isdir else 'F'}{n[0]:07d}"
-    keep = []
     def walk(here, iso_dir):
         for e in sorted(os.scandir(here), key=lambda e: e.name):
             st = os.lstat(e.path)
@@ -83,14 +82,11 @@ def iso(src, out, volume):
             elif e.is_dir():
                 c.add_directory(p, rr_name=e.name, file_mode=0o040755)
                 walk(e.path, p)
-            else:
-                f = open(e.path, "rb"); keep.append(f)
-                c.add_fp(f, st.st_size, p, rr_name=e.name, file_mode=0o100755 if st.st_mode & 0o111 else 0o100644)
+            else:                                 # opened only while written: an app has thousands of files
+                c.add_file(e.path, p, rr_name=e.name, file_mode=0o100755 if st.st_mode & 0o111 else 0o100644)
     walk(src, "/")
     c.write(out)
     c.close()
-    for f in keep:
-        f.close()
 
 
 def tool():
