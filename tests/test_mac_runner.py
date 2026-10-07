@@ -370,6 +370,9 @@ class MacProxies(MacJobs):
             self.assertTrue(made.startswith(light + "\t") and made.rstrip("\n").endswith("\t1") and "h264" in made)
             self.r.job("proxy-build", {"QUERY": "AI"}); self.r.busy["proxies"].join(60)     # not looked at again
             self.assertEqual(open(os.path.join(self.web, "proxy-made.tsv")).read(), made)
+            self.r.job("proxy-build", {"QUERY": "AI/openart-video_1.mp4"}); self.r.busy["proxies"].join(60)   # Search's "Make its proxy now": one file
+            st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+            self.assertEqual(st["state"], "done", "one video can be asked for alone, not only its folder")
         # what is not light: HEVC, 4K, a heavy bitrate, sound a browser cannot play
         for report in ("Video: hevc (Main), yuv420p(tv), 1920x1080 bitrate: 3000 kb/s Audio: aac",
                        "Video: h264 (High), yuv420p(tv), 3840x2160 bitrate: 9000 kb/s Audio: aac",
@@ -378,3 +381,6 @@ class MacProxies(MacJobs):
                        "Video: h264 (High 10), yuv420p10le(tv), 1920x1080 bitrate: 8000 kb/s"):
             self.assertFalse(runner.Runner.light(report, "x.mp4"), report)
         self.assertFalse(runner.Runner.light("Video: h264 (High), yuv420p(tv), 1280x720 bitrate: 4000 kb/s", "x.mxf"))
+        # a phone's vertical HD is HD: the short side is what counts; vertical 4K is not light
+        self.assertTrue(runner.Runner.light("Video: h264 (High), yuv420p(tv), 1080x1920 bitrate: 8000 kb/s Audio: aac", "x.mp4"))
+        self.assertFalse(runner.Runner.light("Video: h264 (High), yuv420p(tv), 2160x3840 bitrate: 9000 kb/s Audio: aac", "x.mp4"))

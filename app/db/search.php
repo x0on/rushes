@@ -114,6 +114,10 @@ if ($in !== '') {
     array_push($args, ...$want);
 }
 
+$nothing = $where === [];
+// A cache (an app's previews and renders, rebuilt by itself: labels.php) is never what anyone looks
+// for: left out unless the Filters panel asks for it (cache=1)
+if (($_GET['cache'] ?? '') !== '1' && !$nothing) $where[] = "files.path NOT IN (SELECT path FROM labels WHERE label = 'cache')";
 $sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 // Sort by: as found (the folder order for files, best match first for videos), newest, oldest, largest, longest, name
 $sort  = (string)($_GET['sort'] ?? '');
@@ -127,7 +131,7 @@ $bind = function (SQLite3Stmt $s, array $a) {
 $db = db();
 $t0 = microtime(true);
 
-if ($where === []) {
+if ($nothing) {
     echo json_encode(['q' => '', 'total' => 0, 'bytes' => 0,
         'counts' => ['all' => 0], 'rows' => [], 'offset' => 0, 'limit' => $limit,
         'ms' => 0, 'indexed' => (int)meta_get('files_imported', '0'),
@@ -137,7 +141,7 @@ if ($where === []) {
 
 // the rows
 $st = $db->prepare("SELECT files.path, name, ext, kind, bytes, year, event, dept,
-                           width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera,
+                           width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera, asis,
                            (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
                            (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still,
                            lb.vkey, lb.vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = lb.vkey) AS versions

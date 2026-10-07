@@ -151,7 +151,7 @@ encode() {
     kind=$(kind_of "$1")
     if [ "$SOFTWARE" = 1 ]; then          # chosen in Proxy settings: straight to software
         how="software"
-        run_ff -i "$1" -vf "scale=-2:$HEIGHT" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"; return
+        run_ff -i "$1" -vf "scale='if(gt(iw,ih),-2,$HEIGHT)':'if(gt(iw,ih),$HEIGHT,-2)'" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"; return
     fi
     if [ "$HW" = 1 ] && ! { [ -n "$kind" ] && grep -qxF "$kind" "$CANNOT" 2>/dev/null; }; then
         how="video chip"
@@ -173,7 +173,7 @@ encode() {
         fi
     fi
     how="software"
-    run_ff -i "$1" -vf "scale=-2:$HEIGHT" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"
+    run_ff -i "$1" -vf "scale='if(gt(iw,ih),-2,$HEIGHT)':'if(gt(iw,ih),$HEIGHT,-2)'" -c:v libx264 -preset veryfast -crf 23 $AUDIO "$2"
 }
 
 # ---------- what is missing ----------

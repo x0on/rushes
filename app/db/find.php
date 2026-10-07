@@ -23,6 +23,7 @@ require __DIR__ . '/config.php';
 <script>
   window.RUSHES = <?= json_encode([
     'archive' => archive_dir(),
+    'mac'     => on_mac(),
     'local'   => s_path('archive.as_seen_from_helper', archive_dir()),
     // drives kept where they are: a path on one reads from the drive's name
     'drives'  => array_map(fn($d) => ['path' => rtrim($d['path'], '/'), 'name' => $d['name']], drives_seen()),
@@ -63,6 +64,10 @@ require __DIR__ . '/config.php';
            font: 13.5px var(--font); padding: 8px 6px; cursor: pointer; white-space: nowrap }
   .plain:hover { color: var(--accent-text) }
   .plain svg { width: 16px; height: 16px }
+  .plain.pulls { padding: 9px 12px; gap: 8px; font-size: 14px }
+  .plain.pulls svg { width: 18px; height: 18px }
+  .plain.pulls .chev { width: 14px; height: 14px; color: var(--muted) }
+  .plain.pulls:hover { background: var(--raised); color: var(--fg) }
   /* the drop-downs: recent searches, pulls */
   .dd { position: absolute; z-index: 25; top: calc(100% + 6px); min-width: 240px; padding: 5px; background: var(--surface);
         border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.3) }
@@ -222,13 +227,22 @@ require __DIR__ . '/config.php';
   .vrow span { flex: 1; min-width: 0; overflow-wrap: anywhere }
   .vrow i { font-style: normal; font-size: 10.5px; padding: 0 5px; margin-left: 4px; border: 1px solid currentColor; opacity: .7 }
   .vrow small { color: var(--muted); white-space: nowrap }
-  .facts { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 4px }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--line); border-top-color: var(--accent);
+          border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; margin-right: 4px }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  details.more { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; padding: 0; margin-top: 18px; box-shadow: none }
+  details.more > summary { list-style: none; cursor: pointer; padding: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--muted) }
+  details.more > summary::-webkit-details-marker { display: none }
+  details.more > summary::after { content: ' ›'; display: inline-block; transition: transform .15s }
+  details.more[open] > summary::after { transform: rotate(90deg) }
+  details.more .kv { margin-bottom: 6px }
   /* the big view: the video large, with room around it */
   dialog#big { width: min(1500px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: 0;
                background: var(--bg); color: var(--fg); padding: 0; overflow: hidden }
   dialog#big::backdrop { background: rgba(5, 12, 12, .85) }
-  .bigbar { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0 }
-  .bigbar button { border: 0; background: none; color: var(--fg); font-size: 22px; width: 38px; height: 34px; cursor: pointer }
+  .bigbar { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px 14px; border-bottom: 1px solid var(--line); margin-bottom: 18px }
+  .bigbar button { border: 0; background: none; color: var(--fg); font-size: 24px; width: 44px; height: 40px; cursor: pointer }
+  .bigbar button:hover:not(:disabled) { background: var(--raised) }
   .bigbar button:disabled { opacity: .3; cursor: default }
   .bigbody { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; padding: 6px 28px 28px;
              max-height: calc(100vh - 90px); overflow-y: auto }
@@ -292,7 +306,7 @@ require __DIR__ . '/config.php';
           <div class="dd" id="recentDd" hidden></div>
         </div>
         <div class="pm">
-          <button class="plain" id="pBtn" aria-haspopup="true" title="Pulls: clips gathered for a job">Pulls ⌄</button>
+          <button class="plain pulls" id="pBtn" aria-haspopup="true" title="Pulls: clips gathered for a job"><?= icon('pull', 1.9) ?><span>Pulls</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           <div class="dd" id="pullsDd" hidden></div>
         </div>
       </div>
@@ -395,6 +409,7 @@ const FILTERS = [
   { k: 'people', t: 'People', many: [['none', 'No people'], ['one', 'One person'], ['two', 'Two'], ['few', 'A group']] },
   { k: 'light', t: 'Light', many: [['day', 'Daylight'], ['artificial', 'Artificial light'], ['golden', 'Sunrise or sunset'], ['night', 'Dusk or night']] },
   { k: 'mood', t: 'Mood', many: [], closed: 1 },
+  { k: 'cache', t: 'Cache files', one: [['', 'Hidden'], ['1', 'Shown']], closed: 1 },
 ];
 const F = {};
 function resetF() { FILTERS.forEach(function (f) { if (f.one) F[f.k] = ''; if (f.many) F[f.k] = []; }); }
@@ -535,6 +550,7 @@ function pieces(list) {
 // from its real size, or from its name until it has been read; its language from its name.
 function aspect(w, h) {
   if (!w || !h) return '';
+  if (Math.abs(Math.max(w, h) / Math.min(w, h) - 1.896) < .02) return w >= 4000 || h >= 4000 ? 'DCI 4K' : 'DCI';   // cinema width, 4096 × 2160
   const r = w / h, known = [[16, 9], [9, 16], [1, 1], [4, 5], [4, 3], [21, 9]];
   const k = known.reduce(function (a, b) { return Math.abs(b[0] / b[1] - r) < Math.abs(a[0] / a[1] - r) ? b : a; });
   return Math.abs(k[0] / k[1] - r) < .06 ? k[0] + ':' + k[1] : (r > 1 ? Math.round(r * 100) / 100 + ':1' : '1:' + Math.round(100 / r) / 100);
@@ -587,7 +603,8 @@ function fileTile(r) {
   const k = r.kind || 'other', st = (r.still || '').split(':');
   return '<div class="frame' + (inPull(r.path) ? ' pulled' : '') + '" tabindex="0" data-k="' + esc(r.path) + '" data-p="' + esc(r.path) + '">' +
     (st.length === 2 ? '<img loading="lazy" alt="' + esc(r.name) + '" src="' + still(st[0], st[1]) + '">'
-                     : '<div class="ph">' + (ICON[k] || ICON.file) + '<small>' + esc(r.name) + '</small></div>') +
+     : k === 'image' && VIEW.test(r.name) ? '<img loading="lazy" alt="' + esc(r.name) + '" src="' + asIs(r.path) + '" onerror="this.outerHTML=\'<div class=ph>' + esc(ICON.image).replace(/'/g, '&#39;') + '</div>\'">'
+     : '<div class="ph">' + (ICON[k] || ICON.file) + '<small>' + esc(r.name) + '</small></div>') +
     '<span class="chip">' + (ICON[k] || ICON.file) + (r.duration ? clock(r.duration) : '') +
       (res(r) ? ' <span class="r">' + res(r) + '</span>' : '') +
       (r.width && aspect(r.width, r.height) !== '16:9' ? ' <span class="r">' + aspect(r.width, r.height) + '</span>' : '') + '</span>' +
@@ -859,35 +876,43 @@ function shootOf(r) {
   return bits.pop() || r.event || '';
 }
 
+// Sounds and pictures a browser plays or shows as they are (play.php sends the file itself)
+const HEAR = /\.(mp3|wav|m4a|aac|aiff?|flac)$/i, VIEW = /\.(jpe?g|png|gif|webp|heic)$/i;
+const asIs = function (p) { return 'play.php?p=' + encodeURIComponent(p); };
 function render(where) {
   const st = where === 'big' ? BIG : PANEL; if (!st) return;
   const r = st.row, it = st.it, cur = shotAt(st), big = where === 'big';
   const fp = it.fp, t = cur && cur.kind === 'shot' ? +cur.start_s : st.t;
-  const canPlay = r.kind === 'video' || it.found.length || !!fp;
-  const pic = cur && cur.kind === 'shot' ? '<img alt="" src="' + still(fp, cur.shot) + '">'
+  const sound = r.kind === 'audio' && HEAR.test(r.name || ''), picture = r.kind === 'image' && VIEW.test(r.name || '');
+  const proxy = !!(r.proxy_at || r.asis === '1');
+  const canPlay = r.kind === 'video' && proxy, noProxy = r.kind === 'video' && !proxy;
+  const pic = picture ? '<img alt="" src="' + asIs(r.path) + '">'
+            : cur && cur.kind === 'shot' ? '<img alt="" src="' + still(fp, cur.shot) + '">'
             : '<div class="ph">' + (ICON[r.kind] || ICON.file) + '</div>';
   // Every keyword of the whole video: the big view offers them as searches
   const words = {};
   st.shots.forEach(function (s) { [s.tags, s.themes, s.on_screen].forEach(function (v) {
     (v || '').split(' · ').forEach(function (w) { w = w.trim(); if (w) words[w.toLowerCase()] = words[w.toLowerCase()] || w; }); }); });
   const found = {}; it.found.forEach(function (x) { found[(+x).toFixed(2)] = 1; });
-  const html =
-    '<div' + (big ? '' : '') + '>' +
-      (big ? '' : head(r)) +
-      '<div class="vb">' +
-        '<div class="pv" data-pv>' + pic + (!st.playing && canPlay ? '<span class="go">▶</span>' : '') + '</div>' +
-        (canPlay ? '<p class="pv-note" data-pvn>' + (st.playing ? 'Loading its proxy from the archive…' : 'Click to play' + (t ? ' from ' + tcode(t) : '') + '.') + '</p>' : '') +
-        (big ? (st.shots.length ? '<div class="sec">In this video · ' + st.shots.filter(function (s) { return s.kind === 'shot'; }).length + ' shots</div>' + strip(st, found) : '') +
-               (Object.keys(words).length ? '<div class="sec">Keywords</div><div class="tags">' +
-                 Object.keys(words).slice(0, 24).map(function (k) { return '<button data-kw="' + esc(words[k]) + '">' + esc(words[k]) + '</button>'; }).join('') + '</div>' : '')
-             : versionsBox(r, it) + describe(cur) + (st.shots.length ? '<div class="sec">In this video</div>' + strip(st, found) : '') + details(r, cur)) +
-      '</div>' +
-    '</div>' +
-    (big ? '<div>' + head(r) + '<div class="vb">' + facts(r, true) + versionsBox(r, it) + describe(cur) + details(r, cur, true) + '</div></div>' : '');
+  const player = sound
+    ? '<audio controls preload="none" src="' + asIs(r.path) + '" style="width:100%"></audio><p class="pv-note">Plays the file itself (the original stays where it is).</p>'
+    : '<div class="pv" data-pv>' + pic + (!st.playing && canPlay ? '<span class="go">▶</span>' : '') + '</div>' +
+      (canPlay ? '<p class="pv-note" data-pvn>' + (st.playing ? 'Loading its proxy from the archive…' : 'Click to play' + (t ? ' from ' + tcode(t) : '') + '.') + '</p>'
+       : noProxy ? '<p class="pv-note" data-pvn>' + (st.making ? '<span class="spin"></span> Making its proxy on this Mac… it plays here as soon as it is ready.'
+                   : 'No proxy yet, so it cannot play here. ' + (RUSHES.mac && pullable(r.path) ? '<button class="plain" data-do="proxy" style="padding:0;color:var(--accent-text);font-weight:600">Make its proxy now</button>'
+                   : 'Proxies are made in Manage → Describe.')) + '</p>' : '');
+  const shotsBox = st.shots.length ? '<div class="sec">In this video' + (big ? ' · ' + st.shots.filter(function (s) { return s.kind === 'shot'; }).length + ' shots' : '') + '</div>' + strip(st, found) : '';
+  const html = big
+    ? '<div><div class="vb">' + player + shotsBox +
+        (Object.keys(words).length ? '<div class="sec">Keywords</div><div class="tags">' +
+          Object.keys(words).slice(0, 24).map(function (k) { return '<button data-kw="' + esc(words[k]) + '">' + esc(words[k]) + '</button>'; }).join('') + '</div>' : '') +
+      '</div></div>' +
+      '<div>' + head(r) + '<div class="vb">' + versionsBox(r, it) + describe(cur) + details(r, cur) + '</div></div>'
+    : head(r) + '<div class="vb">' + player + versionsBox(r, it) + describe(cur) + shotsBox + details(r, cur) + '</div>';
   const box = big ? $('bigBody') : $('inspect');
   box.hidden = false; box.innerHTML = html;
   wire(box, st, where);
-  if (st.playing) startVideo(box, r.path, t);
+  if (st.playing && canPlay) startVideo(box, r.path, t);
 }
 function head(r) {
   return '<div class="vh"><b>' + esc(r.name) + '</b>' +
@@ -911,29 +936,26 @@ function versionsBox(r, it) {
   const n = r.versions || it.versions;
   return n > 1 ? '<div class="sec">' + n + ' versions</div><div class="vlist" data-vers="' + esc(r.vkey || it.vkey) + '"><div class="vrow"><span>Looking…</span></div></div>' : '';
 }
-function facts(r, grid) {
-  return '<div class="kv">' +
-    kv('Dimensions', r.width ? r.width + ' × ' + r.height : '') + kv('File type', esc((r.ext || '').toUpperCase())) +
-    kv('Codec', esc((r.codec || '').toUpperCase())) + kv('Length', r.duration ? clock(r.duration) : '') +
-    kv('Frame rate', r.fps ? (+r.fps).toFixed(3).replace(/\.?0+$/, '') : '') + kv('Size', r.bytes ? tb(r.bytes) : '') +
-    kv('Resolution', res(r)) + kv('Shoot', esc(shootOf(r))) + '</div>';
-}
-function details(r, cur, big) {
+// Everything else about the shot and the file: folded away, one click to open
+function details(r, cur) {
   const shot = cur && cur.kind === 'shot' ? cur : null;
-  return '<div class="facts">' +
+  return '<details class="more"><summary>Details</summary>' +
     (shot ? '<div class="sec">This shot</div><div class="kv">' +
       kv('Text on screen', tagList(shot.on_screen), true) + kv('Themes', tagList(shot.themes), true) + kv('Tags', tagList(shot.tags), true) +
       kv('Shot size', esc(shot.shot_size)) + kv('People', esc(shot.people)) + kv('Light', esc(shot.light)) + kv('Mood', esc(shot.mood)) +
       kv('Part of the day', esc(shot.part_of_day)) + '</div>' : '') +
-    '<div class="sec">The file</div>' + (big ? '' : facts(r)) + '<div class="kv" style="margin-top:10px">' +
-      kv('Kind', esc(r.kind || 'file')) +
+    '<div class="sec">The file</div><div class="kv">' +
+      kv('Dimensions', r.width ? r.width + ' × ' + r.height + (aspect(r.width, r.height) ? ' · ' + aspect(r.width, r.height) : '') : '') +
+      kv('File type', esc((r.ext || '').toUpperCase())) + kv('Codec', esc((r.codec || '').toUpperCase())) + kv('Length', r.duration ? clock(r.duration) : '') +
+      kv('Frame rate', r.fps ? (+r.fps).toFixed(3).replace(/\.?0+$/, '') : '') + kv('Size', r.bytes ? tb(r.bytes) : '') +
+      kv('Resolution', res(r)) + kv('Shoot', esc(shootOf(r))) + kv('Kind', esc(r.kind || 'file')) +
       (r.recorded ? kv('Recorded', esc(recorded(r.recorded)) + ' <small style="display:inline;text-transform:none;letter-spacing:0">(the camera\'s clock)</small>', true) : '') +
       kv('Camera', esc(r.camera)) + kv('Timecode', esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · '))) +
       kv('Copies', copiesText(r.copies), true) +
       (r.proxy_at ? kv('Plays from', 'its proxy (downloads and pulls use the original)', true) : '') +
       (r.drive ? kv('Drive', esc(r.drive) + (r.away ? ' &mdash; <b>not plugged in</b>: plug it in to open this file' : ' (plugged in)'), true) : '') +
       kv('Where it lives', esc(short(r.path)), true) +
-    '</div></div>';
+    '</div></details>';
 }
 function startVideo(box, path, t) {
   const pv = box.querySelector('[data-pv]'), note = box.querySelector('[data-pvn]');
@@ -951,6 +973,25 @@ function wire(box, st, where) {
     b.onclick = function () { copyText(localPath(r.path), function (ok) {
       b.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C');
       setTimeout(function () { b.innerHTML = ICON.copy; }, 1600); }); };
+  });
+  box.querySelectorAll('[data-do="proxy"]').forEach(function (b) {
+    b.onclick = async function () {
+      b.disabled = true; b.textContent = 'Asking…';
+      let j;
+      try { j = await (await fetch('proxy-one.php', { method: 'POST', body: new URLSearchParams({ p: r.path }) })).json(); }
+      catch (e) { j = { error: 'Rushes did not answer (' + e.message + ')' }; }
+      if (j.error) { say('Not asked: ' + j.error); b.disabled = false; b.textContent = 'Make its proxy now'; return; }
+      st.making = true; say('Asked: its proxy is being made on this Mac.'); render(where);
+      const until = Date.now() + 20 * 60 * 1000;
+      const look = async function () {
+        if (!st.making) return;
+        try { const d = await getJSON({ p: r.path, limit: 1 }); const x = d.rows[0];
+              if (x && (x.proxy_at || x.asis === '1')) { KNOWN[x.path] = x; st.row = x; st.making = false; say('Its proxy is ready.'); render(where); return; } } catch (e) {}
+        if (Date.now() > until) { st.making = false; say('Its proxy is taking long: Manage → Describe shows what the proxy maker is doing.'); render(where); return; }
+        setTimeout(look, 8000);
+      };
+      setTimeout(look, 8000);
+    };
   });
   box.querySelectorAll('[data-do="pull"]').forEach(function (b) {
     b.onclick = async function () { await addToPull([r.path], null); const on = inPull(r.path);

@@ -3,6 +3,31 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.20 — October 2026
+
+- **Sounds play, pictures show:** an MP3, WAV, M4A, AAC, AIFF or FLAC plays
+  in the panel, from the file itself; a JPG, PNG, GIF, WebP or HEIC shows as
+  itself, on its tile and large in the panel. Nothing to make first; the
+  original is only read.
+- **Make its proxy now:** a video with no proxy says so in the panel, with a
+  button that makes that one proxy on this Mac, in the background; it plays
+  there as soon as it is ready. No need to add its whole folder in Describe.
+- **Vertical video, done right:** a phone's 1080 × 1920 counts as HD, so a
+  light one plays as it is; and proxies keep the short side at the chosen
+  height (720 × 1280, not 405 × 720).
+- **The details, folded:** in the panel and the big view, the name with Pull
+  and Copy, then the versions, then the Description; everything else (the
+  shot's tags, shot size, light …, the file's dimensions, codec, dates, copies,
+  where it lives) is under **Details ›**, closed until clicked.
+- **More room** around ‹ › ✕ in the big view, and **Pulls** in the header with
+  its icon and a clear arrow.
+- **Cache files left out of Search** (Capture One's previews, Premiere's
+  renders …); Filters → Cache files shows them when wanted.
+- **App backups are versions:** Audition's "Central Park_20250520T124759.sesx"
+  backups and Premiere's auto-saves sit behind the real session or project,
+  shown once with ⧉.
+- **"DCI 4K"** names the cinema-width 4096 × 2160, instead of "1.9:1".
+
 ## 0.12.19 — October 2026
 
 - **A calmer header:** the search field across the top with the kind of file

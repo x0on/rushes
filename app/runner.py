@@ -501,7 +501,7 @@ class Runner:
         v = re.search(r"Video: (\w+)([^\n]*?), (\d{2,5})x(\d{2,5})", report)
         br = re.search(r"bitrate: (\d+) kb/s", report)
         sound = re.findall(r"Audio: (\w+)", report)
-        return bool(v and v[1] == "h264" and re.search(r"yuv(j)?420p[,(]", v[2] + ",") and int(v[4]) <= 1080
+        return bool(v and v[1] == "h264" and re.search(r"yuv(j)?420p[,(]", v[2] + ",") and min(int(v[3]), int(v[4])) <= 1080   # the short side: a phone's 1080x1920 is HD
                     and br and int(br[1]) <= 10000 and all(a in ("aac", "mp3") for a in sound))
 
     def encode(self, ff, src, out, h, b, engine):
@@ -509,10 +509,12 @@ class Runner:
         nice = ["nice", "-n", "15"] if shutil.which("nice") else []      # copies, search and editors come first
         audio = ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
         tries = []
+        # the short side becomes {h}: a vertical clip keeps its width (720x1280, not 405x720)
+        fit = f"scale='if(gt(iw,ih),-2,{h})':'if(gt(iw,ih),{h},-2)'"
         if engine and b != "sw":
-            tries.append(("video chip", ["-hwaccel", "videotoolbox", "-i", src, "-vf", f"scale=-2:{h}", "-c:v", "h264_videotoolbox",
+            tries.append(("video chip", ["-hwaccel", "videotoolbox", "-i", src, "-vf", fit, "-c:v", "h264_videotoolbox",
                                          "-b:v", f"{b}M", "-maxrate", f"{int(b) * 3 // 2}M"]))
-        tries.append(("software", ["-i", src, "-vf", f"scale=-2:{h}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]))
+        tries.append(("software", ["-i", src, "-vf", fit, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]))
         err = ""
         for how, args in tries:
             if self.proxy_halt.is_set():
@@ -543,11 +545,12 @@ class Runner:
             self.proxy_state(state="no-ffmpeg"); self.plog("no ffmpeg on this Mac, and it could not be downloaded (proxy.log says why)")
             return
         root = os.path.join(a, only) if only else a
-        if not os.path.isdir(root):
+        one = os.path.isfile(root) and root.lower().endswith(VIDEO_EXT)      # Search's "Make its proxy now": that video alone
+        if not one and not os.path.isdir(root):
             self.proxy_state(state="no-folder", only=only); return
         proot = os.path.join(a, "PROXIES")
         plan, have, videos = [], 0, 0
-        for d, dirs, files in os.walk(root):
+        for d, dirs, files in ([(os.path.dirname(root), [], [os.path.basename(root)])] if one else os.walk(root)):
             dirs[:] = sorted(x for x in dirs if x not in SKIP and not x.startswith(".")
                              and not (d == a and x in ("PROXIES", HOLD, OLD_HOLD, "_rushes")))
             for n in sorted(files):

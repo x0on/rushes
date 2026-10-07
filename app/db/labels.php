@@ -14,7 +14,7 @@ const LABEL_AUDIO  = ['wav', 'mp3', 'aif', 'aiff', 'm4a', 'aac', 'flac'];
 const LABEL_RAW    = ['nef', 'cr2', 'cr3', 'arw', 'dng', 'raf', 'orf', 'rw2'];
 const LABEL_IMAGE  = ['jpg', 'jpeg', 'png', 'heic', 'tif', 'tiff', 'webp', 'gif'];
 const LABEL_DESIGN = ['psd', 'ai', 'indd', 'eps', 'svg', 'afdesign', 'sketch', 'fig'];
-const LABEL_RULES  = '3';   // raise when the rules change: every label is made again
+const LABEL_RULES  = '4';   // raise when the rules change: every label is made again
 const LABEL_PROJ   = ['prproj', 'prin', 'aep', 'aepx', 'drp', 'drx', 'sesx', 'fcpxml'];
 
 // What Search shows under each name (find.php's rail), and which labels each takes in
@@ -37,8 +37,12 @@ const LABEL_SHOWN = [
 // Only what is made here is grouped (a camera's C0001, C0002 are different takes), and
 // only beside each other: the same folder, or anywhere under the same Output folder.
 // Tried on 1,984 finished videos of a real archive: 354 pieces had versions, none wrongly joined.
-const LABEL_VERSIONED = ['deliverable', 'deliverable_reused', 'made_here', 'design', 'design_editable', 'voiceover'];
+const LABEL_VERSIONED = ['deliverable', 'deliverable_reused', 'made_here', 'design', 'design_editable', 'voiceover', 'project'];
+// A backup an app saved by itself: "Central Park_20250520T124759.149073.sesx" (Audition),
+// "Promo-2024-03-12_10-11-22.prproj" (an auto-save). The same piece, behind the real one.
+const VERSION_STAMP = '/[\s_-]*\d{4}-?\d{2}-?\d{2}[t_ -]?\d{2}[-:.]?\d{2}[-:.]?\d{2}(\.\d+)?$/u';
 const VERSION_TAIL = [
+    VERSION_STAMP,
     '/[\s_-]*(v|ver|version)\s*\.?\d+[a-z]?$/u',                                    // v2, V3, -V10, version 4
     '/[\s_-]*(final|update\d*|revised|rev\d*|fixed|fix|new|copy|alt|edit(ed)?|export|render)$/u',
     '/[\s_-]*(eng|esp|spa|english|spanish|espanol|español)$/u',                      // the same piece in another language
@@ -55,13 +59,15 @@ function version_of(string $path, string $label): array {
     if (!in_array($label, LABEL_VERSIONED, true)) return ['', 0];
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
     $n = trim(preg_replace('/\s+/u', ' ', mb_strtolower(pathinfo($path, PATHINFO_FILENAME))));
-    $rank = preg_match('/final/u', $n) ? 1000 : 0;
-    if (!$rank && preg_match('/(?:v|ver|version|_)\s*\.?(\d+)[a-z]?$|(?<=[a-z])(\d{1,2})$/u', $n, $m)) $rank = (int)($m[1] ?: $m[2]);
-    elseif (!$rank && preg_match('/\d([b-e])$/u', $n, $m)) $rank = ord($m[1]) - 96;
+    $rank = preg_match(VERSION_STAMP, $n) ? -1 : (preg_match('/final/u', $n) ? 1000 : 0);   // a backup never stands for the piece
+    if ($rank === 0 && preg_match('/(?:v|ver|version|_)\s*\.?(\d+)[a-z]?$|(?<=[a-z])(\d{1,2})$/u', $n, $m)) $rank = (int)($m[1] ?: $m[2]);
+    elseif ($rank === 0 && preg_match('/\d([b-e])$/u', $n, $m)) $rank = ord($m[1]) - 96;
     do { $was = $n; foreach (VERSION_TAIL as $t) $n = trim(preg_replace($t, '', $n)); } while ($n !== $was);
     if ($n === '') return ['', 0];
-    $dir = dirname($path); $o = stripos($dir . '/', '/output');
-    $kind = in_array($ext, LABEL_VIDEO, true) ? 'v' : (in_array($ext, LABEL_AUDIO, true) ? 'a' : 'i');
+    // beside each other: the same folder, or under the same Output, Backup or Auto-Save folder
+    $dir = dirname($path);
+    $o = preg_match('#/(outputs?|backups?|adobe premiere pro auto-save|auto-?saves?)(/|$)#i', $dir . '/', $mm, PREG_OFFSET_CAPTURE) ? $mm[0][1] : false;
+    $kind = in_array($ext, LABEL_VIDEO, true) ? 'v' : (in_array($ext, LABEL_AUDIO, true) ? 'a' : (in_array($ext, LABEL_PROJ, true) ? 'p' . $ext : 'i'));
     return [strtolower($o === false ? $dir : substr($dir, 0, $o)) . "	$kind	$n", $rank];
 }
 
