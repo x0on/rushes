@@ -340,7 +340,6 @@ like any other.
 
 Each needs its own discussion before it is built.
 
-- **Versions of one video** (v1, v2, final, final-final) shown as one entry in Search.
 - **Long takes:** a take longer than 30 s is described as one shot today; it should get a still every so often.
 - **Speech:** the speech model cannot be downloaded on some networks; let it be installed from a folder the person already has.
 - **Backups:** the person picks where (any network share or drive, its login kept in the Keychain), found by its address and never by a fixed folder name.

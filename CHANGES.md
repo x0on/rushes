@@ -3,6 +3,33 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.17 — October 2026
+
+- **Search is a wall of pictures:** what was found shows as stills in rows that
+  fill the window, each at its own shape (a phone's vertical clip stays
+  vertical). No words on them: a small chip says the kind, the length and the
+  resolution, or where in the file a moment is. Files without a picture yet
+  show their kind drawn; audio and project files are listed below. A list by
+  folder is one click away (the two buttons at the right).
+- **Versions show once:** "Promo", "Promo v2", "Promo_1", "Promo FINAL",
+  "Promo ENG" and "Promo SPA" are one piece, shown by its newest version with a
+  ⧉ and how many there are. Picking it lists every version beside it, newest
+  first; one click shows that version. Only what is made here is joined (a
+  camera's C0001 and C0002 stay apart), and only within the same folder or Output
+  folder. Tried on the finished videos of a real archive: 1,002 files became
+  354 pieces, none wrongly joined.
+- **Filters, not a side column:** the kind of file (Everything, Videos,
+  Images, Audio, Project files) is a menu in the search bar. Where to look and
+  what a file is (Deliverables, Stock, AI-generated …) are in a Filters panel,
+  hidden until **Filters** is pressed; they combine. Every filter that is on
+  shows beside the count, with a ✕ to turn it off, and moments found in the
+  footage obey them too.
+- **Pulls** are a menu of their own at the top right; **recent searches** drop
+  down under the search box.
+- Nothing plays or loads until asked: a click picks, a double-click plays. The
+  panel beside keeps its place while there are results, so a click never moves
+  the pictures under the mouse.
+
 ## 0.12.16 — October 2026
 
 - **Search, calmer and wider:** results use the whole window (and the panel's

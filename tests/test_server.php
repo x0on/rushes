@@ -266,6 +266,16 @@ foreach ([
     $got = label_of($p, $want === 'deliverable_reused' || $want === 'deliverable' ? 900 : 5, $out)[0];
     check($got === $want, "labels: $p is " . ($want ?: 'ignored') . ($got === $want ? '' : " (got $got)"));
 }
+// Versions of one piece (labels.php version_of): every naming seen on a real archive's finished videos
+$vk = fn($n) => version_of("/a/2022/Fair/OUTPUT/$n", 'deliverable')[0];
+foreach ([['Fair Promo.mp4', 'Fair Promo v2.mp4', 'Fair Promo V3.mp4', 'Fair Promo- V4.mp4', 'Fair Promo_1.mp4', 'Fair Promo FINAL.mp4',
+           'Fair Promo2.mp4', 'Fair Promo ENG.mp4', 'Fair Promo SPA_2.mp4', 'old/Fair Promo version 5.mp4'],
+          ['Testimonial 5.mp4', 'Testimonial 5b.mp4'], ['ParkENGLISH.mp4', 'ParkSPANISH.mp4'], ['Gum_FINALEnglish.mp4', 'Gum_FINALSpanish.mp4']] as $g)
+    check(count(array_unique(array_map($vk, $g))) === 1 && $vk($g[0]) !== '', 'versions: ' . implode(', ', $g) . ' are one piece');
+foreach ([['Our Town 10.mp4', 'Our Town 13.mp4'], ['Testimonial 5.mp4', 'Testimonial 6.mp4'], ['Arbor Day 2020.mp4', 'Arbor Day 2021.mp4'], ['Promo.mp4', 'Promo.psd']] as $g)
+    check(count(array_unique(array_map($vk, $g))) === 2, 'versions: ' . implode(' and ', $g) . ' stay apart');
+check(version_of('/a/Card/C0001.MP4', 'camera')[0] === '' && version_of('/a/Fair Promo FINAL.mp4', 'deliverable')[1] > version_of('/a/Fair Promo v3.mp4', 'deliverable')[1],
+      'versions: camera takes are never joined; FINAL counts as the newest');
 // A light video used as it is (runner.py): no proxy, the original plays, and its folder counts it as done
 require_once web_dir() . '/db/prepare.php';
 $talk = "$arch/Shoots/Library talk/talk.mov";

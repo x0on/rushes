@@ -241,6 +241,10 @@ function icon(string $name, float $w = 1.7): string {
         'server'     => '<rect x="4" y="3.5" width="16" height="5.5" rx="1.5"/><rect x="4" y="9.3" width="16" height="5.5" rx="1.5"/><rect x="4" y="15" width="16" height="5.5" rx="1.5"/><path d="M7.5 6.2h.01M7.5 12h.01M7.5 17.8h.01"/>',
         'info'       => '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6h.01"/>',
         'plus'       => '<path d="M12 5v14M5 12h14"/>',
+        'filter'     => '<path d="M4 6.5h16M7 12h10M10 17.5h4"/>',
+        'versions'   => '<rect x="3" y="8" width="13" height="12" rx="1.6"/><path d="M7 5h12.5A1.5 1.5 0 0 1 21 6.5V16"/>',
+        'list'       => '<path d="M8.5 6.5H20M8.5 12H20M8.5 17.5H20"/><path d="M4 6.5h.01M4 12h.01M4 17.5h.01"/>',
+        'quote'      => '<path d="M5 17.5c0-4 1.5-7 4.5-8.5M12.5 17.5c0-4 1.5-7 4.5-8.5"/><circle cx="7" cy="15.5" r="2"/><circle cx="14.5" cy="15.5" r="2"/>',
     ];
     $p = $d[$name] ?? $d['file'];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' . $w

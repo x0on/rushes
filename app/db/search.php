@@ -25,6 +25,10 @@ require_once __DIR__ . '/schema.php';
 db_init();   // new tables (the media ledger) exist before the first search
 require_once __DIR__ . '/analysis.php';
 analysis_init();   // the moments table, so a file can show the first still the model looked at
+require_once __DIR__ . '/labels.php';
+// Labels (and the versions of each piece) are kept by sync.php; after an update that changed
+// the rules they are made again here once, so the first search already groups versions
+if (meta_get('label_rules', '') !== LABEL_RULES) labels_refresh();
 
 $q      = trim($_GET['q'] ?? '');
 $kind   = $_GET['kind'] ?? '';
@@ -38,17 +42,23 @@ $where = []; $args = [];
 // a search for "50%" or "a_b" looks for those characters rather than acting
 // as a wildcard.
 foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
-    $where[] = "(path LIKE ? ESCAPE '\\' OR media.camera LIKE ? ESCAPE '\\' OR media.reel LIKE ? ESCAPE '\\')";
+    $where[] = "(files.path LIKE ? ESCAPE '\\' OR media.camera LIKE ? ESCAPE '\\' OR media.reel LIKE ? ESCAPE '\\')";
     $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
     array_push($args, $like, $like, $like);
 }
+$words = count($where); $wargs = count($args);     // the conditions after these are filters: moments obey them too
 if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
+// where=ARCHIVE: only under a folder of that name (the Filters panel's Where)
+if (($place = (string)($_GET['where'] ?? '')) !== '') {
+    $where[] = "files.path LIKE ? ESCAPE '\\'"; $args[] = '%/' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $place) . '/%';
+}
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
 // What each file is (labels.php): Deliverables, the stock library and its parts, AI-generated,
 // Photos, Design … from names, folders and sizes, wherever the files are; nothing is moved.
+// v=<key>: every version of one piece (labels.php version_of), for the panel beside the results
+if (($v = (string)($_GET['v'] ?? '')) !== '') { $where[] = 'files.path IN (SELECT path FROM labels WHERE vkey = ?)'; $args[] = $v; }
 $in = (string)($_GET['in'] ?? '');
 if ($in !== '') {
-    require_once __DIR__ . '/labels.php';
     if (!isset(LABEL_SHOWN[$in])) { echo json_encode(['error' => 'unknown section: ' . $in]); exit; }
     labels_refresh();                                       // files new since the last look get theirs first
     $want = LABEL_SHOWN[$in];
@@ -74,11 +84,12 @@ if ($where === []) {
 }
 
 // the rows
-$st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept,
+$st = $db->prepare("SELECT files.path, name, ext, kind, bytes, year, event, dept,
                            width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera,
                            (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
-                           (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still
-                    FROM files LEFT JOIN media ON media.file_id = files.id$sql ORDER BY path LIMIT ? OFFSET ?");
+                           (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still,
+                           lb.vkey, lb.vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = lb.vkey) AS versions
+                    FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$sql ORDER BY files.path LIMIT ? OFFSET ?");
 $bind($st, $args);
 $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
 $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
@@ -110,7 +121,26 @@ while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
 // What the footage shows and what was said, when it has been described.
 $moments = ['count' => 0, 'rows' => []];
 if ($q !== '' && ($kind === '' || $kind === 'all' || $kind === 'video')) {
-    try { $moments = analysis_search($q); } catch (Throwable $e) { $moments['error'] = $e->getMessage(); }
+    try {
+        $moments = analysis_search($q);
+        // which piece each moment's file is a version of, so a shot found in v2 and v3 shows once
+        $vs = $db->prepare('SELECT vkey, vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = labels.vkey) n FROM labels WHERE path = ?');
+        foreach ($moments['rows'] as &$m) {
+            $vs->bindValue(1, $m['path']); $r = $vs->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $vs->reset();
+            $m['vkey'] = $r['vkey'] ?? null; $m['vrank'] = (int)($r['vrank'] ?? 0); $m['versions'] = (int)($r['n'] ?? 0);
+        }
+        unset($m);
+        // Filters on (a kind, where, what it is): only moments of files that pass them
+        $fw = array_slice($where, $words); $fa = array_slice($args, $wargs);
+        if ($fw) {
+            $ok = $db->prepare('SELECT 1 FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path = ? AND ' . implode(' AND ', $fw));
+            $moments['rows'] = array_values(array_filter($moments['rows'], function ($m) use ($ok, $fa) {
+                $ok->bindValue(1, $m['path']); foreach ($fa as $i => $v) $ok->bindValue($i + 2, $v);
+                $r = $ok->execute()->fetchArray(); $ok->reset(); return (bool)$r;
+            }));
+            $moments['count'] = count($moments['rows']);   // ponytail: counts the first 60 found, not every match
+        }
+    } catch (Throwable $e) { $moments['error'] = $e->getMessage(); }
 }
 
 echo json_encode([

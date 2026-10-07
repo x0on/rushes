@@ -14,6 +14,7 @@ const LABEL_AUDIO  = ['wav', 'mp3', 'aif', 'aiff', 'm4a', 'aac', 'flac'];
 const LABEL_RAW    = ['nef', 'cr2', 'cr3', 'arw', 'dng', 'raf', 'orf', 'rw2'];
 const LABEL_IMAGE  = ['jpg', 'jpeg', 'png', 'heic', 'tif', 'tiff', 'webp', 'gif'];
 const LABEL_DESIGN = ['psd', 'ai', 'indd', 'eps', 'svg', 'afdesign', 'sketch', 'fig'];
+const LABEL_RULES  = '2';   // raise when the rules change: every label is made again
 const LABEL_PROJ   = ['prproj', 'prin', 'aep', 'aepx', 'drp', 'drx', 'sesx', 'fcpxml'];
 
 // What Search shows under each name (find.php's rail), and which labels each takes in
@@ -30,6 +31,36 @@ const LABEL_SHOWN = [
     'made'             => ['made_here'],
     'camera'           => ['camera'],
 ];
+
+// Versions of one piece: "Promo.mp4", "Promo v2.mp4", "Promo_1.mp4", "Promo FINAL.mp4",
+// "Promo ENG.mp4" and "Promo SPA.mp4" are one video, shown once with how many there are.
+// Only what is made here is grouped (a camera's C0001, C0002 are different takes), and
+// only beside each other: the same folder, or anywhere under the same Output folder.
+// Tried on 1,984 finished videos of a real archive: 354 pieces had versions, none wrongly joined.
+const LABEL_VERSIONED = ['deliverable', 'deliverable_reused', 'made_here', 'design', 'design_editable', 'voiceover'];
+const VERSION_TAIL = [
+    '/[\s_-]*(v|ver|version)\s*\.?\d+[a-z]?$/u',                                    // v2, V3, -V10, version 4
+    '/[\s_-]*(final|update\d*|revised|rev\d*|fixed|fix|new|copy|alt|edit(ed)?|export|render)$/u',
+    '/[\s_-]*(eng|esp|spa|english|spanish|espanol|español)$/u',                      // the same piece in another language
+    '/_\d{1,2}$/u',                                                                  // Promo_1: exported again
+    '/(?<=[a-z])\d{1,2}$/u',                                                         // February2 (but "Our Town 10" is an episode)
+    '/(?<=\d)[b-e]$/u',                                                              // Testimonial 5b
+    '/\(\d+\)$/u', '/[\s_.-]+$/u',
+];
+/** [key, rank] for a file that can have versions, or ['', 0]. The highest rank is the newest. */
+function version_of(string $path, string $label): array {
+    if (!in_array($label, LABEL_VERSIONED, true)) return ['', 0];
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    $n = trim(preg_replace('/\s+/u', ' ', mb_strtolower(pathinfo($path, PATHINFO_FILENAME))));
+    $rank = preg_match('/final/u', $n) ? 1000 : 0;
+    if (!$rank && preg_match('/(?:v|ver|version|_)\s*\.?(\d+)[a-z]?$|(?<=[a-z])(\d{1,2})$/u', $n, $m)) $rank = (int)($m[1] ?: $m[2]);
+    elseif (!$rank && preg_match('/\d([b-e])$/u', $n, $m)) $rank = ord($m[1]) - 96;
+    do { $was = $n; foreach (VERSION_TAIL as $t) $n = trim(preg_replace($t, '', $n)); } while ($n !== $was);
+    if ($n === '') return ['', 0];
+    $dir = dirname($path); $o = stripos($dir . '/', '/output');
+    $kind = in_array($ext, LABEL_VIDEO, true) ? 'v' : (in_array($ext, LABEL_AUDIO, true) ? 'a' : 'i');
+    return [strtolower($o === false ? $dir : substr($dir, 0, $o)) . "	$kind	$n", $rank];
+}
 
 /** [label, why] for one file. $outputs: "name\tbytes" of every file in an Output folder (a copy reused elsewhere). */
 function label_of(string $path, int $bytes, array $outputs): array {
@@ -89,8 +120,17 @@ function label_of(string $path, int $bytes, array $outputs): array {
 /** Labels for every file that has none yet; labels of files gone are dropped. -> how many were added */
 function labels_refresh(?SQLite3 $db = null): int {
     $db = $db ?? db();
-    $db->exec('CREATE TABLE IF NOT EXISTS labels (path TEXT PRIMARY KEY, label TEXT, why TEXT)');
+    $db->exec('CREATE TABLE IF NOT EXISTS labels (path TEXT PRIMARY KEY, label TEXT, why TEXT, vkey TEXT, vrank INTEGER)');
+    // Rules changed since the labels were made (or the table predates versions): all made again
+    if (meta_get('label_rules', '') !== LABEL_RULES) {
+        $cols = []; $c = $db->query('PRAGMA table_info(labels)');
+        while ($r = $c->fetchArray(SQLITE3_ASSOC)) $cols[] = $r['name'];
+        foreach (['vkey' => 'TEXT', 'vrank' => 'INTEGER'] as $k => $t) if (!in_array($k, $cols, true)) $db->exec("ALTER TABLE labels ADD COLUMN $k $t");
+        $db->exec('DELETE FROM labels');
+        meta_set('label_rules', LABEL_RULES);
+    }
     $db->exec('CREATE INDEX IF NOT EXISTS i_labels_label ON labels (label)');
+    $db->exec('CREATE INDEX IF NOT EXISTS i_labels_vkey ON labels (vkey)');
     $new = $db->query('SELECT f.path, f.bytes FROM files f LEFT JOIN labels l ON l.path = f.path WHERE l.path IS NULL');
     $todo = [];
     while ($r = $new->fetchArray(SQLITE3_NUM)) $todo[] = $r;
@@ -98,11 +138,13 @@ function labels_refresh(?SQLite3 $db = null): int {
         $outputs = [];
         $o = $db->query("SELECT path, bytes FROM files WHERE lower(path) LIKE '%/output/%' OR lower(path) LIKE '%/outputs/%'");
         while ($r = $o->fetchArray(SQLITE3_NUM)) $outputs[strtolower(basename($r[0])) . "\t" . (int)$r[1]] = $r[0];
-        $ins = $db->prepare('INSERT OR REPLACE INTO labels (path, label, why) VALUES (?, ?, ?)');
+        $ins = $db->prepare('INSERT OR REPLACE INTO labels (path, label, why, vkey, vrank) VALUES (?, ?, ?, ?, ?)');
         $db->exec('BEGIN');
         foreach ($todo as [$p, $b]) {
             [$l, $why] = label_of($p, (int)$b, $outputs);
+            [$vk, $vr] = version_of($p, $l);
             $ins->bindValue(1, $p); $ins->bindValue(2, $l); $ins->bindValue(3, $why);
+            $ins->bindValue(4, $vk === '' ? null : $vk); $ins->bindValue(5, $vr);
             $ins->execute(); $ins->reset();
         }
         $db->exec('COMMIT');
