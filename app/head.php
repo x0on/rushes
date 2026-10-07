@@ -362,8 +362,11 @@ window.helperNow = function (c) {
 // Copy anything, from any page. Every copy says it happened — or says what to
 // do instead, when the browser would not let it.
 window.copyText = function (text, btn) {
+  // btn is the button that says so, or a function told whether it worked (a menu has no button)
+  if (typeof btn === 'function') { var tell = btn; btn = { textContent: '' }; }
   var was = btn.textContent;
   var done = function (ok) {
+    if (tell) return tell(ok);
     btn.textContent = ok ? 'Copied ✓' : 'Press ⌘C';
     setTimeout(function () { btn.textContent = was; }, 1600);
   };

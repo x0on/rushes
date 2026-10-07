@@ -336,6 +336,20 @@ like any other.
    management); Rushes never installs anything on a computer by itself.
    After that, updates come from Rushes, when the person presses Update.
 
+## Set aside (October 2026), to come back to
+
+Each needs its own discussion before it is built.
+
+- **Versions of one video** (v1, v2, final, final-final) shown as one entry in Search.
+- **Long takes:** a take longer than 30 s is described as one shot today; it should get a still every so often.
+- **Speech:** the speech model cannot be downloaded on some networks; let it be installed from a folder the person already has.
+- **Backups:** the person picks where (any network share or drive, its login kept in the Keychain), found by its address and never by a fixed folder name.
+- **The copy script from an old server:** what it learnt (a share coming back under another name, a file security software blocks, a folder that hangs) belongs in Rushes' own transfers.
+- **A Making proxies switch** of its own beside Describing.
+- **The folder table's counts:** the proxies column shows the last run only, and "could not be described" counts files whose speech failed.
+- **Image sequences:** 24 or more frames in a row with the same name shown as one entry.
+- **Projects:** the Projects section lists every project file, wherever it is.
+
 ## Decided, and why
 
 - **On a Mac, Rushes is a Mac app, not a web service** (October 2026). One

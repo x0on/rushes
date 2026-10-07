@@ -3,10 +3,30 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.16 — October 2026
+
+- **Search, calmer and wider:** results use the whole window (and the panel's
+  column when nothing is picked). A moment found in the footage is its picture
+  with the time on it, one line of what it shows, and the file; tags, themes,
+  light, mood and the rest are in the panel beside it.
+- **Click picks, double-click plays:** one click picks a file or a moment and
+  shows it beside; nothing opens. Double-click plays the proxy from the moment
+  found, with **From the start**. Cmd/Ctrl-click picks more, Shift-click a run;
+  "Add N to pull" then takes them all. A right click offers Play, Add to pull
+  and Copy path. The "+ Pull" button on every row is gone; each action says
+  it happened beside the count.
+- **Files show their picture:** a described file's row shows its first still.
+  Sidecars (.xmp, Capture One's settings) sit under their file ("+ 1 sidecar")
+  instead of as rows of their own. Folder headings read as a trail, the shoot
+  in bold, not as buttons.
+- **Clearer words:** a file with no other copy says "1 — this file. No other
+  copy on record."; shots count from 1; the count says how many moments were
+  found when no file name matches, instead of "0 files".
+
 ## 0.12.15 — October 2026
 
 - **Describe's AI card, simpler:** one main switch, Describing or Paused, with
-  what it is doing now beside it ("Now: MICROMOBILITY · 12 of 73"); the schedule
+  what it is doing now beside it ("Now: BIKE LANES · 12 of 73"); the schedule
   is a small switch below it, Only at night (10 pm to 7 am), off meaning any time.
   The separate buttons are gone.
 
@@ -18,7 +38,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   proxy: Search plays the original itself, the folder counts it as done, and
   describing reads it directly. Describe says how many were used as they are.
 
-## 0.12.13 — October 2026 (built, not released)
+## 0.12.13 — October 2026
 
 - **Proxies on a Mac:** Rushes on a Mac makes its own proxies now, for the
   folders on Describe's list (and Jobs and tools → Make proxies), on the Mac's

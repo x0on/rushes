@@ -19,6 +19,7 @@ function analysis_init(): void {
         hay TEXT              -- everything searchable, lower case
     )");
     db()->exec('CREATE INDEX IF NOT EXISTS i_moments_fp ON moments (fp)');
+    db()->exec('CREATE INDEX IF NOT EXISTS i_moments_path ON moments (path)');   // a file's still, beside its row in Search
 }
 
 function analysis_dir(): string { return archive_dir() . '/_rushes/analysis'; }

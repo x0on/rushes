@@ -23,6 +23,8 @@ register_shutdown_function(function () {
 
 require_once __DIR__ . '/schema.php';
 db_init();   // new tables (the media ledger) exist before the first search
+require_once __DIR__ . '/analysis.php';
+analysis_init();   // the moments table, so a file can show the first still the model looked at
 
 $q      = trim($_GET['q'] ?? '');
 $kind   = $_GET['kind'] ?? '';
@@ -74,7 +76,8 @@ if ($where === []) {
 // the rows
 $st = $db->prepare("SELECT path, name, ext, kind, bytes, year, event, dept,
                            width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera,
-                           (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies
+                           (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
+                           (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still
                     FROM files LEFT JOIN media ON media.file_id = files.id$sql ORDER BY path LIMIT ? OFFSET ?");
 $bind($st, $args);
 $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
@@ -107,7 +110,6 @@ while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
 // What the footage shows and what was said, when it has been described.
 $moments = ['count' => 0, 'rows' => []];
 if ($q !== '' && ($kind === '' || $kind === 'all' || $kind === 'video')) {
-    require_once __DIR__ . '/analysis.php';
     try { $moments = analysis_search($q); } catch (Throwable $e) { $moments['error'] = $e->getMessage(); }
 }
 
