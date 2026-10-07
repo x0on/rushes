@@ -3,6 +3,29 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.19 — October 2026
+
+- **A calmer header:** the search field across the top with the kind of file
+  inside it, and **Pulls ⌄** as plain text at its end. No boxed buttons.
+- **A tool strip down the left edge** with **Filters**; a dot on it says filters
+  are on. The Filters panel opens beside it, in sections that fold, with Clear:
+  - **Sort by:** best match, newest, oldest, largest, longest, name.
+  - **Show:** pictures or a list by folder, and the picture size.
+  - **What it is, AI-generated** (include, only, leave out) and **Where**.
+  - **Orientation, Resolution, Length** and **Year**, from each file's real
+    size, length and folder.
+  - **Shot size, People, Light** and **Mood**, from what the AI wrote about each
+    shot: a video counts when one of its shots is all of them.
+  Every filter that is on shows beside the count, with a ✕ to turn it off.
+- **The length, not the match, on the picture:** the chip says how long the
+  video is; a thin line along the bottom shows where in it the matches are.
+- **Pull and Copy on the picture:** on the one under the mouse and the one
+  picked, one click each, without opening anything; each says it happened.
+  In the panel and the big view, Add to pull is filled with the accent colour
+  and Copy is clearly outlined.
+- **The list really is a list:** videos found by what they show are rows too
+  ("at 0:03 of 0:30 · 3 moments").
+
 ## 0.12.18 — October 2026
 
 - **A video is one container:** Search finds a video when your words appear

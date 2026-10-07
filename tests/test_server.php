@@ -94,6 +94,15 @@ $v = analysis_videos('aerial bienvenidos');
 check($v['count'] === 1 && $v['moments'] === 2 && $v['rows'][0]['found'] === [0.0, 3.2] && analysis_videos('aerial nothing')['count'] === 0,
       'a video is found when its words are in different moments of it, once, with every matching moment');
 check(count(analysis_shots($fp)) === 2 && analysis_shots($fp)[0]['kind'] === 'shot', 'every shot and line of a video, in order, without the failed one');
+// The Filters panel's content filters: a video counts when one of its shots is all of them
+db()->exec("INSERT OR IGNORE INTO files (path, name, ext, kind, bytes) VALUES ('" . SQLite3::escapeString("$root/archive/park/loop.mp4") . "', 'loop.mp4', 'mp4', 'video', 10)");
+$found = function (array $get) use ($root) {
+    $_GET = $get; ob_start(); include "$root/app/db/search.php"; $d = json_decode(ob_get_clean(), true); $_GET = [];
+    return $d['moments']['count'] ?? -1;
+};
+check($found(['shot' => 'wide']) === 1 && $found(['shot' => 'close']) === 0 && $found(['q' => 'aerial', 'shot' => 'wide', 'people' => 'few']) === 1
+      && $found(['shot' => 'wide', 'light' => 'night']) === 0 && $found(['mood' => 'calm']) === 1,
+      'filters by what is in the footage: shot size, people, light and mood, with or without words');
 check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
 touch(web_dir() . '/describe-status.tsv', time() - 3600);    // describing ended an hour ago
 check((analysis_import()['state'] ?? '') === 'quiet', 'idle: the descriptions folder on VIDEO is not looked through');

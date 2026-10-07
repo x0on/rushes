@@ -34,6 +34,16 @@ if (meta_get('label_rules', '') !== LABEL_RULES) labels_refresh();
 if (preg_match('/^[0-9a-f]{24}$/', (string)($_GET['shots'] ?? ''))) {
     echo json_encode(['shots' => analysis_shots($_GET['shots'])], JSON_UNESCAPED_SLASHES); exit;
 }
+// facets=1: what the Filters panel can offer from this archive: its years, and the moods the AI used most
+if (!empty($_GET['facets'])) {
+    $years = []; $r = db()->query("SELECT year, COUNT(*) n FROM files WHERE year IS NOT NULL AND year != '' GROUP BY year ORDER BY year DESC");
+    while ($x = $r->fetchArray(SQLITE3_ASSOC)) $years[] = $x;
+    $moods = []; $r = db()->query("SELECT mood FROM moments WHERE kind = 'shot' AND mood != ''");
+    while ($x = $r->fetchArray(SQLITE3_NUM))
+        foreach (preg_split('/\s*,\s*/', strtolower($x[0])) as $w) if ($w !== '') $moods[$w] = ($moods[$w] ?? 0) + 1;
+    arsort($moods);
+    echo json_encode(['years' => $years, 'moods' => array_slice(array_keys($moods), 0, 12)]); exit;
+}
 $q      = trim($_GET['q'] ?? '');
 $kind   = $_GET['kind'] ?? '';
 $dept   = $_GET['dept'] ?? '';
@@ -57,6 +67,38 @@ if (($place = (string)($_GET['where'] ?? '')) !== '') {
     $where[] = "files.path LIKE ? ESCAPE '\\'"; $args[] = '%/' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $place) . '/%';
 }
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
+// The Filters panel. Within a section any of the choices; between sections, all of them.
+$pick = fn(string $k, array $known) => array_values(array_intersect(explode(',', (string)($_GET[$k] ?? '')), array_keys($known)));
+$any  = function (array $chosen, array $known) { return $chosen ? '(' . implode(' OR ', array_map(fn($c) => $known[$c], $chosen)) . ')' : ''; };
+// what the file is, from the media ledger: its shape, resolution and length
+$big = 'MAX(media.width, media.height)'; $small = 'MIN(media.width, media.height)';
+foreach ([
+    'orient' => ['h' => 'media.width > media.height * 1.1', 'v' => 'media.height > media.width * 1.1',
+                 's' => 'media.width BETWEEN media.height * 0.9 AND media.height * 1.1'],
+    'res'    => ['4k' => "($big >= 3800 OR $small >= 2100)", 'hd' => "($big < 3800 AND $small < 2100 AND $small >= 1060)", 'sd' => "$small < 1060"],
+    'len'    => ['s' => 'media.duration < 10', 'm' => 'media.duration >= 10 AND media.duration < 60',
+                 'l' => 'media.duration >= 60 AND media.duration < 300', 'xl' => 'media.duration >= 300'],
+] as $k => $known) if ($c = $any($pick($k, $known), $known)) $where[] = $c;
+if ($years = array_filter(explode(',', (string)($_GET['year'] ?? '')), fn($y) => preg_match('/^\d{4}$/', $y))) {
+    $where[] = 'files.year IN (' . implode(',', array_fill(0, count($years), '?')) . ')'; array_push($args, ...$years);
+}
+if (($ai = (string)($_GET['ai'] ?? '')) === 'only' || $ai === 'none')
+    $where[] = 'files.path ' . ($ai === 'none' ? 'NOT ' : '') . "IN (SELECT path FROM labels WHERE label = 'ai')";
+// what is in the footage, from the descriptions: a shot that is all of these
+$cond = []; $cargs = [];
+foreach ([
+    'shot'   => ['close' => "shot_size IN ('close-up','extreme-close-up')", 'medium' => "shot_size = 'medium'",
+                 'full' => "shot_size = 'full'", 'wide' => "shot_size IN ('wide','extreme-wide')"],
+    'people' => ['none' => "people = 'none'", 'one' => "people = 'one'", 'two' => "people = 'two'", 'few' => "people IN ('few','crowd','many')"],
+    'light'  => ['day' => "light = 'daylight'", 'artificial' => "light = 'artificial'", 'golden' => "light = 'sunrise-sunset'",
+                 'night' => "light IN ('dusk','night')"],
+] as $k => $known) if ($c = $any($pick($k, $known), $known)) $cond[] = $c;
+if ($moods = array_filter(explode(',', strtolower((string)($_GET['mood'] ?? ''))), fn($m) => preg_match('/^[a-z -]{2,30}$/', $m))) {
+    $cond[] = '(' . implode(' OR ', array_fill(0, count($moods), "mood LIKE ?")) . ')';
+    foreach ($moods as $m) $cargs[] = "%$m%";
+}
+$cond = implode(' AND ', $cond);
+if ($cond !== '') { $where[] = "files.path IN (SELECT path FROM moments WHERE kind = 'shot' AND $cond)"; array_push($args, ...$cargs); }
 // What each file is (labels.php): Deliverables, the stock library and its parts, AI-generated,
 // Photos, Design … from names, folders and sizes, wherever the files are; nothing is moved.
 // p=<path>: that one file (the panel, for a video found by what it shows)
@@ -73,6 +115,10 @@ if ($in !== '') {
 }
 
 $sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+// Sort by: as found (the folder order for files, best match first for videos), newest, oldest, largest, longest, name
+$sort  = (string)($_GET['sort'] ?? '');
+$order = ['new' => 'files.year IS NULL, files.year DESC, media.recorded DESC, files.path', 'old' => 'files.year IS NULL, files.year, media.recorded, files.path',
+          'big' => 'files.bytes DESC', 'long' => 'media.duration IS NULL, media.duration DESC', 'name' => 'files.name COLLATE NOCASE'][$sort] ?? 'files.path';
 
 $bind = function (SQLite3Stmt $s, array $a) {
     foreach ($a as $i => $v) $s->bindValue($i + 1, $v);
@@ -95,7 +141,7 @@ $st = $db->prepare("SELECT files.path, name, ext, kind, bytes, year, event, dept
                            (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
                            (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still,
                            lb.vkey, lb.vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = lb.vkey) AS versions
-                    FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$sql ORDER BY files.path LIMIT ? OFFSET ?");
+                    FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$sql ORDER BY $order LIMIT ? OFFSET ?");
 $bind($st, $args);
 $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
 $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
@@ -126,16 +172,24 @@ while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
 
 // What the footage shows and what was said, when it has been described.
 $moments = ['count' => 0, 'rows' => []];
-if ($q !== '' && ($kind === '' || $kind === 'all' || $kind === 'video')) {
+if (($q !== '' || $cond !== '') && ($kind === '' || $kind === 'all' || $kind === 'video')) {
     try {
-        $moments = analysis_videos($q);
+        $moments = analysis_videos($q, 120, $cond, $cargs);
         // which piece each moment's file is a version of, so a shot found in v2 and v3 shows once
         $vs = $db->prepare('SELECT vkey, vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = labels.vkey) n FROM labels WHERE path = ?');
+        $ff = $db->prepare('SELECT files.year, files.bytes, media.duration, media.width, media.height, media.recorded, media.proxy_at
+                            FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path = ?');
         foreach ($moments['rows'] as &$m) {
             $vs->bindValue(1, $m['path']); $r = $vs->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $vs->reset();
             $m['vkey'] = $r['vkey'] ?? null; $m['vrank'] = (int)($r['vrank'] ?? 0); $m['versions'] = (int)($r['n'] ?? 0);
+            // the file it is: its length (the tile says it), shape, size and dates (to sort by)
+            $ff->bindValue(1, $m['path']); $f = $ff->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $ff->reset();
+            $m += ['name' => basename($m['path'])] + $f;
         }
         unset($m);
+        $by = ['new' => fn($m) => [-(int)($m['year'] ?? 0), $m['recorded'] ?? ''], 'old' => fn($m) => [(int)($m['year'] ?? 9999), $m['recorded'] ?? ''],
+               'big' => fn($m) => -(int)($m['bytes'] ?? 0), 'long' => fn($m) => -(float)($m['duration'] ?? 0), 'name' => fn($m) => strtolower($m['name'])][$sort] ?? null;
+        if ($by) usort($moments['rows'], fn($a, $b) => $by($a) <=> $by($b));
         // Filters on (a kind, where, what it is): only moments of files that pass them
         $fw = array_slice($where, $words); $fa = array_slice($args, $wargs);
         if ($fw) {

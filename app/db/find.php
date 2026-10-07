@@ -58,9 +58,11 @@ require __DIR__ . '/config.php';
   .q .mag svg { width: 17px; height: 17px; display: block }
   .q input { flex: 1; min-width: 0; padding: 12px 14px 12px 10px; font: 15px var(--font); border: 0; background: none; color: var(--fg) }
   .q input:focus { outline: none }
-  .sbtn { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap }
-  .sbtn svg { width: 16px; height: 16px }
-  .sbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text) }
+  /* plain text buttons: no boxes in the header */
+  .plain { display: inline-flex; align-items: center; gap: 7px; border: 0; background: none; color: var(--fg);
+           font: 13.5px var(--font); padding: 8px 6px; cursor: pointer; white-space: nowrap }
+  .plain:hover { color: var(--accent-text) }
+  .plain svg { width: 16px; height: 16px }
   /* the drop-downs: recent searches, pulls */
   .dd { position: absolute; z-index: 25; top: calc(100% + 6px); min-width: 240px; padding: 5px; background: var(--surface);
         border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.3) }
@@ -75,47 +77,77 @@ require __DIR__ . '/config.php';
   .pm { position: relative }
   .pm .dd { right: 0 }
   #recentDd { left: 0; right: 0 }
-  /* the Filters panel: the rail's look, hidden until wanted */
+  /* the tool strip down the left edge, always there; the Filters panel beside it when wanted */
+  .with-rail { grid-template-columns: 50px 280px minmax(0, 1fr) }
+  .with-rail:has(> #filters[hidden]) { grid-template-columns: 50px minmax(0, 1fr) }
+  .tools { border-right: 1px solid var(--line); padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 6px }
+  .tool { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; position: relative }
+  .tool svg { width: 19px; height: 19px }
+  .tool:hover, .tool[aria-pressed="true"] { color: var(--fg); background: var(--raised) }
+  .tool b { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-text); display: none }
+  .tool.on b { display: block }
   #filters[hidden] { display: none }
-  .with-rail:has(> #filters[hidden]) { grid-template-columns: minmax(0, 1fr) }
-  #filters .fh { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 6px 9px }
-  #filters .fh b { font-size: 13px }
-  .rail .nav.sub { padding-left: 38px; font-size: 12.5px }
+  #filters { padding: 0; gap: 0 }
+  #filters .fh { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid var(--line) }
+  #filters .fh b { font-size: 14px }
+  #filters details { border-bottom: 1px solid var(--line) }
+  #filters summary { list-style: none; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+                     font-size: 13px; font-weight: 600; cursor: pointer }
+  #filters summary::-webkit-details-marker { display: none }
+  #filters summary::after { content: '⌄'; color: var(--muted); font-size: 14px; transition: transform .15s }
+  #filters details:not([open]) summary::after { transform: rotate(90deg) }
+  #filters summary small { color: var(--accent-text); font-weight: 400; margin-left: auto; margin-right: 10px; font-size: 11.5px }
+  .opts { padding: 0 16px 12px 18px; display: flex; flex-direction: column; gap: 2px }
+  .opts label { display: flex; align-items: center; gap: 9px; font-size: 13px; padding: 4px 0; cursor: pointer; color: var(--fg) }
+  .opts label.sub { padding-left: 22px; font-size: 12.5px }
+  .opts input[type=radio], .opts input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); margin: 0; flex: none }
+  .opts label span { flex: 1 } .opts label small { color: var(--faint); font-size: 11px }
+  .opts input[type=range] { width: 100%; accent-color: var(--accent) }
+  .opts .note { font-size: 11.5px; margin: 2px 0 0 }
   /* the line under the search: count, filters on, what is picked, what just happened */
   .statline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; margin: 0 0 12px; min-height: 28px }
-  .fchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 10px; border-radius: 99px; font: 12px var(--font);
+  #active { display: contents }
+  .fchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 10px; font: 12px var(--font);
            background: var(--sel-bg); color: var(--sel-fg); border: 0; cursor: pointer }
   .fchip b { font-weight: 400; opacity: .6; font-size: 13px }
   #selbar[hidden] { display: none }
   #selbar { display: flex; gap: 8px; align-items: center; color: var(--fg) }
   .said { color: var(--ok) }
-  .views { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
-  .views button { border: 0; background: none; color: var(--muted); padding: 5px 8px; cursor: pointer; display: grid }
-  .views button svg { width: 16px; height: 16px }
-  .views button[aria-pressed="true"] { background: var(--raised); color: var(--fg) }
   .results { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start }
   .results:has(> #inspect[hidden]) { grid-template-columns: minmax(0, 1fr) }   /* only before anything is found */
   @media (max-width: 1100px) { .results { grid-template-columns: minmax(0, 1fr) } .inspect { display: none } }
   @media (max-width: 640px) { .shoot .sh .n { display: none } .row { gap: 8px; padding-left: 10px; padding-right: 10px }
-                              .q select { max-width: 110px } .sbtn span { display: none } }
+                              .q select { max-width: 110px } .plain span { display: none }
+                              .with-rail { grid-template-columns: 44px minmax(0, 1fr) } #filters { position: fixed; z-index: 15; left: 44px; top: 0; bottom: 0; width: 280px } }
   /* ── the grid: every picture the same size, square corners, columns that line up ── */
-  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; margin: 0 0 18px }
+  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tile, 220px), 1fr)); gap: 4px; margin: 0 0 18px }
   .frame { position: relative; aspect-ratio: 16 / 9; background: #000; cursor: pointer; user-select: none; outline: 0; overflow: hidden }
   .frame img { width: 100%; height: 100%; object-fit: contain; display: block }   /* a vertical clip sits on black, the grid stays */
   .frame:hover img { filter: brightness(1.08) }
   .frame.on { box-shadow: inset 0 0 0 3px var(--accent) }
   .frame:focus-visible { box-shadow: inset 0 0 0 3px var(--muted) }
   .frame .ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-               color: var(--muted); background: var(--raised); padding: 10px 10px 30px }
+               color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 10px 10px 30px }
   .frame .ph svg { width: 28px; height: 28px; opacity: .7 }
   .frame .ph small { font-size: 11.5px; text-align: center; max-width: 100%; overflow: hidden;
                      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word }
-  .chip, .vers { position: absolute; bottom: 6px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px;
+  /* Pull and Copy, on the picture: shown on the one under the mouse and the one picked */
+  .acts { position: absolute; top: 6px; right: 6px; display: none; gap: 4px }
+  .frame:hover .acts, .frame.on .acts, .frame:focus-within .acts { display: flex }
+  .acts button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; padding: 0; cursor: pointer;
+                 background: rgba(0,0,0,.66); color: #fff }
+  .acts button:hover { background: var(--accent); color: var(--accent-fg) }
+  .acts button svg { width: 15px; height: 15px }
+  .acts button.in { background: var(--ok); color: #fff }
+  /* where in the video the match is: a line the width of the video, a tick at each moment */
+  .tl { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.55) }
+  .tl i { position: absolute; top: -3px; width: 3px; height: 7px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5) }
+  .chip, .vers { position: absolute; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px;
                  background: rgba(0,0,0,.66); color: #fff; font: 600 11px var(--font) }
   .chip { left: 6px } .vers { right: 6px }
   .chip svg, .vers svg { width: 12px; height: 12px }
   .chip .r { opacity: .85 }
-  .frame .pk { position: absolute; top: 6px; right: 6px; display: none; padding: 2px 7px; background: var(--ok); color: #fff; font: 600 11px var(--font) }
+  .frame .pk { position: absolute; top: 6px; left: 6px; display: none; padding: 2px 7px; background: var(--ok); color: #fff; font: 600 11px var(--font) }
   .frame.pulled .pk { display: block }
   .wall-h { font-size: 12px; color: var(--muted); margin: 4px 0 8px; font-weight: 600 }
   /* ── the list: files by the folder they are in ── */
@@ -143,11 +175,13 @@ require __DIR__ . '/config.php';
   .inspect { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto }
   .vh { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px 10px }
   .vh b { flex: 1; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere }
-  .ib { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px;
+  .ib { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 1.5px solid var(--fg); border-radius: 0;
         background: none; color: var(--fg); cursor: pointer; padding: 0 }
-  .ib svg { width: 16px; height: 16px }
-  .ib:hover { border-color: var(--accent) }
-  .ib.in { color: var(--ok); border-color: var(--ok) }
+  .ib svg { width: 17px; height: 17px }
+  .ib:hover { background: var(--raised) }
+  .ib.go-pull { background: var(--accent); border-color: var(--accent); color: var(--accent-fg) }      /* the one action we want taken */
+  .ib.go-pull:hover { filter: brightness(1.12) }
+  .ib.in { background: var(--ok); border-color: var(--ok); color: #fff }
   .ib[hidden] { display: none }
   .vb { padding: 0 14px 14px }
   .pv { position: relative; aspect-ratio: 16 / 9; background: #000; cursor: pointer; overflow: hidden }
@@ -236,34 +270,17 @@ require __DIR__ . '/config.php';
 <div class="app" style="grid-template-rows:1fr">
 <div class="with-rail">
 
-  <!-- Filters: where to look, and what a file is (labels.php: from names, folders and sizes; nothing moved).
-       One choice per group; groups combine. Hidden until wanted. -->
-  <nav class="rail" id="filters" aria-label="Filters" hidden>
-    <div class="fh"><b>Filters</b><button class="ghost" id="fHide">Hide</button></div>
-    <h2>Where</h2>
-    <button class="nav" data-f="where" data-v="ARCHIVE" data-l="Archive" title="finished shoots, kept"><span class="ico"><?= icon('archive') ?></span> Archive</button>
-    <button class="nav" data-f="where" data-v="PROJECTS" data-l="Projects" title="edits and project files"><span class="ico"><?= icon('projects') ?></span> Projects</button>
-    <h2>What it is</h2>
-    <button class="nav" data-f="in" data-v="deliverables" data-l="Deliverables" title="finished videos: anything in an Output folder"><span class="ico"><?= icon('video') ?></span> Deliverables</button>
-    <button class="nav" data-f="in" data-v="library" data-l="Stock library" title="bought or downloaded: stock footage, music, sound effects, templates, graphics"><span class="ico"><?= icon('library') ?></span> Stock library</button>
-    <button class="nav sub" data-f="in" data-v="library/stock" data-l="Stock footage">Stock footage</button>
-    <button class="nav sub" data-f="in" data-v="library/music" data-l="Music">Music</button>
-    <button class="nav sub" data-f="in" data-v="library/sfx" data-l="Sound effects">Sound effects</button>
-    <button class="nav sub" data-f="in" data-v="library/templates" data-l="Templates">Templates</button>
-    <button class="nav sub" data-f="in" data-v="library/graphics" data-l="Graphics">Graphics</button>
-    <button class="nav" data-f="in" data-v="ai" data-l="AI-generated" title="made with an AI tool (OpenArt …)"><span class="ico"><?= icon('ai') ?></span> AI-generated</button>
-    <button class="nav" data-f="in" data-v="made" data-l="Graphics &amp; animation" title="intros, animations and other parts rendered for an edit"><span class="ico"><?= icon('project') ?></span> Graphics &amp; animation</button>
-    <button class="nav" data-f="in" data-v="camera" data-l="Camera footage" title="what the cameras and drones shot"><span class="ico"><?= icon('camera') ?></span> Camera footage</button>
-    <button class="nav" data-f="in" data-v="photos" data-l="Photos" title="photos and camera raws"><span class="ico"><?= icon('image') ?></span> Photos</button>
-    <button class="nav" data-f="in" data-v="design" data-l="Design" title="flyers, logos and graphics: editable files (.psd, .ai) and finished ones"><span class="ico"><?= icon('design') ?></span> Design</button>
-    <button class="nav" data-f="in" data-v="voiceover" data-l="Voice over" title="voice over recordings"><span class="ico"><?= icon('audio') ?></span> Voice over</button>
-    <button class="nav" data-f="in" data-v="recordings" data-l="Recordings" title="Zoom and screen recordings"><span class="ico"><?= icon('video') ?></span> Recordings</button>
-  </nav>
+  <!-- The tool strip: always there, icons only, named on hover -->
+  <div class="tools">
+    <button class="tool" id="fBtn" aria-pressed="false" title="Filters: sort, what it is, where, what is in it"><?= icon('filter', 2) ?><b></b></button>
+  </div>
+  <!-- Filters: every way to narrow or order what was found, in sections that fold. Within a
+       section any of the choices; between sections all of them. Drawn by the script (FILTERS). -->
+  <nav class="rail" id="filters" aria-label="Filters" hidden></nav>
 
   <main class="work">
     <div class="pad">
       <div class="sbar">
-        <button class="ghost sbtn" id="fBtn" aria-pressed="false" title="Where to look, and what kind of file"><?= icon('filter', 2) ?><span>Filters</span></button>
         <div class="q">
           <select id="kind" aria-label="Kind of file" title="The kind of file">
             <option value="all">Everything</option><option value="video">Videos</option><option value="image">Images</option>
@@ -275,18 +292,13 @@ require __DIR__ . '/config.php';
           <div class="dd" id="recentDd" hidden></div>
         </div>
         <div class="pm">
-          <button class="ghost sbtn" id="pBtn" aria-haspopup="true" title="Pulls: clips gathered for a job"><?= icon('archive', 2) ?><span>Pulls</span> ▾</button>
+          <button class="plain" id="pBtn" aria-haspopup="true" title="Pulls: clips gathered for a job">Pulls ⌄</button>
           <div class="dd" id="pullsDd" hidden></div>
         </div>
       </div>
       <div class="statline"><span id="stat">Start typing.</span><span id="active"></span>
         <span id="selbar" hidden><b id="selN"></b><button class="btn" id="selAdd"></button><button class="ghost" id="selClear">Clear</button></span>
         <span class="said" role="status"></span>
-        <span class="grow"></span>
-        <span class="views" role="group" aria-label="Show as">
-          <button data-view="wall" title="Pictures" aria-pressed="true"><?= icon('everything', 2) ?></button>
-          <button data-view="list" title="A list, by folder" aria-pressed="false"><?= icon('list', 2) ?></button>
-        </span>
       </div>
 
       <div class="results">
@@ -359,51 +371,109 @@ async function getJSON(params) {
 }
 
 // ── what is being looked for ───────────────────────────────────────────────
-// kind: the search bar's menu. where, place: the Filters panel, one choice each.
-let kind = 'all', where = '', place = '';
+// kind: the search bar's menu. Everything else: the Filters panel, F below.
+let kind = 'all';
 let rows = [], total = 0, seq = 0, timer = null, videos = { count: 0, moments: 0, rows: [] };
 let view = store('view') === 'list' ? 'list' : 'wall';
 const KNOWN = {};          // every file row seen, by path: the panel and the big view find versions here too
 
+// The Filters panel, section by section: one choice ('one', the first is "as it is") or any of several ('many').
+// Shot size, people, light and mood come from what the AI wrote about each shot.
+const FILTERS = [
+  { k: 'sort', t: 'Sort by', one: [['', 'Best match'], ['new', 'Newest'], ['old', 'Oldest'], ['big', 'Largest'], ['long', 'Longest'], ['name', 'Name']] },
+  { k: 'show', t: 'Show', show: 1 },
+  { k: 'in', t: 'What it is', one: [['', 'Everything'], ['deliverables', 'Deliverables'], ['library', 'Stock library'], ['library/stock', 'Stock footage', 1],
+      ['library/music', 'Music', 1], ['library/sfx', 'Sound effects', 1], ['library/templates', 'Templates', 1], ['library/graphics', 'Graphics', 1],
+      ['made', 'Graphics & animation'], ['camera', 'Camera footage'], ['photos', 'Photos'], ['design', 'Design'], ['voiceover', 'Voice over'], ['recordings', 'Recordings']] },
+  { k: 'ai', t: 'AI-generated', one: [['', 'Include'], ['only', 'Only AI-generated'], ['none', 'Leave it out']] },
+  { k: 'where', t: 'Where', one: [['', 'Anywhere'], ['ARCHIVE', 'Archive'], ['PROJECTS', 'Projects']] },
+  { k: 'orient', t: 'Orientation', many: [['h', 'Horizontal'], ['v', 'Vertical'], ['s', 'Square']] },
+  { k: 'res', t: 'Resolution', many: [['4k', '4K'], ['hd', 'HD'], ['sd', 'Lower']] },
+  { k: 'len', t: 'Length', many: [['s', 'Under 10 seconds'], ['m', '10 seconds to a minute'], ['l', '1 to 5 minutes'], ['xl', 'Over 5 minutes']] },
+  { k: 'year', t: 'Year', many: [], closed: 1 },
+  { k: 'shot', t: 'Shot size', many: [['close', 'Close-up'], ['medium', 'Medium'], ['full', 'Full'], ['wide', 'Wide']] },
+  { k: 'people', t: 'People', many: [['none', 'No people'], ['one', 'One person'], ['two', 'Two'], ['few', 'A group']] },
+  { k: 'light', t: 'Light', many: [['day', 'Daylight'], ['artificial', 'Artificial light'], ['golden', 'Sunrise or sunset'], ['night', 'Dusk or night']] },
+  { k: 'mood', t: 'Mood', many: [], closed: 1 },
+];
+const F = {};
+function resetF() { FILTERS.forEach(function (f) { if (f.one) F[f.k] = ''; if (f.many) F[f.k] = []; }); }
+resetF();
+const labelOf = function (f, v) { const o = (f.one || f.many).find(function (x) { return x[0] === v; }); return o ? o[1] : v; };
+const filtering = function () { return FILTERS.some(function (f) { return f.k !== 'sort' && (f.one ? F[f.k] : f.many && F[f.k].length); }); };
+let tile = +(store('tile') || 220);
+document.documentElement.style.setProperty('--tile', tile + 'px');
+
+function drawFilters() {
+  $('filters').innerHTML = '<div class="fh"><b>Filters</b><button class="plain" id="fClear">Clear</button></div>' +
+    FILTERS.map(function (f) {
+      const on = f.one ? (F[f.k] ? labelOf(f, F[f.k]) : '') : f.many ? (F[f.k].length ? F[f.k].length + ' on' : '') : '';
+      let body = '';
+      if (f.show) body = '<label><input type="radio" name="f-view" value="wall"' + (view === 'wall' ? ' checked' : '') + '><span>Pictures</span></label>' +
+        '<label><input type="radio" name="f-view" value="list"' + (view === 'list' ? ' checked' : '') + '><span>A list, by folder</span></label>' +
+        '<div class="sec" style="margin:10px 0 4px">Picture size</div><input type="range" id="fTile" min="140" max="420" step="20" value="' + tile + '" aria-label="Picture size">';
+      if (f.one) body = f.one.map(function (o) {
+        return '<label' + (o[2] ? ' class="sub"' : '') + '><input type="radio" name="f-' + f.k + '" value="' + esc(o[0]) + '"' + (F[f.k] === o[0] ? ' checked' : '') + '><span>' + esc(o[1]) + '</span></label>'; }).join('');
+      if (f.many) body = f.many.length ? f.many.map(function (o) {
+        return '<label><input type="checkbox" data-many="' + f.k + '" value="' + esc(o[0]) + '"' + (F[f.k].indexOf(o[0]) > -1 ? ' checked' : '') + '><span>' + esc(o[1]) + '</span>' +
+          (o[2] ? '<small>' + o[2] + '</small>' : '') + '</label>'; }).join('')
+        : '<p class="note">' + (f.k === 'mood' ? 'Once footage is described, its moods are here.' : 'None yet.') + '</p>';
+      return '<details' + (f.closed && !on ? '' : ' open') + '><summary>' + esc(f.t) + (on ? '<small>' + esc(on) + '</small>' : '') + '</summary><div class="opts">' + body + '</div></details>';
+    }).join('');
+  $('fClear').onclick = function () { resetF(); kind = 'all'; $('kind').value = 'all'; drawFilters(); run(); };
+  $('filters').querySelectorAll('input[type=radio]').forEach(function (i) {
+    i.onchange = function () {
+      const k = i.name.slice(2);
+      if (k === 'view') { view = i.value; store('view', view); draw(); return; }
+      F[k] = i.value; drawFilters(); run();
+    };
+  });
+  $('filters').querySelectorAll('[data-many]').forEach(function (i) {
+    i.onchange = function () {
+      const k = i.dataset.many;
+      F[k] = i.checked ? F[k].concat([i.value]) : F[k].filter(function (x) { return x !== i.value; });
+      drawFilters(); run();
+    };
+  });
+  const r = $('fTile');
+  if (r) r.oninput = function () { tile = +r.value; store('tile', String(tile)); document.documentElement.style.setProperty('--tile', tile + 'px'); };
+}
+// The years and moods this archive has, once
+fetch('search.php?facets=1').then(function (r) { return r.json(); }).then(function (d) {
+  FILTERS.find(function (f) { return f.k === 'year'; }).many = (d.years || []).map(function (y) { return [y.year, y.year, (+y.n).toLocaleString()]; });
+  FILTERS.find(function (f) { return f.k === 'mood'; }).many = (d.moods || []).map(function (m) { return [m, m.charAt(0).toUpperCase() + m.slice(1)]; });
+  drawFilters();
+}).catch(function () {});
+
 $('kind').onchange = function () { kind = this.value; run(); };
-$('filters').querySelectorAll('[data-f]').forEach(function (b) {
-  b.onclick = function () {
-    const v = b.dataset.v;
-    if (b.dataset.f === 'where') where = where === v ? '' : v; else place = place === v ? '' : v;
-    run();
-  };
-});
 function showFilters(on) {
   $('filters').hidden = !on; $('fBtn').setAttribute('aria-pressed', on); store('filters', on ? '1' : '');
 }
 $('fBtn').onclick = function () { showFilters($('filters').hidden); };
-$('fHide').onclick = function () { showFilters(false); };
+drawFilters();
 showFilters(store('filters') === '1');
-// Every filter that is on, beside the count, with its ✕: a hidden panel never hides one.
+// Every filter that is on, beside the count, with its ✕: a closed panel never hides one.
 function drawActive() {
-  $('filters').querySelectorAll('[data-f]').forEach(function (b) {
-    const on = (b.dataset.f === 'where' ? where : place) === b.dataset.v;
-    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
-  });
-  const lab = function (f, v) { const b = $('filters').querySelector('[data-f="' + f + '"][data-v="' + v + '"]'); return b ? b.dataset.l : v; };
   const on = [];
-  if (kind !== 'all') on.push(['kind', $('kind').selectedOptions[0].textContent]);
-  if (where) on.push(['where', lab('where', where)]);
-  if (place) on.push(['in', lab('in', place)]);
+  if (kind !== 'all') on.push(['kind', '', $('kind').selectedOptions[0].textContent]);
+  FILTERS.forEach(function (f) {
+    if (f.one && F[f.k] && f.k !== 'sort') on.push([f.k, '', labelOf(f, F[f.k])]);
+    if (f.many) F[f.k].forEach(function (v) { on.push([f.k, v, f.t + ': ' + labelOf(f, v)]); });
+  });
+  if (F.sort) on.push(['sort', '', 'Sorted: ' + labelOf(FILTERS[0], F.sort)]);
+  $('fBtn').classList.toggle('on', on.length > 0);
   $('active').innerHTML = on.map(function (x) {
-    return '<button class="fchip" data-off="' + x[0] + '" title="Stop filtering by this">' + esc(x[1]) + ' <b>✕</b></button> '; }).join('');
+    return '<button class="fchip" data-off="' + x[0] + '" data-v="' + esc(x[1]) + '" title="Turn this off">' + esc(x[2]) + ' <b>✕</b></button>'; }).join('');
   $('active').querySelectorAll('[data-off]').forEach(function (b) {
     b.onclick = function () {
-      if (b.dataset.off === 'kind') { kind = 'all'; $('kind').value = 'all'; }
-      if (b.dataset.off === 'where') where = '';
-      if (b.dataset.off === 'in') place = '';
-      run();
+      const k = b.dataset.off;
+      if (k === 'kind') { kind = 'all'; $('kind').value = 'all'; }
+      else if (Array.isArray(F[k])) F[k] = F[k].filter(function (x) { return x !== b.dataset.v; });
+      else F[k] = '';
+      drawFilters(); run();
     };
   });
 }
-document.querySelectorAll('.views [data-view]').forEach(function (b) {
-  b.onclick = function () { view = b.dataset.view; store('view', view); draw(); };
-});
 
 async function run(more) {
   const my = ++seq;
@@ -411,11 +481,12 @@ async function run(more) {
   if (!more) rows = [];
   drawActive();
   const words = $('q').value.trim();
-  if (!words && !place && !where && kind === 'all') {
+  if (!words && !filtering() && kind === 'all') {
     total = 0; videos = { count: 0, moments: 0, rows: [] }; $('stat').textContent = 'Start typing.';
     clearSel(); $('inspect').hidden = true; return draw();
   }
-  const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset, in: place, where: where });
+  const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset });
+  FILTERS.forEach(function (f) { const v = Array.isArray(F[f.k]) ? F[f.k].join(',') : F[f.k]; if (v) p.set(f.k, v); });
   $('stat').textContent = 'searching…';
 
   let raw;
@@ -491,14 +562,25 @@ function res(r) {
 const still = function (fp, shot) { return 'thumb.php?fp=' + encodeURIComponent(fp) + '&shot=' + (+shot || 0); };
 const versTag = function (n) { return n > 1 ? '<span class="vers">' + ICON.versions + n + '</span>' : ''; };
 
-// A video found by what it shows: the shot that matches best, and where it is
+// Pull and Copy, on the picture itself: one click, without opening anything
+const acts = function (path) {
+  return '<span class="acts">' + (pullable(path) ? '<button data-act="pull" class="' + (inPull(path) ? 'in' : '') + '" title="' + (inPull(path) ? 'In the pull' : 'Add to pull') + '">' +
+    (inPull(path) ? '✓' : ICON.pull) + '</button>' : '') + '<button data-act="copy" title="Copy its path">' + ICON.copy + '</button></span>';
+};
+// Where in the video the matches are: a line the width of the video, a tick at each
+const timeline = function (found, length) {
+  if (!length || !found || !found.length) return '';
+  return '<span class="tl">' + found.map(function (t) { return '<i style="left:' + Math.min(99.5, t / length * 100).toFixed(1) + '%"></i>'; }).join('') + '</span>';
+};
+// A video found by what it shows: the shot that matches best; the chip says how long the video is
 function videoTile(m, i) {
   const speech = m.kind === 'speech';
   return '<div class="frame' + (inPull(m.path) ? ' pulled' : '') + '" tabindex="0" data-k="m' + i + '" data-p="' + esc(m.path) + '" data-t="' + (+m.start_s || 0) + '">' +
     (speech ? '<div class="ph">' + ICON.quote + '<small>' + esc(m.what) + '</small></div>'
             : '<img loading="lazy" alt="' + esc(m.what) + '" src="' + still(m.fp, m.shot) + '">') +
-    '<span class="chip">' + (speech ? ICON.quote : ICON.video) + tcode(m.start_s) + '</span>' + versTag(m.versions) +
-    '<span class="pk">✓</span></div>';
+    '<span class="chip">' + (speech ? ICON.quote : ICON.video) + (m.duration ? clock(m.duration) : 'at ' + tcode(m.start_s)) +
+      (m.width && aspect(m.width, m.height) !== '16:9' ? ' <span class="r">' + aspect(m.width, m.height) + '</span>' : '') + '</span>' +
+    versTag(m.versions) + acts(m.path) + timeline(m.found, m.duration) + '<span class="pk">✓</span></div>';
 }
 // A file: its first still if it was described, else its kind drawn with its name
 function fileTile(r) {
@@ -509,7 +591,21 @@ function fileTile(r) {
     '<span class="chip">' + (ICON[k] || ICON.file) + (r.duration ? clock(r.duration) : '') +
       (res(r) ? ' <span class="r">' + res(r) + '</span>' : '') +
       (r.width && aspect(r.width, r.height) !== '16:9' ? ' <span class="r">' + aspect(r.width, r.height) + '</span>' : '') + '</span>' +
-    versTag(r.versions) + '<span class="pk">✓</span></div>';
+    versTag(r.versions) + acts(r.path) + '<span class="pk">✓</span></div>';
+}
+// In the list, a video found by what it shows is a row too: its picture, its name, where the match is
+function videoRows(list) {
+  return '<div class="panel shoot"><header class="sh"><div class="shn"><b>Found in the footage</b></div><span class="n">' + list.length + ' video' + (list.length === 1 ? '' : 's') + '</span></header>' +
+    list.map(function (x) {
+      const m = x[0], i = x[1];
+      return '<div class="row pick' + (inPull(m.path) ? ' pulled' : '') + '" tabindex="0" data-k="m' + i + '" data-p="' + esc(m.path) + '" data-t="' + (+m.start_s || 0) + '">' +
+        '<span class="thumb pic"><img loading="lazy" alt="" src="' + still(m.fp, m.shot) + '"></span>' +
+        '<span class="nm">' + esc(m.name || m.path.split('/').pop()) + '<span class="pk">✓ in the pull</span>' +
+        '<small>' + esc(m.what) + '</small><small>at ' + tcode(m.start_s) + (m.duration ? ' of ' + clock(m.duration) : '') +
+        (m.found && m.found.length > 1 ? ' · ' + m.found.length + ' moments' : '') +
+        (m.versions > 1 ? ' · <span class="vn">' + ICON.versions + ' ' + m.versions + '</span>' : '') + '</small></span>' +
+        '<span class="sz">' + (m.bytes ? tb(m.bytes) : '') + '</span></div>';
+    }).join('') + '</div>';
 }
 
 // Settings and notes a camera or an app writes beside a file
@@ -559,7 +655,6 @@ function listHTML(list) {
 }
 
 function draw() {
-  document.querySelectorAll('.views [data-view]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.view === view); });
   const files = pieces(rows);
   const vids = videos.rows.map(function (m, i) { return [m, i]; });
   const best = pieces(videos.rows);
@@ -567,20 +662,23 @@ function draw() {
   if (!files.length && !vshow.length) {
     $('inspect').hidden = true;
     $('out').innerHTML = '<div class="panel"><div class="empty">' +
-      ($('q').value.trim() || place || where || kind !== 'all' ? 'Nothing matches.' : 'Type a few words above: what it shows, a name, a folder, an event.') + '</div></div>';
+      ($('q').value.trim() || filtering() || kind !== 'all' ? 'Nothing matches.' : 'Type a few words above: what it shows, a name, a folder, an event.') + '</div></div>';
     return;
   }
   let html = '';
   // Videos found by what they show come first, as pictures, in both views
   const shown = {};
-  if (vshow.length) html += '<div class="wall">' + vshow.map(function (x) { shown[x[0].vkey || x[0].path] = 1; return videoTile(x[0], x[1]); }).join('') + '</div>';
+  if (vshow.length) {
+    vshow.forEach(function (x) { shown[x[0].vkey || x[0].path] = 1; });
+    html += view === 'list' ? videoRows(vshow) : '<div class="wall">' + vshow.map(function (x) { return videoTile(x[0], x[1]); }).join('') + '</div>';
+  }
   if (view === 'wall') {
     // footage and pictures as tiles (not again when the video is already shown); the rest as a list
     const pics = files.filter(function (r) { return (r.kind === 'video' || r.kind === 'image') && !shown[r.vkey || r.path]; });
     const rest = files.filter(function (r) { return r.kind !== 'video' && r.kind !== 'image'; });
     if (pics.length) html += (vshow.length ? '<div class="wall-h">Files</div>' : '') + '<div class="wall">' + pics.map(fileTile).join('') + '</div>';
     if (rest.length) html += '<div class="wall-h">Other files</div>' + listHTML(rest);
-  } else html += listHTML(files);
+  } else html += listHTML(files.filter(function (r) { return !shown[r.vkey || r.path]; }));
   if (rows.length < total) html += '<button class="more" id="more">show 200 more (' + (total - rows.length).toLocaleString() + ' left)</button>';
   $('out').innerHTML = html;
   const m = $('more'); if (m) m.onclick = function () { run(true); };
@@ -641,13 +739,24 @@ function choose(el, e) {
   if (SEL.size === 1) openIn('panel', itemOf(picked()[0]));
   else if (!SEL.size) hint();
 }
-$('out').addEventListener('click', function (e) { const el = e.target.closest('[data-k]'); if (el) choose(el, e); });
+$('out').addEventListener('click', function (e) {
+  const a = e.target.closest('[data-act]');
+  if (a) {
+    const p = a.closest('[data-p]').dataset.p;
+    if (a.dataset.act === 'copy') copyText(localPath(p), function (ok) {
+      a.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); setTimeout(function () { a.innerHTML = ICON.copy; }, 1600); });
+    if (a.dataset.act === 'pull') addToPull([p], null).then(function () {
+      const on = inPull(p); a.classList.toggle('in', on); a.innerHTML = on ? '✓' : ICON.pull; a.title = on ? 'In the pull' : 'Add to pull'; });
+    return;
+  }
+  const el = e.target.closest('[data-k]'); if (el) choose(el, e);
+});
 $('out').addEventListener('keydown', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
   if (e.key === 'Enter') { e.preventDefault(); if (SEL.has(el.dataset.k)) openBig(el); else choose(el, e); }
   if (e.key === ' ') { e.preventDefault(); choose(el, e); }
 });
-$('out').addEventListener('dblclick', function (e) { const el = e.target.closest('[data-k]'); if (el) openBig(el); });
+$('out').addEventListener('dblclick', function (e) { if (e.target.closest('[data-act]')) return; const el = e.target.closest('[data-k]'); if (el) openBig(el); });
 $('out').addEventListener('contextmenu', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
   e.preventDefault();
@@ -782,7 +891,7 @@ function render(where) {
 }
 function head(r) {
   return '<div class="vh"><b>' + esc(r.name) + '</b>' +
-    (pullable(r.path) ? '<button class="ib' + (inPull(r.path) ? ' in' : '') + '" data-do="pull" title="' + (inPull(r.path) ? 'In the pull' : 'Add to pull') + '">' + ICON.pull + '</button>' : '') +
+    (pullable(r.path) ? '<button class="ib ' + (inPull(r.path) ? 'in' : 'go-pull') + '" data-do="pull" title="' + (inPull(r.path) ? 'In the pull' : 'Add to pull') + '">' + (inPull(r.path) ? '✓' : ICON.pull) + '</button>' : '') +
     '<button class="ib" data-do="copy" title="Copy its path">' + ICON.copy + '</button></div>' +
     '<div class="said" style="padding:0 14px;font-size:12px"></div>';
 }
@@ -844,7 +953,8 @@ function wire(box, st, where) {
       setTimeout(function () { b.innerHTML = ICON.copy; }, 1600); }); };
   });
   box.querySelectorAll('[data-do="pull"]').forEach(function (b) {
-    b.onclick = async function () { await addToPull([r.path], null); b.classList.toggle('in', inPull(r.path)); b.title = inPull(r.path) ? 'In the pull' : 'Add to pull'; };
+    b.onclick = async function () { await addToPull([r.path], null); const on = inPull(r.path);
+      b.classList.toggle('in', on); b.classList.toggle('go-pull', !on); b.innerHTML = on ? '✓' : ICON.pull; b.title = on ? 'In the pull' : 'Add to pull'; };
   });
   // the picture is the player: a click plays it there, from the shot shown
   const pv = box.querySelector('[data-pv]');
@@ -955,7 +1065,10 @@ async function refreshPull() {
   $('pbMeta').textContent = d.items.length + ' clip' + (d.items.length === 1 ? '' : 's') + ' · ' + tb(b);
   $('pbOpen').href = '/pull.php?p=' + encodeURIComponent(PULL.slug);
   $('pullbar').hidden = false;
-  $('out').querySelectorAll('[data-p]').forEach(function (x) { x.classList.toggle('pulled', inPull(x.dataset.p)); });
+  $('out').querySelectorAll('[data-p]').forEach(function (x) {
+    const on = inPull(x.dataset.p); x.classList.toggle('pulled', on);
+    const a = x.querySelector('[data-act="pull"]'); if (a) { a.classList.toggle('in', on); a.innerHTML = on ? '✓' : ICON.pull; }
+  });
 }
 // Files go in one by one, each confirmed; the bar below and the line above say how it went.
 let pending = null;
