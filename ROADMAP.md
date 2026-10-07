@@ -51,11 +51,37 @@ that NAS; the Mac app has to prove each part again.
 - Rushes Helper for Windows.
 - Live support for organisations with a commercial license (see
   [Decided](#decided-and-why)).
-- **Copying over SSH** (an idea, October 2026). Rushes copies only through
-  shares mounted on the computer. During the NAS rescue, pulling files over SSH
-  was faster than the share (about twice) and kept working when the share
-  stopped answering. Worth offering as an advanced way in ("copy from a server
-  over SSH"); it needs the server's admin login and SSH turned on.
+- **The safety bench** (agreed October 2026, next). Proof that copying loses nothing, before
+  anyone is asked to trust it:
+  - scripted torture tests, each repeatable: the destination unplugged mid-file, the app killed
+    mid-copy, a full disk, one byte flipped in a finished copy, the original changed while it is
+    read, a different file with the same name at the destination, accents written two ways, files
+    over 4 GB, 100,000 small files, a share that drops. Every time: nothing lost, nothing falsely
+    "done", and the problem said;
+  - an outside referee on real footage: after Rushes copies, `rsync -rcn` (every byte of both
+    sides) and an independent ASC MHL verify both report no difference;
+  - every file left out on purpose (dot names, Thumbs.db, recycle bins) counted and shown;
+  - the gaps already listed below (power cuts, path races, stalled reads) closed or said plainly;
+  - one page of every test and its result, to show people.
+- **Copying from a server over SSH** (designed October 2026, after the safety bench). During the
+  NAS rescue, rsync over SSH was about twice as fast as the share and kept working when the share
+  died. Rushes does not write its own network copier: **rsync moves the data**, Rushes does the
+  checks around it.
+  - **Off unless turned on:** Setup → Where footage comes from → "Allow copying over SSH" shows a
+    third kind of source, "A server, over SSH". Its folders then appear in Copying like any other.
+  - **Connected once, without a terminal:** the server's address, admin name and password typed
+    into Rushes by the person; its fingerprint shown first ("is this your server?"); a key made
+    on the Mac and installed on the server; the password forgotten. "Forget this server" removes it.
+  - **rsync with the safe options:** `--whole-file` (no reading the old copy back to compare: the
+    silent minutes that timed out on the rescue's section 25), `--ignore-existing` (never
+    replaces), one shared connection, a dead line noticed in two minutes, waits and tries again.
+    It only reads from the server.
+  - **Rushes' checks after:** the server works out each file's fingerprint on its own disk
+    (sha256sum or md5sum, built into QNAP), Rushes reads the copy back and compares; then the
+    origin record and the ASC MHL, as for every copy.
+  - Tell IT first (Cortex XDR may notice an app opening SSH connections). Signed helper code.
+- Drives and cards stay with Rushes' own copier: there rsync has no advantage (both ends on one
+  machine), and Rushes fingerprints while it reads, so a card is read once.
 - **Send out, to approved destinations** (designed October 2026). For footage
   that has to leave fast, such as a shoot for the press that a station needs tonight.
   - **Destinations, set once by the admin** in Setup: a station's FTP or SFTP,
