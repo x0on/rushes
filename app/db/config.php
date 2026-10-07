@@ -227,6 +227,7 @@ function icon(string $name, float $w = 1.7): string {
         'overview'   => '<path d="M3.5 13a8.5 8.5 0 0 1 17 0"/><path d="M12 13l4.2-3.4"/><circle cx="12" cy="13" r="1.4" fill="currentColor" stroke="none"/><path d="M3.5 13v3.5h17V13"/>',
         'transfers'  => '<path d="M4 8.5h13"/><path d="m14 5.5 3 3-3 3"/><path d="M20 15.5H7"/><path d="m10 12.5-3 3 3 3"/>',
         'cache'      => '<path d="M4 7h16"/><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7"/><path d="M6.2 7 7.1 19a2 2 0 0 0 2 1.9h5.8a2 2 0 0 0 2-1.9L17.8 7"/>',
+        'reorganize' => '<path d="M3 6.5A2 2 0 0 1 5 4.5h3.6l2 2.6H19a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M8 13.5h7"/><path d="m12.5 11 2.5 2.5-2.5 2.5"/>',
         'activity'   => '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
         'tools'      => '<path d="M4 6.5h9"/><path d="M18.5 6.5H20"/><circle cx="15.7" cy="6.5" r="2.2"/><path d="M4 17.5h9"/><path d="M18.5 17.5H20"/><circle cx="15.7" cy="17.5" r="2.2"/><path d="M4 12h1.5"/><path d="M11 12h9"/><circle cx="8.3" cy="12" r="2.2"/>',
         'back'       => '<path d="M20 12H4.5"/><path d="m11 5.5-6.5 6.5L11 18.5"/>',
@@ -258,7 +259,7 @@ function icon(string $name, float $w = 1.7): string {
 // comes from one of these, so it is right for the machine that will use it.
 
 // The folder inside the archive that departments live on, chosen in
-// Reorganize → 00. No default: a guessed name would file footage somewhere
+// Setup → Archive structure. No default: a guessed name would file footage somewhere
 // nobody chose. Until it is chosen, Ingest and the tidy-up refuse.
 // "/" is the archive itself: departments and Projects straight at its top, the
 // tidiest shape. shelf_name() is then '' (no folder in between); shelf_chosen()

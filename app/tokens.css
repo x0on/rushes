@@ -81,6 +81,7 @@
     --ok:   #5FCB9C; --ok-bg:   rgba(95, 203, 156, .14);
     --warn: #E0B35C; --warn-bg: rgba(224, 179, 92, .14);
     --bad:  #E58074; --bad-bg:  rgba(229, 128, 116, .14);
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -94,7 +95,17 @@
   --ok:   #5FCB9C; --ok-bg:   rgba(95,203,156,.14);
   --warn: #E0B35C; --warn-bg: rgba(224,179,92,.14);
   --bad:  #E58074; --bad-bg:  rgba(229,128,116,.14);
+  color-scheme: dark;
 }
+/* The page tells the browser which it is, so the browser's own parts (scroll bars,
+ * dropdown lists, the date picker) are drawn to match instead of staying light. */
+:root[data-theme="light"] { color-scheme: light }
+/* Scroll bars in Rushes' own colours: a quiet thumb on a clear track. */
+* { scrollbar-color: var(--line) transparent }
+::-webkit-scrollbar { width: 10px; height: 10px; background: transparent }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box }
+::-webkit-scrollbar-thumb:hover { background-color: var(--faint) }
+::-webkit-scrollbar-corner { background: transparent }
 
 /* ══ base ═══════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box }
@@ -204,7 +215,10 @@ a:hover { text-decoration: underline }
 
 /* ══ work area ══════════════════════════════════════════════════════════ */
 .work { min-width: 0; overflow-y: auto; display: flex; flex-direction: column }
-.pad { padding: 18px 20px 48px; max-width: 1400px; width: 100% }
+.pad { padding: 18px 20px 48px; width: 100% }
+/* Boxes grow with the window; a paragraph of explanation does not: past about
+ * 90 characters the eye loses its place going back to the next line. */
+.pad p, .pad .note:not(span) { max-width: 90ch }
 .head { display: flex; align-items: center; gap: 12px; margin: 0 0 16px }
 .head h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.01em }
 .head .sub { color: var(--muted); font-size: 12.5px }
@@ -308,7 +322,6 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
 .code.block { display: block; padding: 9px 11px; margin-top: 8px; word-break: break-all }
 
 /* ══ forms (Setup, Structure) ═══════════════════════════════════════════ */
-  .form { max-width: 760px }
   .grp { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
          padding: 18px 20px 20px; margin: 0 0 14px }
   .grp > h2 { font-size: 14px; font-weight: 650; margin: 0 0 3px }
@@ -318,7 +331,7 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
   label.f:last-child { margin-bottom: 0 }
   label.f > span { display: block; font-size: 11px; text-transform: uppercase;
                    letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 0 0 5px }
-  input[type=text], input[type=date], select {
+  input[type=text], input[type=date], input[type=password], select {
     width: 100%; padding: 9px 11px; font: 13.5px var(--font); color: var(--fg);
     border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg) }
 

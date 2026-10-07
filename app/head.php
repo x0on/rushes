@@ -139,7 +139,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   <?= $m('Describe', '/db/admin.php#describe', 'describe') ?><?= $m("Editors' projects", '/db/admin.php#projects', 'projects') ?>
   <?= $m('Reorganize', '/structure.php') ?>
   <h2>System</h2>
-  <?= $m('Activity', '/db/admin.php#activity', 'activity') ?><?= $m('Jobs and tools', '/db/admin.php#tools', 'tools') ?>
+  <?= $m('Activity', '/db/admin.php#activity', 'activity') ?>
   <?= $m('Setup', '/setup.php') ?>
   <div class="mnav-foot">
     <button type="button" id="mTheme">Light or dark</button>

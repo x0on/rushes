@@ -100,7 +100,7 @@ if ($act === 'start') {
     // the name the page sends, or the one this browser was given (head.php)
     $who = mb_substr($clean($_POST['uploader'] ?? ''), 0, 60) ?: mb_substr($clean($_COOKIE['rushes_who'] ?? ''), 0, 60);
     if ($who === '') up_said(400, ['error' => 'Say who you are first (Who? at the top of the page): your name goes with the files.']);
-    if (!shelf_chosen()) up_said(400, ['error' => 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Manage → Reorganize → 00.']);
+    if (!shelf_chosen()) up_said(400, ['error' => 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Manage → Setup → Archive structure.']);
     $folder = dept_folder((string)($_POST['dept'] ?? ''));
     if ($folder === null) up_said(400, ['error' => 'Pick a ' . strtolower(shelf_word()) . ' from the list.']);
     $date = (string)($_POST['date'] ?? '');

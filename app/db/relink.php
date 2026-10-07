@@ -9,7 +9,7 @@
 // tidy-up records (_rushes/origin/… tidy.tsv, and their undos), so the project
 // can be pointed at the new places without anyone hunting for files.
 //
-// The project itself never comes here. The page (Reorganize → 05) opens it on
+// The project itself never comes here. The page (Manage → Editors' projects) opens it on
 // the editor's own computer and sends only the file paths written in it:
 //
 //   POST paths=["/Volumes/VIDEO/ARCHIVE/2019/x/A001.MXF", …]   (JSON)
@@ -20,7 +20,7 @@
 // beginning, and the kind of slashes, are kept exactly as they were.
 require_once __DIR__ . '/auth.php';
 header('Content-Type: application/json');
-// Reorganize is behind the Manage password, and so is this.
+// Manage is behind the Manage password, and so is this.
 if (!may_act((string)($_POST['pass'] ?? ''))) { http_response_code(403); echo '{"error":"sign in first"}'; exit; }
 @ini_set('memory_limit', '512M');       // ponytail: every move in memory; fine to hundreds of thousands
 

@@ -1,7 +1,7 @@
 <?php
 // import.php — the catalogue brought up to date: the file list, descriptions,
 // proxies' details, the next folder to prepare, the daily database copy.
-// The runner asks for it every minute, from this machine; Jobs and tools →
+// The runner asks for it every minute, from this machine; Setup → Jobs and tools →
 // Rebuild search asks for it by hand, signed in. Nobody else may start it.
 require_once __DIR__ . '/sync.php';
 require_once __DIR__ . '/auth.php';
@@ -20,7 +20,7 @@ if (!$local && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 // proxies' details, the daily database copy), however long it takes. ?part=video:
 // only what reads the VIDEO share (new descriptions, the prepare list's proxy
 // check); the runner asks for it separately, within a time limit, and only when
-// VIDEO may be read. No part: both. &force=1 (Jobs and tools → Rebuild search)
+// VIDEO may be read. No part: both. &force=1 (Setup → Jobs and tools → Rebuild search)
 // rebuilds from the file list even when search already has it.
 $part  = (string)($_GET['part'] ?? '');
 $web   = $part !== 'video';

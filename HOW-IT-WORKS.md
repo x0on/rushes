@@ -234,7 +234,7 @@ still do ([known problem](ROADMAP.md#known-problems)).
 | `archive.database` | puts the catalogue outside the web folder |
 | `sources` | servers and drives to copy from, with a name for each |
 | `helper.mode`, `helper.label` | built in or external, and the helper computer's name |
-| `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | the folder in the archive the departments live in (the shelf), the departments and their folders, what they are called, and whether Ingest may add one. All set in Reorganize. The shelf has no default: until it is chosen, Ingest and the tidy-up wait. |
+| `organise.shelves`, `organise.departments`, `organise.kind`, `organise.add_at_ingest` | the folder in the archive the departments live in (the shelf), the departments and their folders, what they are called, and whether Ingest may add one. All set in Setup → Archive structure. The shelf has no default: until it is chosen, Ingest and the tidy-up wait. |
 | `duplicates.never_keep`, `duplicates.card_dumps` | this archive's own folders whose copies are never kept, and where whole cards were once copied (chosen in Manage → Duplicates, from the folders the copies are in). What is true for every archive is in `rules.json → duplicates.never_keep`. |
 | `organise.shape` | `one_place`, or `in_place`: the drives in `sources` are listed where they are ([Drives that come and go](#drives-that-come-and-go)) |
 | `limits.disk_stop_free`, `limits.disk_warn_free` | stop copying below this free space (5 TB), and warn below this (8 TB). They override `rules.json`. |
@@ -388,8 +388,8 @@ so in the job's log (`make_way()` in `runner.py`).
    still copying or any file failed.
 
 If no departments have been set up yet, or the folder they live in has not
-been chosen, Ingest says so and points to Reorganize. Anyone who can open Rushes can ingest a card, without a password.
-A new department can be added here too, if Reorganize allows it.
+been chosen, Ingest says so and points to Setup → Archive structure. Anyone who can open Rushes can ingest a card, without a password.
+A new department can be added here too, if Setup → Archive structure allows it.
 
 `queue.php` checks the request again: it accepts only a card the helper really
 reports, a real date, and not one before 2005 or in the future (the 1 January
@@ -674,7 +674,7 @@ disk, at exactly the size it says.
 
 The full list is rebuilt:
 
-- when you ask: Manage → Jobs and tools → **Rebuild the file list**;
+- when you ask: Manage → Setup → Jobs and tools → **Rebuild the file list**;
 - by itself, after the runner's jobs that move files: moving duplicates or
   caches aside or back, and the old layout's undo. A tidy-up is done by the
   helper, which tells search about each move as it goes.
@@ -952,9 +952,10 @@ now live on each editor's computer and are kept as copies, so it is off unless
 
 ## Keeping the archive tidy
 
-### Reorganize: departments and the tidy-up
+### The archive's structure, and Reorganize
 
-**Manage → Reorganize** holds the plan the archive follows:
+**Manage → Setup → Archive structure** holds the plan the archive follows
+(it was Reorganize's part 1 until 0.12.23; Reorganize is now only the tidy-up):
 
 - what your top folders are called (departments, clients, projects, or your own
   word), and which folder at the top of the archive they live in (the shelf),
@@ -1013,7 +1014,7 @@ Then:
 
 **Put back** undoes a tidy-up from its record.
 
-**Edit projects after a tidy-up** (Reorganize → 05):
+**Edit projects after a tidy-up** (Manage → Editors' projects):
 
 1. Choose a Premiere project (`.prproj`), or an FCPXML or XML exported from
    Final Cut Pro or DaVinci Resolve. Your browser opens it and sends only its
@@ -1025,7 +1026,7 @@ Then:
 3. You save a corrected copy (`… (relinked)`), and open or import it. Mac and
    Windows paths both work.
 
-**In the code:** `structure.php` (the page), `db/tidy.php` (the proposal and
+**In the code:** `setup.php` (the plan, its own forms inside Setup's), `structure.php` (Reorganize: the tidy-up), `db/tidy.php` (the proposal and
 asking; `here_files()` for folders already in the archive), `ingest.py`
 (`tidy()`: `map` lines for copies, `file` lines for folders already there), `db/relink.php` (Premiere paths), `db/moved.php` (search, pulls and
 descriptions follow), and in `ingest.py` `tidy()`, `untidy()`, `move_proxy()`,
@@ -1190,8 +1191,11 @@ put back. **In the code:** `organize.sh`.
 ## Manage
 
 Manage is behind the password. Its left column has these panes: Overview,
-Transfers, Duplicates, Cache, Describe, Reorganize, Activity, Jobs and tools,
-and Setup, plus **Sign out**.
+Transfers, Duplicates, Cache, Describe, Editors' projects, Reorganize, Activity
+and Setup, plus **Sign out**. Each has its own icon. Search is the top bar's,
+so the column does not repeat it. Activity in full hides the short feed beside
+the other panes. Every pane uses the window's width; paragraphs stay a readable
+width.
 
 ### Overview
 
@@ -1284,7 +1288,9 @@ the paired Rushes app, and `activity.tsv` is never handed to a browser
 
 ### Jobs and tools
 
-Buttons for running things by hand, each asking twice:
+At the end of Setup, folded, with the admin password and **Take everything with
+you** above it (until 0.12.23 these were their own pane). Buttons for running
+things by hand, each asking twice:
 
 - Rebuild the file list;
 - Rebuild search;

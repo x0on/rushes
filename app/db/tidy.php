@@ -230,7 +230,7 @@ function queue_add(string $line): void {
 
 if (($_POST['go'] ?? '') === '1') {
     if (helper_archive() === '') bail(400, 'Setup does not know where the helper finds the archive yet.');
-    if (!shelf_chosen()) bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Reorganize → 00.');
+    if (!shelf_chosen()) bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Setup → Archive structure.');
     $p = proposal(); $lines = []; $files = 0; $here = [];
     // As JSON, not pick[...] fields: a folder called "Gala [2024]" would break those.
     $pick = json_decode((string)($_POST['picks'] ?? ''), true);

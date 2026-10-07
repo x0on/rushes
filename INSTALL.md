@@ -82,7 +82,7 @@ a Mac that also edits can pause it during a busy day.
    the runner ✓.
 5. **Open Rushes** in a browser at the archive machine's address and go to
    **Manage**. The password starts as the app's name (`rushes`): **change it
-   first** (Jobs and tools → Admin password).
+   first** (Setup → Admin password).
 6. **Setup** (Manage → Setup):
    - **02** This archive: its name, where it lives, and the address people open
      Rushes at (use the machine's name if it has one, not a number that can
@@ -92,9 +92,9 @@ a Mac that also edits can pause it during a busy day.
      (a Mac). For a Mac, choose where the Mac sees the archive.
    - **05** Duplicates: your own folders whose copies are never kept, and where
      whole cards were once copied. Can wait until you use Duplicates.
-7. **Reorganize** (Manage → Reorganize): what your top folders are, which folder
-   in the archive they live in, and the list of departments, clients or
-   projects. Ingest waits until this is done.
+7. **Archive structure** (Manage → Setup → Archive structure): what your top
+   folders are, which folder in the archive they live in, and the list of
+   departments, clients or projects. Ingest waits until this is done.
 8. **Rushes Helper on the Mac.**
    - Setup → 04 → **Download Rushes Helper**. Open it, and give it the Rushes
      address.

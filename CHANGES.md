@@ -3,6 +3,29 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.23 — October 2026
+
+- **Setup holds the archive's structure.** What the top folders are, which
+  folder they live in, who can add one, the list, and how a shoot's folder is
+  named moved from Reorganize to **Setup → Archive structure**. Its line says
+  "Not set yet: Ingest waits for this" until the shelf is chosen. Each part
+  still saves on its own, and saving still moves nothing.
+- **Reorganize is only the tidy-up**: moving older folders into that
+  structure. "No department in its path" is said once above the list, with a
+  small tag on each such row; long example names are shortened in the middle
+  (the whole name shows on hover).
+- **Edit projects after a tidy-up** moved to **Editors' projects**.
+- **Jobs and tools moved into Setup**, folded at the end, with the admin
+  password and Take everything with you. Old links land there.
+- **The menu is shorter**: no "Back to search" (the top bar has Search) and
+  no Jobs and tools. Every item has its own icon.
+- **Activity is shown once**: on the Activity page the short feed beside it
+  is hidden.
+- **Dark scroll bars in the dark theme.** The pages now tell the browser they
+  are dark, so scroll bars, dropdown lists and the date picker match.
+- **Pages use the window's width.** Boxes grow with it; paragraphs of
+  explanation stay a readable width.
+
 ## 0.12.22 — October 2026
 
 - **Forgot the password? Set a new one at this Mac.** The sign-in page, opened

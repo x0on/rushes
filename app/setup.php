@@ -14,7 +14,7 @@
 //
 // ponytail: a form that rewrites one JSON file, behind the admin lock.
 $NAV = 'admin';
-require __DIR__ . '/db/config.php';
+require_once __DIR__ . '/db/config.php';
 require_once __DIR__ . '/db/auth.php';
 require_sign_in();
 
@@ -27,6 +27,86 @@ $lpath = [];
 foreach ($local as $v) {
     $lpath[$v['path']] = true;
     foreach ($v['top'] as $d) $lpath[$v['path'] . '/' . $d] = true;
+}
+
+// ── the archive's structure (was Reorganize's part 1): its own forms, saved on their own ──
+// The department list lives here and only here. Ingest offers exactly this list; Reorganize
+// moves older folders to match it. Each department is linked to the folder it already has
+// on the shelf, so saving the plan renames nothing and breaks no Premiere project.
+$folders = shelf_folders();
+$pSaid = ''; $pBad = [];
+$rows = departments();            // what the section shows; replaced by a paste or a failed save
+$PRESETS = ['Departments' => 'Department', 'Clients' => 'Client', 'Projects' => 'Project'];
+if (($_POST['_kind'] ?? '') === '1') {
+    $pick = (string)($_POST['kind'] ?? 'Departments');
+    if (isset($PRESETS[$pick])) { $one = $PRESETS[$pick]; $many = $pick; }
+    else {
+        $one  = trim((string)($_POST['kind_one'] ?? ''));
+        $many = trim((string)($_POST['kind_many'] ?? '')) ?: ($one === '' ? '' : $one . 's');
+    }
+    $shelfPick = (string)($_POST['shelves'] ?? '');
+    if ($one === '' || preg_match('#[<>/\\\\]#', $one . $many)) $pBad[] = 'Type the word you use — one and many, e.g. Show / Shows.';
+    elseif ($shelfPick !== '/' && !in_array($shelfPick, shelf_choices(), true)) $pBad[] = 'Pick the folder they live in, from the list.';
+    else {
+        $s = settings();
+        $s['organise']['kind'] = ['one' => $one, 'many' => $many];
+        $s['organise']['shelves'] = $shelfPick;
+        $s['organise']['add_at_ingest'] = ($_POST['open'] ?? '') === '1';
+        if (save_settings($s)) { header('Location: /setup.php?plan=kind#plan'); exit; }
+        $pBad[] = 'Could not write settings.json — is the web folder writable?';
+    }
+}
+// a pasted list: suggest a folder for each, show it, save nothing yet
+if (($_POST['_paste'] ?? '') === '1') {
+    $names = [];
+    foreach (preg_split('/\R/', (string)($_POST['list'] ?? '')) as $n) {
+        $n = trim(preg_replace('/\s+/', ' ', $n));
+        if ($n !== '' && !in_array(strtolower($n), array_map('strtolower', $names), true)) $names[] = $n;
+    }
+    $link = guess_links($names, $folders);
+    $rows = array_map(fn($n) => ['name' => $n, 'folder' => $link[$n]], $names);
+    $pSaid = 'check: ' . count(array_filter($link)) . ' of ' . count($names) . ' matched to a folder you already have.';
+}
+if (($_POST['_plan'] ?? '') === '1') {
+    $rows = []; $seenFolder = [];
+    $names = (array)($_POST['d_name'] ?? []); $links = (array)($_POST['d_folder'] ?? []);
+    $names[] = (string)($_POST['add_name'] ?? ''); $links[] = (string)($_POST['add_folder'] ?? '');
+    foreach ($names as $i => $n) {
+        $n = trim(preg_replace('/\s+/', ' ', (string)$n));
+        $f = (string)($links[$i] ?? '');
+        if ($n === '' || !empty($_POST['d_drop'][$i])) continue;
+        // A catch-all is where everything ends up when nobody is sure. There is
+        // no such place: every shoot belongs to somebody. Same rule as Ingest.
+        if ($why = shelf_name_problem($n, array_column($rows, 'name'))) $pBad[] = $why;
+        $rows[] = ['name' => $n, 'folder' => $f];
+        if ($f !== '' && !in_array($f, $folders, true)) $pBad[] = "The folder “{$f}” is not on the shelf any more.";
+        if ($f !== '' && isset($seenFolder[$f])) $pBad[] = "$f is linked to both “{$seenFolder[$f]}” and “{$n}”. A folder belongs to one " . strtolower(shelf_word()) . '.';
+        if ($f !== '') $seenFolder[$f] = $n;
+    }
+    if (!$rows) $pBad[] = 'The list is empty. Ingest needs at least one ' . strtolower(shelf_word()) . '.';
+    if (!$pBad) {
+        $s = settings();
+        $s['organise']['departments'] = $rows;
+        if (save_settings($s)) { header('Location: /setup.php?plan=1#plan'); exit; }
+        $pBad[] = 'Could not write settings.json — is the web folder writable?';
+    }
+}
+if (isset($_GET['plan'])) $pSaid = $_GET['plan'] === 'kind' ? 'kind' : 'ok';
+
+// ── the admin password (was in Jobs and tools) ──
+$pw_said = '';
+if (isset($_POST['_newpass'])) {
+    $new = (string)$_POST['_newpass'];
+    // At the Mac itself the current one is not asked (auth.php at_this_mac); from anywhere else it is
+    if (!at_this_mac() && !pass_ok((string)($_POST['_oldpass'] ?? ''))) {
+        $pw_said = 'The current password is wrong.';
+    } elseif (strlen(trim($new)) < 4) {
+        $pw_said = 'Pick something at least four characters long.';
+    } elseif (new_pass($new, 'Changed the password' . (at_this_mac() ? ' on this Mac' : '') . '; other devices sign in again with it')) {
+        $pw_said = 'ok';
+    } else {
+        $pw_said = 'Could not write ' . pass_file() . ' — check it is writable.';
+    }
 }
 
 if (($_POST['_save'] ?? '') === '1') {
@@ -154,6 +234,17 @@ $num   = function () use (&$N) { return sprintf('%02d', ++$N); };
 $open  = $said !== '' && $said !== 'ok';      // nothing saved: every section open, to see what to fix
 $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . ' TB'
                                        : number_format($b / 1073741824) . ' GB';
+// the structure section's words and lists
+$ONE = shelf_word(); $MANY = shelf_word(true); $one = strtolower($ONE); $many = strtolower($MANY);
+$kindNow = $MANY;
+$loose  = array_values(array_diff($folders, array_filter(array_column($rows, 'folder'))));
+$shelf  = basename(shelf_dir());
+$opts = function (string $cur) use ($folders, $e) {
+    $o = '<option value="">— a new folder, made the first time</option>';
+    foreach ($folders as $f) $o .= '<option value="' . $e($f) . '"' . ($f === $cur ? ' selected' : '') . '>' . $e($f) . '</option>';
+    return $o;
+};
+$planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
 ?><!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -225,6 +316,29 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
   details.add-w > summary { list-style: none; display: inline-flex; margin-top: 14px }
   details.add-w > summary::-webkit-details-marker { display: none }
   details.add-w[open] > summary { display: none }
+  /* the structure section */
+  h3.sub-h { font-size: 13px; font-weight: 650; margin: 22px 0 6px; padding-top: 16px; border-top: 1px solid var(--line-soft) }
+  .kinds { display: flex; gap: 8px; flex-wrap: wrap }
+  .opt.sm { padding: 8px 14px } .opt.sm b { margin: 0 }
+  .two-in { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; max-width: 420px }
+  .dep, .dep-h { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center }
+  .dep { padding: 7px 0; border-top: 1px solid var(--line-soft) }
+  .dep.new select { color: var(--muted) }
+  .dep label.x { font-size: 12.5px; color: var(--muted); white-space: nowrap; cursor: pointer }
+  .dep-h { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 0 0 6px }
+  .dep-h span:last-child { width: 62px }
+  @media (max-width: 640px) { .dep { grid-template-columns: 1fr } .dep-h { display: none } }
+  textarea { width: 100%; min-height: 160px; padding: 10px 12px; font: 13.5px/1.5 var(--font); color: var(--fg);
+             background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); resize: vertical }
+  .loose { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 }
+  .loose span { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--line); color: var(--muted) }
+  .path { font-family: var(--mono); font-size: 13px; background: var(--bg); padding: 10px 12px;
+          border-radius: var(--radius-sm); border: 1px solid var(--line) }
+  .path b { color: var(--accent-text); font-weight: 600 }
+  .narrow { max-width: 380px }
+  .spin { display:inline-block; width:10px; height:10px; border:2px solid var(--line); border-top-color:var(--accent);
+          border-radius:50%; animation: spin .8s linear infinite; margin-right: 6px; vertical-align: -1px }
+  @keyframes spin { to { transform: rotate(360deg) } }
 </style>
 
 <div class="app">
@@ -330,6 +444,107 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
           </script>
         <?php endif; ?>
         <?php endif; /* not on a Mac */ ?>
+      </details>
+
+      <!-- ══ the archive's structure: what the top folders are, and how a shoot is filed ══
+           Its controls belong to their own forms (form="pK", "pL", "pP", declared after this
+           page's form): saving the plan never saves, or needs, the rest of Setup. -->
+      <details class="grp sec" id="plan"<?= $planOpen ? ' open' : '' ?>>
+        <summary><h2><span><?= $num() ?> /</span> Archive structure<?= $tip('One shape for the archive: a shelf per ' . $one . ', and inside it every shoot filed by year and date. Ingest files every new card straight into it. Saving it moves nothing; Reorganize moves older folders into it.') ?></h2>
+          <span class="val"><?= !shelf_chosen() ? '<b style="color:var(--warn)">Not set yet: Ingest waits for this</b>'
+              : $e(count($rows) . ' ' . (count($rows) === 1 ? $one : $many) . ', in ' . (shelf_is_top() ? ($s['archive']['label'] ?? 'the archive') . ' itself' : shelf_name())) ?></span>
+          <span class="chg">Change</span></summary>
+
+        <?php if ($pSaid === 'kind'): ?>
+          <div class="banner ok"><div class="txt">Saved. Rushes now says &ldquo;<?= $e($MANY) ?>&rdquo;, they live in <?= $e(shelf_is_top() ? ($s['archive']['label'] ?? 'the archive') . ' itself' : shelf_name()) ?>, and <?= shelf_open() ? 'anyone can add one at Ingest' : 'only the admin adds them, here' ?>.</div></div>
+        <?php elseif ($pSaid === 'ok'): ?>
+          <div class="banner ok"><div class="txt">Saved. Ingest offers exactly this list from now on. Nothing on disk was moved.</div></div>
+        <?php elseif ($pBad): ?>
+          <div class="banner bad"><div class="txt"><b>Nothing was saved.</b><?= implode('<br>', array_map($e, $pBad)) ?></div></div>
+        <?php elseif ($pSaid): ?>
+          <div class="banner warn"><div class="txt"><b>Not saved yet &mdash; <?= $e($pSaid) ?></b>
+            Check each link below, fix any that are wrong, then press Save.</div></div>
+        <?php endif; ?>
+
+        <h3 class="sub-h">What your top folders are</h3>
+        <p class="note" style="margin:0 0 10px">The same shape whatever you call them &mdash; only the word changes, everywhere Rushes says it.</p>
+        <div class="kinds">
+          <?php foreach ($PRESETS as $m => $o): ?>
+            <label class="opt sm"><input form="pK" type="radio" name="kind" value="<?= $e($m) ?>" <?= $kindNow === $m ? 'checked' : '' ?>><b><?= $e($m) ?></b></label>
+          <?php endforeach; $custom = !isset($PRESETS[$kindNow]); ?>
+          <label class="opt sm"><input form="pK" type="radio" name="kind" value="custom" id="kCustom" <?= $custom ? 'checked' : '' ?>><b>Another word</b></label>
+        </div>
+        <div class="two-in" id="kWords" <?= $custom ? '' : 'hidden' ?>>
+          <label class="f"><span>One</span><input form="pK" type="text" name="kind_one" value="<?= $custom ? $e($ONE) : '' ?>" placeholder="Show"></label>
+          <label class="f"><span>Many</span><input form="pK" type="text" name="kind_many" value="<?= $custom ? $e($MANY) : '' ?>" placeholder="Shows"></label>
+        </div>
+
+        <label class="f" style="margin-top:16px"><span>Which folder in <?= $e($s['archive']['label'] ?? 'the archive') ?> they live in</span>
+          <select form="pK" name="shelves">
+          <?php if (!shelf_chosen()): ?><option value="">— pick one (Ingest and Reorganize wait for this)</option><?php endif; ?>
+          <option value="/" <?= shelf_is_top() ? 'selected' : '' ?>><?= $e($s['archive']['label'] ?? 'The archive') ?> itself: <?= $e($many) ?> straight at the top</option>
+          <?php foreach (shelf_choices() as $f): ?>
+            <option value="<?= $e($f) ?>" <?= $f === shelf_name() ? 'selected' : '' ?>><?= $e($f) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <small>The shelf: every <?= $e($one) ?> has its own folder inside it, and every shoot is filed there.
+          Make the folder in the archive first if it is not in the list.</small></label>
+
+        <p style="margin:16px 0 8px;font-size:13px"><b>Who can add a new <?= $e($one) ?>?</b></p>
+        <div class="pick">
+          <label class="opt"><input form="pK" type="radio" name="open" value="0" <?= !shelf_open() ? 'checked' : '' ?>>
+            <b>Only here, by the admin</b>
+            <small>For a list that hardly changes &mdash; departments, regular clients. Someone at Ingest can only pick from it.</small></label>
+          <label class="opt"><input form="pK" type="radio" name="open" value="1" <?= shelf_open() ? 'checked' : '' ?>>
+            <b>Anyone, while bringing a shoot in</b>
+            <small>For a list that grows every week &mdash; projects. Ingest gets &ldquo;add a new one&rdquo;; the no-catch-all rule still applies.</small></label>
+        </div>
+        <div class="btns" style="margin-top:14px"><button form="pK" class="btn quiet" type="submit">Save these three</button></div>
+
+        <h3 class="sub-h">Your <?= $e($many) ?></h3>
+        <?php if (!$rows): ?>
+          <p class="note" style="margin:0 0 10px">Every shoot goes on one of these shelves, and Ingest offers exactly this list &mdash;
+             nothing else, and no &ldquo;Others&rdquo;. Paste them one per line. Rushes suggests
+             which folder you already have for each one; you check it before anything is saved.</p>
+          <textarea form="pL" name="list" placeholder="Parks &amp; Recreation&#10;Police Department&#10;Public Works Department&#10;…"></textarea>
+          <div class="btns" style="margin-top:12px">
+            <button form="pL" class="btn" type="submit">Suggest folders</button>
+            <span class="note">Saves nothing yet.</span></div>
+        <?php else: ?>
+          <p class="note" style="margin:0 0 10px">Every shoot goes on one of these shelves, and Ingest offers exactly this list.
+             A linked folder is used as it is &mdash; nothing is renamed, so no Premiere project breaks.</p>
+          <div class="dep-h"><span><?= $e($ONE) ?></span><span>Its folder in <?= $e($shelf) ?></span><span></span></div>
+          <?php foreach ($rows as $i => $r): ?>
+            <div class="dep<?= ($r['folder'] ?? '') === '' ? ' new' : '' ?>">
+              <input form="pP" type="text" name="d_name[<?= $i ?>]" value="<?= $e($r['name']) ?>" aria-label="<?= $e($ONE) ?>">
+              <select form="pP" name="d_folder[<?= $i ?>]" aria-label="Its folder"><?= $opts($r['folder'] ?? '') ?></select>
+              <label class="x"><input form="pP" type="checkbox" name="d_drop[<?= $i ?>]" value="1"> remove</label>
+            </div>
+          <?php endforeach; ?>
+          <div class="dep" style="border-top:1px solid var(--line);margin-top:6px;padding-top:12px">
+            <input form="pP" type="text" name="add_name" placeholder="add a <?= $e($one) ?>" aria-label="New <?= $e($one) ?>">
+            <select form="pP" name="add_folder" aria-label="Its folder"><?= $opts('') ?></select>
+            <span></span>
+          </div>
+          <div class="btns" style="margin-top:14px">
+            <button form="pP" class="btn" type="submit">Save</button>
+            <span class="note">Writes the plan. Moves nothing.</span></div>
+        <?php endif; ?>
+
+        <h3 class="sub-h">Folders not in the plan</h3>
+        <?php if ($loose): ?>
+          <p class="note" style="margin:0 0 10px">Folders already on the shelf that no <?= $e($one) ?> in the plan uses. They stay exactly where
+             they are and stay searchable; Ingest never offers them. <a href="/structure.php">Reorganize</a> is where each one gets a home.</p>
+          <div class="loose"><?php foreach ($loose as $f): ?><span><?= $e($f) ?></span><?php endforeach; ?></div>
+        <?php else: ?>
+          <p class="note" style="margin:0">None &mdash; every folder on the shelf belongs to a <?= $e($one) ?>.</p>
+        <?php endif; ?>
+
+        <h3 class="sub-h">How a shoot's folder is named</h3>
+        <p class="note" style="margin:0 0 10px">Every shoot that comes through Ingest lands like this. The date comes from the camera,
+           not from whoever brings the card in.</p>
+        <div class="path"><?= $e($shelf) ?> / <b><?= $e($one) ?></b> / <b>year</b> / <b>date</b> <b>what it was</b>
+          <div class="note" style="margin-top:6px;font-family:var(--font)">e.g. <?= $e($shelf) ?> / PARKS / 2026 / 20260926 Spring Festival</div></div>
       </details>
 
       <!-- ══ 03 sources ══ -->
@@ -717,6 +932,119 @@ $tb    = fn($b) => $b >= 1099511627776 ? number_format($b / 1099511627776, 1) . 
       <input type="hidden" name="_save" value="1">
       <button class="btn" type="submit">Save settings</button><?= $tip('Rules about media (what counts as cache, which files are never swept, when a disk is too full) are the same everywhere and live in rules.json, not here.') ?>
     </form>
+    <!-- the structure section's own forms: its controls name them (form="…") -->
+    <form id="pK" method="post" action="/setup.php#plan" hidden><input type="hidden" name="_kind" value="1"></form>
+    <form id="pL" method="post" action="/setup.php#plan" hidden><input type="hidden" name="_paste" value="1"></form>
+    <form id="pP" method="post" action="/setup.php#plan" hidden><input type="hidden" name="_plan" value="1"></form>
+    <script>
+      document.querySelectorAll('[name=kind]').forEach(function (r) {
+        r.onchange = function () { document.getElementById('kWords').hidden = !document.getElementById('kCustom').checked; }; });
+    </script>
+
+    <div class="pad form" style="padding-top:0">
+      <!-- ══ the admin password ══ -->
+      <div class="grp" id="password">
+        <h2 style="margin-bottom:12px">Admin password<?= $tip('One password for this archive, no accounts. It guards Manage and anything that moves files. Search and Ingest stay open to anyone who can reach this address.') ?></h2>
+        <form method="post" action="/setup.php#password" class="narrow">
+          <?php if ($pw_said === 'ok'): ?>
+            <div class="banner ok" style="margin-bottom:12px"><div class="txt">Changed. Phones and other computers sign in again with the new one.</div></div>
+          <?php elseif ($pw_said): ?>
+            <div class="banner bad" style="margin-bottom:12px"><div class="txt"><?= $e($pw_said) ?></div></div>
+          <?php endif; ?>
+          <?php if (!at_this_mac()): ?>
+            <label class="f"><span>Current</span><input id="op" name="_oldpass" type="password" autocomplete="current-password"></label>
+          <?php else: ?>
+            <p class="note" style="margin:0 0 12px">You are at the Mac Rushes runs on, so the current one is not asked.</p>
+          <?php endif; ?>
+          <label class="f"><span>New</span><input id="np" name="_newpass" type="password" autocomplete="new-password"></label>
+          <button class="btn" type="submit">Change it</button>
+        </form>
+      </div>
+
+      <!-- ══ no lock-in: everything Rushes knows, in formats any other program reads ══ -->
+      <div class="grp" id="exports-sec">
+        <h2 style="margin-bottom:8px">Take everything with you</h2>
+        <p class="note" style="margin:0 0 10px">What Rushes knows, in open formats, to keep or to move to
+          another program. Downloaded to this computer; nothing on the archive changes.</p>
+        <div class="btns" id="exports">
+          <a class="btn quiet" href="/db/export.php?what=files" download>Every file, and what it is (CSV)</a>
+          <a class="btn quiet" href="/db/export.php?what=moments" download>What describing found (CSV)</a>
+          <a class="btn quiet" href="/db/export.php?what=pulls" download>Every pull (JSON)</a>
+          <a class="btn quiet" href="/db/export.php?what=copies" download>Where else each file exists (CSV)</a>
+        </div>
+        <p class="note" style="margin:10px 0 0">Already open files on the archive, readable without Rushes:
+          the descriptions (<code>_rushes/analysis</code>, JSON), the record of every copy and move
+          (<code>_rushes/origin</code>, text), and the copy proofs (the <code>ascmhl</code> folder in each
+          copied folder, ASC MHL).</p>
+      </div>
+
+      <!-- ══ jobs and tools: run by hand, for when something looks wrong ══ -->
+      <details class="grp sec" id="tools">
+        <summary><h2>Jobs and tools</h2>
+          <span class="val">Run a job by hand &mdash; for when something looks wrong</span>
+          <span class="chg">Open</span></summary>
+        <div class="btns" id="toolBtns">
+          <?php foreach ([['manifest', 'Rebuild the file list', 'Write down every file and its size, then rebuild search. A few minutes.'],
+                          ['import', 'Rebuild search', 'Rebuild search from the file list. Seconds to minutes.'],
+                          ['verify', 'Check Recently Removed', 'Check every file in Recently Removed still has a twin in the archive. Moves nothing.'],
+                          ['df', 'Measure free space', ''],
+                          ['proxy-plan', 'Plan proxies (changes nothing)', 'Count the videos that have no proxy yet, and how much there is to read. Makes nothing.'],
+                          ['gpu-test', 'Test the video chip (changes nothing, about a minute)', 'Measure what the video chip can do: test encodes and one real clip. Writes a report; makes no video files.']] as [$k, $l, $ask]): ?>
+            <button class="btn quiet" type="button" data-t="<?= $k ?>" data-ask="<?= $e($ask) ?>"><?= $e($l) ?></button>
+          <?php endforeach; ?>
+        </div>
+        <div id="toolState" class="note" style="margin-top:10px"></div>
+        <p class="note" style="margin:12px 0 0">These run whether or not anything in Manage says you need them. Each step shows in the raw log (Activity).</p>
+      </details>
+    </div>
+    <script>
+    (function () {
+      var $ = function (i) { return document.getElementById(i); };
+      var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      var TOOL = {manifest: 'Rebuild the file list', import: 'Rebuild search', verify: 'Check Recently Removed', df: 'Measure free space',
+        'proxy-plan': 'Plan proxies', 'proxy-build': 'Make proxies', 'gpu-test': 'Test the video chip', 'proxy-test': 'Test proxy settings', scan: 'Find duplicates'};
+      // Each download says so on itself, then goes back.
+      document.querySelectorAll('#exports a').forEach(function (a) {
+        a.addEventListener('click', function () { var was = a.textContent; a.textContent = 'Downloading ✓';
+          setTimeout(function () { a.textContent = was; }, 2500); }); });
+      // Where each job is: asked, running, finished (from the same state Manage reads), while this section is open
+      async function state() {
+        if (!$('tools').open || document.hidden) return;
+        try {
+          var d = await (await fetch('/db/state.php?t=' + Date.now())).json(), tq = d.queued || [];
+          $('toolState').innerHTML =
+            (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running) + '</b>' + (d.progress ? ' · ' + d.progress.pct + '%' : '') + '</p>' : '') +
+            (tq.length ? '<p>Asked: <b>' + tq.map(function (x) { return esc(TOOL[x] || x); }).join(', ') + '</b> — it starts at the next turn, within a minute</p>' : '') +
+            (!d.running && !tq.length ? '<p>Nothing running ✓</p>' : '') +
+            (d.gpu_test ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px"><b>Video chip test</b> · ' +
+              (d.running === 'gpu-test' ? 'running now' : 'finished ' + new Date(d.gpu_test.at * 1000).toLocaleString()) +
+              '<pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 var(--mono)">' + esc(d.gpu_test.text) + '</pre></div>' : '');
+        } catch (e) { $('toolState').textContent = 'Could not reach the archive: ' + e.message; }
+      }
+      $('tools').addEventListener('toggle', state);
+      setInterval(state, 4000);
+      document.querySelectorAll('#toolBtns [data-t]').forEach(function (b) {
+        b.onclick = async function () {
+          var t = b.dataset.t, was = b.textContent.replace(/^Sure\? /, '');
+          if (b.dataset.ask && !sure(b, b.dataset.ask, 'act:' + t)) return;     // asked on the button itself
+          b.disabled = true; b.textContent = t === 'import' ? 'Rebuilding search…' : 'Asking…';
+          try {
+            if (t === 'import') {       // the same rebuild the runner does; the old search keeps working until the new one is complete
+              var r = await (await fetch('/db/import.php?part=web&force=1', {method: 'POST', signal: AbortSignal.timeout(900000)})).json();
+              b.textContent = r.state === 'retrying' ? 'Kept the old search — ' + (r.error || 'try again')
+                            : r.state === 'updating' ? 'Already rebuilding — give it a minute' : 'Search is up to date ✓';
+            } else {
+              var j = await (await fetch('/run.php', {method: 'POST', body: new URLSearchParams({action: t})})).json();
+              b.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓';
+            }
+          } catch (e) { b.textContent = 'Could not reach the archive'; }
+          state();
+          setTimeout(function () { b.textContent = was; b.disabled = false; }, 3000);
+        };
+      });
+      if (location.hash === '#tools') $('tools').open = true;
+    })();
+    </script>
 
     <!-- One question at a time: which drive, then the whole of it or one
          folder, then what to call it. Built from what the machines report, so

@@ -11,22 +11,8 @@ $NAV = 'admin';
 require_once __DIR__ . '/auth.php';
 require_sign_in();   // the whole page is behind the lock, not each button
 
-$pw_said = '';
 // ⓘ: the explanation the page does not need to show all the time (tokens.css → .infotip)
 $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialchars($t, ENT_QUOTES) . '">i</span>';
-if (isset($_POST['_newpass'])) {
-    $new = (string)$_POST['_newpass'];
-    // At the Mac itself the current one is not asked (auth.php at_this_mac); from anywhere else it is
-    if (!at_this_mac() && !pass_ok((string)($_POST['_oldpass'] ?? ''))) {
-        $pw_said = 'The current password is wrong.';
-    } elseif (strlen(trim($new)) < 4) {
-        $pw_said = 'Pick something at least four characters long.';
-    } elseif (new_pass($new, 'Changed the password' . (at_this_mac() ? ' on this Mac' : '') . '; other devices sign in again with it')) {
-        $pw_said = 'ok';
-    } else {
-        $pw_said = 'Could not write ' . pass_file() . ' — check it is writable.';
-    }
-}
 ?><!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -142,6 +128,7 @@ if (isset($_POST['_newpass'])) {
   #anTools .airow { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line) }
   #anTools .ok { color: var(--ok) } #anTools > div { margin-top: 4px } #anTools .spin { margin-right: 6px }
   .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
+  .with-side.no-side { grid-template-columns: var(--rail-w) minmax(0,1fr) } .no-side > .side { display: none }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
   @media (max-width: 900px)  { .with-side { grid-template-columns: 1fr } }
@@ -424,6 +411,95 @@ foreach (watchers() as $k => $w) {
           };
         });
         </script>
+    <!-- ══ Premiere projects after a tidy-up ══ -->
+    <div class="panel" id="relink" style="margin-top:14px"><header><b>Edit projects after a tidy-up</b></header><div style="padding:14px">
+      <p class="note" style="margin:0 0 8px;color:var(--fg)">A tidy-up moves footage, so a project that used it opens with &ldquo;media offline&rdquo;.
+         Choose the project here and Rushes points every clip at where the tidy-up put it, from the record
+         of every move. You get a copy, &ldquo;<i>name</i> (relinked)&rdquo;; the file you chose is not changed.
+         It is read on this computer: only the file paths written in it are sent to Rushes, never the project.</p>
+      <p class="note">Premiere: the project itself (<code>.prproj</code>). Final Cut Pro: export the library or event as
+         XML (<code>.fcpxml</code>), relink it here, and import the copy. DaVinci Resolve: export the timeline as FCPXML
+         or as XML, relink it here, and import the copy.</p>
+      <div class="btns">
+        <button class="btn" type="button" id="rlGo">Choose a project or an XML&hellip;</button>
+        <input type="file" id="rlPick" accept=".prproj,.fcpxml,.xml" hidden>
+      </div>
+      <p class="note" id="rlSaid" style="margin:10px 0 0"></p>
+      <div id="rlOut"></div>
+    </div></div>
+    <script>
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      var ENT = {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"};
+      var dec = function (s) { return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, function (m, e) {
+        return e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e] || m); }); };
+      var enc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+      var TEXT = />([^<>]{3,2000})</g;                 // every piece of text in the project
+      var isPath = function (s) { return /[\\/]/.test(s) && /\.\w{2,5}$/.test(s); };
+      // file:///Volumes/A/b.mov -> /Volumes/A/b.mov; file:///Z:/A -> Z:\A; file://server/share/A -> \\server\share\A
+      var toPath = function (u) {
+        var m = u.match(/^file:\/\/([^\/]*)(\/.*)$/i); if (!m) return '';
+        var p; try { p = decodeURIComponent(m[2]); } catch (e) { return ''; }
+        if (m[1] && m[1].toLowerCase() !== 'localhost') return '\\\\' + m[1] + p.replace(/\//g, '\\');
+        return /^\/[A-Za-z]:/.test(p) ? p.slice(1).replace(/\//g, '\\') : p;
+      };
+      // and back, written the way the file wrote it (with or without "localhost")
+      var toUrl = function (p, was) {
+        var pre = /^file:\/\/localhost\//i.test(was) ? 'file://localhost' : 'file://';
+        var segs = function (s) { return s.split(/[\\\/]+/).filter(Boolean).map(encodeURIComponent).join('/'); };
+        if (/^\\\\/.test(p)) { var parts = p.split('\\').filter(Boolean); return 'file://' + parts.shift() + '/' + segs(parts.join('/')); }
+        if (/^[A-Za-z]:/.test(p)) return pre + '/' + p.slice(0, 2) + '/' + segs(p.slice(2));
+        return pre + '/' + segs(p);
+      };
+      $('rlGo').onclick = function () { $('rlPick').value = ''; $('rlPick').click(); };
+      $('rlPick').onchange = async function () {
+        var f = (this.files || [])[0], said = $('rlSaid'), out = $('rlOut');
+        if (!f) return;
+        out.innerHTML = ''; said.textContent = 'Reading ' + f.name + ' on this computer…';
+        try {
+          if (!window.DecompressionStream) throw new Error('this browser is too old to open a Premiere project (Safari 16.4 or newer, or Chrome, is needed)');
+          var buf = await f.arrayBuffer(), b = new Uint8Array(buf, 0, 2);
+          var xml = b[0] === 0x1f && b[1] === 0x8b      // a .prproj is gzipped XML
+            ? await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+            : new TextDecoder().decode(buf);
+          var head = xml.slice(0, 4000);
+          var kind = /<PremiereData/.test(head) ? 'premiere' : /<fcpxml/.test(head) ? 'fcpxml' : /<xmeml/.test(head) ? 'xmeml' : '';
+          if (!kind) throw new Error(f.name + ' is not a Premiere project, an FCPXML, or an XML from Premiere or Resolve');
+          // FCPXML and XML name each file as an address (file:///Volumes/…): a path in, a path out.
+          var URLS = kind === 'fcpxml' ? /(\ssrc=")(file:[^"]+)(")/g : /(<pathurl>)(file:[^<]+)(<\/pathurl>)/g;
+          var found = new Set();
+          if (kind === 'premiere') xml.replace(TEXT, function (m, t) { var d = dec(t); if (isPath(d)) found.add(d); return m; });
+          else xml.replace(URLS, function (m, a, u) { var p = toPath(dec(u)); if (p) found.add(p); return m; });
+          said.textContent = 'Asking Rushes where the ' + found.size.toLocaleString() + ' files this project names are now…';
+          var r = await (await fetch('/db/relink.php', {method: 'POST', body: new URLSearchParams({paths: JSON.stringify(Array.from(found))})})).json();
+          if (r.error) throw new Error(r.error);
+          if (!r.moved) {
+            said.textContent = '';
+            out.innerHTML = '<div class="banner ok"><div class="txt"><b>Nothing in ' + esc(f.name) + ' was moved by a tidy-up.</b> ' +
+              (r.tidyups ? 'Its ' + found.size.toLocaleString() + ' files are where the project expects them, as far as Rushes moved them.'
+                         : 'No tidy-up has run yet, so every file is where it was.') + ' No copy is needed.</div></div>';
+            return;
+          }
+          var n = 0, fixed = kind === 'premiere'
+            ? xml.replace(TEXT, function (m, t) { var to = r.map[dec(t)]; if (!to) return m; n++; return '>' + enc(to) + '<'; })
+            : xml.replace(URLS, function (m, a, u, c) { var to = r.map[toPath(dec(u))]; if (!to) return m; n++; return a + enc(toUrl(to, dec(u))).replace(/"/g, '&quot;') + c; });
+          var ext = (f.name.match(/\.(prproj|fcpxml|xml)$/i) || ['', 'xml'])[1];
+          var blob = kind === 'premiere'
+            ? await new Response(new Blob([fixed]).stream().pipeThrough(new CompressionStream('gzip'))).blob()
+            : new Blob([fixed], {type: 'application/xml'});
+          var name = f.name.replace(/\.(prproj|fcpxml|xml)$/i, '') + ' (relinked).' + ext, url = URL.createObjectURL(blob);
+          said.textContent = '';
+          out.innerHTML = '<div class="banner ok"><div class="txt"><b>' + r.moved.toLocaleString() + ' file' + (r.moved === 1 ? '' : 's') +
+            ' pointed at where the tidy-up put ' + (r.moved === 1 ? 'it' : 'them') + '</b> (' + n.toLocaleString() + ' places in the project); ' +
+            r.kept.toLocaleString() + ' left as they were. Open the copy in Premiere; the one you chose is unchanged.' +
+            (r.missing.length ? '<br><b>' + r.missing.length + ' of them are not where the last tidy-up put them</b> — moved since, outside Rushes: ' +
+              r.missing.slice(0, 5).map(esc).join(', ') + (r.missing.length > 5 ? ' …' : '') : '') +
+            '<div class="btns" style="margin-top:10px"><a class="btn" id="rlGet" href="' + url + '" download="' + esc(name) + '">Save ' + esc(name) + '</a></div></div></div>';
+        } catch (e) { said.textContent = 'Could not relink it: ' + e.message; }
+      };
+    })();
+    </script>
         <div class="panel" style="margin-top:14px">
           <header><b>Editors' computers</b> <span class="note">what each Watcher is doing, and its log</span></header>
 <?php if (!$said): ?>
@@ -438,67 +514,6 @@ foreach (watchers() as $k => $w) {
         </div>
       </section>
 
-      <section id="pane-tools" hidden>
-        <div class="panel" style="margin-top:8px">
-          <header><b>Run something by hand</b></header>
-          <div style="padding:14px">
-            <div class="btns" id="tools"></div>
-            <div id="toolState" class="note" style="margin-top:10px"></div>
-            <p class="note" style="margin:12px 0 0">
-              These run whether or not anything above says you need them.</p>
-          </div>
-        </div>
-
-        <!-- No lock-in: everything Rushes knows, in formats any other program reads. -->
-        <div class="panel" style="margin-top:14px">
-          <header><b>Take everything with you</b></header>
-          <div style="padding:14px">
-            <p class="note" style="margin:0 0 10px">What Rushes knows, in open formats, to keep or to move to
-              another program. Downloaded to this computer; nothing on the archive changes.</p>
-            <div class="btns" id="exports">
-              <a class="btn quiet" href="export.php?what=files" download>Every file, and what it is (CSV)</a>
-              <a class="btn quiet" href="export.php?what=moments" download>What describing found (CSV)</a>
-              <a class="btn quiet" href="export.php?what=pulls" download>Every pull (JSON)</a>
-              <a class="btn quiet" href="export.php?what=copies" download>Where else each file exists (CSV)</a>
-            </div>
-            <p class="note" style="margin:10px 0 0">Already open files on the archive, readable without Rushes:
-              the descriptions (<code>_rushes/analysis</code>, JSON), the record of every copy and move
-              (<code>_rushes/origin</code>, text), and the copy proofs (the <code>ascmhl</code> folder in each
-              copied folder, ASC MHL).</p>
-          </div>
-        </div>
-
-        <div class="panel" style="margin-top:14px">
-          <header><b>Admin password</b></header>
-          <form method="post" action="#tools" style="padding:14px;max-width:360px">
-            <?php if ($pw_said === 'ok'): ?>
-              <div class="banner ok" style="margin-bottom:12px">
-                <div class="txt">Changed. Phones and other computers sign in again with the new one.</div></div>
-            <?php elseif ($pw_said): ?>
-              <div class="banner bad" style="margin-bottom:12px">
-                <div class="txt"><?= htmlspecialchars($pw_said) ?></div></div>
-            <?php endif; ?>
-            <?php if (!at_this_mac()): ?>
-            <label class="note" for="op">Current</label>
-            <input id="op" name="_oldpass" type="password" autocomplete="current-password"
-                   style="width:100%;padding:8px 10px;margin:4px 0 12px;font:13.5px var(--font);
-                          border:1px solid var(--line);border-radius:var(--radius-sm);
-                          background:var(--bg);color:var(--fg)">
-            <?php else: ?>
-            <p class="note" style="margin:0 0 12px">You are at the Mac Rushes runs on, so the current one is not asked.</p>
-            <?php endif; ?>
-            <label class="note" for="np">New</label>
-            <input id="np" name="_newpass" type="password" autocomplete="new-password"
-                   style="width:100%;padding:8px 10px;margin:4px 0 12px;font:13.5px var(--font);
-                          border:1px solid var(--line);border-radius:var(--radius-sm);
-                          background:var(--bg);color:var(--fg)">
-            <button class="btn" type="submit">Change it</button>
-            <p class="note" style="margin:12px 0 0">One password for this archive, no accounts.
-              It guards this page and anything that moves files. Search and Ingest stay open
-              to anyone who can reach this address.</p>
-          </form>
-        </div>
-      </section>
     </div>
   </main>
 
@@ -553,7 +568,7 @@ const ON_MAC = <?= on_mac() ? 'true' : 'false' ?>, WHERE = ON_MAC ? 'on this Mac
 const CHIP = ON_MAC ? "the Mac's media engine" : 'the video chip';      // what makes the proxies
 const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
                  duplicates: 'Duplicates', describe: 'Describe',
-                 activity: 'Activity', tools: 'Jobs and tools', projects: "Editors' projects" };
+                 activity: 'Activity', projects: "Editors' projects" };
 
 function show(which) {
   pane = which;
@@ -562,10 +577,12 @@ function show(which) {
     if (b.dataset.go === which) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  ['transfers', 'duplicates', 'cache', 'describe', 'projects', 'activity', 'tools'].forEach(function (p) {
+  ['transfers', 'duplicates', 'cache', 'describe', 'projects', 'activity'].forEach(function (p) {
     $('pane-' + p).hidden = (p !== which);
   });
   // Overview shows the tiles and the cards; a section shows its own thing.
+  // Activity in full: the short feed beside it would only repeat it
+  document.querySelector('.with-side').classList.toggle('no-side', which === 'activity');
   $('tiles').hidden = (which !== 'overview');
   $('cards').hidden = (which !== 'overview');
   $('repeats').hidden = (which !== 'overview');
@@ -578,10 +595,8 @@ document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
   b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
 $('sideMore').onclick = function () { show('activity'); };
-// The password banner's button: Jobs and tools, at the form, typing in Current
-if ($('pwGo')) $('pwGo').onclick = function () {
-  show('tools'); const f = $('op') || $('np'); f.scrollIntoView({ block: 'center' }); f.focus();
-};
+// The password banner's button: Setup, at the form
+if ($('pwGo')) $('pwGo').onclick = function () { location.href = '/setup.php#password'; };
 // ── duplicates: Find, look, Remove, Recover ─────────────────────────────────
 // One press finds them (which files are the same, then which copy stays: the runner's
 // "find"). Rushes chooses the copy that stays and says why; "Keep this one" chooses
@@ -791,14 +806,6 @@ async function act(name, btn) {
   }
   setTimeout(load, 1200);
 }
-
-// The export links download at once; each says so on itself, then goes back.
-document.querySelectorAll('#exports a').forEach(function (a) {
-  a.addEventListener('click', function () {
-    const was = a.textContent; a.textContent = 'Downloading ✓';
-    setTimeout(function () { a.textContent = was; }, 2500);
-  });
-});
 
 // ── cache: Remove and Recover, as for duplicates ─────────────────────────────
 async function loadCache() {
@@ -1282,28 +1289,7 @@ async function load() {
 
   drawMove(d);
 
-  $('tools').innerHTML = [['manifest', 'Rebuild the file list'], ['import', 'Rebuild search'],
-    ['verify', 'Check Recently Removed'], ['df', 'Measure free space'], ['proxy-plan', 'Plan proxies (changes nothing)'],
-    ['gpu-test', 'Test the video chip (changes nothing, about a minute)']]
-    .map(function (a) { return '<button class="btn quiet" data-t="' + a[0] + '">' + a[1] + '</button>'; })
-    .join('');
-  $('tools').querySelectorAll('[data-t]').forEach(function (b) {
-    b.onclick = function () { act(b.dataset.t, b); };
-  });
-
-  // Every tool says where it is: asked, running, finished — and the video
-  // chip test shows its result right here.
-  const TOOL = {manifest: 'Rebuild the file list', import: 'Rebuild search', verify: 'Check Recently Removed', df: 'Measure free space',
-    'proxy-plan': 'Plan proxies', 'proxy-build': 'Make proxies', 'gpu-test': 'Test the video chip', 'proxy-test': 'Test proxy settings', scan: 'Find duplicates'};
   const tq = d.queued || [];
-  $('toolState').innerHTML =
-    (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running) + '</b>' +
-        (d.progress ? ' · ' + d.progress.pct + '%' : '') + ' — each step shows in the raw log (Activity)</p>' : '') +
-    (tq.length ? '<p><span class="spin"></span>Asked: <b>' + tq.map(function (x) { return esc(TOOL[x] || x); }).join(', ') +
-        '</b> — the archive machine starts it at its next turn, within a minute</p>' : '') +
-    (d.gpu_test ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px">' +
-        '<b>Video chip test</b> · ' + (d.running === 'gpu-test' ? 'running now' : 'finished ' + esc(clock(d.gpu_test.at))) +
-        '<pre style="white-space:pre-wrap;margin:8px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace">' + esc(d.gpu_test.text) + '</pre></div>' : '');
   if (busy && !d.running && !tq.length) busy = null;
 }
 
@@ -1698,6 +1684,8 @@ function drawPrepare(rows, a) {
 }
 every(loadAnalysis, 10000);
 
-show((location.hash || '#overview').slice(1));
+// Jobs and tools moved to Setup (0.12.23): an old link or bookmark lands there
+if (location.hash === '#tools') location.replace('/setup.php#tools');
+else show((location.hash || '#overview').slice(1));
 every(load, 4000);
 </script>

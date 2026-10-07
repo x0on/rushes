@@ -15,7 +15,7 @@ require __DIR__ . '/db/config.php';
 // The departments come from the plan in Structure — never from whatever
 // folders happen to be on disk, which is years of history, typos and all.
 $shelf = shelf_dir();
-// No shelf chosen yet (Reorganize → 00): nowhere to put a shoot, so the
+// No shelf chosen yet (Setup → Archive structure): nowhere to put a shoot, so the
 // set-up card below shows instead of the form.
 $depts = !shelf_chosen() ? [] : array_column(departments(), 'name');
 natcasesort($depts); $depts = array_values($depts);   // A to Z: found by name, whatever order they were added in
@@ -107,7 +107,7 @@ $aname  = $S['archive']['label'] ?? 'Archive';
       your list of <?= htmlspecialchars(strtolower(shelf_word(true))) ?> &mdash; the shelves every shoot goes on &mdash;
       and which folder in the archive they live in<?= !shelf_chosen() && departments() ? ' (the list is there; the folder is not chosen yet)' : '' ?>. It takes a couple of minutes,
       moves nothing, and only has to be done once.</p>
-    <a class="btn" href="/structure.php">Set up the structure</a>
+    <a class="btn" href="/setup.php#plan">Set up the structure</a>
     <p class="note" style="margin:12px 0 0">This needs the admin password.</p>
   </div>
 </div></main></div>

@@ -55,8 +55,8 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
 <?php if (!$depts): ?>
   <div class="card"><h2>First, one choice by the admin</h2>
     <p class="tip"><?= departments() ? 'The ' . $e(strtolower(shelf_word(true))) . ' are there; what is missing is which folder of the archive they live in. Rushes never guesses where footage goes, so someone with the admin password picks it once' : 'Rushes needs the list of ' . $e(strtolower(shelf_word(true))) . ', and the folder of the archive they live in, picked once by someone with the admin password' ?>
-      (Reorganize → 00). It moves nothing and takes a minute.</p>
-    <p style="margin:12px 0 0"><a class="btn" href="/structure.php">Open Reorganize</a></p></div>
+      (Setup → Archive structure). It moves nothing and takes a minute.</p>
+    <p style="margin:12px 0 0"><a class="btn" href="/setup.php#plan">Open Setup</a></p></div>
 <?php else: ?>
   <!-- Two things to say, as for a card in Ingest: the department and what it was. Who is
        the name this browser was given (the bar at the top); the day comes from the files,

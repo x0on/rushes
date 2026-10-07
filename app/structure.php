@@ -1,94 +1,18 @@
 <?php
-// structure.php — the plan the archive follows.
+// structure.php — Reorganize: moving what is already here into the archive's structure.
 //
-// The department list lives here and only here. Ingest offers exactly this
-// list; the tidy-up will move things to match it. Each department is linked to
-// the folder it already has on the shelf, so writing the plan renames nothing
-// and breaks no Premiere project. Only the tidy-up ever moves files, and only
-// after showing you everything first.
+// The structure itself (the word, the shelf, the department list, how a shoot is
+// named) is chosen in Setup → Archive structure. This page only moves older folders
+// into it, and only after showing you everything first. Relinking an edit project
+// afterwards is in Manage → Editors' projects.
 $NAV = 'admin';
 require_once __DIR__ . '/db/config.php';
 require_once __DIR__ . '/db/auth.php';
 require_sign_in();
 
-$folders = shelf_folders();
-$said = ''; $bad = [];
-$rows = departments();            // what the page shows; replaced by a paste or a failed save
-
-// ── what they are called, and who may add one ───────────────────────────────
-$PRESETS = ['Departments' => 'Department', 'Clients' => 'Client', 'Projects' => 'Project'];
-if (($_POST['_kind'] ?? '') === '1') {
-    $pick = (string)($_POST['kind'] ?? 'Departments');
-    if (isset($PRESETS[$pick])) { $one = $PRESETS[$pick]; $many = $pick; }
-    else {
-        $one  = trim((string)($_POST['kind_one'] ?? ''));
-        $many = trim((string)($_POST['kind_many'] ?? '')) ?: ($one === '' ? '' : $one . 's');
-    }
-    $shelfPick = (string)($_POST['shelves'] ?? '');
-    if ($one === '' || preg_match('#[<>/\\\\]#', $one . $many)) $bad[] = 'Type the word you use — one and many, e.g. Show / Shows.';
-    elseif ($shelfPick !== '/' && !in_array($shelfPick, shelf_choices(), true)) $bad[] = 'Pick the folder they live in, from the list.';
-    else {
-        $s = settings();
-        $s['organise']['kind'] = ['one' => $one, 'many' => $many];
-        $s['organise']['shelves'] = $shelfPick;
-        $s['organise']['add_at_ingest'] = ($_POST['open'] ?? '') === '1';
-        if (save_settings($s)) { header('Location: /structure.php?saved=kind'); exit; }
-        $bad[] = 'Could not write settings.json — is the web folder writable?';
-    }
-}
-
-// ── a pasted list: suggest a folder for each, show it, save nothing yet ────
-if (($_POST['_paste'] ?? '') === '1') {
-    $names = [];
-    foreach (preg_split('/\R/', (string)($_POST['list'] ?? '')) as $n) {
-        $n = trim(preg_replace('/\s+/', ' ', $n));
-        if ($n !== '' && !in_array(strtolower($n), array_map('strtolower', $names), true)) $names[] = $n;
-    }
-    $link = guess_links($names, $folders);
-    $rows = array_map(fn($n) => ['name' => $n, 'folder' => $link[$n]], $names);
-    $found = count(array_filter($link));
-    $said = "check: $found of " . count($names) . ' matched to a folder you already have.';
-}
-
-// ── saving the list ─────────────────────────────────────────────────────────
-if (($_POST['_save'] ?? '') === '1') {
-    $rows = []; $seenName = []; $seenFolder = [];
-    $names = (array)($_POST['d_name'] ?? []); $links = (array)($_POST['d_folder'] ?? []);
-    $names[] = (string)($_POST['add_name'] ?? ''); $links[] = (string)($_POST['add_folder'] ?? '');
-    foreach ($names as $i => $n) {
-        $n = trim(preg_replace('/\s+/', ' ', (string)$n));
-        $f = (string)($links[$i] ?? '');
-        if ($n === '' || !empty($_POST['d_drop'][$i])) continue;
-        $seenName[strtolower($n)] = true;
-        // A catch-all is where everything ends up when nobody is sure. There is
-        // no such place: every shoot belongs to somebody. Same rule as Ingest.
-        if ($why = shelf_name_problem($n, array_column($rows, 'name'))) $bad[] = $why;
-        $rows[] = ['name' => $n, 'folder' => $f];
-        if ($f !== '' && !in_array($f, $folders, true)) $bad[] = "The folder “{$f}” is not on the shelf any more.";
-        if ($f !== '' && isset($seenFolder[$f])) $bad[] = "$f is linked to both “{$seenFolder[$f]}” and “{$n}”. A folder belongs to one " . strtolower(shelf_word()) . '.';
-        if ($f !== '') $seenFolder[$f] = $n;
-    }
-    if (!$rows) $bad[] = 'The list is empty. Ingest needs at least one ' . strtolower(shelf_word()) . '.';
-    if (!$bad) {
-        $s = settings();
-        $s['organise']['departments'] = $rows;
-        if (save_settings($s)) { header('Location: /structure.php?saved=1'); exit; }
-        $bad[] = 'Could not write settings.json — is the web folder writable?';
-    }
-}
-if (isset($_GET['saved'])) $said = $_GET['saved'] === 'kind' ? 'kind' : 'ok';
-$ONE = shelf_word(); $MANY = shelf_word(true); $one = strtolower($ONE); $many = strtolower($MANY);
-$kindNow = shelf_word(true);
-
+$ONE = shelf_word(); $one = strtolower($ONE);
 $e = fn($x) => htmlspecialchars((string)$x);
-$linked = array_filter(array_column($rows, 'folder'));
-$loose  = array_values(array_diff($folders, $linked));
-$shelf  = basename(shelf_dir());
-$opts = function (string $cur) use ($folders, $e) {
-    $o = '<option value="">— a new folder, made the first time</option>';
-    foreach ($folders as $f) $o .= '<option value="' . $e($f) . '"' . ($f === $cur ? ' selected' : '') . '>' . $e($f) . '</option>';
-    return $o;
-};
+$shelf = basename(shelf_dir());
 ?><!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -96,7 +20,6 @@ $opts = function (string $cur) use ($folders, $e) {
 <title>Reorganize &middot; <?= $e(settings()['name'] ?? 'Rushes') ?></title>
 <?php require __DIR__ . '/head.php'; ?>
 <style>
-  .form { max-width: 820px }
   .dep { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center;
          padding: 7px 0; border-top: 1px solid var(--line-soft) }
   .dep:first-of-type { border-top: 0 }
@@ -128,11 +51,12 @@ $opts = function (string $cur) use ($folders, $e) {
           border-radius: var(--radius-sm); border: 1px solid var(--line) }
   .path b { color: var(--accent-text); font-weight: 600 }
   @media (max-width: 640px) { .dep, .dep-h { grid-template-columns: 1fr } .dep-h { display: none } }
-  .tg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,260px); gap: 14px; padding: 10px 0;
+  .tg { display: grid; grid-template-columns: minmax(0,1fr) minmax(240px,340px); gap: 14px; padding: 10px 0;
         border-top: 1px solid var(--line-soft); align-items: start }
   .dep-h.tg { border-top: 0; padding: 0 }
   .tg b { font-size: 13.5px; font-weight: 600; word-break: break-word }
   .tg small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 3px; word-break: break-word }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--warn); margin-right: 6px; white-space: nowrap }
   .tg small.flag { color: var(--warn, var(--accent-text)) }
   .tg select { width: 100% }
   .tg .to { color: var(--accent-text) }
@@ -154,155 +78,15 @@ $opts = function (string $cur) use ($folders, $e) {
   <main class="work">
   <div class="pad form">
     <div class="head"><h1>Reorganize</h1>
-      <span class="sub">How the archive should be organised, and moving what is already here into it.</span></div>
+      <span class="sub">Moving what is already here into the structure set in <a href="/setup.php#plan">Setup</a>.</span></div>
 
-    <!-- What this page is, for someone who did not build it. -->
-    <div class="grp intro">
-      <h2>What this is</h2>
-      <p>An archive that grew over years has every shoot organised a different way: by date in one
-         place, by whoever filed it in another, the same event in three folders. This page gives it
-         <b>one shape</b>: a shelf per <?= $e($one) ?>, and inside it every shoot filed by year and date.
-         It works in two parts, and nothing moves until you say so.</p>
-      <div class="parts">
-        <div><b>Part 1 · The plan</b> <span class="note">(00 to 03)</span>
-          <p>Say what your top folders are, which folder on the shelf each <?= $e($one) ?> uses, and how a
-             shoot's folder is named. Saving the plan moves nothing. From then on, <b>Ingest</b> files every
-             new card straight into it, so new footage is never out of place.</p></div>
-        <div><b>Part 2 · Moving what is already here</b> <span class="note">(04 · Tidy-up)</span>
-          <p>Footage copied in from another server arrives as an exact copy of that server, in ARCHIVE.
-             Tidy-up proposes where each of its folders belongs on the shelf. You check it, approve it,
-             and the helper moves it: every move recorded, so it can be put back and Premiere projects
-             can be relinked.</p></div>
-      </div>
-      <p class="note" style="margin:10px 0 0"><b>Why bother:</b> every shoot in one predictable place;
-         searching or filtering by <?= $e($one) ?> works; the same footage stops landing in three
-         folders; and anyone can find last year's event without knowing who filed it.</p>
-    </div>
-
-    <h3 class="part">Part 1 · The plan</h3>
-
-    <!-- ══ 00 what they are, and who adds them ══ -->
-    <form class="grp" method="post">
-      <h2><span>00 /</span> What your top folders are</h2>
-      <p>The same shape whatever you call them &mdash; only the word changes, everywhere Rushes says it.</p>
-      <div class="kinds">
-        <?php foreach ($PRESETS as $m => $o): ?>
-          <label class="opt sm"><input type="radio" name="kind" value="<?= $e($m) ?>" <?= $kindNow === $m ? 'checked' : '' ?>><b><?= $e($m) ?></b></label>
-        <?php endforeach; $custom = !isset($PRESETS[$kindNow]); ?>
-        <label class="opt sm"><input type="radio" name="kind" value="custom" id="kCustom" <?= $custom ? 'checked' : '' ?>><b>Another word</b></label>
-      </div>
-      <div class="two-in" id="kWords" <?= $custom ? '' : 'hidden' ?>>
-        <label class="f"><span>One</span><input type="text" name="kind_one" value="<?= $custom ? $e($ONE) : '' ?>" placeholder="Show"></label>
-        <label class="f"><span>Many</span><input type="text" name="kind_many" value="<?= $custom ? $e($MANY) : '' ?>" placeholder="Shows"></label>
-      </div>
-
-      <p style="margin:18px 0 8px;color:var(--fg);font-size:13px"><b>Which folder in <?= $e(settings()['archive']['label'] ?? 'the archive') ?> they live in</b></p>
-      <label class="f"><select name="shelves">
-        <?php if (!shelf_chosen()): ?><option value="">— pick one (Ingest and the tidy-up wait for this)</option><?php endif; ?>
-        <option value="/" <?= shelf_is_top() ? 'selected' : '' ?>><?= $e(settings()['archive']['label'] ?? 'The archive') ?> itself: <?= $e(strtolower($MANY)) ?> straight at the top</option>
-        <?php foreach (shelf_choices() as $f): ?>
-          <option value="<?= $e($f) ?>" <?= $f === shelf_name() ? 'selected' : '' ?>><?= $e($f) ?></option>
-        <?php endforeach; ?>
-      </select>
-      <small>The shelf: every <?= $e($one) ?> has its own folder inside it, and every shoot is filed there.
-        Make the folder in the archive first if it is not in the list.</small></label>
-
-      <p style="margin:18px 0 8px;color:var(--fg);font-size:13px"><b>Who can add a new <?= $e($one) ?>?</b></p>
-      <div class="pick">
-        <label class="opt"><input type="radio" name="open" value="0" <?= !shelf_open() ? 'checked' : '' ?>>
-          <b>Only here, by the admin</b>
-          <small>For a list that hardly changes &mdash; departments, regular clients.
-                 Someone at Ingest can only pick from it.</small></label>
-        <label class="opt"><input type="radio" name="open" value="1" <?= shelf_open() ? 'checked' : '' ?>>
-          <b>Anyone, while bringing a shoot in</b>
-          <small>For a list that grows every week &mdash; projects. Ingest gets
-                 &ldquo;add a new one&rdquo;; the no-catch-all rule still applies.</small></label>
-      </div>
-      <input type="hidden" name="_kind" value="1">
-      <div class="btns" style="margin-top:14px"><button class="btn quiet" type="submit">Save these three</button></div>
-    </form>
-    <script>
-      document.querySelectorAll('[name=kind]').forEach(function (r) {
-        r.onchange = function () { document.getElementById('kWords').hidden = !document.getElementById('kCustom').checked; }; });
-    </script>
-
-    <?php if ($said === 'kind'): ?>
-      <div class="banner ok"><div class="txt">Saved. Rushes now says &ldquo;<?= $e($MANY) ?>&rdquo;, they live in <?= $e(shelf_is_top() ? (settings()['archive']['label'] ?? 'the archive') . ' itself' : shelf_name()) ?>, and <?= shelf_open() ? 'anyone can add one at Ingest' : 'only the admin adds them, here' ?>.</div></div>
-    <?php elseif ($said === 'ok'): ?>
-      <div class="banner ok"><div class="txt">Saved. Ingest offers exactly this list from now on. Nothing on disk was moved.</div></div>
-    <?php elseif ($bad): ?>
-      <div class="banner bad"><div class="txt"><b>Nothing was saved.</b><?= implode('<br>', array_map($e, $bad)) ?></div></div>
-    <?php elseif ($said): ?>
-      <div class="banner warn"><div class="txt"><b>Not saved yet &mdash; <?= $e($said) ?></b>
-        Check each link below, fix any that are wrong, then press Save.</div></div>
+    <?php if (!shelf_chosen()): ?>
+      <div class="banner warn"><div class="txt"><b>The archive's structure is not set yet.</b>
+        Say which folder your <?= $e(strtolower(shelf_word(true))) ?> live in, in <a href="/setup.php#plan">Setup → Archive structure</a>; the tidy-up moves folders into it.</div></div>
     <?php endif; ?>
-
-    <?php if (!$rows): ?>
-    <!-- ══ first time: start from a list ══ -->
-    <form class="grp" method="post">
-      <h2><span>01 /</span> Your <?= $e($many) ?></h2>
-      <p>Every shoot goes on one of these shelves, and Ingest offers exactly this list &mdash;
-         nothing else, and no &ldquo;Others&rdquo;. Paste them one per line. Rushes suggests
-         which folder you already have for each one; you check it before anything is saved.</p>
-      <textarea name="list" placeholder="Parks &amp; Recreation&#10;Police Department&#10;Public Works Department&#10;…" autofocus></textarea>
-      <input type="hidden" name="_paste" value="1">
-      <div class="btns" style="margin-top:12px">
-        <button class="btn" type="submit">Suggest folders</button>
-        <span class="note">Saves nothing yet.</span>
-      </div>
-    </form>
-    <?php else: ?>
-    <!-- ══ the list, each linked to its folder ══ -->
-    <form class="grp" method="post">
-      <h2><span>01 /</span> Your <?= $e($many) ?></h2>
-      <p>Every shoot goes on one of these shelves, and Ingest offers exactly this list.
-         A linked folder is used as it is &mdash; nothing is renamed, so no Premiere project breaks.</p>
-      <div class="dep-h"><span><?= $e($ONE) ?></span><span>Its folder in <?= $e($shelf) ?></span><span></span></div>
-      <?php foreach ($rows as $i => $r): ?>
-        <div class="dep<?= ($r['folder'] ?? '') === '' ? ' new' : '' ?>">
-          <input type="text" name="d_name[<?= $i ?>]" value="<?= $e($r['name']) ?>" aria-label="<?= $e($ONE) ?>">
-          <select name="d_folder[<?= $i ?>]" aria-label="Its folder"><?= $opts($r['folder'] ?? '') ?></select>
-          <label class="x"><input type="checkbox" name="d_drop[<?= $i ?>]" value="1"> remove</label>
-        </div>
-      <?php endforeach; ?>
-      <div class="dep" style="border-top:1px solid var(--line);margin-top:6px;padding-top:12px">
-        <input type="text" name="add_name" placeholder="add a <?= $e($one) ?>" aria-label="New <?= $e($one) ?>">
-        <select name="add_folder" aria-label="Its folder"><?= $opts('') ?></select>
-        <span></span>
-      </div>
-      <input type="hidden" name="_save" value="1">
-      <div class="btns" style="margin-top:14px">
-        <button class="btn" type="submit">Save</button>
-        <span class="note">Writes the plan. Moves nothing.</span>
-      </div>
-    </form>
-    <?php endif; ?>
-
-    <!-- ══ what is on the shelf but not in the plan ══ -->
-    <div class="grp">
-      <h2><span>02 /</span> Folders not in the plan</h2>
-      <?php if ($loose): ?>
-        <p>Folders already on the shelf that no <?= $e($one) ?> in the plan uses. They stay exactly where
-           they are and stay searchable; Ingest never offers them. Tidy-up (part 2) is where each one gets a home.</p>
-        <div class="loose"><?php foreach ($loose as $f): ?><span><?= $e($f) ?></span><?php endforeach; ?></div>
-      <?php else: ?>
-        <p style="margin:0">None &mdash; every folder on the shelf belongs to a <?= $e($one) ?>.</p>
-      <?php endif; ?>
-    </div>
-
-    <!-- ══ how a path is built ══ -->
-    <div class="grp">
-      <h2><span>03 /</span> How a shoot's folder is named</h2>
-      <p>Every shoot that comes through Ingest lands like this. The date comes from the camera,
-         not from whoever brings the card in.</p>
-      <div class="path"><?= $e($shelf) ?> / <b><?= $e($one) ?></b> / <b>year</b> / <b>date</b> <b>what it was</b>
-        <div class="note" style="margin-top:6px;font-family:var(--font)">e.g. <?= $e($shelf) ?> / PARKS / 2026 / 20260926 Spring Festival</div></div>
-    </div>
-
     <!-- ══ the tidy-up ══ -->
-    <h3 class="part">Part 2 · Moving what is already here</h3>
     <div class="grp" id="tidy">
-      <h2><span>04 /</span> Tidy-up</h2>
+      <h2>Tidy-up</h2>
       <p>Moves what the copies brought into ARCHIVE onto the shelf, and the folders that were already
          in the archive outside it (an old server's layout, a drive's own folders). For a copy, where
          each file goes is read from where it <i>came from</i>, not where the copy put it; a folder already
@@ -326,96 +110,6 @@ $opts = function (string $cur) use ($folders, $e) {
       <div id="tRuns"></div>
     </div>
 
-    <!-- ══ Premiere projects after a tidy-up ══ -->
-    <div class="grp" id="relink">
-      <h2><span>05 /</span> Edit projects after a tidy-up</h2>
-      <p>A tidy-up moves footage, so a project that used it opens with &ldquo;media offline&rdquo;.
-         Choose the project here and Rushes points every clip at where the tidy-up put it, from the record
-         of every move. You get a copy, &ldquo;<i>name</i> (relinked)&rdquo;; the file you chose is not changed.
-         It is read on this computer: only the file paths written in it are sent to Rushes, never the project.</p>
-      <p class="note">Premiere: the project itself (<code>.prproj</code>). Final Cut Pro: export the library or event as
-         XML (<code>.fcpxml</code>), relink it here, and import the copy. DaVinci Resolve: export the timeline as FCPXML
-         or as XML, relink it here, and import the copy.</p>
-      <div class="btns">
-        <button class="btn" type="button" id="rlGo">Choose a project or an XML&hellip;</button>
-        <input type="file" id="rlPick" accept=".prproj,.fcpxml,.xml" hidden>
-      </div>
-      <p class="note" id="rlSaid" style="margin:10px 0 0"></p>
-      <div id="rlOut"></div>
-    </div>
-    <script>
-    (function () {
-      var $ = function (id) { return document.getElementById(id); };
-      var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
-      var ENT = {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"};
-      var dec = function (s) { return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, function (m, e) {
-        return e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e] || m); }); };
-      var enc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
-      var TEXT = />([^<>]{3,2000})</g;                 // every piece of text in the project
-      var isPath = function (s) { return /[\\/]/.test(s) && /\.\w{2,5}$/.test(s); };
-      // file:///Volumes/A/b.mov -> /Volumes/A/b.mov; file:///Z:/A -> Z:\A; file://server/share/A -> \\server\share\A
-      var toPath = function (u) {
-        var m = u.match(/^file:\/\/([^\/]*)(\/.*)$/i); if (!m) return '';
-        var p; try { p = decodeURIComponent(m[2]); } catch (e) { return ''; }
-        if (m[1] && m[1].toLowerCase() !== 'localhost') return '\\\\' + m[1] + p.replace(/\//g, '\\');
-        return /^\/[A-Za-z]:/.test(p) ? p.slice(1).replace(/\//g, '\\') : p;
-      };
-      // and back, written the way the file wrote it (with or without "localhost")
-      var toUrl = function (p, was) {
-        var pre = /^file:\/\/localhost\//i.test(was) ? 'file://localhost' : 'file://';
-        var segs = function (s) { return s.split(/[\\\/]+/).filter(Boolean).map(encodeURIComponent).join('/'); };
-        if (/^\\\\/.test(p)) { var parts = p.split('\\').filter(Boolean); return 'file://' + parts.shift() + '/' + segs(parts.join('/')); }
-        if (/^[A-Za-z]:/.test(p)) return pre + '/' + p.slice(0, 2) + '/' + segs(p.slice(2));
-        return pre + '/' + segs(p);
-      };
-      $('rlGo').onclick = function () { $('rlPick').value = ''; $('rlPick').click(); };
-      $('rlPick').onchange = async function () {
-        var f = (this.files || [])[0], said = $('rlSaid'), out = $('rlOut');
-        if (!f) return;
-        out.innerHTML = ''; said.textContent = 'Reading ' + f.name + ' on this computer…';
-        try {
-          if (!window.DecompressionStream) throw new Error('this browser is too old to open a Premiere project (Safari 16.4 or newer, or Chrome, is needed)');
-          var buf = await f.arrayBuffer(), b = new Uint8Array(buf, 0, 2);
-          var xml = b[0] === 0x1f && b[1] === 0x8b      // a .prproj is gzipped XML
-            ? await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
-            : new TextDecoder().decode(buf);
-          var head = xml.slice(0, 4000);
-          var kind = /<PremiereData/.test(head) ? 'premiere' : /<fcpxml/.test(head) ? 'fcpxml' : /<xmeml/.test(head) ? 'xmeml' : '';
-          if (!kind) throw new Error(f.name + ' is not a Premiere project, an FCPXML, or an XML from Premiere or Resolve');
-          // FCPXML and XML name each file as an address (file:///Volumes/…): a path in, a path out.
-          var URLS = kind === 'fcpxml' ? /(\ssrc=")(file:[^"]+)(")/g : /(<pathurl>)(file:[^<]+)(<\/pathurl>)/g;
-          var found = new Set();
-          if (kind === 'premiere') xml.replace(TEXT, function (m, t) { var d = dec(t); if (isPath(d)) found.add(d); return m; });
-          else xml.replace(URLS, function (m, a, u) { var p = toPath(dec(u)); if (p) found.add(p); return m; });
-          said.textContent = 'Asking Rushes where the ' + found.size.toLocaleString() + ' files this project names are now…';
-          var r = await (await fetch('/db/relink.php', {method: 'POST', body: new URLSearchParams({paths: JSON.stringify(Array.from(found))})})).json();
-          if (r.error) throw new Error(r.error);
-          if (!r.moved) {
-            said.textContent = '';
-            out.innerHTML = '<div class="banner ok"><div class="txt"><b>Nothing in ' + esc(f.name) + ' was moved by a tidy-up.</b> ' +
-              (r.tidyups ? 'Its ' + found.size.toLocaleString() + ' files are where the project expects them, as far as Rushes moved them.'
-                         : 'No tidy-up has run yet, so every file is where it was.') + ' No copy is needed.</div></div>';
-            return;
-          }
-          var n = 0, fixed = kind === 'premiere'
-            ? xml.replace(TEXT, function (m, t) { var to = r.map[dec(t)]; if (!to) return m; n++; return '>' + enc(to) + '<'; })
-            : xml.replace(URLS, function (m, a, u, c) { var to = r.map[toPath(dec(u))]; if (!to) return m; n++; return a + enc(toUrl(to, dec(u))).replace(/"/g, '&quot;') + c; });
-          var ext = (f.name.match(/\.(prproj|fcpxml|xml)$/i) || ['', 'xml'])[1];
-          var blob = kind === 'premiere'
-            ? await new Response(new Blob([fixed]).stream().pipeThrough(new CompressionStream('gzip'))).blob()
-            : new Blob([fixed], {type: 'application/xml'});
-          var name = f.name.replace(/\.(prproj|fcpxml|xml)$/i, '') + ' (relinked).' + ext, url = URL.createObjectURL(blob);
-          said.textContent = '';
-          out.innerHTML = '<div class="banner ok"><div class="txt"><b>' + r.moved.toLocaleString() + ' file' + (r.moved === 1 ? '' : 's') +
-            ' pointed at where the tidy-up put ' + (r.moved === 1 ? 'it' : 'them') + '</b> (' + n.toLocaleString() + ' places in the project); ' +
-            r.kept.toLocaleString() + ' left as they were. Open the copy in Premiere; the one you chose is unchanged.' +
-            (r.missing.length ? '<br><b>' + r.missing.length + ' of them are not where the last tidy-up put them</b> — moved since, outside Rushes: ' +
-              r.missing.slice(0, 5).map(esc).join(', ') + (r.missing.length > 5 ? ' …' : '') : '') +
-            '<div class="btns" style="margin-top:10px"><a class="btn" id="rlGet" href="' + url + '" download="' + esc(name) + '">Save ' + esc(name) + '</a></div></div></div>';
-        } catch (e) { said.textContent = 'Could not relink it: ' + e.message; }
-      };
-    })();
-    </script>
     <script>
     (function () {
       var SHELF = <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>, data = null;
@@ -423,6 +117,9 @@ $opts = function (string $cur) use ($folders, $e) {
       var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
       var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
       var num = function (n) { return n.toLocaleString(); };
+      var ONE = <?= json_encode($one) ?>;
+      // a long file name, shortened in the middle so the row stays one line (the whole name shows on hover)
+      var mid = function (t) { return t.length > 56 ? t.slice(0, 22) + '…' + t.slice(-30) : t; };
       var shown = function (r) {       // share / Departments / Parks & Recreation / 2024
         var from = r.root.slice(0, r.root.lastIndexOf('/') + 1);
         return r.key.slice(from.length).split('/').join(' / ');
@@ -465,13 +162,15 @@ $opts = function (string $cur) use ($folders, $e) {
         } else {
           var opts = d.depts.map(function (x) {
             return '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>'; }).join('');
-          $('tList').innerHTML = '<div class="dep-h tg"><span>Came from</span><span>Goes to</span></div>'
+          var none = d.groups.filter(function (r) { return !r.dept; }).length;
+          $('tList').innerHTML = (none ? '<p class="note" style="margin:0 0 10px"><span class="tag">no ' + ONE + '</span> ' + num(none) + ' of these folders have no ' + ONE
+              + ' in their path: pick one for each, or leave it where it is.</p>' : '')
+            + '<div class="dep-h tg"><span>Came from</span><span>Goes to</span></div>'
             + d.groups.map(function (r, i) {
               return '<div class="tg' + (r.busy ? ' busy' : '') + '"><div><b>' + esc(shown(r)) + '</b>'
-                + '<small>' + (r.here ? 'already in the archive · ' : 'copied in · ') + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
-                + (r.eg ? ' · e.g. …' + esc(r.eg) : '') + '</small>'
+                + '<small>' + (r.dept ? '' : '<span class="tag">no ' + ONE + '</span>') + (r.here ? 'already in the archive · ' : 'copied in · ') + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
+                + (r.eg ? ' · <span title="' + esc(r.eg) + '">e.g. …' + esc(mid(r.eg)) + '</span>' : '') + '</small>'
                 + (r.busy ? '<small class="flag">Still being copied &mdash; those files wait for the next tidy-up.</small>' : '')
-                + (r.dept ? '' : '<small>No ' + <?= json_encode(strtolower($one)) ?> + ' in its path &mdash; pick one, or leave it.</small>')
                 + '</div><div><select id="tp' + i + '" aria-label="Goes to"><option value="">— leave it '
                 + (r.here ? 'where it is' : 'in ARCHIVE') + ' —</option>' + opts + '</select>'
                 + '<small id="td' + i + '" class="to"></small></div></div>';

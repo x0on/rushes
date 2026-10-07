@@ -1,7 +1,7 @@
 // Relinking FCPXML and XML from Final Cut and Resolve: a file address to a path and back.
-// Run: node tests/test_relink.js   (reads the functions from structure.php itself)
+// Run: node tests/test_relink.js   (reads the functions from admin.php itself, Editors' projects)
 const fs = require('fs'), path = require('path');
-const s = fs.readFileSync(path.join(__dirname, '..', 'app', 'structure.php'), 'utf8');
+const s = fs.readFileSync(path.join(__dirname, '..', 'app', 'db', 'admin.php'), 'utf8');
 const code = s.slice(s.indexOf('      var toPath'), s.indexOf("      $('rlGo').onclick"));
 const { toPath, toUrl } = new Function(code + '; return { toPath, toUrl };')();
 let bad = 0;

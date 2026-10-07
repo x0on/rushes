@@ -18,15 +18,13 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
     <?= $railItem('transfers',  'Transfers',  'transfers', '/db/admin.php#transfers',  true, ' <span class="count" id="nTransfers"></span>') ?>
     <?= $railItem('duplicates', 'Duplicates', 'library',   '/db/admin.php#duplicates', true) ?>
     <?= $railItem('cache',      'Cache',      'cache',     '/db/admin.php#cache',      true, ' <span class="count" id="nCache"></span>') ?>
-    <?= $railItem('describe',   'Describe',   'search',    '/db/admin.php#describe',   true) ?>
+    <?= $railItem('describe',   'Describe',   'ai',    '/db/admin.php#describe',   true) ?>
     <?= $railItem('projects',   "Editors' projects", 'project', '/db/admin.php#projects', true) ?>
-    <?= $railItem('structure',  'Reorganize',  'projects',  '/structure.php',           false) ?>
+    <?= $railItem('structure',  'Reorganize',  'reorganize',  '/structure.php',           false) ?>
 
     <h2>System</h2>
     <?= $railItem('activity',   'Activity',       'activity', '/db/admin.php#activity', true) ?>
-    <?= $railItem('tools',      'Jobs and tools', 'tools',    '/db/admin.php#tools',    true) ?>
-    <?= $railItem('setup',      'Setup',          'overview', '/setup.php',             false) ?>
-    <?= $railItem('search',     'Back to search', 'search',   '/db/find.php',           false) ?>
+    <?= $railItem('setup',      'Setup',          'tools',    '/setup.php',             false) ?>
 
     <div class="rail-foot">
       <span class="note" title="One number for the pages, the helper's code and both apps">Rushes <?= htmlspecialchars(rushes_version()) ?></span>

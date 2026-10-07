@@ -9,6 +9,9 @@ foreach (glob(__DIR__ . '/../app/db/*.php') as $f) copy($f, "$root/app/db/" . ba
 file_put_contents("$root/app/settings.json", json_encode(['archive'=>[
     'web'=>"$root/app", 'local'=>"$root/archive", 'as_seen_from_helper'=>"$root/archive", 'label'=>'VIDEO'],
     'helper'=>['mode'=>'built_in'], 'projects'=>['aside_days'=>90], 'organise'=>['shelves'=>'Library', 'departments'=>[['name'=>'Parks','folder'=>'PARKS']]]]));
+// A page that ends the script (a sign-in page, a redirect) must not end the test as a pass.
+$done = false;
+register_shutdown_function(function () { global $done; if (!$done) { echo "FAIL the test ended early: a page stopped it\n"; exit(1); } });
 function check($ok, $what) { if (!$ok) throw new RuntimeException("FAIL $what"); echo "PASS $what\n"; }
 $now = time();
 file_put_contents("$root/app/ingest-status.tsv", "ts\t$now\nphase\tcopying\nsource\t/src/Parks\ncopied\t2\nof\t4\nnew_bytes\t400\ndone_bytes\t200\nrate\t100\neta\t2\nfile\tA001.MXF\n");
@@ -47,7 +50,7 @@ check((bool)array_filter($act, fn($r) => $r['kind'] === 'changed' && str_starts_
 check(count($s['ingests']) === 2 && $s['ingests'][0]['state'] === 'done' && $s['ingests'][0]['failed'] === 0 && $s['ingests'][1]['failed'] === 1,
       'a landed card says how many files could not be copied (Ingest says safe to format only at none)');
 
-ini_set('session.save_path', "$root/app"); session_start(); $_SESSION['rushes_in'] = true;
+ini_set('session.save_path', "$root/app"); session_start(); $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen();
 db()->exec("INSERT INTO projects (path, name, host, watcher, saved, seen, files, outside, missing, shoot, state)
             VALUES ('Parks/Kite.prproj', 'Kite', 'edit-1', 'ab12cd34ef567890', " . ($now - 86400 * 12) . ", $now, 12, 2, 'a.wav;b.mov', '', 'active')");
 db()->exec("INSERT INTO projects (path, name, saved, archived, missing, state, aside_at)
@@ -59,4 +62,15 @@ check(str_contains($html, 'data-back="Parks/Old"') && str_contains($html, 'stays
       "a folder moved aside has Bring it back; a resting one says why it will not be moved aside");
 check(str_contains($html, 'id="now"') && str_contains($html, 'id="transferSummary"'), 'Overview has both the live card and the transfer card');
 check(str_contains($html, 'helperNow') && str_contains($html, 'tokens.css?v='), 'shared top bar with live words and a fresh stylesheet');
+check(str_contains($html, 'id="rlGo"') && !str_contains($html, 'id="pane-tools"') && str_contains($html, "'/setup.php#tools'"),
+      "relinking after a tidy-up is in Editors' projects; Jobs and tools is in Setup, and an old link lands there");
+check(!str_contains($html, 'Back to search') && substr_count($html, 'href="/setup.php"') >= 1, 'the menu has no second way back to Search');
+ob_start(); include "$root/app/setup.php"; $html = ob_get_clean();
+check(str_contains($html, 'id="plan"') && str_contains($html, '1 department, in Library') && str_contains($html, 'form="pP" type="text" name="d_name[0]" value="Parks"'),
+      'Setup has the archive structure: the word, the shelf, the list, each control in its own form');
+check(str_contains($html, 'id="password"') && str_contains($html, 'id="exports"') && str_contains($html, 'data-t="manifest"'),
+      'Setup has the password, the exports and Jobs and tools');
+ob_start(); include "$root/app/structure.php"; $html = ob_get_clean();
+check(str_contains($html, 'id="tidy"') && !str_contains($html, 'name="list"') && !str_contains($html, 'id="rlGo"'), 'Reorganize is only the tidy-up');
+$done = true;
 echo "Page tests complete.\n";

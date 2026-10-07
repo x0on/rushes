@@ -837,9 +837,9 @@ class Window:
         elif do == "reveal-archive" and local():
             # the archive, in Finder (where Setup last put it)
             subprocess.run(["open", (read_json(os.path.join(WEB, "settings.json")).get("archive") or {}).get("local") or local()["archive"]])
-        elif do == "reset-pass" and not WATCHER and local():   # Manage, at the password, on this Mac
-            subprocess.run(["open", local_url() + "/db/admin.php#tools"])
-            self.set(said="Opened Manage at the password: set a new one there; the old one is not asked on this Mac.")
+        elif do == "reset-pass" and not WATCHER and local():   # Setup, at the password, on this Mac
+            subprocess.run(["open", local_url() + "/setup.php#password"])
+            self.set(said="Opened Setup at the password: set a new one there; the old one is not asked on this Mac.")
         elif do == "open-setup":
             subprocess.run(["open", (local_url() if local() else s["url"]) + "/setup.php"])
         elif do == "show-log":
