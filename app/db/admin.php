@@ -1208,7 +1208,7 @@ async function load() {
   drawTiles(d);
   drawNow(d);
   drawHelper(d);
-  drawDescribeTools(d.helper);
+  drawDescribeTools(d.helper, d.meaning);
   drawProxies(d.proxies);
   drawProxyTest(d);
 
@@ -1434,7 +1434,7 @@ document.querySelectorAll('[data-px]').forEach(function (b) {
   };
 });
 let descPaused = false;                // for the list, which says "paused" instead of "queued"
-function drawDescribeTools(h) {
+function drawDescribeTools(h, meaning) {
   descPaused = !!(h && h.describe_paused);
   // Always there: it is a switch Rushes keeps, so it works even while the helper is
   // away (it sees it when it is back).
@@ -1464,7 +1464,7 @@ function drawDescribeTools(h) {
       '<div class="airow"><button class="sw' + (h.describe_night ? ' on' : '') + '" role="switch" aria-checked="' + !!h.describe_night +
           '" aria-label="Only at night" data-an="' + (h.describe_night ? 'describe-anytime' : 'describe-night') + '"></button>' +
         '<div class="t">Only at night<small>' + (h.describe_night ? '10 pm to 7 am: the Mac is free during the day'
-          : 'Off: any time there is something to describe') + '</small></div></div>'
+          : 'Off: any time there is something to describe') + '</small></div></div>' + meaningRow(meaning)
     : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
     : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
       '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +
@@ -1488,6 +1488,32 @@ function drawDescribeTools(h) {
     };
   });
 }
+// Search by meaning (meaning.py, beside Rushes on this Mac; runner.py starts it and says how it is)
+function meaningRow(m) {
+  if (!m || m.state === 'no-ai') return '';
+  const spin = function (t) { return '<span class="spin"></span>' + esc(t); };
+  const what = m.state === 'ready' ? (m.understood < m.moments
+        ? spin('Learning what each moment means: ' + m.understood.toLocaleString() + ' of ' + m.moments.toLocaleString() + '. Search uses what is learnt so far.')
+        : '<span class="ok">✓ On</span> · all ' + (m.moments || 0).toLocaleString() + ' moments understood. "abuelos" finds an older couple with their grandchildren; "old building" does not.')
+    : m.state === 'starting' ? spin('Starting …')
+    : m.state === 'installing' ? spin(m.note || 'Installing …')
+    : m.state === 'failed' ? '<span class="warnline" style="display:block">Not installed: ' + esc(m.note || '') + '</span>'
+    : 'Off: Search finds the words you type, and a few related ones.';
+  const btn = m.state === 'not-installed' || m.state === 'failed'
+    ? '<button class="btn quiet" type="button" id="meaningGo">' + (m.state === 'failed' ? 'Try again' : 'Install it (120 MB)') + '</button>' : '';
+  return '<div class="airow"><div class="t">Search by meaning<span class="infotip" tabindex="0" data-tip="' +
+    esc('Search finds what you mean, in English and Spanish, not only the words: a small model (120 MB) turns each described moment and each search into a meaning fingerprint and compares them. It runs on this Mac; nothing is sent anywhere.') +
+    '">i</span><small>' + what + '</small></div>' + btn + '</div>';
+}
+document.addEventListener('click', async function (e) {
+  if (!e.target || e.target.id !== 'meaningGo') return;
+  const b = e.target; b.disabled = true; b.textContent = 'Asking…';
+  try {
+    const j = await (await fetch('../run.php', { method: 'POST', body: new URLSearchParams({ action: 'meaning-install' }) })).json();
+    b.textContent = j.error ? 'Did not happen: ' + j.error : 'Asked ✓ it starts within a minute; each step shows here';
+  } catch (x) { b.textContent = 'Could not reach the archive'; }
+  setTimeout(load, 1500);
+});
 async function loadAnalysis() {
   try {
     const a = await (await fetch('analyze.php?t=' + Date.now())).json();

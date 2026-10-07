@@ -535,8 +535,9 @@ async function run(more) {
   if (!more) videos = d.moments || { count: 0, moments: 0, rows: [] };
   // Videos found by what they show count too: "0 files" above a page of them read as a bug
   const vc = pieces(videos.rows).length;
-  $('stat').textContent =
-    (vc ? vc.toLocaleString() + ' video' + (vc === 1 ? '' : 's') + ' · ' + (videos.moments || 0).toLocaleString() + ' moment' + (videos.moments === 1 ? '' : 's') + ' in the footage · ' : '') +
+  $('stat').innerHTML =
+    (vc ? vc.toLocaleString() + ' video' + (vc === 1 ? '' : 's') + ' · ' + (videos.moments || 0).toLocaleString() + ' moment' + (videos.moments === 1 ? '' : 's') + ' in the footage' +
+      (videos.meaning ? ' <span class="infotip" tabindex="0" data-tip="Found by what you mean, not only the words: in English and Spanish (Manage → Describe → Search by meaning).">by meaning</span>' : '') + ' · ' : '') +
     (total ? total.toLocaleString() + ' file' + (total === 1 ? '' : 's') + (d.bytes ? ' · ' + tb(d.bytes) : '')
            : vc ? 'no file names match' : '0 files');
   if (!more) clearSel();

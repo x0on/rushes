@@ -33,7 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.s
 
 SKIP = {"@Recycle", ".Trashes", ".Spotlight-V100", ".fseventsd", ".DocumentRevisions-V100",
         ".TemporaryItems", ".DS_Store_cache"}
-TRIM = ("helper.log", "proxy.log", "proxy-built.tsv", "proxy-built.tsv.err", "proxy-speed.tsv", "proxy-failed.tsv", "php-errors.log")
+TRIM = ("meaning.log", "helper.log", "proxy.log", "proxy-built.tsv", "proxy-built.tsv.err", "proxy-speed.tsv", "proxy-failed.tsv", "php-errors.log")
 # Where Remove puts duplicate copies and caches on the archive and on each drive, nothing deleted:
 # Recently Removed, as in Photos (Manage → Duplicates and Cache say so). Called _duplicates before
 # 0.12.4: that folder is renamed by itself (migrate_holding), and the records of what moved follow.
@@ -41,6 +41,15 @@ HOLD, OLD_HOLD = "_Recently Removed", "_duplicates"
 VIDEO_EXT = (".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d")     # the same list as proxy.sh
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
+
+
+# Meaning search (meaning.py): its model, from Rushes' own release on GitHub (Hugging Face, where it
+# comes from, is not reachable from every office), checked by its fingerprint before it is used.
+MEANING_PORT = 18652
+MEANING_GET = ("https://github.com/x0on/rushes/releases/download/models-1/rushes-meaning-1.tar",
+               "88b3092559cdce6e1cfda3780bcf79e9d67a7835a14954b7bd14a8cf670cc506")
+MEANING_PACKAGES = ["onnxruntime", "tokenizers", "numpy"]
+PILOT = os.path.expanduser("~/archive-pilot")           # the helper's folder on this Mac (ingest.py HOME)
 
 
 def archive_ok(a, web):
@@ -336,10 +345,115 @@ class Runner:
             except OSError: pass
             self.say(f"making proxies for {nxt}")
             self.proxy_start(nxt)
+        self.meaning()
         for name, fn in (("upkeep", self.upkeep), ("jobs", self.jobs)):
             if not (self.busy.get(name) and self.busy[name].is_alive()):      # the last one still at it: left alone
                 self.busy[name] = threading.Thread(target=self.guarded, args=(name, fn), daemon=True)
                 self.busy[name].start()
+
+    # ── meaning search ───────────────────────────────────────────────────────
+    def ai_python(self):
+        """The AI's own Python on this Mac, as the helper finds it (ingest.py analysis_tools): set in
+        Rushes, else one made by hand (~/archive-pilot/venv), else Install the AI's. "" when none."""
+        a = self.settings().get("analysis") or {}
+        for py in (a.get("python"), os.path.join(PILOT, "venv", "bin", "python"), os.path.join(PILOT, "ai", "python", "bin", "python3")):
+            if py and os.path.exists(os.path.expanduser(py)):
+                return os.path.expanduser(py)
+        return ""
+
+    def meaning_dir(self):
+        return os.path.join(PILOT, "ai", "models", "meaning")
+
+    def meaning_say(self, state, **more):
+        """What Manage → Describe shows about meaning search (meaning.json)."""
+        self.write("meaning.json", json.dumps(dict(state=state, at=int(time.time()), **more)))
+
+    def meaning_ready(self, py):
+        """The AI's Python has what meaning.py needs: asked once, and again after Install."""
+        got = getattr(self, "meaning_ok", {})
+        if py not in got:
+            try: got[py] = subprocess.run([py, "-c", "import onnxruntime, tokenizers, numpy"], capture_output=True, timeout=120).returncode == 0
+            except (OSError, subprocess.TimeoutExpired): got[py] = False
+            self.meaning_ok = got
+        return got[py]
+
+    def meaning(self):
+        """Meaning search runs beside Rushes once it is installed: started here, and again within a
+        minute if it stops. Only on a Mac with the AI (it runs in the AI's Python)."""
+        if getattr(self, "meaning_installing", False):
+            return
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{MEANING_PORT}/state", timeout=2) as r:
+                st = json.loads(r.read())
+            self.meaning_say("ready" if st.get("ready") else "starting", moments=st.get("moments", 0), understood=st.get("understood", 0))
+            return
+        except (OSError, ValueError):
+            pass
+        proc = getattr(self, "meaning_proc", None)
+        if proc and proc.poll() is None and time.time() - self.meaning_started < 120:
+            self.meaning_say("starting"); return                    # loading the model takes a few seconds
+        py, d = self.ai_python(), self.meaning_dir()
+        if not py:
+            self.meaning_say("no-ai"); return
+        if not (os.path.exists(os.path.join(d, "model.onnx")) and self.meaning_ready(py)):
+            self.meaning_say("not-installed"); return
+        if proc and proc.poll() is None:
+            proc.terminate()                                       # started, never answered: once more
+        if proc:
+            self.say(f"meaning search stopped ({proc.poll()}); started again — detail in meaning.log")
+        db = (self.settings().get("archive") or {}).get("database") or self.p("rushes.sqlite")
+        self.meaning_proc = subprocess.Popen(
+            [py, "-u", os.path.join(HERE, "meaning.py"), "--model", d, "--db", db,
+             "--store", self.p("meaning.sqlite"), "--port", str(MEANING_PORT)],
+            stdin=subprocess.DEVNULL, stdout=open(self.p("meaning.log"), "a"), stderr=subprocess.STDOUT)
+        self.meaning_started = time.time()
+        self.meaning_say("starting")
+
+    def meaning_install(self):
+        """Install meaning search (Manage → Describe): what it needs in the AI's Python (pip), and its
+        model (118 MB) from Rushes' release, checked by its fingerprint. Each step said as it happens."""
+        py = self.ai_python()
+        if not py:
+            self.meaning_say("no-ai"); self.log("  install the AI first (Manage → Describe): meaning search runs in its Python"); return
+        self.meaning_installing = True
+        try:
+            self.meaning_say("installing", note="Installing onnxruntime and tokenizers into the AI's Python …")
+            self.log("  installing onnxruntime, tokenizers into the AI's Python")
+            r = subprocess.run([py, "-m", "pip", "install", "--disable-pip-version-check", *MEANING_PACKAGES],
+                               capture_output=True, text=True, timeout=1800)
+            if r.returncode:
+                raise RuntimeError("pip: " + (r.stdout + r.stderr).strip().splitlines()[-1][:300])
+            d = self.meaning_dir(); os.makedirs(d, exist_ok=True)
+            url, sha = MEANING_GET
+            part, h, got = os.path.join(d, "model.tar.part"), hashlib.sha256(), 0
+            with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
+                size = int(r.headers.get("Content-Length") or 0)
+                while True:
+                    b = r.read(1 << 20)
+                    if not b: break
+                    h.update(b); f.write(b); got += len(b)
+                    self.meaning_say("installing", note=f"Downloading the model: {got >> 20} of {size >> 20 or '?'} MB …")
+            if h.hexdigest() != sha:
+                os.remove(part)
+                raise RuntimeError("the model download is not the one expected (its fingerprint differs): not used")
+            import tarfile
+            with tarfile.open(part) as t:
+                t.extractall(d, filter="data")
+            os.remove(part)
+            self.meaning_say("installing", note="Checking the model …")
+            r = subprocess.run([py, os.path.join(HERE, "meaning.py"), "--check", d], capture_output=True, text=True, timeout=300)
+            if r.returncode:
+                raise RuntimeError("the model did not pass its check: " + (r.stdout + r.stderr).strip()[-300:])
+            self.meaning_ok = {}
+            self.log("  meaning search installed ✓ it starts within a minute, then learns what each described moment means")
+            self.activity("changed", "Installed meaning search: Search finds what you mean, in English and Spanish")
+        except Exception as e:
+            self.meaning_say("failed", note=str(e)[:300])
+            self.log(f"  meaning search was not installed: {e}")
+            return
+        finally:
+            self.meaning_installing = False
+        self.meaning_say("starting")
 
     def guarded(self, name, fn):
         try:
@@ -849,6 +963,8 @@ class Runner:
             self.refresh()
         elif action == "holding":
             self.holding()
+        elif action == "meaning-install":
+            self.meaning_install()
         elif action == "df":
             u = shutil.disk_usage(a)
             self.log(f"  {a}: {u.free / 1e9:,.1f} GB free of {u.total / 1e9:,.1f} GB")

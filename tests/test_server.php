@@ -96,6 +96,20 @@ check($v['count'] === 1 && $v['moments'] === 2 && $v['rows'][0]['found'] === [0.
 check(analysis_videos('drone')['count'] === 1 && analysis_videos('parks')['count'] === 1 && analysis_videos('aer')['count'] === 0,
       'whole words only, plurals by themselves, and related words: "drone" finds an aerial shot, "aer" finds nothing');
 check(count(analysis_shots($fp)) === 2 && analysis_shots($fp)[0]['kind'] === 'shot', 'every shot and line of a video, in order, without the failed one');
+// Search by meaning (meaning.py), here a stand-in answering as it would: "abuelos" is close to the aerial shot
+file_put_contents("$root/meaning-fake.php", '<?php header("Content-Type: application/json"); parse_str($_SERVER["QUERY_STRING"] ?? "", $a);
+    echo json_encode(($a["q"] ?? "") === "abuelos" || ($a["q"] ?? "") === "aerial" ? [["' . $fp . '", "shot", 0.0, 0.62], ["' . $fp . '", "speech", 3.2, 0.41]] : []);');
+$fake = proc_open([PHP_BINARY, '-S', '127.0.0.1:' . MEANING_PORT, "$root/meaning-fake.php"], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes);
+for ($i = 0; $i < 50 && meaning_moments('x') === null; $i++) usleep(100000);
+$v = analysis_videos('abuelos');
+check($v['meaning'] && $v['count'] === 1 && $v['rows'][0]['found'] === [0.0, 3.2] && abs($v['rows'][0]['score'] - 0.62) < 1e-6,
+      'meaning finds a video none of whose words were typed, with every close moment');
+check(analysis_videos('drone')['count'] === 0, 'with meaning on, the related-word groups are off: a shared word no longer joins things that mean something else');
+$v = analysis_videos('aerial');
+check($v['count'] === 1 && $v['rows'][0]['score'] > 0.9 && $v['rows'][0]['hits'] > 0, 'a video with the very words comes first (its words and its meaning both count)');
+check(analysis_videos('aerial', 120, "shot_size = 'close'")['count'] === 0, 'content filters hold for what meaning finds too');
+proc_terminate($fake); proc_close($fake);
+check(meaning_moments('abuelos') === null && analysis_videos('drone')['count'] === 1, 'meaning search not running: Search finds by words, with the related-word groups, as before');
 // The Filters panel's content filters: a video counts when one of its shots is all of them
 db()->exec("INSERT OR IGNORE INTO files (path, name, ext, kind, bytes) VALUES ('" . SQLite3::escapeString("$root/archive/park/loop.mp4") . "', 'loop.mp4', 'mp4', 'video', 10)");
 $found = function (array $get) use ($root) {

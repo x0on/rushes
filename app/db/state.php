@@ -469,6 +469,9 @@ echo json_encode([
                      'stills' => array_map('basename', glob("$WEB/proxy-test/*.jpg") ?: [])] : null,
     // the proxy setting in use: height and Mbit/s (chosen after the test; 720p at 4 until then)
     'proxy_setting' => preg_match('/^(720|1080) (4|6|sw)$/', trim((string)@file_get_contents("$WEB/proxy-setting.txt")), $ps) ? [(int)$ps[1], $ps[2]] : [720, '4'],
+    // meaning search (runner.py writes it each minute): installed, starting, learning, ready
+    'meaning'  => (function () use ($WEB) { $m = json_decode((string)@file_get_contents("$WEB/meaning.json"), true);
+                     return is_array($m) && time() - (int)($m['at'] ?? 0) < 600 ? $m : null; })(),
     'gpu_test' => is_readable("$WEB/gpu-test.txt") ? ['text' => (string)file_get_contents("$WEB/gpu-test.txt"), 'at' => filemtime("$WEB/gpu-test.txt")] : null,
     'conditions' => $c,
     'copies'   => $copies,

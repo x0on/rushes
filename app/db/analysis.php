@@ -28,7 +28,7 @@ function analysis_init(): void {
 // One searched word, as the words it stands for: itself whole (not "old" inside "holding"), its
 // plural or singular, and every word of its group in rules.json analysis.related ("elder" finds
 // "old", "senior", "abuelo" …). -> a pattern for wmatch().
-function word_pattern(string $word): string {
+function word_pattern(string $word, bool $related = true): string {
     $word = mb_strtolower(trim($word));
     $one = function (string $w): array {             // kids -> kid, babies -> baby, buses -> bus
         $f = [$w];
@@ -45,13 +45,25 @@ function word_pattern(string $word): string {
     };
     $base = $one($word);
     $words = $base;
-    foreach ((array)(rules()['analysis']['related'] ?? []) as $group) {
+    foreach ($related ? (array)(rules()['analysis']['related'] ?? []) : [] as $group) {
         $g = array_map(fn($x) => mb_strtolower((string)$x), (array)$group);
         if (array_intersect($base, $g)) $words = array_merge($words, $g);
     }
     $forms = [];
     foreach (array_unique($words) as $w) foreach ($all($w) as $f) $forms[$f] = true;
     return '/(*UCP)\b(?:' . implode('|', array_map(fn($f) => preg_quote($f, '/'), array_keys($forms))) . ')\b/u';
+}
+
+// Moments close in meaning to $q (meaning.py, beside Rushes on this Mac): [[fp, kind, start_s, score], …],
+// best first. null when it is not running here (not installed, starting, or Rushes runs on a NAS):
+// Search then finds by words alone, with the related-word groups.
+const MEANING_PORT = 18652;
+function meaning_moments(string $q): ?array {
+    $min = (float)(rules()['analysis']['meaning']['min'] ?? 0.3);
+    $ctx = stream_context_create(['http' => ['timeout' => 3, 'ignore_errors' => true]]);
+    $r = @file_get_contents('http://127.0.0.1:' . MEANING_PORT . '/search?k=400&min=' . $min . '&q=' . rawurlencode($q), false, $ctx);
+    $j = $r === false ? null : json_decode($r, true);
+    return (is_array($j) && array_is_list($j)) ? $j : null;
 }
 
 function analysis_dir(): string { return archive_dir() . '/_rushes/analysis'; }
@@ -147,10 +159,63 @@ function analysis_search(string $q, int $limit = 60): array {
 // With it, a video counts when one of its shots is all of that; words may still be anywhere in it.
 function analysis_videos(string $q, int $limit = 120, string $cond = '', array $cargs = []): array {
     analysis_init();
+    // With meaning search here, words are only themselves (and their plurals): meaning finds the rest,
+    // and a shared word ("old" building, "old" man) no longer joins things that mean something else.
+    $mean = trim($q) === '' ? null : meaning_moments($q);
     $likes = [];
     foreach (preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY) as $word)
-        $likes[] = word_pattern($word);
+        $likes[] = word_pattern($word, $mean === null);
     if (!$likes && $cond === '') return ['count' => 0, 'moments' => 0, 'rows' => []];
+    $words = analysis_by_words($likes, $cond, $cargs);
+    if (!$mean) {
+        $rows = $words['rows'];
+        usort($rows, fn($a, $b) => [$b['hits'], count($b['found']), $a['path']] <=> [$a['hits'], count($a['found']), $b['path']]);
+        return ['count' => count($rows), 'moments' => $words['n'], 'rows' => array_slice($rows, 0, $limit), 'meaning' => $mean !== null];
+    }
+    // Meaning: each video's closest moment, and when every close moment is. A video found by its
+    // words too comes first (+0.3: the words were asked for); with content filters, only videos
+    // with a shot that is all of them, as for words.
+    $by = [];
+    foreach ($mean as [$fp, $kind, $start, $score]) $by[$fp][] = [(float)$start, (float)$score, $kind];
+    if ($cond !== '' && $by) {
+        $in = implode(',', array_fill(0, count($by), '?'));
+        $st = db()->prepare("SELECT DISTINCT fp FROM moments WHERE fp IN ($in) AND kind = 'shot' AND $cond");
+        foreach (array_merge(array_keys($by), $cargs) as $i => $v) $st->bindValue($i + 1, $v);
+        $r = $st->execute(); $ok = [];
+        while ($x = $r->fetchArray(SQLITE3_NUM)) $ok[$x[0]] = true;
+        $by = array_intersect_key($by, $ok);
+    }
+    $videos = $words['rows']; $n = $words['n'];
+    foreach ($videos as $fp => &$v) { $v['score'] = 0.3 + ($by[$fp][0][1] ?? 0); } unset($v);
+    $new = array_diff_key($by, $videos);
+    if ($new) {
+        $in = implode(',', array_fill(0, count($new), '?'));
+        $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,
+            light,part_of_day,mood,language FROM moments WHERE kind != 'failed' AND fp IN ($in)");
+        foreach (array_keys($new) as $i => $v) $st->bindValue($i + 1, $v);
+        $r = $st->execute(); $all = [];
+        while ($m = $r->fetchArray(SQLITE3_ASSOC)) $all[$m['fp']][] = $m;
+        foreach ($new as $fp => $close) {
+            [$t, $score, $kind] = $close[0];            // the closest: the video's picture and its first line
+            foreach ($all[$fp] ?? [] as $m) {
+                if ($m['kind'] === $kind && abs((float)$m['start_s'] - $t) < 0.01) { $videos[$fp] = $m + ['hits' => 0, 'score' => $score]; break; }
+            }
+        }
+    }
+    foreach ($by as $fp => $close) {                    // every close moment shows on the video's line
+        if (!isset($videos[$fp])) continue;
+        foreach ($close as [$t]) $videos[$fp]['found'][] = $t;
+    }
+    foreach ($videos as &$v) { $v['found'] = array_values(array_unique($v['found'] ?? [])); sort($v['found']); } unset($v);
+    $rows = array_values($videos);
+    usort($rows, fn($a, $b) => [$b['score'], $b['hits'], $a['path']] <=> [$a['score'], $a['hits'], $b['path']]);
+    $n = array_sum(array_map(fn($v) => count($v['found']), $rows));
+    return ['count' => count($rows), 'moments' => $n, 'rows' => array_slice($rows, 0, $limit), 'meaning' => true];
+}
+
+// Videos where every word appears somewhere (any shot or line), as fp => the best-matching
+// moment with its hits and when every matching moment is. $cond: as for analysis_videos.
+function analysis_by_words(array $likes, string $cond, array $cargs): array {
     $shot = $cond === '' ? '' : "kind = 'shot' AND $cond";
     $any = $likes ? implode(' + ', array_fill(0, count($likes), 'wmatch(hay, ?)'))
         : '0';
@@ -161,7 +226,7 @@ function analysis_videos(string $q, int $limit = 120, string $cond = '', array $
         : db()->prepare("SELECT DISTINCT fp FROM moments WHERE $shot LIMIT 2000");
     $bind($st, $likes ? ($shot ? array_merge($cargs, $likes) : $likes) : $cargs); $r = $st->execute(); $fps = [];
     while ($x = $r->fetchArray(SQLITE3_NUM)) $fps[] = $x[0];
-    if (!$fps) return ['count' => 0, 'moments' => 0, 'rows' => []];
+    if (!$fps) return ['rows' => [], 'n' => 0];
     $in = implode(',', array_fill(0, count($fps), '?'));
     $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,
         light,part_of_day,mood,language, ($any) AS hits FROM moments
@@ -173,10 +238,8 @@ function analysis_videos(string $q, int $limit = 120, string $cond = '', array $
         if (!isset($videos[$m['fp']])) { $m['found'] = []; $videos[$m['fp']] = $m; }
         $videos[$m['fp']]['found'][] = (float)$m['start_s'];
     }
-    $rows = array_values($videos);
-    usort($rows, fn($a, $b) => [$b['hits'], count($b['found']), $a['path']] <=> [$a['hits'], count($a['found']), $b['path']]);
-    foreach ($rows as &$v) { sort($v['found']); } unset($v);
-    return ['count' => count($rows), 'moments' => $n, 'rows' => array_slice($rows, 0, $limit)];
+    foreach ($videos as &$v) { sort($v['found']); } unset($v);
+    return ['rows' => $videos, 'n' => $n];
 }
 
 // Every shot of one video, and what is said in it, in order: the video as a whole.

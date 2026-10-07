@@ -14,7 +14,7 @@ header('Content-Type: application/json');
 $allowed = ['plan', 'apply', 'undo', 'find', 'empty', 'reindex', 'cacheclean', 'df',
             // the old date-based layout: only its undo is left (see organize.sh)
             'organize-undo', 'scan', 'manifest', 'holding',
-            'cache-undo', 'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test', 'proxy-remake', 'reset-breaker'];
+            'cache-undo', 'proxy-plan', 'proxy-build', 'proxy-stop', 'verify', 'gpu-test', 'proxy-test', 'proxy-remake', 'reset-breaker', 'meaning-install'];
 
 // First: settings, and the check that this came from Rushes itself (config.php).
 require_once __DIR__ . '/db/auth.php';

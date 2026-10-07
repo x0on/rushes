@@ -597,6 +597,10 @@
         "sonriendo",
         "sonrisa"
       ]
-    ]
+    ],
+    "meaning": {
+      "_": "Search by meaning (meaning.py): a moment counts as found when it is at least this close to the search, 0 to 1. Lower finds more and looser; higher fewer and closer.",
+      "min": 0.3
+    }
   }
 }
