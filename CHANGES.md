@@ -3,6 +3,26 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.22 — October 2026
+
+- **Forgot the password? Set a new one at this Mac.** The sign-in page, opened
+  on the Mac that runs Rushes, offers "Forgot it? Set a new one"; being at
+  this Mac is enough. Other devices are signed out when it changes, and
+  Activity records it. The menu bar's Other devices page has the same row.
+- **Search finds whole words, plurals and related words.** "old" no longer
+  matches "holding"; "elder" also finds old person, abuelo, anciano; "kid"
+  finds child, niño. About 37 English/Spanish groups, in rules.json.
+- **Keywords are what the video is about** (tags and themes). Text seen on
+  screen moves to Details.
+- **The side panel:** the name sits on top, with larger labeled buttons
+  (Add to pull, Copy path) under it; the big view shows its name in its bar.
+  One scroll bar per column, not two.
+- **Sounds play right on their row**, with a play button and a progress
+  line, and only one plays at a time. An MP3 and WAV of the same track show
+  as one row.
+- **The description follows the video** as it plays. "1 shot", not "1 shots".
+  The chosen row stands out more.
+
 ## 0.12.21 — October 2026
 
 - **Check for updates and Update in the menu bar work when the Rushes window

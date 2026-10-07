@@ -837,6 +837,9 @@ class Window:
         elif do == "reveal-archive" and local():
             # the archive, in Finder (where Setup last put it)
             subprocess.run(["open", (read_json(os.path.join(WEB, "settings.json")).get("archive") or {}).get("local") or local()["archive"]])
+        elif do == "reset-pass" and not WATCHER and local():   # Manage, at the password, on this Mac
+            subprocess.run(["open", local_url() + "/db/admin.php#tools"])
+            self.set(said="Opened Manage at the password: set a new one there; the old one is not asked on this Mac.")
         elif do == "open-setup":
             subprocess.run(["open", (local_url() if local() else s["url"]) + "/setup.php"])
         elif do == "show-log":
@@ -1395,7 +1398,10 @@ function home(s) {
     return head('Other devices', 'Phones and computers that may open Rushes, and editors\' computers sending their projects.') + said(s) + upd(s) +
       (L ? '<div class="box">' + sw(L.others, ['others-on', 'others-off'], 'Let other devices open Rushes', L.others
           ? 'On: phones and computers on your network, or on your Tailscale, open <b>http://' + esc(L.name) + ':' + esc(L.port) + '</b> (or this Mac\'s Tailscale address, port ' + esc(L.port) + ') and sign in with Rushes\' password.'
-          : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') + '</div>' : '') +
+          : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') +
+        // a forgotten password: set again at this Mac, where the old one is not asked (auth.php at_this_mac)
+        '<div class="row"><div class="t">Forgot the password?<small>Set a new one in Rushes → Manage: on this Mac the old one is not asked. Phones and other computers sign in again with it.</small></div>' +
+        btn('Set a new one', 'reset-pass') + '</div></div>' : '') +
       (unpaired ? pairBox(s) : !L && s.pairing === 'this' ? '<p class="muted" style="font-size:12.5px">Paired with Rushes ✓ — it gives work to this Mac only.</p>' : '') +
       '<div class="box"><div class="muted" style="margin-bottom:6px">Editors\' computers (Rushes Watcher)</div>' +
       (s.watchers === undefined ? '<p class="muted">' + (s.rushes === false ? 'Rushes cannot be reached right now.' : '<span class="spin"></span>Asking Rushes …') + '</p>'

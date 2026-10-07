@@ -14,7 +14,7 @@ const LABEL_AUDIO  = ['wav', 'mp3', 'aif', 'aiff', 'm4a', 'aac', 'flac'];
 const LABEL_RAW    = ['nef', 'cr2', 'cr3', 'arw', 'dng', 'raf', 'orf', 'rw2'];
 const LABEL_IMAGE  = ['jpg', 'jpeg', 'png', 'heic', 'tif', 'tiff', 'webp', 'gif'];
 const LABEL_DESIGN = ['psd', 'ai', 'indd', 'eps', 'svg', 'afdesign', 'sketch', 'fig'];
-const LABEL_RULES  = '4';   // raise when the rules change: every label is made again
+const LABEL_RULES  = '5';   // raise when the rules change: every label is made again
 const LABEL_PROJ   = ['prproj', 'prin', 'aep', 'aepx', 'drp', 'drx', 'sesx', 'fcpxml'];
 
 // What Search shows under each name (find.php's rail), and which labels each takes in
@@ -37,7 +37,7 @@ const LABEL_SHOWN = [
 // Only what is made here is grouped (a camera's C0001, C0002 are different takes), and
 // only beside each other: the same folder, or anywhere under the same Output folder.
 // Tried on 1,984 finished videos of a real archive: 354 pieces had versions, none wrongly joined.
-const LABEL_VERSIONED = ['deliverable', 'deliverable_reused', 'made_here', 'design', 'design_editable', 'voiceover', 'project'];
+const LABEL_VERSIONED = ['deliverable', 'deliverable_reused', 'made_here', 'design', 'design_editable', 'voiceover', 'project', 'music', 'sfx', 'audio'];   // a track as MP3 and WAV is one
 // A backup an app saved by itself: "Central Park_20250520T124759.149073.sesx" (Audition),
 // "Promo-2024-03-12_10-11-22.prproj" (an auto-save). The same piece, behind the real one.
 const VERSION_STAMP = '/[\s_-]*\d{4}-?\d{2}-?\d{2}[t_ -]?\d{2}[-:.]?\d{2}[-:.]?\d{2}(\.\d+)?$/u';

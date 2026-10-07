@@ -19,7 +19,39 @@ function analysis_init(): void {
         hay TEXT              -- everything searchable, lower case
     )");
     db()->exec('CREATE INDEX IF NOT EXISTS i_moments_fp ON moments (fp)');
+    // wmatch(hay, pattern): a whole word, as word_pattern() writes it (SQLite has no regular expressions)
+    static $fn = false;
+    if (!$fn) { db()->createFunction('wmatch', fn($hay, $re) => preg_match($re, (string)$hay) ? 1 : 0, 2, SQLITE3_DETERMINISTIC); $fn = true; }
     db()->exec('CREATE INDEX IF NOT EXISTS i_moments_path ON moments (path)');   // a file's still, beside its row in Search
+}
+
+// One searched word, as the words it stands for: itself whole (not "old" inside "holding"), its
+// plural or singular, and every word of its group in rules.json analysis.related ("elder" finds
+// "old", "senior", "abuelo" …). -> a pattern for wmatch().
+function word_pattern(string $word): string {
+    $word = mb_strtolower(trim($word));
+    $one = function (string $w): array {             // kids -> kid, babies -> baby, buses -> bus
+        $f = [$w];
+        if (preg_match('/ies$/u', $w)) $f[] = mb_substr($w, 0, -3) . 'y';
+        elseif (preg_match('/(s|x|z|ch|sh)es$/u', $w)) $f[] = mb_substr($w, 0, -2);
+        elseif (preg_match('/[^s]s$/u', $w)) $f[] = mb_substr($w, 0, -1);
+        return $f;
+    };
+    $all = function (string $w): array {             // kid -> kids, baby -> babies, bus -> buses
+        $f = [$w, $w . 's'];
+        if (preg_match('/[^aeiou]y$/u', $w)) $f[] = mb_substr($w, 0, -1) . 'ies';
+        if (preg_match('/(s|x|z|ch|sh)$/u', $w)) $f[] = $w . 'es';
+        return $f;
+    };
+    $base = $one($word);
+    $words = $base;
+    foreach ((array)(rules()['analysis']['related'] ?? []) as $group) {
+        $g = array_map(fn($x) => mb_strtolower((string)$x), (array)$group);
+        if (array_intersect($base, $g)) $words = array_merge($words, $g);
+    }
+    $forms = [];
+    foreach (array_unique($words) as $w) foreach ($all($w) as $f) $forms[$f] = true;
+    return '/(*UCP)\b(?:' . implode('|', array_map(fn($f) => preg_quote($f, '/'), array_keys($forms))) . ')\b/u';
 }
 
 function analysis_dir(): string { return archive_dir() . '/_rushes/analysis'; }
@@ -89,8 +121,8 @@ function analysis_search(string $q, int $limit = 60): array {
     analysis_init();
     $w = []; $a = [];
     foreach (preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY) as $word) {
-        $w[] = "hay LIKE ? ESCAPE '\\'";
-        $a[] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
+        $w[] = 'wmatch(hay, ?)';
+        $a[] = word_pattern($word);
     }
     if (!$w) return ['count' => 0, 'rows' => []];
     $where = implode(' AND ', $w);
@@ -110,19 +142,19 @@ function analysis_search(string $q, int $limit = 60): array {
 // in any of its shots or in what is said, not only all in one shot. Each video
 // comes back once, with the shot that matches best (most words; the earliest of
 // those) and when every matching moment is.
-// ponytail: LIKE per word over all moments, like analysis_search; FTS5 when it passes ~300 ms.
+// ponytail: a pattern per word over all moments, like analysis_search; FTS5 when it passes ~300 ms.
 // $cond: what a shot must be (search.php's content filters: shot size, people, light, mood).
 // With it, a video counts when one of its shots is all of that; words may still be anywhere in it.
 function analysis_videos(string $q, int $limit = 120, string $cond = '', array $cargs = []): array {
     analysis_init();
     $likes = [];
     foreach (preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY) as $word)
-        $likes[] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
+        $likes[] = word_pattern($word);
     if (!$likes && $cond === '') return ['count' => 0, 'moments' => 0, 'rows' => []];
     $shot = $cond === '' ? '' : "kind = 'shot' AND $cond";
-    $any = $likes ? implode(' + ', array_fill(0, count($likes), "(hay LIKE ? ESCAPE '\\')"))
+    $any = $likes ? implode(' + ', array_fill(0, count($likes), 'wmatch(hay, ?)'))
         : '0';
-    $all = implode(' AND ', array_fill(0, count($likes), "SUM(hay LIKE ? ESCAPE '\\') > 0"));
+    $all = implode(' AND ', array_fill(0, count($likes), 'SUM(wmatch(hay, ?)) > 0'));
     $bind = function (SQLite3Stmt $s, array $vals) { foreach ($vals as $i => $v) $s->bindValue($i + 1, $v); };
     $st = $likes
         ? db()->prepare("SELECT fp FROM moments WHERE kind != 'failed'" . ($shot ? " AND fp IN (SELECT fp FROM moments WHERE $shot)" : '') . " GROUP BY fp HAVING $all")

@@ -85,14 +85,16 @@ file_put_contents("$root/archive/_rushes/analysis/cd/" . str_repeat('cd', 12) . 
 touch(web_dir() . '/describe-status.tsv');                  // the helper says it is describing
 check(analysis_import()['described_files'] === 2, 'descriptions in _rushes/analysis are imported into search');
 $m = analysis_search('central park');
-check($m['count'] === 1 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['what'] === 'An aerial view of a water park',
-      'words on screen find the shot');
+check($m['count'] === 2 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['what'] === 'An aerial view of a water park'
+      && $m['rows'][1]['kind'] === 'speech', 'words on screen find the shot, and the Spanish line saying them ("parque central") too');
 check(analysis_search('parque bienvenidos')['rows'][0]['kind'] === 'speech', 'spoken words find the moment they were said');
 check(analysis_search('parks recreation')['count'] === 1 && analysis_search('nothing here')['count'] === 0, 'themes are searchable; nothing invented');
 // A video is one container: words in different moments of it still find it, once, with its best moment
 $v = analysis_videos('aerial bienvenidos');
 check($v['count'] === 1 && $v['moments'] === 2 && $v['rows'][0]['found'] === [0.0, 3.2] && analysis_videos('aerial nothing')['count'] === 0,
       'a video is found when its words are in different moments of it, once, with every matching moment');
+check(analysis_videos('drone')['count'] === 1 && analysis_videos('parks')['count'] === 1 && analysis_videos('aer')['count'] === 0,
+      'whole words only, plurals by themselves, and related words: "drone" finds an aerial shot, "aer" finds nothing');
 check(count(analysis_shots($fp)) === 2 && analysis_shots($fp)[0]['kind'] === 'shot', 'every shot and line of a video, in order, without the failed one');
 // The Filters panel's content filters: a video counts when one of its shots is all of them
 db()->exec("INSERT OR IGNORE INTO files (path, name, ext, kind, bytes) VALUES ('" . SQLite3::escapeString("$root/archive/park/loop.mp4") . "', 'loop.mp4', 'mp4', 'video', 10)");

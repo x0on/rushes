@@ -118,7 +118,10 @@ require __DIR__ . '/config.php';
   #selbar[hidden] { display: none }
   #selbar { display: flex; gap: 8px; align-items: center; color: var(--fg) }
   .said { color: var(--ok) }
-  .results { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start }
+  .work { overflow: hidden }
+  .pad { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0 }
+  .results { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: stretch }
+  #out { min-height: 0; overflow-y: auto; padding-bottom: 90px }
   .results:has(> #inspect[hidden]) { grid-template-columns: minmax(0, 1fr) }   /* only before anything is found */
   @media (max-width: 1100px) { .results { grid-template-columns: minmax(0, 1fr) } .inspect { display: none } }
   @media (max-width: 640px) { .shoot .sh .n { display: none } .row { gap: 8px; padding-left: 10px; padding-right: 10px }
@@ -162,8 +165,12 @@ require __DIR__ . '/config.php';
   .shn b { color: var(--fg); font-size: 13px; font-weight: 600 }
   .shn .sep { color: var(--faint); margin: 0 5px }
   .row { padding-top: 6px; padding-bottom: 6px }
-  .row.pick { user-select: none }
-  .row.pick.on { box-shadow: inset 3px 0 0 var(--accent) }
+  .row.pick { user-select: none; position: relative }
+  .playbtn { border: 0; cursor: pointer; font-size: 13px; padding: 0 }
+  .playbtn:hover, .row.playing .playbtn { background: var(--accent); color: var(--accent-fg) }
+  .row .prog { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent-text); transition: width .25s linear }
+  .row.pick.on { box-shadow: inset 3px 0 0 var(--accent); background: var(--raised); color: var(--fg) }
+  .row.pick.on .nm small, .row.pick.on .sz { color: var(--muted); opacity: 1 }
   .row .pk { display: none; margin-left: 6px; color: var(--ok); font-size: 11px; font-weight: 600 }
   .row.pulled .pk { display: inline }
   .row .side, .row .vn { color: var(--faint); font-size: 11px }
@@ -177,9 +184,18 @@ require __DIR__ . '/config.php';
   .more { display: block; width: 100%; margin: 16px 0; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--line);
           background: var(--surface); color: var(--fg); font: 13.5px var(--font); cursor: pointer }
   /* ── one video, opened: the panel beside (small) and the big view (double-click) share these ── */
-  .inspect { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto }
-  .vh { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px 10px }
-  .vh b { flex: 1; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere }
+  .inspect { min-height: 0; overflow-y: auto; margin-bottom: 16px; align-self: stretch }
+  .vh { padding: 14px 14px 8px }
+  .vh b { display: block; font-size: 14px; overflow-wrap: anywhere }
+  .vbtns { display: flex; gap: 8px; padding: 0 14px 12px }
+  .vbtns button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 12px;
+                  font: 600 13.5px var(--font); cursor: pointer; border: 1.5px solid var(--fg); background: none; color: var(--fg) }
+  .vbtns button svg { width: 17px; height: 17px }
+  .vbtns button:hover { background: var(--raised) }
+  .vbtns .go-pull { background: var(--accent); border-color: var(--accent); color: var(--accent-fg) }
+  .vbtns .go-pull:hover { background: var(--accent); filter: brightness(1.12) }
+  .vbtns .in { background: var(--ok); border-color: var(--ok); color: #fff }
+  .bigname { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .ib { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 1.5px solid var(--fg); border-radius: 0;
         background: none; color: var(--fg); cursor: pointer; padding: 0 }
   .ib svg { width: 17px; height: 17px }
@@ -240,14 +256,15 @@ require __DIR__ . '/config.php';
   dialog#big { width: min(1500px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: 0;
                background: var(--bg); color: var(--fg); padding: 0; overflow: hidden }
   dialog#big::backdrop { background: rgba(5, 12, 12, .85) }
-  .bigbar { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px 14px; border-bottom: 1px solid var(--line); margin-bottom: 18px }
+  .bigbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 18px 14px; border-bottom: 1px solid var(--line); margin-bottom: 18px }
   .bigbar button { border: 0; background: none; color: var(--fg); font-size: 24px; width: 44px; height: 40px; cursor: pointer }
   .bigbar button:hover:not(:disabled) { background: var(--raised) }
   .bigbar button:disabled { opacity: .3; cursor: default }
   .bigbody { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; padding: 6px 28px 28px;
              max-height: calc(100vh - 90px); overflow-y: auto }
   .bigbody .pv { cursor: default }
-  .bigbody .vh { padding: 0 0 10px }
+  .bigbody .vbtns { padding: 0 0 6px }
+  .bigbody .vbtns button { height: 46px; font-size: 14.5px }
   .bigbody .vh b { font-size: 18px; font-weight: 600 }
   .bigbody .vb { padding: 0 }
   .bigbody .strip { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px }
@@ -335,7 +352,7 @@ require __DIR__ . '/config.php';
 
 <!-- The big view: one video large, its shots, its versions, its keywords -->
 <dialog id="big" aria-label="The video, large">
-  <div class="bigbar">
+  <div class="bigbar"><b class="bigname" id="bigName"></b>
     <button type="button" id="bigPrev" title="The one before (←)">‹</button>
     <button type="button" id="bigNext" title="The next one (→)">›</button>
     <button type="button" id="bigClose" title="Close (Esc)">✕</button>
@@ -539,10 +556,11 @@ function fail(what, detail) {
 // only how they are shown is grouped.
 function pieces(list) {
   const best = {};
+  const light = function (r) { return /\.(mp3|m4a|aac|mp4)$/i.test(r.name || r.path || '') ? 1 : 0; };   // the same rank: the one that plays at once
   list.forEach(function (r) {
     if (!r.vkey) return;
     const b = best[r.vkey];
-    if (!b || (+r.vrank || 0) > (+b.vrank || 0)) best[r.vkey] = r;
+    if (!b || (+r.vrank || 0) > (+b.vrank || 0) || ((+r.vrank || 0) === (+b.vrank || 0) && light(r) > light(b))) best[r.vkey] = r;
   });
   return list.filter(function (r) { return !r.vkey || best[r.vkey] === r; });
 }
@@ -561,6 +579,7 @@ function versionTags(x) {
                                     : /square|1x1/.test(n) ? '1:1' : /youtube|(^|[\s_-])yt([\s_.-]|$)|1080p|720p|4k|uhd/.test(n) ? '16:9' : ''));
   if (/(^|[\s_-])(eng|english)([\s_.-]|$)|english/.test(n)) t.push('ENG');
   if (/(^|[\s_-])(spa|esp|spanish|espanol|español)([\s_.-]|$)|spanish/.test(n)) t.push('SPA');
+  if (HEAR.test(n)) t.push(n.split('.').pop().toUpperCase());                 // a sound: its format, MP3 or WAV …
   return t.filter(Boolean);
 }
 
@@ -655,6 +674,7 @@ function listHTML(list) {
       const k = r.kind || 'other', st = (r.still || '').split(':'), sc = side[r.path] || [];
       html += '<div class="row pick' + (moved ? ' dim' : '') + (inPull(r.path) ? ' pulled' : '') + '" tabindex="0" data-p="' + esc(r.path) + '" data-k="' + esc(r.path) + '">' +
         (st.length === 2 ? '<span class="thumb pic"><img loading="lazy" alt="" src="' + still(st[0], st[1]) + '"></span>'
+                         : k === 'audio' && HEAR.test(r.name) ? '<button class="thumb k-audio playbtn" data-act="play" title="Play it here">' + PLAY + '</button>'
                          : '<span class="thumb k-' + esc(k) + '">' + (ICON[k] || ICON.file || '') + '</span>') +
         '<span class="nm">' + esc(r.name) + '<span class="pk">✓ in the pull</span>' +
         (moved ? ' <span class="pill">in Recently Removed</span>' : '') +
@@ -664,7 +684,7 @@ function listHTML(list) {
         (res(r) ? ' · <b class="res">' + res(r) + '</b>' : '') +
         (r.versions > 1 ? ' · <span class="vn" title="versions of this piece">' + ICON.versions + ' ' + r.versions + '</span>' : '') +
         (sc.length ? ' · <span class="side" title="' + esc(sc.join('\n')) + '">+ ' + sc.length + ' sidecar' + (sc.length === 1 ? '' : 's') + '</span>' : '') +
-        '</small></span><span class="sz">' + tb(r.bytes) + '</span></div>';
+        '</small></span><span class="sz">' + tb(r.bytes) + '</span>' + (k === 'audio' ? '<i class="prog"></i>' : '') + '</div>';
     });
     html += '</div>';
   });
@@ -672,6 +692,7 @@ function listHTML(list) {
 }
 
 function draw() {
+  stopSound();                                      // a new page of results: whatever was playing stops
   const files = pieces(rows);
   const vids = videos.rows.map(function (m, i) { return [m, i]; });
   const best = pieces(videos.rows);
@@ -708,6 +729,31 @@ function hint() {
   $('inspect').innerHTML = '<div style="padding:16px 14px"><p class="note" style="margin:0">Click a picture to see it here.<br>' +
     'Double-click to open it large and play it. Right-click to add it to a pull.</p></div>';
 }
+
+// ── sounds: played on their own row, one at a time on the whole page ──────
+const PLAY = '▶', PAUSE = '❚❚';
+const SOUND = new Audio(); let soundEl = null;
+function stopSound() {
+  SOUND.pause();
+  if (soundEl) { soundEl.classList.remove('playing'); const b = soundEl.querySelector('[data-act="play"]'); if (b) b.innerHTML = PLAY;
+                 const p = soundEl.querySelector('.prog'); if (p) p.style.width = '0'; }
+  soundEl = null;
+}
+function playSound(el, path) {
+  if (soundEl === el) { stopSound(); return; }              // the same one again: stop
+  stopSound();
+  document.querySelectorAll('audio, video').forEach(function (m) { m.pause(); });
+  SOUND.src = asIs(path); soundEl = el; el.classList.add('playing');
+  el.querySelector('[data-act="play"]').innerHTML = PAUSE;
+  SOUND.play().catch(function () { say('This sound cannot be played here (is its drive plugged in?).'); stopSound(); });
+}
+SOUND.ontimeupdate = function () { const p = soundEl && soundEl.querySelector('.prog'); if (p && SOUND.duration) p.style.width = (SOUND.currentTime / SOUND.duration * 100) + '%'; };
+SOUND.onended = stopSound;
+// anything else that starts playing (the panel's player, a video) stops the others
+document.addEventListener('play', function (e) {
+  stopSound();
+  document.querySelectorAll('audio, video').forEach(function (m) { if (m !== e.target) m.pause(); });
+}, true);
 
 // ── choosing ───────────────────────────────────────────────────────────────
 // One click picks a tile or a row and shows it beside; nothing plays.
@@ -760,6 +806,7 @@ $('out').addEventListener('click', function (e) {
   const a = e.target.closest('[data-act]');
   if (a) {
     const p = a.closest('[data-p]').dataset.p;
+    if (a.dataset.act === 'play') { playSound(a.closest('[data-p]'), p); return; }
     if (a.dataset.act === 'copy') copyText(localPath(p), function (ok) {
       a.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); setTimeout(function () { a.innerHTML = ICON.copy; }, 1600); });
     if (a.dataset.act === 'pull') addToPull([p], null).then(function () {
@@ -847,7 +894,8 @@ const shotAt = function (st) {
   return cur;
 };
 const kv = function (k, v, wide) { return v ? '<div' + (wide ? ' class="wide"' : '') + '><small>' + k + '</small><span>' + v + '</span></div>' : ''; };
-const tagList = function (v) { return v ? '<div class="tags">' + v.split(' · ').filter(Boolean).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : ''; };
+const tagList = function (v) { v = (v || '').split(' · ').filter(function (x) { return x.trim().length > 1; }).join(' · ');   // "5", "-": misread, not text
+  return v ? '<div class="tags">' + v.split(' · ').filter(Boolean).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : ''; };
 // "2024-05-03 14:22:10" as the camera wrote it -> "3 May 2024, 2:22 pm · afternoon".
 // Never converted between time zones: cameras disagree about which one they mean.
 function recorded(t) {
@@ -891,7 +939,7 @@ function render(where) {
             : '<div class="ph">' + (ICON[r.kind] || ICON.file) + '</div>';
   // Every keyword of the whole video: the big view offers them as searches
   const words = {};
-  st.shots.forEach(function (s) { [s.tags, s.themes, s.on_screen].forEach(function (v) {
+  st.shots.forEach(function (s) { [s.tags, s.themes].forEach(function (v) {
     (v || '').split(' · ').forEach(function (w) { w = w.trim(); if (w) words[w.toLowerCase()] = words[w.toLowerCase()] || w; }); }); });
   const found = {}; it.found.forEach(function (x) { found[(+x).toFixed(2)] = 1; });
   const player = sound
@@ -901,24 +949,27 @@ function render(where) {
        : noProxy ? '<p class="pv-note" data-pvn>' + (st.making ? '<span class="spin"></span> Making its proxy on this Mac… it plays here as soon as it is ready.'
                    : 'No proxy yet, so it cannot play here. ' + (RUSHES.mac && pullable(r.path) ? '<button class="plain" data-do="proxy" style="padding:0;color:var(--accent-text);font-weight:600">Make its proxy now</button>'
                    : 'Proxies are made in Manage → Describe.')) + '</p>' : '');
-  const shotsBox = st.shots.length ? '<div class="sec">In this video' + (big ? ' · ' + st.shots.filter(function (s) { return s.kind === 'shot'; }).length + ' shots' : '') + '</div>' + strip(st, found) : '';
+  const shotsBox = st.shots.length ? '<div class="sec">In this video' + (big ? ' · ' + (function (n) { return n + ' shot' + (n === 1 ? '' : 's'); })(st.shots.filter(function (s) { return s.kind === 'shot'; }).length) : '') + '</div>' + strip(st, found) : '';
   const html = big
     ? '<div><div class="vb">' + player + shotsBox +
         (Object.keys(words).length ? '<div class="sec">Keywords</div><div class="tags">' +
           Object.keys(words).slice(0, 24).map(function (k) { return '<button data-kw="' + esc(words[k]) + '">' + esc(words[k]) + '</button>'; }).join('') + '</div>' : '') +
       '</div></div>' +
-      '<div>' + head(r) + '<div class="vb">' + versionsBox(r, it) + describe(cur) + details(r, cur) + '</div></div>'
-    : head(r) + '<div class="vb">' + player + versionsBox(r, it) + describe(cur) + shotsBox + details(r, cur) + '</div>';
+      '<div>' + head(r, true) + '<div class="vb">' + versionsBox(r, it) + '<div data-desc>' + describe(cur) + '</div>' + details(r, cur) + '</div></div>'
+    : head(r) + '<div class="vb">' + player + versionsBox(r, it) + '<div data-desc>' + describe(cur) + '</div>' + shotsBox + details(r, cur) + '</div>';
+  if (big) $('bigName').textContent = r.name;
   const box = big ? $('bigBody') : $('inspect');
   box.hidden = false; box.innerHTML = html;
   wire(box, st, where);
-  if (st.playing && canPlay) startVideo(box, r.path, t);
+  if (st.playing && canPlay) startVideo(box, r.path, t, st);
 }
-function head(r) {
-  return '<div class="vh"><b>' + esc(r.name) + '</b>' +
-    (pullable(r.path) ? '<button class="ib ' + (inPull(r.path) ? 'in' : 'go-pull') + '" data-do="pull" title="' + (inPull(r.path) ? 'In the pull' : 'Add to pull') + '">' + (inPull(r.path) ? '✓' : ICON.pull) + '</button>' : '') +
-    '<button class="ib" data-do="copy" title="Copy its path">' + ICON.copy + '</button></div>' +
-    '<div class="said" style="padding:0 14px;font-size:12px"></div>';
+function head(r, big) {
+  const on = inPull(r.path);
+  return (big ? '' : '<div class="vh"><b>' + esc(r.name) + '</b></div>') +
+    '<div class="vbtns">' +
+    (pullable(r.path) ? '<button class="' + (on ? 'in' : 'go-pull') + '" data-do="pull">' + (on ? '✓ In the pull' : ICON.pull + 'Add to pull') + '</button>' : '') +
+    '<button data-do="copy">' + ICON.copy + 'Copy path</button></div>' +
+    '<div class="said" style="padding:0 14px 6px;font-size:12px"></div>';
 }
 function describe(cur) {
   if (!cur) return '';
@@ -957,7 +1008,7 @@ function details(r, cur) {
       kv('Where it lives', esc(short(r.path)), true) +
     '</div></details>';
 }
-function startVideo(box, path, t) {
+function startVideo(box, path, t, st) {
   const pv = box.querySelector('[data-pv]'), note = box.querySelector('[data-pvn]');
   if (!pv) return;
   const was = pv.querySelector('img');               // the shot's still stays on screen while the proxy loads
@@ -965,14 +1016,23 @@ function startVideo(box, path, t) {
   const v = pv.querySelector('video');
   v.onloadeddata = function () { if (note) note.textContent = 'Playing its proxy' + (t ? ' from ' + tcode(t) : '') + ' (the original stays where it is).'; };
   v.onerror = function () { if (note) note.textContent = 'No proxy to play yet. Proxies are made in Manage → Describe.'; };
+  // the description and the strip follow what is on screen as it plays
+  if (st && st.shots.length) v.ontimeupdate = function () {
+    let cur = null;
+    st.shots.forEach(function (x) { if (x.kind === 'shot' && +x.start_s <= v.currentTime + .05) cur = x; });
+    if (!cur || cur === st.onScreen) return;
+    st.onScreen = cur; st.t = +cur.start_s;
+    const d = box.querySelector('[data-desc]'); if (d) d.innerHTML = describe(cur);
+    box.querySelectorAll('.strip [data-shot]').forEach(function (b) { b.classList.toggle('cur', +b.dataset.shot === +cur.start_s); });
+  };
   v.play().catch(function () {});
 }
 function wire(box, st, where) {
   const r = st.row;
   box.querySelectorAll('[data-do="copy"]').forEach(function (b) {
     b.onclick = function () { copyText(localPath(r.path), function (ok) {
-      b.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C');
-      setTimeout(function () { b.innerHTML = ICON.copy; }, 1600); }); };
+      b.innerHTML = ok ? '✓ Copied' : 'Press ⌘C'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C');
+      setTimeout(function () { b.innerHTML = ICON.copy + 'Copy path'; }, 1600); }); };
   });
   box.querySelectorAll('[data-do="proxy"]').forEach(function (b) {
     b.onclick = async function () {
@@ -995,12 +1055,12 @@ function wire(box, st, where) {
   });
   box.querySelectorAll('[data-do="pull"]').forEach(function (b) {
     b.onclick = async function () { await addToPull([r.path], null); const on = inPull(r.path);
-      b.classList.toggle('in', on); b.classList.toggle('go-pull', !on); b.innerHTML = on ? '✓' : ICON.pull; b.title = on ? 'In the pull' : 'Add to pull'; };
+      b.classList.toggle('in', on); b.classList.toggle('go-pull', !on); b.innerHTML = on ? '✓ In the pull' : ICON.pull + 'Add to pull'; };
   });
   // the picture is the player: a click plays it there, from the shot shown
   const pv = box.querySelector('[data-pv]');
   if (pv && !st.playing && box.querySelector('.go')) pv.onclick = function () { st.playing = true; const n = box.querySelector('[data-pvn]'); if (n) n.textContent = 'Loading its proxy from the archive…';
-    startVideo(box, r.path, (shotAt(st) && shotAt(st).kind === 'shot') ? +shotAt(st).start_s : st.t); };
+    startVideo(box, r.path, (shotAt(st) && shotAt(st).kind === 'shot') ? +shotAt(st).start_s : st.t, st); };
   // a shot of the video: shown, and played from there if it is playing
   box.querySelectorAll('[data-shot]').forEach(function (b) {
     b.onclick = function () {

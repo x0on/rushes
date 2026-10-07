@@ -22,6 +22,6 @@ if (getenv('HELPERID')) $_SERVER['HTTP_X_RUSHES_HELPER'] = getenv('HELPERID');
 if (getenv('BODY')) $_SERVER['RUSHES_TEST_BODY'] = getenv('BODY');
 if (getenv('PIECE')) $_SERVER['HTTP_X_PIECE_SHA256'] = getenv('PIECE');                // a piece's fingerprint (upload.php)                // a request's raw body (watcher.php ?upload)
 if (getenv('LOCAL')) $_SERVER['REMOTE_ADDR'] = '127.0.0.1';                      // as the runner, on the same machine
-if (getenv('SIGNED')) { @session_start(); $_SESSION['rushes_in'] = true; }      // as if signed in to Manage
+if (getenv('SIGNED')) { require_once "$app/db/auth.php"; @session_start(); $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen(); }  // as if signed in to Manage, with today's password
 $_GET = json_decode($get, true) ?: []; $_POST = json_decode($post, true) ?: [];
 include "$app/$door";

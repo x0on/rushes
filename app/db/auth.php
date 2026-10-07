@@ -65,9 +65,31 @@ function session_begin(): void {
     }
 }
 
+// Which password a session signed in with: a new password signs every other device out.
+function pass_gen(): string { return substr(hash('sha256', stored_pass()), 0, 16); }
+
 function signed_in(): bool {
     session_begin();
-    return !empty($_SESSION['rushes_in']);
+    return !empty($_SESSION['rushes_in']) && ($_SESSION['rushes_gen'] ?? '') === pass_gen();
+}
+
+// Someone at the Mac Rushes runs on (a request from the Mac itself, on a Mac). Like a
+// router's reset button: they may set a new password without the old one. They can
+// already open Rushes and every file on that Mac without it; the password only guards
+// against other devices, which still need the current one to change it.
+function at_this_mac(): bool {
+    return on_mac() && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
+        && empty($_SERVER['HTTP_X_FORWARDED_FOR']);
+}
+
+// A new password: kept, this session signed in with it (every other one signed out), and said in Activity.
+function new_pass(string $new, string $how): bool {
+    if (!set_pass($new)) return false;
+    session_begin();
+    $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen();
+    require_once __DIR__ . '/activity.php';
+    activity_add('changed', $how);
+    return true;
 }
 
 // Endpoints (run.php, queue.php) accept a signed-in session OR the password in
@@ -94,12 +116,21 @@ function require_sign_in(): void {
     if (isset($_POST['_pass'])) {
         $tried = true;
         if (pass_ok((string)$_POST['_pass'])) {
-            $_SESSION['rushes_in'] = true;
+            $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen();
             session_regenerate_id(true);           // a fresh id once signed in
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?')); exit;
         }
         $why = 'That is not the password.';
         sleep(1);                                   // slow a guessing loop down
+    }
+
+    // Forgot it, at the Mac itself: a new one, no old one asked
+    if (isset($_POST['_reset']) && at_this_mac()) {
+        $tried = true;
+        if (strlen(trim((string)$_POST['_reset'])) < 4) $why = 'Pick something at least four characters long.';
+        elseif (new_pass((string)$_POST['_reset'], 'Set a new password on this Mac (the old one was not asked); other devices sign in again with it')) {
+            header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?')); exit;
+        } else $why = 'Could not keep the new password: ' . pass_file() . ' is not writable.';
     }
 
     if (signed_in()) return;
@@ -150,6 +181,14 @@ function sign_in_page(string $why): void {
     <p style="margin:14px 0 0;font-size:12.5px;color:var(--muted)">
       Not set yet &mdash; it is <code><?= htmlspecialchars(default_pass()) ?></code>.
       Change it once you are in.</p>
+  <?php elseif (at_this_mac()): ?>
+    <details style="margin:16px 0 0;font-size:13px" <?= isset($_POST['_reset']) ? 'open' : '' ?>>
+      <summary style="cursor:pointer;color:var(--accent-text)">Forgot it? Set a new one</summary>
+      <p style="margin:10px 0">You are at the Mac Rushes runs on, so the old one is not needed.
+        Phones and other computers sign in again with the new one.</p>
+      <input type="password" name="_reset" placeholder="new password" autocomplete="new-password" minlength="4">
+      <button class="btn" type="submit" formnovalidate>Set it and unlock</button>
+    </details>
   <?php endif; ?>
 </form>
 <?php

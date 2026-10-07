@@ -16,11 +16,12 @@ $pw_said = '';
 $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialchars($t, ENT_QUOTES) . '">i</span>';
 if (isset($_POST['_newpass'])) {
     $new = (string)$_POST['_newpass'];
-    if (!pass_ok((string)($_POST['_oldpass'] ?? ''))) {
+    // At the Mac itself the current one is not asked (auth.php at_this_mac); from anywhere else it is
+    if (!at_this_mac() && !pass_ok((string)($_POST['_oldpass'] ?? ''))) {
         $pw_said = 'The current password is wrong.';
     } elseif (strlen(trim($new)) < 4) {
         $pw_said = 'Pick something at least four characters long.';
-    } elseif (set_pass($new)) {
+    } elseif (new_pass($new, 'Changed the password' . (at_this_mac() ? ' on this Mac' : '') . '; other devices sign in again with it')) {
         $pw_said = 'ok';
     } else {
         $pw_said = 'Could not write ' . pass_file() . ' — check it is writable.';
@@ -472,16 +473,20 @@ foreach (watchers() as $k => $w) {
           <form method="post" action="#tools" style="padding:14px;max-width:360px">
             <?php if ($pw_said === 'ok'): ?>
               <div class="banner ok" style="margin-bottom:12px">
-                <div class="txt">Changed. It applies to the next sign-in.</div></div>
+                <div class="txt">Changed. Phones and other computers sign in again with the new one.</div></div>
             <?php elseif ($pw_said): ?>
               <div class="banner bad" style="margin-bottom:12px">
                 <div class="txt"><?= htmlspecialchars($pw_said) ?></div></div>
             <?php endif; ?>
+            <?php if (!at_this_mac()): ?>
             <label class="note" for="op">Current</label>
             <input id="op" name="_oldpass" type="password" autocomplete="current-password"
                    style="width:100%;padding:8px 10px;margin:4px 0 12px;font:13.5px var(--font);
                           border:1px solid var(--line);border-radius:var(--radius-sm);
                           background:var(--bg);color:var(--fg)">
+            <?php else: ?>
+            <p class="note" style="margin:0 0 12px">You are at the Mac Rushes runs on, so the current one is not asked.</p>
+            <?php endif; ?>
             <label class="note" for="np">New</label>
             <input id="np" name="_newpass" type="password" autocomplete="new-password"
                    style="width:100%;padding:8px 10px;margin:4px 0 12px;font:13.5px var(--font);
@@ -575,7 +580,7 @@ document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
 $('sideMore').onclick = function () { show('activity'); };
 // The password banner's button: Jobs and tools, at the form, typing in Current
 if ($('pwGo')) $('pwGo').onclick = function () {
-  show('tools'); $('op').scrollIntoView({ block: 'center' }); $('op').focus();
+  show('tools'); const f = $('op') || $('np'); f.scrollIntoView({ block: 'center' }); f.focus();
 };
 // ── duplicates: Find, look, Remove, Recover ─────────────────────────────────
 // One press finds them (which files are the same, then which copy stays: the runner's
