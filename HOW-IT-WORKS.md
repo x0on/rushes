@@ -1026,6 +1026,11 @@ Then:
 3. You save a corrected copy (`… (relinked)`), and open or import it. Mac and
    Windows paths both work.
 
+Reorganize's list folds by top folder (`T7 / KITE FEST`): one line each, with one **Goes to**
+for all of it and how many folders, files and how much it holds; opened only when its folders need
+to go different ways (its line then says "different for each folder"). Beside it, the same Activity
+column as Copying, Duplicates and Cache, so each move shows as it happens.
+
 **In the code:** `setup.php` (the plan, its own forms inside Setup's), `structure.php` (Reorganize: the tidy-up), `db/tidy.php` (the proposal and
 asking; `here_files()` for folders already in the archive), `ingest.py`
 (`tidy()`: `map` lines for copies, `file` lines for folders already there), `db/relink.php` (Premiere paths), `db/moved.php` (search, pulls and
@@ -1326,7 +1331,15 @@ in Recently Removed. A page can start them only when signed in.
 
 ### Setup
 
-Each section saves with **Save settings**.
+Setup is a tree: each section is one line, closed, with how it stands (a green ✓ when it is done,
+amber when something waits on it). The first one still to do opens by itself, marked **Start
+here**, in this order: how media is organised, this archive, the archive's structure, the helper
+(on a server), the admin password. Opening one section closes the others, and Archive structure's
+four parts (what the top folders are and where they live, the list, folders not in the plan, how
+a shoot is named) open the same way inside it. Each section saves with its own **Save**, and folds
+back to its line; the next one still to do then opens. A link to a section (`/setup.php#password`,
+`#plan`, `#tools`) opens it. **Tools** at the end: the admin password, Take everything with you,
+and Jobs and tools.
 
 - **01 How media is organised:** bring everything to one place, or leave media
   on its own drives: then 03 lists **the drives** Rushes looks after where they

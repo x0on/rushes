@@ -50,7 +50,7 @@ check((bool)array_filter($act, fn($r) => $r['kind'] === 'changed' && str_starts_
 check(count($s['ingests']) === 2 && $s['ingests'][0]['state'] === 'done' && $s['ingests'][0]['failed'] === 0 && $s['ingests'][1]['failed'] === 1,
       'a landed card says how many files could not be copied (Ingest says safe to format only at none)');
 
-ini_set('session.save_path', "$root/app"); session_start(); $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen();
+if (session_status() !== PHP_SESSION_ACTIVE) { ini_set('session.save_path', "$root/app"); session_start(); } $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen();
 db()->exec("INSERT INTO projects (path, name, host, watcher, saved, seen, files, outside, missing, shoot, state)
             VALUES ('Parks/Kite.prproj', 'Kite', 'edit-1', 'ab12cd34ef567890', " . ($now - 86400 * 12) . ", $now, 12, 2, 'a.wav;b.mov', '', 'active')");
 db()->exec("INSERT INTO projects (path, name, saved, archived, missing, state, aside_at)
@@ -70,9 +70,15 @@ check(!str_contains($html, 'Back to search') && substr_count($html, 'href="/setu
 ob_start(); include "$root/app/setup.php"; $html = ob_get_clean();
 check(str_contains($html, 'id="plan"') && str_contains($html, '1 department, in Library') && str_contains($html, 'form="pP" type="text" name="d_name[0]" value="Parks"'),
       'Setup has the archive structure: the word, the shelf, the list, each control in its own form');
+check(substr_count($html, 'Start here') === 1 && str_contains($html, '<details class="grp sec" id="shape" open') && substr_count($html, '<details class="grp sec" id="') - substr_count($html, '" open>') >= 7,
+      'Setup is a tree of closed lines: only the first thing still to do opens, marked Start here (here: how media is organised)');
+check(str_contains($html, 'id="plan" data-done') && str_contains($html, 'id="plan-list"') && str_contains($html, 'id="plan-name"') && !str_contains($html, '.no-shelf-chosen'),
+      'the structure folds into its parts, and never shows the placeholder for a shelf not chosen');
+check(substr_count($html, '<div class="btns sec-save">') >= 3 && !str_contains($html, 'Save settings</button>'), 'each section saves itself: no Save at the very bottom');
 check(str_contains($html, 'id="password"') && str_contains($html, 'id="exports"') && str_contains($html, 'data-t="manifest"'),
       'Setup has the password, the exports and Jobs and tools');
 ob_start(); include "$root/app/structure.php"; $html = ob_get_clean();
 check(str_contains($html, 'id="tidy"') && !str_contains($html, 'name="list"') && !str_contains($html, 'id="rlGo"'), 'Reorganize is only the tidy-up');
+check(str_contains($html, 'class="side"') && str_contains($html, "fetch('/db/state.php") && str_contains($html, 'tops.map('), 'Reorganize has the Activity column, and its list folds by top folder');
 $done = true;
 echo "Page tests complete.\n";

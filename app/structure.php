@@ -12,7 +12,8 @@ require_sign_in();
 
 $ONE = shelf_word(); $one = strtolower($ONE);
 $e = fn($x) => htmlspecialchars((string)$x);
-$shelf = basename(shelf_dir());
+// the shelf as people read it: never the placeholder for "not chosen yet"
+$shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (settings()['archive']['label'] ?? 'the archive') : shelf_name());
 ?><!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -56,6 +57,9 @@ $shelf = basename(shelf_dir());
   .dep-h.tg { border-top: 0; padding: 0 }
   .tg b { font-size: 13.5px; font-weight: 600; word-break: break-word }
   .tg small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 3px; word-break: break-word }
+  .tg.gh { background: var(--bg); border-radius: 8px; padding: 10px 10px; margin-top: 6px; border-top: 0 }
+  .gk { padding-left: 26px; border-left: 2px solid var(--line-soft); margin-left: 9px }
+  .tw { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; width: 20px; padding: 0; margin-right: 4px }
   .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--warn); margin-right: 6px; white-space: nowrap }
   .tg small.flag { color: var(--warn, var(--accent-text)) }
   .tg select { width: 100% }
@@ -72,7 +76,7 @@ $shelf = basename(shelf_dir());
 </style>
 
 <div class="app">
-<div class="with-rail">
+<div class="with-rail with-side">
 <?php $RAIL = 'structure'; require __DIR__ . '/db/rail.php'; ?>
 
   <main class="work">
@@ -112,7 +116,7 @@ $shelf = basename(shelf_dir());
 
     <script>
     (function () {
-      var SHELF = <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>, data = null;
+      var SHELF = <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>, data = null, tops = [];
       var $ = function (id) { return document.getElementById(id); };
       var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
       var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
@@ -140,6 +144,14 @@ $shelf = basename(shelf_dir());
           $('td' + i).className = 'to' + (v ? '' : ' stay');
           if (v) { n += r.n; b += r.bytes; rows++; }
         });
+        tops.forEach(function (g, gi) {
+          if (g.rows.length === 1 || !$('tg' + gi)) return;
+          var vs = g.rows.map(function (i) { return $('tp' + i).value; }), same = vs.every(function (v) { return v === vs[0]; });
+          $('tg' + gi).value = same ? vs[0] : '*';
+          $('tgd' + gi).innerHTML = !same ? 'different for each folder: open it to see'
+            : vs[0] ? '&rarr; ' + esc(SHELF + ' / ' + (data.depts.filter(function (x) { return x.name === vs[0]; })[0] || {}).folder) + ' / …' : 'they stay where they are';
+          $('tgd' + gi).className = 'to' + (same && !vs[0] ? ' stay' : '');
+        });
         $('tGo').hidden = !data.groups.length;
         $('tAsk').disabled = !n;
         $('tAsk').textContent = n ? 'Move ' + num(n) + ' files (' + size(b) + ')' : 'Nothing picked to move';
@@ -163,19 +175,51 @@ $shelf = basename(shelf_dir());
           var opts = d.depts.map(function (x) {
             return '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>'; }).join('');
           var none = d.groups.filter(function (r) { return !r.dept; }).length;
+          var row = function (i) {
+            var r = d.groups[i];
+            return '<div class="tg' + (r.busy ? ' busy' : '') + '"><div><b>' + esc(shown(r)) + '</b>'
+              + '<small>' + (r.dept ? '' : '<span class="tag">no ' + ONE + '</span>') + (r.here ? 'already in the archive · ' : 'copied in · ') + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
+              + (r.eg ? ' · <span title="' + esc(r.eg) + '">e.g. …' + esc(mid(r.eg)) + '</span>' : '') + '</small>'
+              + (r.busy ? '<small class="flag">Still being copied &mdash; those files wait for the next tidy-up.</small>' : '')
+              + '</div><div><select id="tp' + i + '" aria-label="Goes to"><option value="">— leave it '
+              + (r.here ? 'where it is' : 'in ARCHIVE') + ' —</option>' + opts + '</select>'
+              + '<small id="td' + i + '" class="to"></small></div></div>';
+          };
+          tops = []; var byTop = {};
+          d.groups.forEach(function (r, i) {
+            var k = shown(r).split(' / ').slice(0, 2).join(' / ');
+            if (!(k in byTop)) { byTop[k] = tops.length; tops.push({name: k, rows: []}); }
+            tops[byTop[k]].rows.push(i);
+          });
           $('tList').innerHTML = (none ? '<p class="note" style="margin:0 0 10px"><span class="tag">no ' + ONE + '</span> ' + num(none) + ' of these folders have no ' + ONE
               + ' in their path: pick one for each, or leave it where it is.</p>' : '')
             + '<div class="dep-h tg"><span>Came from</span><span>Goes to</span></div>'
-            + d.groups.map(function (r, i) {
-              return '<div class="tg' + (r.busy ? ' busy' : '') + '"><div><b>' + esc(shown(r)) + '</b>'
-                + '<small>' + (r.dept ? '' : '<span class="tag">no ' + ONE + '</span>') + (r.here ? 'already in the archive · ' : 'copied in · ') + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
-                + (r.eg ? ' · <span title="' + esc(r.eg) + '">e.g. …' + esc(mid(r.eg)) + '</span>' : '') + '</small>'
-                + (r.busy ? '<small class="flag">Still being copied &mdash; those files wait for the next tidy-up.</small>' : '')
-                + '</div><div><select id="tp' + i + '" aria-label="Goes to"><option value="">— leave it '
-                + (r.here ? 'where it is' : 'in ARCHIVE') + ' —</option>' + opts + '</select>'
-                + '<small id="td' + i + '" class="to"></small></div></div>';
+            // One line per top folder (T7 / KITE FEST), folded, with one "Goes to" for all of
+            // it; opened only when its folders need to go different ways.
+            + tops.map(function (g, gi) {
+              if (g.rows.length === 1) return row(g.rows[0]);
+              var n = 0, b = 0, nd = 0;
+              g.rows.forEach(function (i) { n += d.groups[i].n; b += d.groups[i].bytes; nd += d.groups[i].dept ? 0 : 1; });
+              return '<div class="tg gh"><div><button type="button" class="tw" aria-expanded="false" data-g="' + gi + '">▸</button>'
+                + '<b>' + esc(g.name) + '</b><small>' + (nd ? '<span class="tag">' + (nd === g.rows.length ? 'no ' + ONE : nd + ' with no ' + ONE) + '</span>' : '')
+                + g.rows.length + ' folders · ' + num(n) + ' files · ' + size(b) + '</small></div>'
+                + '<div><select id="tg' + gi + '" aria-label="Goes to, all of it"><option value="">— leave them where they are —</option>' + opts
+                + '<option value="*" disabled>— different for each (open it) —</option></select><small id="tgd' + gi + '" class="to"></small></div></div>'
+                + '<div class="gk" id="gk' + gi + '" hidden>' + g.rows.map(row).join('') + '</div>';
             }).join('');
           d.groups.forEach(function (r, i) { $('tp' + i).value = r.dept || ''; $('tp' + i).onchange = sum; });
+          tops.forEach(function (g, gi) {
+            if (g.rows.length === 1) return;
+            $('tg' + gi).onchange = function () {          // the whole top folder at once
+              var v = this.value; g.rows.forEach(function (i) { $('tp' + i).value = v; }); sum();
+            };
+          });
+          $('tList').querySelectorAll('.tw').forEach(function (t) {
+            t.onclick = function () {
+              var open = t.getAttribute('aria-expanded') !== 'true';
+              t.setAttribute('aria-expanded', open); t.textContent = open ? '▾' : '▸'; $('gk' + t.dataset.g).hidden = !open;
+            };
+          });
         }
         $('tRuns').innerHTML = d.runs.length ? '<p style="margin:18px 0 6px;color:var(--fg);font-size:13px"><b>Done so far</b></p>'
           + d.runs.map(function (r) {
@@ -235,5 +279,6 @@ $shelf = basename(shelf_dir());
     </script>
   </div>
   </main>
+<?php $SIDE_SELF = true; require __DIR__ . '/db/side.php'; ?>
 </div>
 </div>

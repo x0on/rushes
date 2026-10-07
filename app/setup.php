@@ -244,7 +244,23 @@ $opts = function (string $cur) use ($folders, $e) {
     foreach ($folders as $f) $o .= '<option value="' . $e($f) . '"' . ($f === $cur ? ' selected' : '') . '>' . $e($f) . '</option>';
     return $o;
 };
-$planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
+$aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
+            $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST);
+            $aDrive = ''; foreach ($local as $v) if ($v['path'] === $aLoc) $aDrive = $v['name'];
+            $aNum = !on_mac() && filter_var(trim($aHost, '[]'), FILTER_VALIDATE_IP);     // a number: the warning shows, so open
+            $aDone = $aLoc !== '' && (on_mac() || $aUrl !== '') && !$aNum;
+// Setup as a tree: every section is one line, closed. The first one still to do opens by itself,
+// marked Start here; a finished setup is a short column of ✓ lines. One open at a time (the script below).
+$hvNeeds = !on_mac() && (!$hv['fresh'] || ($hmode === 'external' && !helper_paired()));
+$start = !isset($s['organise']['shape']) ? 'shape' : (!$aDone ? 'archive' : (!shelf_chosen() || !$rows ? 'plan'
+       : ($hvNeeds ? 'helper' : (pass_is_default() ? 'password' : ''))));
+$is = fn($id) => $open || $start === $id;
+// done: its line starts with a green ✓ (the optional ones once they have something in them)
+$done = fn(bool $ok) => $ok ? ' data-done' : '';
+$here_ = fn($id) => $start === $id ? ' <span class="start">Start here</span>' : '';
+$planOpen = $is('plan') || $pSaid !== '' || $pBad;
+// The shelf as people should read it: never the placeholder for "not chosen yet"
+$shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top() ? ($s['archive']['label'] ?? 'the archive') : shelf_name());
 ?><!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -316,6 +332,27 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
   details.add-w > summary { list-style: none; display: inline-flex; margin-top: 14px }
   details.add-w > summary::-webkit-details-marker { display: none }
   details.add-w[open] > summary { display: none }
+  /* Setup as a tree: one line each, one open at a time */
+  details.sec > summary h2 .start { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 650; padding: 2px 9px;
+    border-radius: 999px; background: var(--accent); color: var(--accent-fg); vertical-align: 1px }
+  details.sec > summary::after { content: "▸"; color: var(--muted); margin-left: auto; transition: transform .15s }
+  details.sec[open] > summary::after { transform: rotate(90deg) }
+  details.sec > summary .chg { display: none }
+  .amber { color: var(--warn) }
+  details.sec[data-done] > summary .val::before { content: "✓ "; color: var(--ok); font-weight: 650 }
+  .sec-save { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft) }
+  details.sub { border-top: 1px solid var(--line-soft); padding: 12px 0 }
+  details.sub > summary { list-style: none; cursor: pointer; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap }
+  details.sub > summary::-webkit-details-marker { display: none }
+  details.sub > summary::before { content: "▸"; color: var(--muted); width: 12px; transition: transform .15s; display: inline-block }
+  details.sub[open] > summary::before { transform: rotate(90deg) }
+  details.sub > summary b { font-size: 13px }
+  details.sub > summary .val { color: var(--muted); font-size: 12.5px }
+  details.sub[open] > summary { margin-bottom: 12px }
+  details.sub[open] > summary .val { display: none }
+  details.sub { padding-left: 22px } details.sub > summary { margin-left: -22px }
+  label.f > small { display: block; color: var(--muted); font-size: 12px; margin-top: 5px }
+  .tools-h { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 650; margin: 26px 0 10px }
   /* the structure section */
   h3.sub-h { font-size: 13px; font-weight: 650; margin: 22px 0 6px; padding-top: 16px; border-top: 1px solid var(--line-soft) }
   .kinds { display: flex; gap: 8px; flex-wrap: wrap }
@@ -346,7 +383,7 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
 <?php $RAIL = 'setup'; require __DIR__ . '/db/rail.php'; ?>
 
   <main class="work">
-    <form class="pad form" method="post">
+    <form class="pad form" method="post" style="padding-bottom:0">
       <div class="head"><h1>Setup</h1>
         <span class="sub">Where things are on this installation.</span></div>
 
@@ -357,8 +394,8 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
       <?php endif; ?>
 
       <!-- ══ 01 the decision everything else follows ══ -->
-      <details class="grp sec"<?= $open || !isset($s['organise']['shape']) ? ' open' : '' ?>>
-        <summary><h2><span><?= $num() ?> /</span> How media is organised<?= $tip('The one decision that changes what every other page does.') ?></h2>
+      <details class="grp sec" id="shape"<?= $is('shape') ? ' open' : '' ?><?= $done(isset($s['organise']['shape'])) ?>>
+        <summary><h2><span><?= $num() ?> /</span> How media is organised<?= $tip('The one decision that changes what every other page does.') ?><?= $here_('shape') ?></h2>
           <span class="val"><?= $shape === 'in_place' ? 'Left on its own drives' : 'Brought to one place' ?></span>
           <span class="chg">Change</span></summary>
         <div class="pick">
@@ -369,19 +406,16 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
             <b>Leave media on its own drives<?= $tip('The drives in 03 keep their files where they are. Rushes lists each one, searches across all of them at once (an unplugged drive too, and says which to plug in), and lists a drive again whenever it comes back.') ?></b>
             <small>Rushes lists them where they are.</small></label>
         </div>
+        <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
       </details>
 
       <!-- ══ 02 the archive ══ -->
       <?php // what the archive is follows 01 (the page's script swaps it when 01 changes)
             $archTip = ['The drive your footage is copied to. Rushes keeps its records here too.',
                         'Where Rushes keeps its records. Your footage stays on the drives in 03.']; ?>
-      <?php $aUrl = rtrim((string)($s['archive']['url'] ?? ''), '/'); $here = here_url(); $byName = name_url();
-            $aHost = (string)parse_url($aUrl ?: $here, PHP_URL_HOST);
-            $aDrive = ''; foreach ($local as $v) if ($v['path'] === $aLoc) $aDrive = $v['name'];
-            $aNum = !on_mac() && filter_var(trim($aHost, '[]'), FILTER_VALIDATE_IP);     // a number: the warning shows, so open
-            $aDone = $aLoc !== '' && (on_mac() || $aUrl !== '') && !$aNum; ?>
-      <details class="grp sec"<?= $open || !$aDone ? ' open' : '' ?>>
-        <summary><h2><span><?= $num() ?> /</span> This archive<span id="archTip"><?= $tip($shape === 'in_place' ? $archTip[1] : $archTip[0]) ?></span></h2>
+
+      <details class="grp sec" id="archive"<?= $is('archive') ? ' open' : '' ?><?= $done($aDone) ?>>
+        <summary><h2><span><?= $num() ?> /</span> This archive<span id="archTip"><?= $tip($shape === 'in_place' ? $archTip[1] : $archTip[0]) ?></span><?= $here_('archive') ?></h2>
           <span class="val"><?= $e($s['name'] ?? 'Rushes') ?> &middot; <?= $e($aDrive ?: basename($aLoc)) ?> &middot; <?= $e($aUrl ?: $here) ?>
             <button type="button" class="ghost" data-copy="<?= $e($aUrl ?: $here) ?>">Copy</button></span>
           <span class="chg">Change</span></summary>
@@ -406,7 +440,7 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
         <label class="f"><span>Address people open Rushes at</span>
           <input type="text" name="a_url" id="aUrl" value="<?= $e($aUrl ?: $here) ?>"></label>
         <?php if ($aUrl === '' && $here !== ''): ?>
-          <div class="seen">Filled in from the address you opened this page at — press <b>Save settings</b> to keep it.</div>
+          <div class="seen">Filled in from the address you opened this page at — press <b>Save</b> to keep it.</div>
         <?php endif; ?>
         <?php if (filter_var(trim($aHost, '[]'), FILTER_VALIDATE_IP)): ?>
           <!-- A number can change under everyone's feet; a name usually does not. -->
@@ -433,7 +467,7 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
                   el.querySelector('b').textContent = name;
                   el.querySelector('button').onclick = function () {
                     document.getElementById('aUrl').value = name;
-                    this.outerHTML = '<b>Filled in ✓ — press Save settings to keep it.</b>';
+                    this.outerHTML = '<b>Filled in ✓ — press Save to keep it.</b>';
                   };
                 })
                 .catch(function () {
@@ -444,14 +478,15 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
           </script>
         <?php endif; ?>
         <?php endif; /* not on a Mac */ ?>
+        <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
       </details>
 
       <!-- ══ the archive's structure: what the top folders are, and how a shoot is filed ══
            Its controls belong to their own forms (form="pK", "pL", "pP", declared after this
            page's form): saving the plan never saves, or needs, the rest of Setup. -->
-      <details class="grp sec" id="plan"<?= $planOpen ? ' open' : '' ?>>
-        <summary><h2><span><?= $num() ?> /</span> Archive structure<?= $tip('One shape for the archive: a shelf per ' . $one . ', and inside it every shoot filed by year and date. Ingest files every new card straight into it. Saving it moves nothing; Reorganize moves older folders into it.') ?></h2>
-          <span class="val"><?= !shelf_chosen() ? '<b style="color:var(--warn)">Not set yet: Ingest waits for this</b>'
+      <details class="grp sec" id="plan"<?= $planOpen ? ' open' : '' ?><?= $done(shelf_chosen() && (bool)$rows) ?>>
+        <summary><h2><span><?= $num() ?> /</span> Archive structure<?= $tip('One shape for the archive: a shelf per ' . $one . ', and inside it every shoot filed by year and date. Ingest files every new card straight into it. Saving it moves nothing; Reorganize moves older folders into it.') ?><?= $here_('plan') ?></h2>
+          <span class="val"><?= !shelf_chosen() ? '<b class="amber">Not set yet: Ingest waits for this</b>'
               : $e(count($rows) . ' ' . (count($rows) === 1 ? $one : $many) . ', in ' . (shelf_is_top() ? ($s['archive']['label'] ?? 'the archive') . ' itself' : shelf_name())) ?></span>
           <span class="chg">Change</span></summary>
 
@@ -466,7 +501,8 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
             Check each link below, fix any that are wrong, then press Save.</div></div>
         <?php endif; ?>
 
-        <h3 class="sub-h">What your top folders are</h3>
+        <details class="sub" id="plan-kind"<?= !shelf_chosen() || $pSaid === 'kind' || $pBad ? ' open' : '' ?>>
+        <summary><b>What your top folders are, and where they live</b><span class="val"><?= $e(shelf_chosen() ? $MANY . ' · in ' . $shelfShown . ' · ' . (shelf_open() ? 'anyone adds one at Ingest' : 'only the admin adds one') : 'Which folder they live in is not chosen yet') ?></span></summary>
         <p class="note" style="margin:0 0 10px">The same shape whatever you call them &mdash; only the word changes, everywhere Rushes says it.</p>
         <div class="kinds">
           <?php foreach ($PRESETS as $m => $o): ?>
@@ -501,7 +537,9 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
         </div>
         <div class="btns" style="margin-top:14px"><button form="pK" class="btn quiet" type="submit">Save these three</button></div>
 
-        <h3 class="sub-h">Your <?= $e($many) ?></h3>
+        </details>
+        <details class="sub" id="plan-list"<?= (shelf_chosen() && !$rows) || $pSaid === 'ok' || (str_starts_with((string)$pSaid, 'check')) || $pBad ? ' open' : '' ?>>
+        <summary><b>Your <?= $e($many) ?></b><span class="val"><?= $rows ? $e(count($rows) . ' ' . (count($rows) === 1 ? $one : $many)) : 'None yet' ?></span></summary>
         <?php if (!$rows): ?>
           <p class="note" style="margin:0 0 10px">Every shoot goes on one of these shelves, and Ingest offers exactly this list &mdash;
              nothing else, and no &ldquo;Others&rdquo;. Paste them one per line. Rushes suggests
@@ -513,7 +551,7 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
         <?php else: ?>
           <p class="note" style="margin:0 0 10px">Every shoot goes on one of these shelves, and Ingest offers exactly this list.
              A linked folder is used as it is &mdash; nothing is renamed, so no Premiere project breaks.</p>
-          <div class="dep-h"><span><?= $e($ONE) ?></span><span>Its folder in <?= $e($shelf) ?></span><span></span></div>
+          <div class="dep-h"><span><?= $e($ONE) ?></span><span>Its folder in <?= $e($shelfShown) ?></span><span></span></div>
           <?php foreach ($rows as $i => $r): ?>
             <div class="dep<?= ($r['folder'] ?? '') === '' ? ' new' : '' ?>">
               <input form="pP" type="text" name="d_name[<?= $i ?>]" value="<?= $e($r['name']) ?>" aria-label="<?= $e($ONE) ?>">
@@ -531,8 +569,12 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
             <span class="note">Writes the plan. Moves nothing.</span></div>
         <?php endif; ?>
 
-        <h3 class="sub-h">Folders not in the plan</h3>
-        <?php if ($loose): ?>
+        </details>
+        <details class="sub" id="plan-loose">
+        <summary><b>Folders not in the plan</b><span class="val"><?= !shelf_chosen() ? 'Choose the folder first' : ($loose ? $e(count($loose) . (count($loose) === 1 ? ' folder' : ' folders')) : 'None') ?></span></summary>
+        <?php if (!shelf_chosen()): ?>
+          <p class="note" style="margin:0">Once you choose which folder they live in, the folders already in it that no <?= $e($one) ?> uses show here.</p>
+        <?php elseif ($loose): ?>
           <p class="note" style="margin:0 0 10px">Folders already on the shelf that no <?= $e($one) ?> in the plan uses. They stay exactly where
              they are and stay searchable; Ingest never offers them. <a href="/structure.php">Reorganize</a> is where each one gets a home.</p>
           <div class="loose"><?php foreach ($loose as $f): ?><span><?= $e($f) ?></span><?php endforeach; ?></div>
@@ -540,18 +582,23 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
           <p class="note" style="margin:0">None &mdash; every folder on the shelf belongs to a <?= $e($one) ?>.</p>
         <?php endif; ?>
 
-        <h3 class="sub-h">How a shoot's folder is named</h3>
+        </details>
+        <details class="sub" id="plan-name">
+        <summary><b>How a shoot's folder is named</b><span class="val"><?= $e($shelfShown) ?> / <?= $e($one) ?> / year / date what it was</span></summary>
         <p class="note" style="margin:0 0 10px">Every shoot that comes through Ingest lands like this. The date comes from the camera,
            not from whoever brings the card in.</p>
-        <div class="path"><?= $e($shelf) ?> / <b><?= $e($one) ?></b> / <b>year</b> / <b>date</b> <b>what it was</b>
-          <div class="note" style="margin-top:6px;font-family:var(--font)">e.g. <?= $e($shelf) ?> / PARKS / 2026 / 20260926 Spring Festival</div></div>
+        <div class="path"><?= $e($shelfShown) ?> / <b><?= $e($one) ?></b> / <b>year</b> / <b>date</b> <b>what it was</b>
+          <div class="note" style="margin-top:6px;font-family:var(--font)">e.g. <?= $e(shelf_chosen() ? $shelfShown : 'LIBRARY') ?> / PARKS / 2026 / 20260926 Spring Festival</div></div>
+        </details>
       </details>
 
       <!-- ══ 03 sources ══ -->
-      <div class="grp">
-        <h2 style="margin-bottom:14px"><span><?= $num() ?> /</span> <?= $shape === 'in_place' ? 'The drives' : 'Where footage comes from' ?><?= $tip($shape === 'in_place'
+      <?php $ns = count($s['sources'] ?? []); ?><details class="grp sec" id="sources"<?= $open ? ' open' : '' ?><?= $done($ns > 0) ?>>
+        <summary><h2><span><?= $num() ?> /</span> <?= $shape === 'in_place' ? 'The drives' : 'Where footage comes from' ?><?= $tip($shape === 'in_place'
             ? 'The drives Rushes looks after where they are. Each is known by its own ID, so it is found again under another name; while it is unplugged its files stay in Search. Cards do not need adding: Ingest finds them when they are plugged in.'
             : 'Drives and shares Rushes brings media in from. Cards do not need adding: Ingest finds them when they are plugged in.') ?></h2>
+          <span class="val"><?= $ns ? $ns . ($ns === 1 ? ' drive or folder' : ' drives and folders') : 'None yet · cards need no adding: Ingest finds them' ?></span>
+          <span class="chg">Change</span></summary>
 
         <?php foreach (($s['sources'] ?? []) as $i => $r): ?>
           <div class="src">
@@ -573,13 +620,14 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
         </div>
         <input type="hidden" name="add_src" id="addSrc">
         <input type="hidden" name="add_label" id="addLabel">
-      </div>
+        <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
+      </details>
 
       <!-- ══ 04 helper ══ -->
       <!-- On a Mac the helper is the Rushes app itself: nothing to set, so no section -->
       <?php if (on_mac()): ?><input type="hidden" name="h_mode" value="built_in"><?php endif; ?>
-      <details class="grp sec"<?= on_mac() ? ' hidden' : '' ?><?= $open || !$hv['fresh'] || ($hmode === 'external' && !helper_paired()) ? ' open' : '' ?>>
-        <summary><h2><span><?= on_mac() ? '' : $num() . ' /' ?></span> Helper<?= $tip('The part of Rushes that copies. It watches for cards and drives, and does whatever Ingest and Transfers ask for.') ?></h2>
+      <details class="grp sec" id="helper"<?= on_mac() ? ' hidden' : '' ?><?= $is('helper') ? ' open' : '' ?><?= $done(!$hvNeeds) ?>>
+        <summary><h2><span><?= on_mac() ? '' : $num() . ' /' ?></span> Helper<?= $tip('The part of Rushes that copies. It watches for cards and drives, and does whatever Ingest and Copying ask for.') ?><?= $here_('helper') ?></h2>
           <span class="val"><?= $hmode === 'external' ? 'On the ' . $e($hname) : 'Built in' ?> &middot; running</span>
           <span class="chg">Change</span></summary>
         <div class="pick"<?= on_mac() ? ' hidden' : '' ?>>
@@ -819,14 +867,18 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
             r.addEventListener('change', function () {
               document.querySelector('#archTip .infotip').dataset.tip = ARCH[r.value === 'in_place' ? 1 : 0]; }); });
         </script>
+        <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
       </details>
 
       <!-- ══ editors' computers ══ -->
-      <div class="grp">
+      <?php $ws = watchers(); ?>
+      <details class="grp sec" id="editors"<?= $open ? ' open' : '' ?><?= $done((bool)$ws) ?>>
         <?php $ws = watchers(); $wurl = rtrim((string)(settings()['archive']['url'] ?? ''), '/');
               // On a Mac, editors' computers reach it by this Mac's name, once other devices are let in
               if (on_mac() && name_url() !== '') $wurl = name_url(); ?>
-        <h2 style="margin-bottom:14px"><span><?= $num() ?> /</span> Editors' computers (<span id="wN" style="margin:0"><?= count($ws) ?></span>)<?= $tip('Rushes Watcher keeps each editor\'s Premiere projects in the archive: the files a project uses and what the editor exports. Install it once on each editor\'s computer. The editor keeps working as usual.') ?></h2>
+        <summary><h2><span><?= $num() ?> /</span> Editors' computers (<span id="wN" style="margin:0"><?= count($ws) ?></span>)<?= $tip('Rushes Watcher keeps each editor\'s Premiere projects in the archive: the files a project uses and what the editor exports. Install it once on each editor\'s computer. The editor keeps working as usual.') ?></h2>
+          <span class="val"><?= $ws ? count($ws) . (count($ws) === 1 ? ' computer paired' : ' computers paired') : 'None yet · optional: for editors who use Premiere' ?></span>
+          <span class="chg">Change</span></summary>
         <div id="wList">
         <?php if (!$ws): ?><p class="note" style="margin:0">None yet. Each computer you add appears here.</p><?php endif; ?>
         <?php
@@ -927,24 +979,40 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
           });
         })();
         </script>
-      </div>
+        <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
+      </details>
 
       <input type="hidden" name="_save" value="1">
-      <button class="btn" type="submit">Save settings</button><?= $tip('Rules about media (what counts as cache, which files are never swept, when a disk is too full) are the same everywhere and live in rules.json, not here.') ?>
     </form>
     <!-- the structure section's own forms: its controls name them (form="…") -->
     <form id="pK" method="post" action="/setup.php#plan" hidden><input type="hidden" name="_kind" value="1"></form>
     <form id="pL" method="post" action="/setup.php#plan" hidden><input type="hidden" name="_paste" value="1"></form>
     <form id="pP" method="post" action="/setup.php#plan" hidden><input type="hidden" name="_plan" value="1"></form>
     <script>
+      // One section open at a time, and one part of a section: opening one folds the others back to their line.
+      document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('details.sec, details.sub').forEach(function (d) {
+        d.addEventListener('toggle', function () {
+          if (!d.open) return;
+          var kind = d.classList.contains('sec') ? 'details.sec' : 'details.sub', home = d.parentElement.closest('details');
+          document.querySelectorAll(kind).forEach(function (o) {
+            if (o !== d && o.open && o.parentElement.closest('details') === home) o.open = false;
+          });
+        });
+      });
+      // A link to a section (Setup#password, #plan, #tools) opens it
+      var t = location.hash && document.getElementById(location.hash.slice(1));
+      if (t && t.tagName === 'DETAILS') { t.open = true; setTimeout(function () { t.scrollIntoView({block: 'start'}); }, 50); } });
       document.querySelectorAll('[name=kind]').forEach(function (r) {
         r.onchange = function () { document.getElementById('kWords').hidden = !document.getElementById('kCustom').checked; }; });
     </script>
 
     <div class="pad form" style="padding-top:0">
+      <h3 class="tools-h">Tools</h3>
       <!-- ══ the admin password ══ -->
-      <div class="grp" id="password">
-        <h2 style="margin-bottom:12px">Admin password<?= $tip('One password for this archive, no accounts. It guards Manage and anything that moves files. Search and Ingest stay open to anyone who can reach this address.') ?></h2>
+      <details class="grp sec" id="password"<?= $is('password') || $pw_said ? ' open' : '' ?><?= $done(!pass_is_default()) ?>>
+        <summary><h2>Admin password<?= $tip('One password for this archive, no accounts. It guards Manage and anything that moves files. Search and Ingest stay open to anyone who can reach this address.') ?><?= $here_('password') ?></h2>
+          <span class="val"><?= pass_is_default() ? '<b class="amber">Still the first one: change it before other devices come in</b>' : 'Your own' ?></span>
+          <span class="chg">Change</span></summary>
         <form method="post" action="/setup.php#password" class="narrow">
           <?php if ($pw_said === 'ok'): ?>
             <div class="banner ok" style="margin-bottom:12px"><div class="txt">Changed. Phones and other computers sign in again with the new one.</div></div>
@@ -959,11 +1027,13 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
           <label class="f"><span>New</span><input id="np" name="_newpass" type="password" autocomplete="new-password"></label>
           <button class="btn" type="submit">Change it</button>
         </form>
-      </div>
+      </details>
 
       <!-- ══ no lock-in: everything Rushes knows, in formats any other program reads ══ -->
-      <div class="grp" id="exports-sec">
-        <h2 style="margin-bottom:8px">Take everything with you</h2>
+      <details class="grp sec" id="exports-sec">
+        <summary><h2>Take everything with you</h2>
+          <span class="val">Everything Rushes knows, as files any program opens</span>
+          <span class="chg">Open</span></summary>
         <p class="note" style="margin:0 0 10px">What Rushes knows, in open formats, to keep or to move to
           another program. Downloaded to this computer; nothing on the archive changes.</p>
         <div class="btns" id="exports">
@@ -976,7 +1046,7 @@ $planOpen = $open || !shelf_chosen() || !$rows || $pSaid !== '' || $pBad;
           the descriptions (<code>_rushes/analysis</code>, JSON), the record of every copy and move
           (<code>_rushes/origin</code>, text), and the copy proofs (the <code>ascmhl</code> folder in each
           copied folder, ASC MHL).</p>
-      </div>
+      </details>
 
       <!-- ══ jobs and tools: run by hand, for when something looks wrong ══ -->
       <details class="grp sec" id="tools">

@@ -20,16 +20,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
 <title>Manage &middot; Rushes</title>
 <?php require __DIR__ . '/../head.php'; ?>
 <style>
-  .with-side { grid-template-columns: var(--rail-w) minmax(0,1fr) 296px }
-  .side { background: var(--surface); border-left: 1px solid var(--line);
-          display: flex; flex-direction: column; min-height: 0 }
-  .side-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px;
-            border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 650;
-            letter-spacing: .09em; text-transform: uppercase; color: var(--faint) }
-  .side-h .ghost { margin-left: auto; text-transform: none; letter-spacing: 0 }
-  .side-body { flex: 1; overflow-y: auto; min-height: 0 }
-  .side-f { border-top: 1px solid var(--line); padding: 10px 14px; font-size: 11.5px;
-            color: var(--muted); flex: none }
   .transfer-summary { margin: 16px 0; padding: 20px; border: 1px solid var(--line);
     border-radius: var(--radius); background: var(--surface) }
   .transfer-summary .job-top { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap }
@@ -42,7 +32,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .transfer-summary progress::-moz-progress-bar { background:var(--accent); border-radius:4px }
   .transfer-summary .job-percent small { font-size:14px; font-weight:500; color:var(--muted) }
   .transfer-summary p { margin:5px 0; line-height:1.5 }
-  .side .ev { padding: 9px 14px }
   .big-head { padding: 16px 18px }
   .bh { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap }
   .bh .t { flex: 1 1 280px; min-width: 0 }
@@ -128,10 +117,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   #anTools .airow { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line) }
   #anTools .ok { color: var(--ok) } #anTools > div { margin-top: 4px } #anTools .spin { margin-right: 6px }
   .warnline { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 8px; font-size: 13px }
-  .with-side.no-side { grid-template-columns: var(--rail-w) minmax(0,1fr) } .no-side > .side { display: none }
-  @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
-                               .side { display: none } }
-  @media (max-width: 900px)  { .with-side { grid-template-columns: 1fr } }
   .spin { display:inline-block; width:10px; height:10px; border:2px solid var(--line); border-top-color:var(--accent);
           border-radius:50%; animation:spin .9s linear infinite; vertical-align:-1px }
   @keyframes spin { to { transform: rotate(360deg) } }
@@ -517,14 +502,7 @@ foreach (watchers() as $k => $w) {
     </div>
   </main>
 
-  <!-- The log lives beside the work, not behind a tab. Half the point of this
-       page is being able to see that something is still moving. -->
-  <aside class="side" aria-label="Recent activity">
-    <div class="side-h">Activity
-      <button class="ghost" id="sideMore" type="button">all</button></div>
-    <div class="side-body" id="sideLog"><div class="empty">Nothing yet.</div></div>
-    <div class="side-f" id="sideNow">&mdash;</div>
-  </aside>
+<?php require __DIR__ . '/side.php'; ?>
 </div>
 </div>
 
@@ -600,7 +578,7 @@ document.addEventListener('click', function (e) {
 document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
   b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
-$('sideMore').onclick = function () { show('activity'); };
+$('sideMore').onclick = function (e) { e.preventDefault(); show('activity'); };
 // The password banner's button: Setup, at the form
 if ($('pwGo')) $('pwGo').onclick = function () { location.href = '/setup.php#password'; };
 // ── duplicates: Find, look, Remove, Recover ─────────────────────────────────

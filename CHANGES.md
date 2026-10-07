@@ -3,6 +3,24 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.25 — October 2026
+
+- **Setup is a tree, not a wall of settings.** Each section is one line,
+  closed, with how it stands: a green ✓ when it is done, amber when something
+  waits on it. The first thing still to do opens by itself, marked
+  **Start here**. Opening one section closes the others; Archive structure's
+  four parts fold the same way inside it. Each section has its own **Save** and
+  folds back when saved, and the next one to do opens. Tools (password, the
+  exports, Jobs and tools) sit at the end, folded too.
+- **Reorganize has the Activity column** like Copying, Duplicates and Cache:
+  every move shows as it happens. (Setup and Activity itself have none.)
+- **Reorganize's list folds by top folder:** one line per folder with one
+  "Goes to" for all of it, opened only when its folders need to go different
+  ways. A drive with 217 folders becomes a few dozen decisions.
+- **No more ".no-shelf-chosen":** before the shelf is chosen, Setup and
+  Reorganize say "the folder you choose" instead of an internal placeholder,
+  and "Folders not in the plan" says to choose the folder first.
+
 ## 0.12.24 — October 2026
 
 - **Manage's menu, grouped by what each page does.** Overview first: the
