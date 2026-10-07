@@ -3,6 +3,38 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.18 — October 2026
+
+- **A video is one container:** Search finds a video when your words appear
+  anywhere in it, in any of its shots or in what is said, not only all in one
+  shot. Each video shows once, by the shot that matches best, with where it is
+  (0:16). The count says how many videos and how many moments.
+- **Opening a video shows all of it:** every shot it has, in a strip, with the
+  ones that matched your search marked; click a shot to see it, or to jump
+  there while it plays.
+- **The panel beside, rebuilt:** the name with two small buttons (Add to pull,
+  Copy path), each confirming itself; the picture is the player (click it to
+  play there, from that shot); the versions; the Description; the strip; then
+  the shot's details and the file's, below.
+- **The big view (double-click), with room:** the video large, its shots below
+  it, and its keywords as buttons that search for them; beside it the facts at
+  a glance (dimensions, type, codec, length, frame rate, size), the versions
+  and the description. ‹ › go to the one before or after without closing.
+- **A strict grid:** every picture the same size, square corners, columns that
+  line up; a vertical clip sits on black instead of bending the grid. No more
+  hover boxes over the pictures.
+- **More versions joined:** 1080p, 4K, Broadcast/Delivery, YouTube, Instagram,
+  Reels, Vertical and a second extension (".mov.mxf") count as the same video.
+  Every version is still described on its own; only how they show is grouped.
+  Each version in the list says its shape (16:9, 9:16 …, from its real size)
+  and its language (ENG, SPA).
+- **The shoot is the shoot:** a folder an edit is saved in (Output, Exports,
+  Renders …) is no longer taken for the shoot's name.
+- **Updates, said once and in front:** when a newer Rushes is ready, every page
+  of the Rushes window says so at the top, with its Update button (the pill on
+  Help is gone). "Updated to …" shows for a minute after an update, then goes.
+  Check for updates in the menu bar opens the window and answers there.
+
 ## 0.12.17 — October 2026
 
 - **Search is a wall of pictures:** what was found shows as stills in rows that

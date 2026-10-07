@@ -241,6 +241,8 @@ function icon(string $name, float $w = 1.7): string {
         'server'     => '<rect x="4" y="3.5" width="16" height="5.5" rx="1.5"/><rect x="4" y="9.3" width="16" height="5.5" rx="1.5"/><rect x="4" y="15" width="16" height="5.5" rx="1.5"/><path d="M7.5 6.2h.01M7.5 12h.01M7.5 17.8h.01"/>',
         'info'       => '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6h.01"/>',
         'plus'       => '<path d="M12 5v14M5 12h14"/>',
+        'copy'       => '<rect x="8.5" y="8.5" width="12" height="12" rx="1.6"/><path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5"/>',
+        'pull'       => '<rect x="3" y="3.5" width="18" height="4.5" rx="1.4"/><path d="M5 8v11.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V8"/><path d="M12 11v6M9 14h6"/>',
         'filter'     => '<path d="M4 6.5h16M7 12h10M10 17.5h4"/>',
         'versions'   => '<rect x="3" y="8" width="13" height="12" rx="1.6"/><path d="M7 5h12.5A1.5 1.5 0 0 1 21 6.5V16"/>',
         'list'       => '<path d="M8.5 6.5H20M8.5 12H20M8.5 17.5H20"/><path d="M4 6.5h.01M4 12h.01M4 17.5h.01"/>',

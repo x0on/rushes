@@ -14,7 +14,7 @@ const LABEL_AUDIO  = ['wav', 'mp3', 'aif', 'aiff', 'm4a', 'aac', 'flac'];
 const LABEL_RAW    = ['nef', 'cr2', 'cr3', 'arw', 'dng', 'raf', 'orf', 'rw2'];
 const LABEL_IMAGE  = ['jpg', 'jpeg', 'png', 'heic', 'tif', 'tiff', 'webp', 'gif'];
 const LABEL_DESIGN = ['psd', 'ai', 'indd', 'eps', 'svg', 'afdesign', 'sketch', 'fig'];
-const LABEL_RULES  = '2';   // raise when the rules change: every label is made again
+const LABEL_RULES  = '3';   // raise when the rules change: every label is made again
 const LABEL_PROJ   = ['prproj', 'prin', 'aep', 'aepx', 'drp', 'drx', 'sesx', 'fcpxml'];
 
 // What Search shows under each name (find.php's rail), and which labels each takes in
@@ -42,6 +42,9 @@ const VERSION_TAIL = [
     '/[\s_-]*(v|ver|version)\s*\.?\d+[a-z]?$/u',                                    // v2, V3, -V10, version 4
     '/[\s_-]*(final|update\d*|revised|rev\d*|fixed|fix|new|copy|alt|edit(ed)?|export|render)$/u',
     '/[\s_-]*(eng|esp|spa|english|spanish|espanol|español)$/u',                      // the same piece in another language
+    // the same piece in another shape or for another place: 16:9 and 9:16, YouTube and Instagram, broadcast and web
+    '/[\s_-]*(\d{3,4}p|4k|uhd|hd|vertical|horizontal|square|\d{1,2}x\d{1,2}|youtube|yt|instagram|insta|ig|reels?|tiktok|facebook|fb|web|br[o]?adcast|delivery)$/u',
+    '/\.[a-z0-9]{1,4}$/u',                                                           // a second extension: "Promo.mov.mxf"
     '/_\d{1,2}$/u',                                                                  // Promo_1: exported again
     '/(?<=[a-z])\d{1,2}$/u',                                                         // February2 (but "Our Town 10" is an episode)
     '/(?<=\d)[b-e]$/u',                                                              // Testimonial 5b

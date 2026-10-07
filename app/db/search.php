@@ -30,6 +30,10 @@ require_once __DIR__ . '/labels.php';
 // the rules they are made again here once, so the first search already groups versions
 if (meta_get('label_rules', '') !== LABEL_RULES) labels_refresh();
 
+// shots=<fingerprint>: every shot of one video, for the panel and the big view
+if (preg_match('/^[0-9a-f]{24}$/', (string)($_GET['shots'] ?? ''))) {
+    echo json_encode(['shots' => analysis_shots($_GET['shots'])], JSON_UNESCAPED_SLASHES); exit;
+}
 $q      = trim($_GET['q'] ?? '');
 $kind   = $_GET['kind'] ?? '';
 $dept   = $_GET['dept'] ?? '';
@@ -55,6 +59,8 @@ if (($place = (string)($_GET['where'] ?? '')) !== '') {
 if ($dept !== '')                   { $where[] = 'dept = ?'; $args[] = $dept; }
 // What each file is (labels.php): Deliverables, the stock library and its parts, AI-generated,
 // Photos, Design … from names, folders and sizes, wherever the files are; nothing is moved.
+// p=<path>: that one file (the panel, for a video found by what it shows)
+if (($one = (string)($_GET['p'] ?? '')) !== '') { $where[] = 'files.path = ?'; $args[] = $one; }
 // v=<key>: every version of one piece (labels.php version_of), for the panel beside the results
 if (($v = (string)($_GET['v'] ?? '')) !== '') { $where[] = 'files.path IN (SELECT path FROM labels WHERE vkey = ?)'; $args[] = $v; }
 $in = (string)($_GET['in'] ?? '');
@@ -122,7 +128,7 @@ while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
 $moments = ['count' => 0, 'rows' => []];
 if ($q !== '' && ($kind === '' || $kind === 'all' || $kind === 'video')) {
     try {
-        $moments = analysis_search($q);
+        $moments = analysis_videos($q);
         // which piece each moment's file is a version of, so a shot found in v2 and v3 shows once
         $vs = $db->prepare('SELECT vkey, vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = labels.vkey) n FROM labels WHERE path = ?');
         foreach ($moments['rows'] as &$m) {
@@ -138,7 +144,8 @@ if ($q !== '' && ($kind === '' || $kind === 'all' || $kind === 'video')) {
                 $ok->bindValue(1, $m['path']); foreach ($fa as $i => $v) $ok->bindValue($i + 2, $v);
                 $r = $ok->execute()->fetchArray(); $ok->reset(); return (bool)$r;
             }));
-            $moments['count'] = count($moments['rows']);   // ponytail: counts the first 60 found, not every match
+            $moments['count'] = count($moments['rows']);
+            $moments['moments'] = array_sum(array_map(fn($m) => count($m['found']), $moments['rows']));
         }
     } catch (Throwable $e) { $moments['error'] = $e->getMessage(); }
 }

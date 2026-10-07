@@ -68,6 +68,7 @@ WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
 UPCHECK = os.path.join(WDIR if WATCHER else DIR, "update-check.json")
 UPDATED = os.path.join(WDIR if WATCHER else DIR, "update-result.txt")   # how the last update went (release.app_update)
 UPDATE_NOW = os.path.join(WDIR if WATCHER else DIR, "update-now")        # the menu's Update, done in the window, where it shows
+CHECK_NOW = os.path.join(WDIR if WATCHER else DIR, "check-now")          # the menu's Check for updates, answered in the window
 FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 # The helper writes this when a share stopped answering three times (DEVELOPING.md, the six rules
 # rule 4): it then touches no share until Try again here removes it.
@@ -624,10 +625,14 @@ class Window:
     def set(self, **kw):
         with self.lock:
             self.s.update(kw)
+            if "said" in kw:
+                self.said_time = time.time()
 
     def state(self):
         with self.lock:
             s = dict(self.s)
+        if str(s.get("said") or "").startswith("✓ Updated to") and time.time() - getattr(self, "said_time", 0) > 60:
+            s["said"] = ""
         s.update(name=NAME, watcher=WATCHER, set_up=bool(s["url"]) and service_points_here(),
                  local_up=None if WATCHER else local_up())     # Open Rushes waits until Rushes answers
         if s["step"] == "home":
@@ -873,8 +878,11 @@ class Window:
             else:
                 self.set(error="")
                 self.run("Pairing with Rushes …", lambda: self.pair(clip.replace(" ", "")))
+        elif do == "check-updates" and self.in_menu:      # from the menu bar: the window opens and answers there
+            open(CHECK_NOW, "w").close()
+            subprocess.run(["open", "-n", APP])
         elif do == "check-updates":
-            self.run("Asking Rushes …", self.check_updates)
+            self.run("Asking Rushes …" if self.source() else "Asking GitHub for the newest release …", self.check_updates)
         elif do == "update-app":
             self.run(f"Updating {NAME} …", self.update_app)
         elif do == "change-where" and not WATCHER:
@@ -1198,7 +1206,7 @@ function draw() {
   $('navtop').innerHTML = atHome ? openBtn(s, true) : '';
   $('navfoot').innerHTML = atHome ? 'Version ' + esc(s.version) + ' · <button class="lnk" data-credits="1">What it is made of</button>' : '';
   $('steps').innerHTML = atHome ? pages.map(x => '<li class="pg' + (x[0] === page ? ' on' : '') + '" data-page="' + x[0] + '">' + x[1] +
-      (x[0] === 'help' && s.newer ? '<span class="pill">update</span>' : '') + '</li>').join('')
+      '</li>').join('')
     : s.step === 'remove' || s.step === 'removed' ? ''
     : STEPS.map((x, i) => '<li class="' + (i < setupStep ? 'ok' : i === setupStep ? 'on' : '') + '">' + x[1] + '</li>').join('');
   let b = '', f = '';
@@ -1310,9 +1318,8 @@ const said = s => (s.error ? '<p class="err">Did not happen: ' + esc(s.error) + 
   (s.said ? '<p class="said">' + esc(s.said) + '</p>' : '') + (s.busy ? '<p><span class="spin"></span>' + esc(s.busy) + '</p>' : '');
 const head = (h, sub) => '<h2>' + h + '</h2><p class="sub">' + sub + '</p>';
 // A newer version on Rushes: one button, it puts itself in place and starts again.
-const upd = s => s.newer ? '<div class="box"><div class="row"><div class="t"><b>Rushes ' + esc(s.newer) + ' is ready</b><small>This is ' +
-  esc(s.version) + '. ' + (s.local ? 'It comes from Rushes\'s releases on GitHub' : 'It comes from your Rushes') +
-  ', and is taken only if signed by its author. Settings, pairing and permissions stay; nothing to download or open.</small></div>' +
+const upd = s => s.newer ? '<div class="box"><div class="row"><div class="t"><b>%NAME% ' + esc(s.newer) + ' is ready</b><small>This is ' +
+  esc(s.version) + '. Nothing changes until you press Update; settings and pairing stay.</small></div>' +
   btn('Update to ' + s.newer, 'update-app', true, !!s.busy) + '</div></div>' : '';
 
 // Activity (db/activity.php): what came in, what went out, what changed, and who did it
@@ -1355,7 +1362,7 @@ function home(s) {
   switch (page) {
   case 'act':
     const shown = ev.filter(r => kind === 'all' || r.kind === kind || (kind === 'changed' && r.kind === 'people'));
-    return head('Activity', 'What came in, what went out, what changed, and who did it. Newest first.') + said(s) +
+    return head('Activity', 'What came in, what went out, what changed, and who did it. Newest first.') + said(s) + upd(s) +
       '<div class="chips">' + KINDS.map(k => '<button data-kind="' + k[0] + '"' + (k[0] === kind ? ' class="on"' : '') + '>' + k[1] + '</button>').join('') + '</div>' +
       '<div class="box">' + (s.activity === undefined ? (s.rushes === false ? '<p class="muted">Rushes cannot be reached right now, so its activity is not here. The technical log below still shows this Mac\'s work.</p>'
         : '<p class="muted"><span class="spin"></span>Asking Rushes …</p>')
@@ -1363,7 +1370,7 @@ function home(s) {
       '<p class="muted" style="font-size:12.5px">Names are the ones people gave Rushes in their browser, and editors\' computers by their pairing. Rushes → Manage → Activity shows the same.</p>' +
       rawLink() + rawLog(s);
   case 'work':
-    return head('Work', 'What Rushes is allowed to do. Each switch pauses at a safe point; nothing is lost.') + said(s) + '<div class="box">' +
+    return head('Work', 'What Rushes is allowed to do. Each switch pauses at a safe point; nothing is lost.') + said(s) + upd(s) + '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Starts when you log in and restarts itself if it stops. Off stops Rushes completely, also after a restart, until you turn it on here.') +
       sw(on && !s.paused, ['resume', 'pause'], 'Copy footage', 'Cards and drives brought into the archive. Rushes → Manage has the same switch.', !on || !s.rushes) +
       sw(on && !s.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage',
@@ -1374,7 +1381,7 @@ function home(s) {
       (L ? '' : sw(!s.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, it connects it again once the server answers. Off: you connect drives in Finder.', !s.rushes)) +
     '</div>';
   case 'arch':
-    return head('Archive', 'Where your footage lives.') + said(s) + (L
+    return head('Archive', 'Where your footage lives.') + said(s) + upd(s) + (L
       ? '<div class="box"><div class="head"><div class="t"><span class="dot' + (L.there ? ' ok' : ' warn') + '"></span><b>' + esc(base(L.archive)) + '</b><small class="muted" style="display:block">' +
           esc(L.archive) + ' · ' + (L.there ? 'plugged in' + (st && st.free ? ' · ' + size(st.free) + ' free' : '') : 'not plugged in: plug it in and Rushes carries on by itself') + '</small></div>' +
           btn('Show in Finder', 'reveal-archive', false, !L.there) + '</div></div>' +
@@ -1385,7 +1392,7 @@ function home(s) {
       '<p style="margin-top:28px;font-size:12.5px"><button class="lnk danger" data-do="remove">Remove Rushes from this Mac…</button> <span class="muted">· it stops and no longer starts at login; the archive and its footage stay.</span></p>';
   case 'dev':
     const ws = s.watchers || [];
-    return head('Other devices', 'Phones and computers that may open Rushes, and editors\' computers sending their projects.') + said(s) +
+    return head('Other devices', 'Phones and computers that may open Rushes, and editors\' computers sending their projects.') + said(s) + upd(s) +
       (L ? '<div class="box">' + sw(L.others, ['others-on', 'others-off'], 'Let other devices open Rushes', L.others
           ? 'On: phones and computers on your network, or on your Tailscale, open <b>http://' + esc(L.name) + ':' + esc(L.port) + '</b> (or this Mac\'s Tailscale address, port ' + esc(L.port) + ') and sign in with Rushes\' password.'
           : 'Off: only this Mac. On: others sign in with Rushes\' password, once you have set your own in Rushes → Manage.') + '</div>' : '') +
@@ -1441,11 +1448,11 @@ function whome(s) {
   const lines = (s.log || []).slice().reverse();
   switch (page) {
   case 'act':
-    return head('Activity', 'What this computer sent to Rushes, in its own words. Newest first.') + said(s) +
+    return head('Activity', 'What this computer sent to Rushes, in its own words. Newest first.') + said(s) + upd(s) +
       '<div class="box">' + (lines.length ? '<ul class="feed">' + lines.map(l => '<li><div class="t">' + esc(l) + '</div></li>').join('') + '</ul>' : '<p class="muted">Nothing yet.</p>') + '</div>' +
       '<p class="muted" style="font-size:12.5px">Rushes → Manage → Activity shows what every editor\'s computer sent, with everything else that happened. ' + lnk('Open the whole log file', 'show-log') + '</p>';
   case 'work':
-    return head('Work', 'What Rushes Watcher is allowed to do.') + said(s) + '<div class="box">' +
+    return head('Work', 'What Rushes Watcher is allowed to do.') + said(s) + upd(s) + '<div class="box">' +
       sw(on, ['service-on', 'service-off'], 'Run in the background', 'Starts when you log in. Off stops it completely, also after a restart, until you turn it on here. Its icon goes with it.') +
       sw(!s.paused, ['watch-resume', 'watch-pause'], 'Watch projects', 'Off: it looks at no project; nothing already delivered changes. The menu bar icon has the same switch.', !on) +
     '</div>';
@@ -1490,6 +1497,9 @@ def serve(port, key):
         if os.path.exists(UPDATE_NOW) and time.time() - os.path.getmtime(UPDATE_NOW) < 60:
             os.remove(UPDATE_NOW)
             w.act("update-app", {})                      # asked from the menu bar: done here, step by step
+        elif os.path.exists(CHECK_NOW) and time.time() - os.path.getmtime(CHECK_NOW) < 60:
+            os.remove(CHECK_NOW)
+            w.act("check-updates", {})                   # asked from the menu bar: the answer shows here
         elif os.path.exists(UPDATED) and time.time() - os.path.getmtime(UPDATED) < 120:
             w.set(said=update_said())                    # the window the update opened: how it went
 

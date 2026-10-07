@@ -105,3 +105,49 @@ function analysis_search(string $q, int $limit = 60): array {
     while ($r = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
     return ['count' => $count, 'rows' => $rows];
 }
+
+// A video is one container: it is found when every word appears somewhere in it,
+// in any of its shots or in what is said, not only all in one shot. Each video
+// comes back once, with the shot that matches best (most words; the earliest of
+// those) and when every matching moment is.
+// ponytail: LIKE per word over all moments, like analysis_search; FTS5 when it passes ~300 ms.
+function analysis_videos(string $q, int $limit = 120): array {
+    analysis_init();
+    $likes = [];
+    foreach (preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY) as $word)
+        $likes[] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
+    if (!$likes) return ['count' => 0, 'moments' => 0, 'rows' => []];
+    $any = implode(' + ', array_fill(0, count($likes), "(hay LIKE ? ESCAPE '\\')"));
+    $all = implode(' AND ', array_fill(0, count($likes), "SUM(hay LIKE ? ESCAPE '\\') > 0"));
+    $bind = function (SQLite3Stmt $s, array $vals) { foreach ($vals as $i => $v) $s->bindValue($i + 1, $v); };
+    $st = db()->prepare("SELECT fp FROM moments WHERE kind != 'failed' GROUP BY fp HAVING $all");
+    $bind($st, $likes); $r = $st->execute(); $fps = [];
+    while ($x = $r->fetchArray(SQLITE3_NUM)) $fps[] = $x[0];
+    if (!$fps) return ['count' => 0, 'moments' => 0, 'rows' => []];
+    $in = implode(',', array_fill(0, count($fps), '?'));
+    $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,
+        light,part_of_day,mood,language, ($any) AS hits FROM moments
+        WHERE kind != 'failed' AND fp IN ($in) AND ($any) > 0 ORDER BY fp, hits DESC, kind, start_s");
+    $bind($st, array_merge($likes, $fps, $likes)); $r = $st->execute();
+    $videos = []; $n = 0;
+    while ($m = $r->fetchArray(SQLITE3_ASSOC)) {
+        $n++;
+        if (!isset($videos[$m['fp']])) { $m['found'] = []; $videos[$m['fp']] = $m; }
+        $videos[$m['fp']]['found'][] = (float)$m['start_s'];
+    }
+    $rows = array_values($videos);
+    usort($rows, fn($a, $b) => [$b['hits'], count($b['found']), $a['path']] <=> [$a['hits'], count($a['found']), $b['path']]);
+    foreach ($rows as &$v) { sort($v['found']); } unset($v);
+    return ['count' => count($rows), 'moments' => $n, 'rows' => array_slice($rows, 0, $limit)];
+}
+
+// Every shot of one video, and what is said in it, in order: the video as a whole.
+function analysis_shots(string $fp): array {
+    analysis_init();
+    $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,part_of_day,mood,language
+        FROM moments WHERE fp = ? AND kind != 'failed' ORDER BY start_s, kind");
+    $st->bindValue(1, $fp); $r = $st->execute(); $rows = [];
+    while ($x = $r->fetchArray(SQLITE3_ASSOC)) $rows[] = $x;
+    return $rows;
+}
+

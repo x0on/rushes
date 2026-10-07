@@ -89,6 +89,11 @@ check($m['count'] === 1 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['wh
       'words on screen find the shot');
 check(analysis_search('parque bienvenidos')['rows'][0]['kind'] === 'speech', 'spoken words find the moment they were said');
 check(analysis_search('parks recreation')['count'] === 1 && analysis_search('nothing here')['count'] === 0, 'themes are searchable; nothing invented');
+// A video is one container: words in different moments of it still find it, once, with its best moment
+$v = analysis_videos('aerial bienvenidos');
+check($v['count'] === 1 && $v['moments'] === 2 && $v['rows'][0]['found'] === [0.0, 3.2] && analysis_videos('aerial nothing')['count'] === 0,
+      'a video is found when its words are in different moments of it, once, with every matching moment');
+check(count(analysis_shots($fp)) === 2 && analysis_shots($fp)[0]['kind'] === 'shot', 'every shot and line of a video, in order, without the failed one');
 check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
 touch(web_dir() . '/describe-status.tsv', time() - 3600);    // describing ended an hour ago
 check((analysis_import()['state'] ?? '') === 'quiet', 'idle: the descriptions folder on VIDEO is not looked through');
@@ -270,7 +275,9 @@ foreach ([
 $vk = fn($n) => version_of("/a/2022/Fair/OUTPUT/$n", 'deliverable')[0];
 foreach ([['Fair Promo.mp4', 'Fair Promo v2.mp4', 'Fair Promo V3.mp4', 'Fair Promo- V4.mp4', 'Fair Promo_1.mp4', 'Fair Promo FINAL.mp4',
            'Fair Promo2.mp4', 'Fair Promo ENG.mp4', 'Fair Promo SPA_2.mp4', 'old/Fair Promo version 5.mp4'],
-          ['Testimonial 5.mp4', 'Testimonial 5b.mp4'], ['ParkENGLISH.mp4', 'ParkSPANISH.mp4'], ['Gum_FINALEnglish.mp4', 'Gum_FINALSpanish.mp4']] as $g)
+          ['Testimonial 5.mp4', 'Testimonial 5b.mp4'], ['ParkENGLISH.mp4', 'ParkSPANISH.mp4'], ['Gum_FINALEnglish.mp4', 'Gum_FINALSpanish.mp4'],
+          ['Park Spot V16.mov', 'Park Spot 1080p.mp4', 'Park Spot Bradcast Delivery.mxf', 'Park Spot Broadcast Delivery.mov.mxf'],
+          ['Message APR youtube.mp4', 'Message APR  Instagram SPA.mp4', 'Message APR REELS_1.mp4', 'Message APR Vertical.mp4']] as $g)
     check(count(array_unique(array_map($vk, $g))) === 1 && $vk($g[0]) !== '', 'versions: ' . implode(', ', $g) . ' are one piece');
 foreach ([['Our Town 10.mp4', 'Our Town 13.mp4'], ['Testimonial 5.mp4', 'Testimonial 6.mp4'], ['Arbor Day 2020.mp4', 'Arbor Day 2021.mp4'], ['Promo.mp4', 'Promo.psd']] as $g)
     check(count(array_unique(array_map($vk, $g))) === 2, 'versions: ' . implode(' and ', $g) . ' stay apart');

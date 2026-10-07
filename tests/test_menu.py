@@ -160,6 +160,18 @@ class UpdateWindowTests(unittest.TestCase):
         self.assertEqual(opened, [["open", "-n", m.APP]]); self.assertTrue(w.quit.is_set())
         self.assertEqual(m.update_said(), "✓ Updated to 0.12.10")
 
+    def test_check_from_the_menu_answers_in_the_window_and_old_news_fades(self):
+        m = front("Rushes", Path(tempfile.mkdtemp())); os.makedirs(m.DIR)
+        opened = []
+        with patch.object(m.subprocess, "run", side_effect=lambda a, **k: opened.append(a)):
+            w = m.Window(); w.in_menu = True
+            w.act("check-updates", {})                   # a menu closes when clicked: the window says the answer
+        self.assertTrue(os.path.exists(m.CHECK_NOW)); self.assertEqual(opened, [["open", "-n", m.APP]])
+        w = m.Window(); w.set(said="✓ Updated to 0.12.10")
+        self.assertEqual(w.state()["said"], "✓ Updated to 0.12.10", "news just after the update")
+        w.said_time -= 61
+        self.assertEqual(w.state()["said"], "", "a minute later it is gone: it never stands beside an update that waits")
+
 
 class OneCopyTests(unittest.TestCase):
     """Rushes runs from where it was put, one copy only (0.12.2: the disk image)."""

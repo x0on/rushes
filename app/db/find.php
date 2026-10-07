@@ -1,16 +1,18 @@
 <?php
 // find.php — the search page. The one screen most people ever open.
 //
-// Pictures first: what was found shows as a wall of stills, each with a small
-// chip (kind, length, resolution, how many versions) instead of words. A click
-// picks one and the panel beside says the rest; a double-click plays its proxy.
-// Nothing loads or plays until it is asked for.
+// Pictures first: what was found shows as a grid of stills, one per video, each
+// with a small chip (kind, length, where the match is, how many versions)
+// instead of words. A video is a container: it is found when the words appear
+// anywhere in it, and opening it shows every shot it has, not only the one that
+// matched. A click picks one and the panel beside shows it; a double-click
+// opens it large and plays it. Nothing loads or plays until it is asked for.
 //
 // Everything that narrows a search is a filter: the kind of file sits in the
 // search bar (picked almost every time); where to look and what a file is
 // (labels.php) sit in a Filters panel that stays hidden until it is wanted, and
 // every filter that is on shows beside the count, so none is ever forgotten.
-// Versions of one piece (v2, _1, FINAL, ENG/SPA: labels.php) show once.
+// Versions of one piece (v2, _1, FINAL, ENG/SPA, YouTube/Instagram: labels.php) show once.
 $NAV = 'search';
 require __DIR__ . '/config.php';
 ?><!doctype html>
@@ -25,7 +27,7 @@ require __DIR__ . '/config.php';
     // drives kept where they are: a path on one reads from the drive's name
     'drives'  => array_map(fn($d) => ['path' => rtrim($d['path'], '/'), 'name' => $d['name']], drives_seen()),
   ], JSON_UNESCAPED_SLASHES) ?>;
-  // The same drawings the rest of Rushes uses, handed to the script for tiles and rows.
+  // The same drawings the rest of Rushes uses, handed to the script for tiles, rows and buttons.
   window.ICON = <?= json_encode([
     'search'   => icon('search', 1.9),
     'video'    => icon('video'),
@@ -37,6 +39,8 @@ require __DIR__ . '/config.php';
     'file'     => icon('file'),
     'versions' => icon('versions', 2),
     'quote'    => icon('quote', 2),
+    'pull'     => icon('pull', 1.8),
+    'copy'     => icon('copy', 1.8),
   ], JSON_UNESCAPED_SLASHES) ?>;
 </script>
 <?php require __DIR__ . '/../head.php'; ?>
@@ -84,36 +88,34 @@ require __DIR__ . '/config.php';
   .fchip b { font-weight: 400; opacity: .6; font-size: 13px }
   #selbar[hidden] { display: none }
   #selbar { display: flex; gap: 8px; align-items: center; color: var(--fg) }
-  #said { color: var(--ok) }
+  .said { color: var(--ok) }
   .views { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
   .views button { border: 0; background: none; color: var(--muted); padding: 5px 8px; cursor: pointer; display: grid }
   .views button svg { width: 16px; height: 16px }
   .views button[aria-pressed="true"] { background: var(--raised); color: var(--fg) }
-  .results { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start }
+  .results { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start }
   .results:has(> #inspect[hidden]) { grid-template-columns: minmax(0, 1fr) }   /* only before anything is found */
   @media (max-width: 1100px) { .results { grid-template-columns: minmax(0, 1fr) } .inspect { display: none } }
   @media (max-width: 640px) { .shoot .sh .n { display: none } .row { gap: 8px; padding-left: 10px; padding-right: 10px }
                               .q select { max-width: 110px } .sbtn span { display: none } }
-  /* ── the wall: rows of pictures that fill the width, each at its own shape ── */
-  .wall { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px }
-  .wall::after { content: ''; flex-grow: 10000 }     /* the last row keeps its pictures' size */
-  .frame { position: relative; height: 170px; flex-grow: 1.78; flex-basis: 302px; border-radius: 6px; overflow: hidden;
-          background: var(--line); cursor: pointer; user-select: none; outline: 0 }
-  .frame img { width: 100%; height: 100%; object-fit: cover; display: block }
-  .frame:hover img { filter: brightness(1.06) }
-  .frame.on { box-shadow: 0 0 0 3px var(--accent) }
-  .frame:focus-visible { box-shadow: 0 0 0 3px var(--muted) }
+  /* ── the grid: every picture the same size, square corners, columns that line up ── */
+  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; margin: 0 0 18px }
+  .frame { position: relative; aspect-ratio: 16 / 9; background: #000; cursor: pointer; user-select: none; outline: 0; overflow: hidden }
+  .frame img { width: 100%; height: 100%; object-fit: contain; display: block }   /* a vertical clip sits on black, the grid stays */
+  .frame:hover img { filter: brightness(1.08) }
+  .frame.on { box-shadow: inset 0 0 0 3px var(--accent) }
+  .frame:focus-visible { box-shadow: inset 0 0 0 3px var(--muted) }
   .frame .ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-              color: var(--muted); background: var(--raised); padding: 10px 10px 30px; border: 1px solid var(--line); border-radius: 6px }
-  .frame .ph svg { width: 30px; height: 30px; opacity: .7 }
+               color: var(--muted); background: var(--raised); padding: 10px 10px 30px }
+  .frame .ph svg { width: 28px; height: 28px; opacity: .7 }
   .frame .ph small { font-size: 11.5px; text-align: center; max-width: 100%; overflow: hidden;
-                    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word }
+                     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word }
   .chip, .vers { position: absolute; bottom: 6px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px;
-                 border-radius: 4px; background: rgba(0,0,0,.66); color: #fff; font: 600 11px var(--font) }
+                 background: rgba(0,0,0,.66); color: #fff; font: 600 11px var(--font) }
   .chip { left: 6px } .vers { right: 6px }
   .chip svg, .vers svg { width: 12px; height: 12px }
   .chip .r { opacity: .85 }
-  .frame .pk { position: absolute; top: 6px; right: 6px; display: none; padding: 2px 7px; border-radius: 4px; background: var(--ok); color: #fff; font: 600 11px var(--font) }
+  .frame .pk { position: absolute; top: 6px; right: 6px; display: none; padding: 2px 7px; background: var(--ok); color: #fff; font: 600 11px var(--font) }
   .frame.pulled .pk { display: block }
   .wall-h { font-size: 12px; color: var(--muted); margin: 4px 0 8px; font-weight: 600 }
   /* ── the list: files by the folder they are in ── */
@@ -129,30 +131,80 @@ require __DIR__ . '/config.php';
   .row.pulled .pk { display: inline }
   .row .side, .row .vn { color: var(--faint); font-size: 11px }
   .row .vn svg { width: 11px; height: 11px; vertical-align: -1px }
-  .thumb { width: 34px; height: 34px; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--raised); color: var(--muted) }
+  .thumb { width: 34px; height: 34px; border-radius: 4px; flex: none; display: grid; place-items: center; background: var(--raised); color: var(--muted) }
   .thumb svg { width: 17px; height: 17px }
-  .thumb.pic { width: 60px; overflow: hidden; background: var(--line) }
-  .thumb.pic img { width: 100%; height: 100%; object-fit: cover; display: block }
+  .thumb.pic { width: 60px; overflow: hidden; background: #000 }
+  .thumb.pic img { width: 100%; height: 100%; object-fit: contain; display: block }
   .k-video, .k-image, .k-audio { color: var(--accent-text) }
   .dim { opacity: .5 }
   .more { display: block; width: 100%; margin: 16px 0; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--line);
           background: var(--surface); color: var(--fg); font: 13.5px var(--font); cursor: pointer }
-  /* ── the panel beside ── */
+  /* ── one video, opened: the panel beside (small) and the big view (double-click) share these ── */
   .inspect { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto }
-  .inspect .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650; margin-top: 12px }
-  .inspect .v { font-size: 13px; overflow-wrap: anywhere }
-  .inspect .ons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px }
-  .inspect .ons span { font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
-  .inspect img.big, .inspect video { width: 100%; border-radius: 8px; display: block; background: #000 }
-  .vlist { margin-top: 4px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
+  .vh { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px 10px }
+  .vh b { flex: 1; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere }
+  .ib { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px;
+        background: none; color: var(--fg); cursor: pointer; padding: 0 }
+  .ib svg { width: 16px; height: 16px }
+  .ib:hover { border-color: var(--accent) }
+  .ib.in { color: var(--ok); border-color: var(--ok) }
+  .ib[hidden] { display: none }
+  .vb { padding: 0 14px 14px }
+  .pv { position: relative; aspect-ratio: 16 / 9; background: #000; cursor: pointer; overflow: hidden }
+  .pv img, .pv video { width: 100%; height: 100%; object-fit: contain; display: block }
+  .pv .go { position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border-radius: 50%; background: rgba(0,0,0,.55);
+            display: grid; place-items: center; color: #fff; font-size: 20px; pointer-events: none }
+  .pv .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); background: var(--raised) }
+  .pv .ph svg { width: 34px; height: 34px }
+  .pv-note { font-size: 12px; color: var(--muted); margin: 6px 0 0 }
+  .sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 16px 0 6px }
+  .desc { font-size: 13.5px; line-height: 1.5 }
+  .desc small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px }
+  .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 3px }
+  .strip button { position: relative; aspect-ratio: 16 / 9; padding: 0; border: 0; background: #000; cursor: pointer; overflow: hidden }
+  .strip img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .75 }
+  .strip button:hover img, .strip .hit img, .strip .cur img { opacity: 1 }
+  .strip .hit { box-shadow: inset 0 0 0 2px var(--accent-text) }
+  .strip .cur { box-shadow: inset 0 0 0 3px var(--fg) }
+  .strip span { position: absolute; left: 3px; bottom: 3px; padding: 0 4px; background: rgba(0,0,0,.66); color: #fff; font: 600 10px var(--font) }
+  .strip .said { display: grid; place-items: center; height: 100%; color: var(--muted) }
+  .strip .said svg { width: 16px; height: 16px }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px }
+  .kv div { min-width: 0 }
+  .kv .wide { grid-column: 1 / -1 }
+  .kv small { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650 }
+  .kv span { font-size: 13px; overflow-wrap: anywhere }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px }
+  .tags span, .tags button { font: 11.5px var(--font); padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); background: none }
+  .tags button { cursor: pointer; color: var(--fg); padding: 5px 12px; font-size: 13px }
+  .tags button:hover { border-color: var(--accent) }
+  .vlist { border: 1px solid var(--line); overflow: hidden }
   .vrow { display: flex; gap: 8px; align-items: baseline; width: 100%; padding: 7px 10px; border: 0; border-top: 1px solid var(--line);
           background: none; color: var(--fg); font: 12.5px var(--font); text-align: left; cursor: pointer }
   .vrow:first-child { border-top: 0 }
   .vrow:hover { background: var(--raised) }
   .vrow.cur { background: var(--sel-bg); color: var(--sel-fg) }
+  .vrow.cur small { color: inherit; opacity: .75 }
   .vrow span { flex: 1; min-width: 0; overflow-wrap: anywhere }
+  .vrow i { font-style: normal; font-size: 10.5px; padding: 0 5px; margin-left: 4px; border: 1px solid currentColor; opacity: .7 }
   .vrow small { color: var(--muted); white-space: nowrap }
-  /* ── the right-click menu, the pull being filled, the dialogs ── */
+  .facts { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 4px }
+  /* the big view: the video large, with room around it */
+  dialog#big { width: min(1500px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: 0;
+               background: var(--bg); color: var(--fg); padding: 0; overflow: hidden }
+  dialog#big::backdrop { background: rgba(5, 12, 12, .85) }
+  .bigbar { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0 }
+  .bigbar button { border: 0; background: none; color: var(--fg); font-size: 22px; width: 38px; height: 34px; cursor: pointer }
+  .bigbar button:disabled { opacity: .3; cursor: default }
+  .bigbody { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; padding: 6px 28px 28px;
+             max-height: calc(100vh - 90px); overflow-y: auto }
+  .bigbody .pv { cursor: default }
+  .bigbody .vh { padding: 0 0 10px }
+  .bigbody .vh b { font-size: 18px; font-weight: 600 }
+  .bigbody .vb { padding: 0 }
+  .bigbody .strip { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px }
+  @media (max-width: 1000px) { .bigbody { grid-template-columns: minmax(0, 1fr) } }
+  /* ── the right-click menu, the pull being filled, the pull dialog ── */
   .ctx { position: fixed; z-index: 30; min-width: 190px; padding: 5px; background: var(--surface);
          border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.3) }
   .ctx button { display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: 6px;
@@ -171,11 +223,6 @@ require __DIR__ . '/config.php';
   dialog#pullDlg { width: min(460px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
     padding: 18px 20px 20px; background: var(--surface); color: var(--fg) }
   dialog#pullDlg::backdrop { background: rgba(10, 22, 21, .6) }
-  dialog#playDlg { width: min(960px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
-                   background: var(--panel); color: var(--fg); padding: 14px }
-  dialog#playDlg::backdrop { background: rgba(10, 22, 21, .75) }
-  dialog#playDlg video { width: 100%; border-radius: 8px; background: #000; display: block }
-  #plStart[hidden] { display: none }
   #pullDlg .dh { display: flex; align-items: center; margin: 0 0 8px } #pullDlg .dh b { flex: 1; font-size: 15px }
   .pd-pick { display: flex; width: 100%; justify-content: space-between; gap: 10px; padding: 9px 12px; margin: 0 0 6px;
              border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--fg);
@@ -234,7 +281,7 @@ require __DIR__ . '/config.php';
       </div>
       <div class="statline"><span id="stat">Start typing.</span><span id="active"></span>
         <span id="selbar" hidden><b id="selN"></b><button class="btn" id="selAdd"></button><button class="ghost" id="selClear">Clear</button></span>
-        <span id="said" role="status"></span>
+        <span class="said" role="status"></span>
         <span class="grow"></span>
         <span class="views" role="group" aria-label="Show as">
           <button data-view="wall" title="Pictures" aria-pressed="true"><?= icon('everything', 2) ?></button>
@@ -260,10 +307,14 @@ require __DIR__ . '/config.php';
   <button class="ghost" id="pbSwitch">Switch</button>
 </div>
 
-<dialog id="playDlg" aria-labelledby="plT">
-  <div class="dh"><b id="plT"></b><button type="button" class="ghost" id="plStart">From the start</button><button type="button" class="ghost" id="plClose">Close</button></div>
-  <video id="plV" controls playsinline preload="metadata"></video>
-  <p class="note" id="plSaid" style="margin:8px 0 0"></p>
+<!-- The big view: one video large, its shots, its versions, its keywords -->
+<dialog id="big" aria-label="The video, large">
+  <div class="bigbar">
+    <button type="button" id="bigPrev" title="The one before (←)">‹</button>
+    <button type="button" id="bigNext" title="The next one (→)">›</button>
+    <button type="button" id="bigClose" title="Close (Esc)">✕</button>
+  </div>
+  <div class="bigbody" id="bigBody"></div>
 </dialog>
 <div class="ctx" id="ctx" hidden role="menu"></div>
 <dialog id="pullDlg" aria-labelledby="pdT">
@@ -302,13 +353,17 @@ const trail = function (p) { const bits = short(p).split('/'); bits.pop(); retur
 function store(k, v) {
   try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; }
 }
+async function getJSON(params) {
+  const d = await (await fetch('search.php?' + new URLSearchParams(params))).json();
+  if (d.error) throw new Error(d.error); return d;
+}
 
 // ── what is being looked for ───────────────────────────────────────────────
 // kind: the search bar's menu. where, place: the Filters panel, one choice each.
 let kind = 'all', where = '', place = '';
-let rows = [], total = 0, seq = 0, timer = null, moments = { count: 0, rows: [] };
+let rows = [], total = 0, seq = 0, timer = null, videos = { count: 0, moments: 0, rows: [] };
 let view = store('view') === 'list' ? 'list' : 'wall';
-const KNOWN = {};          // every file row seen, by path: the panel finds versions here too
+const KNOWN = {};          // every file row seen, by path: the panel and the big view find versions here too
 
 $('kind').onchange = function () { kind = this.value; run(); };
 $('filters').querySelectorAll('[data-f]').forEach(function (b) {
@@ -357,7 +412,7 @@ async function run(more) {
   drawActive();
   const words = $('q').value.trim();
   if (!words && !place && !where && kind === 'all') {
-    total = 0; moments = { count: 0, rows: [] }; $('stat').textContent = 'Start typing.';
+    total = 0; videos = { count: 0, moments: 0, rows: [] }; $('stat').textContent = 'Start typing.';
     clearSel(); $('inspect').hidden = true; return draw();
   }
   const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset, in: place, where: where });
@@ -374,16 +429,16 @@ async function run(more) {
 
   total = d.total; rows = more ? rows.concat(d.rows) : d.rows;
   d.rows.forEach(function (r) { KNOWN[r.path] = r; });
-  if (!more) moments = d.moments || { count: 0, rows: [] };
-  // Moments found inside the footage count too: "0 files" above a page of them read as a bug
-  const mc = moments.count;
+  if (!more) videos = d.moments || { count: 0, moments: 0, rows: [] };
+  // Videos found by what they show count too: "0 files" above a page of them read as a bug
+  const vc = pieces(videos.rows).length;
   $('stat').textContent =
-    (mc ? mc.toLocaleString() + ' moment' + (mc === 1 ? '' : 's') + ' in the footage · ' : '') +
+    (vc ? vc.toLocaleString() + ' video' + (vc === 1 ? '' : 's') + ' · ' + (videos.moments || 0).toLocaleString() + ' moment' + (videos.moments === 1 ? '' : 's') + ' in the footage · ' : '') +
     (total ? total.toLocaleString() + ' file' + (total === 1 ? '' : 's') + (d.bytes ? ' · ' + tb(d.bytes) : '')
-           : mc ? 'no file names match' : '0 files');
+           : vc ? 'no file names match' : '0 files');
   if (!more) clearSel();
   draw();
-  remember($('q').value.trim());
+  remember(words);
 }
 
 function fail(what, detail) {
@@ -394,8 +449,8 @@ function fail(what, detail) {
 
 // ── versions: one piece shows once ─────────────────────────────────────────
 // Files that are versions of one piece share a key (labels.php). Of those found,
-// the newest stands for the piece; moments come only from that one file, so a
-// shot found in v2 and in v3 is not shown twice.
+// the newest stands for the piece. Every version keeps its own description:
+// only how they are shown is grouped.
 function pieces(list) {
   const best = {};
   list.forEach(function (r) {
@@ -405,13 +460,21 @@ function pieces(list) {
   });
   return list.filter(function (r) { return !r.vkey || best[r.vkey] === r; });
 }
-function momentPieces() {
-  const best = {};
-  moments.rows.forEach(function (m) {
-    if (m.vkey && (!best[m.vkey] || (+m.vrank || 0) > (+best[m.vkey].vrank || 0))) best[m.vkey] = m;
-  });
-  return moments.rows.map(function (m, i) { return [m, i]; })
-    .filter(function (x) { return !x[0].vkey || best[x[0].vkey].path === x[0].path; });
+// What a version is, at a glance and in standard words: its shape (16:9, 9:16, 1:1 …)
+// from its real size, or from its name until it has been read; its language from its name.
+function aspect(w, h) {
+  if (!w || !h) return '';
+  const r = w / h, known = [[16, 9], [9, 16], [1, 1], [4, 5], [4, 3], [21, 9]];
+  const k = known.reduce(function (a, b) { return Math.abs(b[0] / b[1] - r) < Math.abs(a[0] / a[1] - r) ? b : a; });
+  return Math.abs(k[0] / k[1] - r) < .06 ? k[0] + ':' + k[1] : (r > 1 ? Math.round(r * 100) / 100 + ':1' : '1:' + Math.round(100 / r) / 100);
+}
+function versionTags(x) {
+  const n = x.name.toLowerCase(), t = [];
+  t.push(aspect(x.width, x.height) || (/vertical|9x16|instagram|(^|[\s_-])(ig|insta)([\s_.-]|$)|reels?([\s_.-]|$)|tiktok/.test(n) ? '9:16'
+                                    : /square|1x1/.test(n) ? '1:1' : /youtube|(^|[\s_-])yt([\s_.-]|$)|1080p|720p|4k|uhd/.test(n) ? '16:9' : ''));
+  if (/(^|[\s_-])(eng|english)([\s_.-]|$)|english/.test(n)) t.push('ENG');
+  if (/(^|[\s_-])(spa|esp|spanish|espanol|español)([\s_.-]|$)|spanish/.test(n)) t.push('SPA');
+  return t.filter(Boolean);
 }
 
 // ── drawing ────────────────────────────────────────────────────────────────
@@ -425,28 +488,27 @@ function res(r) {
   const w = Math.max(r.width, r.height), h = Math.min(r.width, r.height);
   return w >= 3800 || h >= 2100 ? '4K' : w >= 2500 || h >= 1400 ? '2.7K' : h >= 1060 ? 'HD' : h >= 700 ? '720p' : 'SD';
 }
-const versTag = function (n) { return n > 1 ? '<span class="vers" title="' + n + ' versions of this">' + ICON.versions + n + '</span>' : ''; };
-const shape = function (w, h) { const a = Math.min(Math.max(w / h || 1.78, .5), 2.6); return 'flex-grow:' + a.toFixed(3) + ';flex-basis:' + Math.round(a * 170) + 'px'; };
+const still = function (fp, shot) { return 'thumb.php?fp=' + encodeURIComponent(fp) + '&shot=' + (+shot || 0); };
+const versTag = function (n) { return n > 1 ? '<span class="vers">' + ICON.versions + n + '</span>' : ''; };
 
-// A moment: its picture, and a chip with where in the file it is
-function momentTile(m, i) {
+// A video found by what it shows: the shot that matches best, and where it is
+function videoTile(m, i) {
   const speech = m.kind === 'speech';
-  return '<div class="frame' + (inPull(m.path) ? ' pulled' : '') + '" tabindex="0" data-k="m' + i + '" data-p="' + esc(m.path) + '" data-t="' + (+m.start_s || 0) + '"' +
-    ' title="' + esc((speech ? '“' + m.what + '”' : m.what) + '\n' + m.path.split('/').pop()) + '">' +
+  return '<div class="frame' + (inPull(m.path) ? ' pulled' : '') + '" tabindex="0" data-k="m' + i + '" data-p="' + esc(m.path) + '" data-t="' + (+m.start_s || 0) + '">' +
     (speech ? '<div class="ph">' + ICON.quote + '<small>' + esc(m.what) + '</small></div>'
-            : '<img loading="lazy" alt="' + esc(m.what) + '" src="thumb.php?fp=' + encodeURIComponent(m.fp) + '&shot=' + m.shot + '">') +
+            : '<img loading="lazy" alt="' + esc(m.what) + '" src="' + still(m.fp, m.shot) + '">') +
     '<span class="chip">' + (speech ? ICON.quote : ICON.video) + tcode(m.start_s) + '</span>' + versTag(m.versions) +
     '<span class="pk">✓</span></div>';
 }
 // A file: its first still if it was described, else its kind drawn with its name
 function fileTile(r) {
   const k = r.kind || 'other', st = (r.still || '').split(':');
-  return '<div class="frame' + (inPull(r.path) ? ' pulled' : '') + '" tabindex="0" data-k="' + esc(r.path) + '" data-p="' + esc(r.path) + '"' +
-    ' style="' + (r.width ? shape(r.width, r.height) : '') + '" title="' + esc(r.name) + '">' +
-    (st.length === 2 ? '<img loading="lazy" alt="' + esc(r.name) + '" src="thumb.php?fp=' + encodeURIComponent(st[0]) + '&shot=' + (+st[1]) + '">'
+  return '<div class="frame' + (inPull(r.path) ? ' pulled' : '') + '" tabindex="0" data-k="' + esc(r.path) + '" data-p="' + esc(r.path) + '">' +
+    (st.length === 2 ? '<img loading="lazy" alt="' + esc(r.name) + '" src="' + still(st[0], st[1]) + '">'
                      : '<div class="ph">' + (ICON[k] || ICON.file) + '<small>' + esc(r.name) + '</small></div>') +
     '<span class="chip">' + (ICON[k] || ICON.file) + (r.duration ? clock(r.duration) : '') +
-      (res(r) ? ' <span class="r">' + res(r) + '</span>' : '') + '</span>' +
+      (res(r) ? ' <span class="r">' + res(r) + '</span>' : '') +
+      (r.width && aspect(r.width, r.height) !== '16:9' ? ' <span class="r">' + aspect(r.width, r.height) + '</span>' : '') + '</span>' +
     versTag(r.versions) + '<span class="pk">✓</span></div>';
 }
 
@@ -479,7 +541,7 @@ function listHTML(list) {
       const moved = r.path.indexOf('/_duplicates/') > -1 || r.path.indexOf('/_Recently Removed/') > -1;
       const k = r.kind || 'other', st = (r.still || '').split(':'), sc = side[r.path] || [];
       html += '<div class="row pick' + (moved ? ' dim' : '') + (inPull(r.path) ? ' pulled' : '') + '" tabindex="0" data-p="' + esc(r.path) + '" data-k="' + esc(r.path) + '">' +
-        (st.length === 2 ? '<span class="thumb pic"><img loading="lazy" alt="" src="thumb.php?fp=' + encodeURIComponent(st[0]) + '&shot=' + (+st[1]) + '"></span>'
+        (st.length === 2 ? '<span class="thumb pic"><img loading="lazy" alt="" src="' + still(st[0], st[1]) + '"></span>'
                          : '<span class="thumb k-' + esc(k) + '">' + (ICON[k] || ICON.file || '') + '</span>') +
         '<span class="nm">' + esc(r.name) + '<span class="pk">✓ in the pull</span>' +
         (moved ? ' <span class="pill">in Recently Removed</span>' : '') +
@@ -498,24 +560,25 @@ function listHTML(list) {
 
 function draw() {
   document.querySelectorAll('.views [data-view]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.view === view); });
-  const files = pieces(rows), mom = momentPieces();
-  if (!files.length && !mom.length) {
+  const files = pieces(rows);
+  const vids = videos.rows.map(function (m, i) { return [m, i]; });
+  const best = pieces(videos.rows);
+  const vshow = vids.filter(function (x) { return best.indexOf(x[0]) > -1; });
+  if (!files.length && !vshow.length) {
     $('inspect').hidden = true;
     $('out').innerHTML = '<div class="panel"><div class="empty">' +
       ($('q').value.trim() || place || where || kind !== 'all' ? 'Nothing matches.' : 'Type a few words above: what it shows, a name, a folder, an event.') + '</div></div>';
     return;
   }
   let html = '';
-  // What the footage shows comes first, as pictures, in both views
+  // Videos found by what they show come first, as pictures, in both views
   const shown = {};
-  if (mom.length) {
-    html += '<div class="wall">' + mom.map(function (x) { shown[x[0].vkey || x[0].path] = 1; return momentTile(x[0], x[1]); }).join('') + '</div>';
-  }
+  if (vshow.length) html += '<div class="wall">' + vshow.map(function (x) { shown[x[0].vkey || x[0].path] = 1; return videoTile(x[0], x[1]); }).join('') + '</div>';
   if (view === 'wall') {
-    // footage and pictures as tiles (not again when a moment of it is already shown); the rest as a list
+    // footage and pictures as tiles (not again when the video is already shown); the rest as a list
     const pics = files.filter(function (r) { return (r.kind === 'video' || r.kind === 'image') && !shown[r.vkey || r.path]; });
     const rest = files.filter(function (r) { return r.kind !== 'video' && r.kind !== 'image'; });
-    if (pics.length) html += (mom.length ? '<div class="wall-h">Files</div>' : '') + '<div class="wall">' + pics.map(fileTile).join('') + '</div>';
+    if (pics.length) html += (vshow.length ? '<div class="wall-h">Files</div>' : '') + '<div class="wall">' + pics.map(fileTile).join('') + '</div>';
     if (rest.length) html += '<div class="wall-h">Other files</div>' + listHTML(rest);
   } else html += listHTML(files);
   if (rows.length < total) html += '<button class="more" id="more">show 200 more (' + (total - rows.length).toLocaleString() + ' left)</button>';
@@ -527,43 +590,27 @@ function draw() {
 // The panel keeps its place while there are results, so a click never moves the pictures under the mouse
 function hint() {
   $('inspect').hidden = false;
-  $('inspect').innerHTML = '<div style="padding:16px 14px"><p class="note" style="margin:0">Click a picture to see what it is.<br>' +
-    'Double-click to play it. Right-click to add it to a pull.</p></div>';
+  $('inspect').innerHTML = '<div style="padding:16px 14px"><p class="note" style="margin:0">Click a picture to see it here.<br>' +
+    'Double-click to open it large and play it. Right-click to add it to a pull.</p></div>';
 }
-// A picture takes its own shape once it has loaded: a phone's vertical clip stays vertical
-$('out').addEventListener('load', function (e) {
-  const t = e.target.closest && e.target.closest('.frame');
-  if (t && e.target.naturalWidth) t.style.cssText = shape(e.target.naturalWidth, e.target.naturalHeight);
-}, true);
-
-// ── playing ────────────────────────────────────────────────────────────────
-// Only when asked: the proxy from the moment found, with a way back to its start.
-function play(path, t) {
-  const v = $('plV');
-  $('plT').textContent = path.split('/').pop() + (t ? ' · from ' + tcode(t) : '');
-  $('plStart').hidden = !t;
-  $('plSaid').textContent = 'Loading its proxy from the archive…';
-  v.onloadeddata = function () { $('plSaid').textContent = 'Playing its proxy (the original stays where it is).'; };
-  v.onerror = function () { $('plSaid').textContent = 'No proxy to play yet. Proxies are made in Manage → Describe.'; };
-  v.src = 'play.php?p=' + encodeURIComponent(path) + (t ? '#t=' + t : '');
-  $('playDlg').showModal();
-  v.play().catch(function () {});
-}
-$('plStart').onclick = function () { const v = $('plV'); v.currentTime = 0; v.play().catch(function () {}); $('plStart').hidden = true;
-  $('plT').textContent = $('plT').textContent.replace(/ · from .*$/, ''); };
-$('plClose').onclick = function () { $('plV').pause(); $('plV').removeAttribute('src'); $('plV').load(); $('playDlg').close(); };
-$('playDlg').addEventListener('close', function () { $('plV').pause(); });
 
 // ── choosing ───────────────────────────────────────────────────────────────
-// One click picks a tile or a row and shows it beside; nothing opens.
+// One click picks a tile or a row and shows it beside; nothing plays.
 // Cmd/Ctrl-click adds or removes one, Shift-click takes a run. Double-click
-// plays. A right click offers what can be done with whatever is picked.
+// opens it large. A right click offers what can be done with whatever is picked.
 const SEL = new Set(); let lastEl = null;
 const items = function () { return Array.prototype.slice.call($('out').querySelectorAll('[data-k]')); };
 const picked = function () { return items().filter(function (x) { return SEL.has(x.dataset.k); }); };
-const isMoment = function (el) { return el.dataset.t !== undefined; };
-const momentOf = function (el) { return moments.rows[+el.dataset.k.slice(1)]; };
-const playable = function (el) { return isMoment(el) || (KNOWN[el.dataset.p] || {}).kind === 'video'; };
+// What a tile or row stands for: a video found by what it shows, or a file
+function itemOf(el) {
+  if (el.dataset.t !== undefined) {
+    const m = videos.rows[+el.dataset.k.slice(1)];
+    return { path: m.path, fp: m.fp, t: +m.start_s || 0, found: m.found || [], vkey: m.vkey, versions: m.versions };
+  }
+  const r = KNOWN[el.dataset.p] || {}, st = (r.still || '').split(':');
+  return { path: el.dataset.p, fp: st.length === 2 ? st[0] : '', t: 0, found: [], vkey: r.vkey, versions: r.versions };
+}
+const playable = function (el) { return el.dataset.t !== undefined || (KNOWN[el.dataset.p] || {}).kind === 'video'; };
 function clearSel() { SEL.clear(); lastEl = null; drawSel(); }
 function drawSel() {
   items().forEach(function (x) { x.classList.toggle('on', SEL.has(x.dataset.k)); });
@@ -574,8 +621,7 @@ function drawSel() {
     $('selAdd').textContent = paths.length ? 'Add ' + paths.length + ' to pull' : 'Not in the archive: cannot be pulled';
     $('selAdd').disabled = !paths.length;
     $('inspect').hidden = false;
-    $('inspect').innerHTML = '<header><b>' + n + ' picked</b></header><div style="padding:12px 14px">' +
-      '<p class="note" style="margin:0">Double-click one to play it. Right-click for more.</p></div>';
+    $('inspect').innerHTML = '<div style="padding:16px 14px"><b>' + n + ' picked</b><p class="note" style="margin:6px 0 0">Double-click one to open it. Right-click for more.</p></div>';
   }
 }
 // what the picked things add to a pull: each file once, and only files in the archive
@@ -592,27 +638,24 @@ function choose(el, e) {
   } else { SEL.clear(); SEL.add(el.dataset.k); }
   if (!(e && e.shiftKey)) lastEl = el;
   drawSel();
-  if (SEL.size === 1) { const one = picked()[0]; if (isMoment(one)) inspectMoment(momentOf(one)); else inspect(KNOWN[one.dataset.p]); }
+  if (SEL.size === 1) openIn('panel', itemOf(picked()[0]));
   else if (!SEL.size) hint();
 }
 $('out').addEventListener('click', function (e) { const el = e.target.closest('[data-k]'); if (el) choose(el, e); });
 $('out').addEventListener('keydown', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
-  if (e.key === 'Enter') { e.preventDefault(); if (SEL.has(el.dataset.k) && playable(el)) play(el.dataset.p, +el.dataset.t || 0); else choose(el, e); }
+  if (e.key === 'Enter') { e.preventDefault(); if (SEL.has(el.dataset.k)) openBig(el); else choose(el, e); }
   if (e.key === ' ') { e.preventDefault(); choose(el, e); }
 });
-$('out').addEventListener('dblclick', function (e) {
-  const el = e.target.closest('[data-k]'); if (el && playable(el)) play(el.dataset.p, +el.dataset.t || 0);
-});
+$('out').addEventListener('dblclick', function (e) { const el = e.target.closest('[data-k]'); if (el) openBig(el); });
 $('out').addEventListener('contextmenu', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
   e.preventDefault();
   if (!SEL.has(el.dataset.k)) choose(el, null);
-  const paths = selPaths(), one = SEL.size === 1, t = +el.dataset.t || 0;
+  const paths = selPaths(), one = SEL.size === 1;
   const m = $('ctx');
   m.innerHTML =
-    (one && playable(el) ? '<button data-do="play">Play' + (t ? ' from ' + tcode(t) : '') + '</button>' : '') +
-    (one && t ? '<button data-do="start">Play from the start</button>' : '') +
+    (one ? '<button data-do="open">Open large' + (playable(el) ? ' and play' : '') + '</button>' : '') +
     '<button data-do="pull"' + (paths.length ? '' : ' disabled') + '>' +
       (paths.length ? 'Add ' + (paths.length > 1 ? paths.length + ' ' : '') + (PULL && PULL.name ? 'to ' + esc(PULL.name) : 'to a pull…')
                     : 'Not in the archive: cannot be pulled') + '</button>' +
@@ -623,10 +666,9 @@ $('out').addEventListener('contextmenu', function (e) {
   m.onclick = function (ev) {
     const b = ev.target.closest('[data-do]'); if (!b || b.disabled) return;
     m.hidden = true;
-    if (b.dataset.do === 'play')  play(el.dataset.p, t);
-    if (b.dataset.do === 'start') play(el.dataset.p, 0);
-    if (b.dataset.do === 'pull')  addToPull(paths, null);
-    if (b.dataset.do === 'copy')  copyText(localPath(el.dataset.p), function (ok) { say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); });
+    if (b.dataset.do === 'open') openBig(el);
+    if (b.dataset.do === 'pull') addToPull(paths, null);
+    if (b.dataset.do === 'copy') copyText(localPath(el.dataset.p), function (ok) { say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); });
   };
 });
 document.addEventListener('click', function (e) {
@@ -635,17 +677,51 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('scroll', function () { $('ctx').hidden = true; }, true);
 document.addEventListener('keydown', function (e) {
+  if ($('big').open) {
+    if (e.key === 'ArrowLeft' && !$('bigPrev').disabled) { e.preventDefault(); stepBig(-1); }
+    if (e.key === 'ArrowRight' && !$('bigNext').disabled) { e.preventDefault(); stepBig(1); }
+    return;
+  }
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   if (!$('ctx').hidden || !$('pullsDd').hidden || !$('recentDd').hidden) { $('ctx').hidden = $('pullsDd').hidden = $('recentDd').hidden = true; return; }
   clearSel(); hint();
 });
 $('selAdd').onclick = function () { addToPull(selPaths(), $('selAdd')); };
 $('selClear').onclick = function () { clearSel(); hint(); };
-// every action says it happened, here, for a few seconds
+// every action says it happened, for a few seconds: beside the count, and in the big view when it is open
 let saidT = null;
-function say(t) { $('said').textContent = t; clearTimeout(saidT); saidT = setTimeout(function () { $('said').textContent = ''; }, 4000); }
+function say(t) {
+  document.querySelectorAll('.said').forEach(function (x) { x.textContent = t; });
+  clearTimeout(saidT); saidT = setTimeout(function () { document.querySelectorAll('.said').forEach(function (x) { x.textContent = ''; }); }, 4000);
+}
 
-// ── the panel beside ───────────────────────────────────────────────────────
+// ── one video, opened ──────────────────────────────────────────────────────
+// The same pieces in the panel beside (a click) and in the big view (a
+// double-click): the name with Pull and Copy, the picture that plays, the
+// versions, what the shot shows, every shot of the video, then the details.
+const SHOTS = {};          // every shot of a video, by fingerprint, once asked
+let PANEL = null, BIG = null;
+async function rowOf(path) {
+  if (!KNOWN[path]) { try { (await getJSON({ p: path, limit: 1 })).rows.forEach(function (r) { KNOWN[r.path] = r; }); } catch (e) {} }
+  return KNOWN[path] || { path: path, name: path.split('/').pop() };
+}
+async function shotsOf(fp) {
+  if (!fp) return [];
+  if (!SHOTS[fp]) { try { SHOTS[fp] = (await getJSON({ shots: fp })).shots; } catch (e) { SHOTS[fp] = []; } }
+  return SHOTS[fp];
+}
+async function openIn(where, it) {
+  const st = { it: it, row: await rowOf(it.path), shots: await shotsOf(it.fp), t: it.t, playing: where === 'big' };
+  if (where === 'panel') { PANEL = st; if (SEL.size === 1) render('panel'); }
+  else { BIG = st; render('big'); }
+}
+const shotAt = function (st) {
+  let cur = st.shots[0];
+  st.shots.forEach(function (s) { if (s.kind === 'shot' && +s.start_s <= st.t + .01) cur = s; });
+  return cur;
+};
+const kv = function (k, v, wide) { return v ? '<div' + (wide ? ' class="wide"' : '') + '><small>' + k + '</small><span>' + v + '</span></div>' : ''; };
+const tagList = function (v) { return v ? '<div class="tags">' + v.split(' · ').filter(Boolean).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : ''; };
 // "2024-05-03 14:22:10" as the camera wrote it -> "3 May 2024, 2:22 pm · afternoon".
 // Never converted between time zones: cameras disagree about which one they mean.
 function recorded(t) {
@@ -667,6 +743,165 @@ function copiesText(s) {
     rs.map(function (x) { return esc(x.place) + ' was gone when checked on ' + day(x.at); }).join(', ');
   return '1 — this file. No other copy on record.';
 }
+// The shoot a file belongs to; a folder an edit is saved in (Output …) is not one
+function shootOf(r) {
+  if (r.event && !/^(outputs?|exports?|renders?|deliverables?|finals?|old|versions?|backups?)$/i.test(r.event)) return r.event;
+  const bits = trail(r.path || '').filter(function (b) { return !/^(outputs?|exports?|renders?|deliverables?|finals?|old|versions?|backups?)$/i.test(b) && !/^(19|20)\d\d$/.test(b); });
+  return bits.pop() || r.event || '';
+}
+
+function render(where) {
+  const st = where === 'big' ? BIG : PANEL; if (!st) return;
+  const r = st.row, it = st.it, cur = shotAt(st), big = where === 'big';
+  const fp = it.fp, t = cur && cur.kind === 'shot' ? +cur.start_s : st.t;
+  const canPlay = r.kind === 'video' || it.found.length || !!fp;
+  const pic = cur && cur.kind === 'shot' ? '<img alt="" src="' + still(fp, cur.shot) + '">'
+            : '<div class="ph">' + (ICON[r.kind] || ICON.file) + '</div>';
+  // Every keyword of the whole video: the big view offers them as searches
+  const words = {};
+  st.shots.forEach(function (s) { [s.tags, s.themes, s.on_screen].forEach(function (v) {
+    (v || '').split(' · ').forEach(function (w) { w = w.trim(); if (w) words[w.toLowerCase()] = words[w.toLowerCase()] || w; }); }); });
+  const found = {}; it.found.forEach(function (x) { found[(+x).toFixed(2)] = 1; });
+  const html =
+    '<div' + (big ? '' : '') + '>' +
+      (big ? '' : head(r)) +
+      '<div class="vb">' +
+        '<div class="pv" data-pv>' + pic + (!st.playing && canPlay ? '<span class="go">▶</span>' : '') + '</div>' +
+        (canPlay ? '<p class="pv-note" data-pvn>' + (st.playing ? 'Loading its proxy from the archive…' : 'Click to play' + (t ? ' from ' + tcode(t) : '') + '.') + '</p>' : '') +
+        (big ? (st.shots.length ? '<div class="sec">In this video · ' + st.shots.filter(function (s) { return s.kind === 'shot'; }).length + ' shots</div>' + strip(st, found) : '') +
+               (Object.keys(words).length ? '<div class="sec">Keywords</div><div class="tags">' +
+                 Object.keys(words).slice(0, 24).map(function (k) { return '<button data-kw="' + esc(words[k]) + '">' + esc(words[k]) + '</button>'; }).join('') + '</div>' : '')
+             : versionsBox(r, it) + describe(cur) + (st.shots.length ? '<div class="sec">In this video</div>' + strip(st, found) : '') + details(r, cur)) +
+      '</div>' +
+    '</div>' +
+    (big ? '<div>' + head(r) + '<div class="vb">' + facts(r, true) + versionsBox(r, it) + describe(cur) + details(r, cur, true) + '</div></div>' : '');
+  const box = big ? $('bigBody') : $('inspect');
+  box.hidden = false; box.innerHTML = html;
+  wire(box, st, where);
+  if (st.playing) startVideo(box, r.path, t);
+}
+function head(r) {
+  return '<div class="vh"><b>' + esc(r.name) + '</b>' +
+    (pullable(r.path) ? '<button class="ib' + (inPull(r.path) ? ' in' : '') + '" data-do="pull" title="' + (inPull(r.path) ? 'In the pull' : 'Add to pull') + '">' + ICON.pull + '</button>' : '') +
+    '<button class="ib" data-do="copy" title="Copy its path">' + ICON.copy + '</button></div>' +
+    '<div class="said" style="padding:0 14px;font-size:12px"></div>';
+}
+function describe(cur) {
+  if (!cur) return '';
+  return '<div class="sec">Description</div><div class="desc">' + (cur.kind === 'speech' ? '“' + esc(cur.what) + '”' : esc(cur.what)) +
+    '<small>' + (cur.kind === 'speech' ? 'said' : 'shot ' + ((+cur.shot || 0) + 1)) + ' · ' + tcode(cur.start_s) + ' → ' + tcode(cur.end_s) + '</small></div>';
+}
+function strip(st, found) {
+  const cur = shotAt(st);
+  return '<div class="strip">' + st.shots.filter(function (s) { return s.kind === 'shot'; }).map(function (s) {
+    return '<button data-shot="' + (+s.start_s) + '" class="' + (found[(+s.start_s).toFixed(2)] ? 'hit ' : '') + (s === cur ? 'cur' : '') + '" title="' +
+      esc(s.what) + '"><img loading="lazy" alt="" src="' + still(s.fp, s.shot) + '"><span>' + tcode(s.start_s) + '</span></button>';
+  }).join('') + '</div>';
+}
+function versionsBox(r, it) {
+  const n = r.versions || it.versions;
+  return n > 1 ? '<div class="sec">' + n + ' versions</div><div class="vlist" data-vers="' + esc(r.vkey || it.vkey) + '"><div class="vrow"><span>Looking…</span></div></div>' : '';
+}
+function facts(r, grid) {
+  return '<div class="kv">' +
+    kv('Dimensions', r.width ? r.width + ' × ' + r.height : '') + kv('File type', esc((r.ext || '').toUpperCase())) +
+    kv('Codec', esc((r.codec || '').toUpperCase())) + kv('Length', r.duration ? clock(r.duration) : '') +
+    kv('Frame rate', r.fps ? (+r.fps).toFixed(3).replace(/\.?0+$/, '') : '') + kv('Size', r.bytes ? tb(r.bytes) : '') +
+    kv('Resolution', res(r)) + kv('Shoot', esc(shootOf(r))) + '</div>';
+}
+function details(r, cur, big) {
+  const shot = cur && cur.kind === 'shot' ? cur : null;
+  return '<div class="facts">' +
+    (shot ? '<div class="sec">This shot</div><div class="kv">' +
+      kv('Text on screen', tagList(shot.on_screen), true) + kv('Themes', tagList(shot.themes), true) + kv('Tags', tagList(shot.tags), true) +
+      kv('Shot size', esc(shot.shot_size)) + kv('People', esc(shot.people)) + kv('Light', esc(shot.light)) + kv('Mood', esc(shot.mood)) +
+      kv('Part of the day', esc(shot.part_of_day)) + '</div>' : '') +
+    '<div class="sec">The file</div>' + (big ? '' : facts(r)) + '<div class="kv" style="margin-top:10px">' +
+      kv('Kind', esc(r.kind || 'file')) +
+      (r.recorded ? kv('Recorded', esc(recorded(r.recorded)) + ' <small style="display:inline;text-transform:none;letter-spacing:0">(the camera\'s clock)</small>', true) : '') +
+      kv('Camera', esc(r.camera)) + kv('Timecode', esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · '))) +
+      kv('Copies', copiesText(r.copies), true) +
+      (r.proxy_at ? kv('Plays from', 'its proxy (downloads and pulls use the original)', true) : '') +
+      (r.drive ? kv('Drive', esc(r.drive) + (r.away ? ' &mdash; <b>not plugged in</b>: plug it in to open this file' : ' (plugged in)'), true) : '') +
+      kv('Where it lives', esc(short(r.path)), true) +
+    '</div></div>';
+}
+function startVideo(box, path, t) {
+  const pv = box.querySelector('[data-pv]'), note = box.querySelector('[data-pvn]');
+  if (!pv) return;
+  const was = pv.querySelector('img');               // the shot's still stays on screen while the proxy loads
+  pv.innerHTML = '<video controls autoplay playsinline' + (was ? ' poster="' + esc(was.getAttribute('src')) + '"' : '') + ' src="play.php?p=' + encodeURIComponent(path) + (t ? '#t=' + t : '') + '"></video>';
+  const v = pv.querySelector('video');
+  v.onloadeddata = function () { if (note) note.textContent = 'Playing its proxy' + (t ? ' from ' + tcode(t) : '') + ' (the original stays where it is).'; };
+  v.onerror = function () { if (note) note.textContent = 'No proxy to play yet. Proxies are made in Manage → Describe.'; };
+  v.play().catch(function () {});
+}
+function wire(box, st, where) {
+  const r = st.row;
+  box.querySelectorAll('[data-do="copy"]').forEach(function (b) {
+    b.onclick = function () { copyText(localPath(r.path), function (ok) {
+      b.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C');
+      setTimeout(function () { b.innerHTML = ICON.copy; }, 1600); }); };
+  });
+  box.querySelectorAll('[data-do="pull"]').forEach(function (b) {
+    b.onclick = async function () { await addToPull([r.path], null); b.classList.toggle('in', inPull(r.path)); b.title = inPull(r.path) ? 'In the pull' : 'Add to pull'; };
+  });
+  // the picture is the player: a click plays it there, from the shot shown
+  const pv = box.querySelector('[data-pv]');
+  if (pv && !st.playing && box.querySelector('.go')) pv.onclick = function () { st.playing = true; const n = box.querySelector('[data-pvn]'); if (n) n.textContent = 'Loading its proxy from the archive…';
+    startVideo(box, r.path, (shotAt(st) && shotAt(st).kind === 'shot') ? +shotAt(st).start_s : st.t); };
+  // a shot of the video: shown, and played from there if it is playing
+  box.querySelectorAll('[data-shot]').forEach(function (b) {
+    b.onclick = function () {
+      st.t = +b.dataset.shot;
+      const v = box.querySelector('[data-pv] video');
+      if (v) { v.currentTime = st.t; v.play().catch(function () {}); st.playing = true; }
+      const keep = v ? v : null;
+      render(where);
+      if (keep) { const pv2 = box.querySelector('[data-pv]'); pv2.innerHTML = ''; pv2.appendChild(keep); }
+    };
+  });
+  box.querySelectorAll('[data-kw]').forEach(function (b) {
+    b.onclick = function () { $('big').close(); $('q').value = b.dataset.kw; run(); };
+  });
+  const vl = box.querySelector('[data-vers]');
+  if (vl) loadVersions(vl, st, where);
+}
+// Every version of the piece, newest first, with what each one is; one click shows that version
+async function loadVersions(box, st, where) {
+  let d;
+  try { d = await getJSON({ v: box.dataset.vers, limit: 100 }); } catch (e) { box.innerHTML = '<div class="vrow"><span>Could not list them: ' + esc(e.message) + '</span></div>'; return; }
+  d.rows.forEach(function (x) { KNOWN[x.path] = x; });
+  d.rows.sort(function (a, b) { return (+b.vrank || 0) - (+a.vrank || 0) || a.name.localeCompare(b.name); });
+  box.innerHTML = d.rows.map(function (x, i) {
+    return '<button class="vrow' + (x.path === st.row.path ? ' cur' : '') + '" data-vp="' + esc(x.path) + '" title="' + esc(short(x.path)) + '">' +
+      '<span>' + esc(x.name) + versionTags(x).map(function (t) { return '<i>' + esc(t) + '</i>'; }).join('') + '</span>' +
+      '<small>' + (i === 0 ? 'newest · ' : '') + tb(x.bytes) + '</small></button>';
+  }).join('');
+  box.querySelectorAll('[data-vp]').forEach(function (b) {
+    b.onclick = function () {
+      const x = KNOWN[b.dataset.vp], s2 = (x.still || '').split(':');
+      openIn(where, { path: x.path, fp: s2.length === 2 ? s2[0] : '', t: 0, found: [], vkey: x.vkey, versions: x.versions });
+    };
+  });
+}
+
+// The big view: a double-click; ‹ › walk through what was found without closing
+let bigAt = -1;
+function openBig(el) {
+  const all = items(); bigAt = all.indexOf(el);
+  $('bigPrev').disabled = bigAt <= 0; $('bigNext').disabled = bigAt >= all.length - 1;
+  if (!$('big').open) $('big').showModal();
+  $('bigBody').innerHTML = '<p class="note">Opening…</p>';
+  openIn('big', itemOf(el));
+}
+function stepBig(d) { const all = items(), el = all[bigAt + d]; if (el) { choose(el, null); openBig(el); } }
+$('bigPrev').onclick = function () { stepBig(-1); };
+$('bigNext').onclick = function () { stepBig(1); };
+$('bigClose').onclick = function () { $('big').close(); };
+$('big').addEventListener('close', function () { $('bigBody').querySelectorAll('video').forEach(function (v) { v.pause(); }); $('bigBody').innerHTML = ''; BIG = null; });
+$('big').addEventListener('click', function (e) { if (e.target === $('big')) $('big').close(); });   // a click outside closes it
+
 // The path as this computer reaches it, for Copy path
 function localPath(p) {
   const mine = store('archiveBase');
@@ -675,94 +910,6 @@ function localPath(p) {
     : p.replace(ARCHIVE, LOCAL);
 }
 const pullable = function (p) { return p.startsWith(ROOT) && !(RUSHES.drives || []).some(function (d) { return p.startsWith(d.path + '/'); }); };
-const kv = function (k, v) { return v ? '<div class="k">' + k + '</div><div class="v">' + v + '</div>' : ''; };
-
-// Every version of the piece, newest first; one click shows that version here
-function versionsHTML(r) {
-  return r && r.versions > 1 ? '<div class="k">' + r.versions + ' versions</div><div class="vlist" id="iVers"><div class="vrow"><span>Looking…</span></div></div>' : '';
-}
-async function loadVersions(r) {
-  if (!r || !(r.versions > 1) || !$('iVers')) return;
-  let d;
-  try { d = await (await fetch('search.php?' + new URLSearchParams({ v: r.vkey, limit: 100 }))).json(); } catch (e) { d = { error: e.message }; }
-  if (!$('iVers')) return;
-  if (d.error) { $('iVers').innerHTML = '<div class="vrow"><span>Could not list them: ' + esc(d.error) + '</span></div>'; return; }
-  d.rows.forEach(function (x) { KNOWN[x.path] = x; });
-  d.rows.sort(function (a, b) { return (+b.vrank || 0) - (+a.vrank || 0) || a.name.localeCompare(b.name); });
-  $('iVers').innerHTML = d.rows.map(function (x, i) {
-    return '<button class="vrow' + (x.path === r.path ? ' cur' : '') + '" data-vp="' + esc(x.path) + '" title="' + esc(short(x.path)) + '">' +
-      '<span>' + esc(x.name) + '</span><small>' + (i === 0 ? 'newest · ' : '') + tb(x.bytes) + '</small></button>';
-  }).join('');
-  $('iVers').querySelectorAll('[data-vp]').forEach(function (b) {
-    b.onclick = function () { inspect(KNOWN[b.dataset.vp]); };
-    b.ondblclick = function () { if ((KNOWN[b.dataset.vp] || {}).kind === 'video') play(b.dataset.vp, 0); };
-  });
-}
-
-function inspect(r) {
-  if (!r) return;
-  const local = r.drive ? r.path : localPath(r.path), st = (r.still || '').split(':');
-  $('inspect').hidden = false;
-  $('inspect').innerHTML =
-    '<header><b>' + esc(r.name) + '</b></header>' +
-    '<div style="padding:12px 14px">' +
-      // the player is ready, not playing: nothing loads until Play is pressed
-      (r.proxy_at ? '<video controls playsinline preload="none"' + (st.length === 2 ? ' poster="thumb.php?fp=' + encodeURIComponent(st[0]) + '&shot=' + (+st[1]) + '"' : '') +
-          ' src="play.php?p=' + encodeURIComponent(r.path) + '"></video>'
-        : st.length === 2 ? '<img class="big" alt="" src="thumb.php?fp=' + encodeURIComponent(st[0]) + '&shot=' + (+st[1]) + '">' : '') +
-      versionsHTML(r) +
-      kv('Kind', esc(r.kind || 'file') + (r.ext ? ' · ' + esc(r.ext.toUpperCase()) : '')) +
-      kv('Size', tb(r.bytes)) +
-      (r.width ? kv('Original', res(r) + ' · ' + r.width + ' × ' + r.height +
-        (r.fps ? ' · ' + (+r.fps).toFixed(2).replace(/\.?0+$/, '') + ' fps' : '') +
-        (r.codec ? ' · ' + esc(r.codec.toUpperCase()) : '') + (r.duration ? ' · ' + clock(r.duration) : '')) : '') +
-      (r.recorded ? kv('Recorded', esc(recorded(r.recorded)) + ' <small>(the camera\'s clock)</small>') : '') +
-      kv('Camera', esc(r.camera)) +
-      kv('Timecode', esc([r.timecode, r.reel ? 'reel ' + r.reel : ''].filter(Boolean).join(' · '))) +
-      kv('Copies', copiesText(r.copies)) +
-      (r.proxy_at ? kv('Plays from', 'its proxy (downloads and pulls use the original)') : '') +
-      kv('Shoot', esc(r.event)) + kv('Year', esc(r.year)) +
-      (r.drive ? kv('Drive', esc(r.drive) + (r.away ? ' &mdash; <b>not plugged in</b>: plug it in to open this file' : ' (plugged in)')) : '') +
-      kv('Where it lives', esc(short(r.path))) +
-      '<div class="btns" style="margin-top:14px">' +
-        (pullable(r.path) ? '<button class="btn" id="iPull">' + (inPull(r.path) ? 'In the pull ✓' : 'Add to pull') + '</button>' : '') +
-        '<button class="btn quiet" id="iCopy">Copy path</button>' +
-      '</div>' +
-    '</div>';
-  $('iCopy').onclick = function () { copyText(local, $('iCopy')); };
-  if ($('iPull')) $('iPull').onclick = function () { addToPull([r.path], $('iPull')); };
-  loadVersions(r);
-}
-
-// A moment picked: its picture, everything the model said about it, and what to do with it
-function inspectMoment(m) {
-  if (!m) return;
-  const speech = m.kind === 'speech', t = +m.start_s || 0;
-  const tags = function (k, v) { return v ? '<div class="k">' + k + '</div><div class="ons">' +
-    v.split(' · ').map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : ''; };
-  const piece = { path: m.path, vkey: m.vkey, versions: m.versions };
-  $('inspect').hidden = false;
-  $('inspect').innerHTML = '<header><b>' + esc(m.path.split('/').pop()) + '</b></header><div style="padding:12px 14px">' +
-    (speech ? '' : '<img class="big" alt="" src="thumb.php?fp=' + encodeURIComponent(m.fp) + '&shot=' + m.shot + '">') +
-    kv(speech ? 'Said' : 'Shot ' + ((+m.shot || 0) + 1), tcode(m.start_s) + ' → ' + tcode(m.end_s) + (speech && m.language ? ' · ' + esc(m.language) : '')) +
-    kv(speech ? 'Words' : 'What it shows', esc(m.what)) +
-    tags('Text on screen', m.on_screen) + tags('Themes', m.themes) + tags('Tags', m.tags) +
-    kv('Shot size', esc(m.shot_size)) + kv('People', esc(m.people)) + kv('Light', esc(m.light)) + kv('Mood', esc(m.mood)) +
-    kv('Part of the day', esc(m.part_of_day)) +
-    versionsHTML(piece) +
-    kv('Where it lives', esc(short(m.path))) +
-    '<div class="btns" style="margin-top:14px">' +
-      '<button class="btn" id="iPlay">Play from ' + tcode(t) + '</button>' +
-      (t ? '<button class="btn quiet" id="iStart">From the start</button>' : '') +
-      (pullable(m.path) ? '<button class="btn quiet" id="iPull">' + (inPull(m.path) ? 'In the pull ✓' : 'Add to pull') + '</button>' : '') +
-      '<button class="btn quiet" id="iCopy">Copy path</button>' +
-    '</div></div>';
-  $('iPlay').onclick = function () { play(m.path, t); };
-  if ($('iStart')) $('iStart').onclick = function () { play(m.path, 0); };
-  if ($('iPull')) $('iPull').onclick = function () { addToPull([m.path], $('iPull')); };
-  $('iCopy').onclick = function () { copyText(localPath(m.path), $('iCopy')); };
-  loadVersions(piece);
-}
 
 // ── recent searches: under the search box, kept in this browser only ──────
 function recentList() { try { return JSON.parse(store('recent') || '[]'); } catch (e) { return []; } }
@@ -817,10 +964,7 @@ async function addToPull(paths, btn) {
   if (!paths.length) return;
   if (!PULL) { pending = [paths, btn]; return openPullDlg(); }
   const todo = paths.filter(function (p) { return !inPull(p); });
-  if (!todo.length) {
-    if (paths.length === 1 && btn) { location.href = '/pull.php?p=' + encodeURIComponent(PULL.slug); return; }
-    return say('Already in ' + PULL.name + '.');
-  }
+  if (!todo.length) return say('Already in ' + PULL.name + '.');
   const was = btn ? btn.textContent : ''; if (btn) btn.disabled = true;
   let n = 0;
   try {
@@ -830,7 +974,7 @@ async function addToPull(paths, btn) {
     }
     await refreshPull();
     say((n === 1 ? 'Added to ' : 'Added ' + n + ' to ') + PULL.name + (paths.length > n ? ' (' + (paths.length - n) + ' already in it)' : '') + '.');
-    if (btn) btn.textContent = btn.id === 'iPull' ? 'In the pull ✓' : '✓ Added ' + n;
+    if (btn) btn.textContent = '✓ Added ' + n;
   } catch (e) {
     say((n ? n + ' added, then ' : '') + 'not added: ' + e.message);
     if (btn) { btn.textContent = 'Not added'; setTimeout(function () { btn.textContent = was; }, 4000); }
@@ -854,7 +998,9 @@ async function usePull(p) {
   PULL = p; store('pull', JSON.stringify(p)); $('pullDlg').close();
   await refreshPull();
   say('Filling ' + (PULL ? PULL.name : p.name) + '.');
-  if (pending) { const x = pending; pending = null; addToPull(x[0], x[1]); }
+  if (pending) { const x = pending; pending = null; await addToPull(x[0], x[1]); }
+  if (PANEL) render('panel');
+  if (BIG && $('big').open) { BIG.playing = false; render('big'); }
 }
 $('pdName').oninput = function () { $('pdCreate').disabled = !this.value.trim(); };
 $('pdClose').onclick = function () { $('pullDlg').close(); pending = null; };

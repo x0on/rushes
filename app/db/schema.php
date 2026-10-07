@@ -183,6 +183,7 @@ function classify(string $path): array {
         $p = $parts[$i];
         if (is_card_junk($p)) continue;
         if (is_year($p)) continue;                    // a year is not an event
+        if (preg_match('/^(outputs?|exports?|renders?|deliverables?|finals?|old|versions?|backups?)$/i', trim($p))) continue;   // where an edit is saved, not the shoot
         $event = $p; $why = 'event = nearest meaningful folder'; break;
     }
 
