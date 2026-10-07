@@ -3,6 +3,19 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.24 — October 2026
+
+- **Manage's menu, grouped by what each page does.** Overview first: the
+  dashboard. **Transfer**: Copying (was Transfers), Reorganize, Duplicates
+  and Cache, the pages that move files (each shows everything first, asks
+  first, records every move and can put it back). **Footage**: Describe and
+  Editors' projects. **System**: Activity and Setup.
+- **Every on/off switch is on Overview only.** Copying no longer repeats the
+  helper's box. Describe says whether describing is on or paused, with a link
+  to its switch; "Only at night" stays in Describe.
+- **The default-password warning shows on Overview only**, where its button
+  is; Setup has the form itself.
+
 ## 0.12.23 — October 2026
 
 - **Setup holds the archive's structure.** What the top folders are, which

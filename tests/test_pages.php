@@ -64,6 +64,8 @@ check(str_contains($html, 'id="now"') && str_contains($html, 'id="transferSummar
 check(str_contains($html, 'helperNow') && str_contains($html, 'tokens.css?v='), 'shared top bar with live words and a fresh stylesheet');
 check(str_contains($html, 'id="rlGo"') && !str_contains($html, 'id="pane-tools"') && str_contains($html, "'/setup.php#tools'"),
       "relinking after a tidy-up is in Editors' projects; Jobs and tools is in Setup, and an old link lands there");
+check(str_contains($html, '<h2>Transfer</h2>') && str_contains($html, '<h2>Footage</h2>') && str_contains($html, '> Copying') && str_contains($html, "pane !== 'overview'"),
+      'the menu: Overview, then Transfer, Footage and System; the switches only on Overview');
 check(!str_contains($html, 'Back to search') && substr_count($html, 'href="/setup.php"') >= 1, 'the menu has no second way back to Search');
 ob_start(); include "$root/app/setup.php"; $html = ob_get_clean();
 check(str_contains($html, 'id="plan"') && str_contains($html, '1 department, in Library') && str_contains($html, 'form="pP" type="text" name="d_name[0]" value="Parks"'),

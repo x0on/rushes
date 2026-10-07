@@ -340,6 +340,9 @@ like any other.
 
 Each needs its own discussion before it is built.
 
+- **Search in both languages, from the describer:** Qwen writes each shot's tags in English and Spanish, with the obvious other words (drone → aerial, dron, vista aérea; abuelo → elderly, senior), and a words-only pass gives already described files the same. Whole-word search then finds them exactly; the related-word groups stay as the backup. Changes analyze.py (signed helper code).
+- **Search by meaning (parked on the `wip-meaning` branch):** a small multilingual model (paraphrase-multilingual-MiniLM-L12-v2, 118 MB, from Rushes' own release) beside Rushes on the Mac. Tried on the pilot's 856 real shots (October 2026): learnt in 6 s, 2–3 ms a search; right for "abuelos", "elder", "old building", "sunset", "reunión", wrong for "drone" (badminton shuttlecocks; the 15 aerial shots missed) and "patineta eléctrica". bge-m3 (570 MB) fixed some and broke others. Not worth a new engine and process until the tags above are tried.
+
 - **Versions found by what they show:** every version is described, so files whose shots match one for one (stills, descriptions, length) can be joined even when their names differ, and a name-based join whose footage differs can be flagged.
 - **Long takes:** a take longer than 30 s is described as one shot today; it should get a still every so often.
 - **Speech:** the speech model cannot be downloaded on some networks; let it be installed from a folder the person already has.

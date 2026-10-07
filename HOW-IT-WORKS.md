@@ -1190,9 +1190,12 @@ put back. **In the code:** `organize.sh`.
 
 ## Manage
 
-Manage is behind the password. Its left column has these panes: Overview,
-Transfers, Duplicates, Cache, Describe, Editors' projects, Reorganize, Activity
-and Setup, plus **Sign out**. Each has its own icon. Search is the top bar's,
+Manage is behind the password. Its left column: **Overview** (the dashboard:
+how things are, and every on/off switch), then **Transfer** (Copying,
+Reorganize, Duplicates, Cache: the pages that move files, each showing
+everything first, asking first, recording every move, able to put it back),
+**Footage** (Describe, Editors' projects) and **System** (Activity, Setup),
+plus **Sign out**. "Copying" was called Transfers until 0.12.24. Each has its own icon. Search is the top bar's,
 so the column does not repeat it. Activity in full hides the short feed beside
 the other panes. Every pane uses the window's width; paragraphs stay a readable
 width.

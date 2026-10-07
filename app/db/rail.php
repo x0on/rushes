@@ -13,18 +13,22 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
 };
 ?>
   <nav class="rail rail-manage" aria-label="Manage sections">
-    <h2>Archive</h2>
     <?= $railItem('overview',   'Overview',   'overview',  '/db/admin.php#overview',   true, ' <span class="badge bad" id="nOverview" hidden></span>') ?>
-    <?= $railItem('transfers',  'Transfers',  'transfers', '/db/admin.php#transfers',  true, ' <span class="count" id="nTransfers"></span>') ?>
+
+    <!-- The pages that move files: each shows everything first, asks before it moves, records every move, and can put it back -->
+    <h2>Transfer</h2>
+    <?= $railItem('transfers',  'Copying',    'transfers', '/db/admin.php#transfers',  true, ' <span class="count" id="nTransfers"></span>') ?>
+    <?= $railItem('structure',  'Reorganize', 'reorganize', '/structure.php',          false) ?>
     <?= $railItem('duplicates', 'Duplicates', 'library',   '/db/admin.php#duplicates', true) ?>
     <?= $railItem('cache',      'Cache',      'cache',     '/db/admin.php#cache',      true, ' <span class="count" id="nCache"></span>') ?>
-    <?= $railItem('describe',   'Describe',   'ai',    '/db/admin.php#describe',   true) ?>
+
+    <h2>Footage</h2>
+    <?= $railItem('describe',   'Describe',   'ai',        '/db/admin.php#describe',   true) ?>
     <?= $railItem('projects',   "Editors' projects", 'project', '/db/admin.php#projects', true) ?>
-    <?= $railItem('structure',  'Reorganize',  'reorganize',  '/structure.php',           false) ?>
 
     <h2>System</h2>
-    <?= $railItem('activity',   'Activity',       'activity', '/db/admin.php#activity', true) ?>
-    <?= $railItem('setup',      'Setup',          'tools',    '/setup.php',             false) ?>
+    <?= $railItem('activity',   'Activity',   'activity',  '/db/admin.php#activity',   true) ?>
+    <?= $railItem('setup',      'Setup',      'tools',     '/setup.php',               false) ?>
 
     <div class="rail-foot">
       <span class="note" title="One number for the pages, the helper's code and both apps">Rushes <?= htmlspecialchars(rushes_version()) ?></span>

@@ -151,7 +151,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
 
       <div id="err" class="banner bad" hidden></div>
       <?php if (pass_is_default()): ?>
-      <div class="banner warn">
+      <div class="banner warn" id="pwBanner">
         <div class="txt"><b>The admin password is still the default</b>
           <?php if (!on_mac()): ?>
           Anyone on this network can open this page and move your files. Change it &mdash; it takes ten seconds.
@@ -566,7 +566,7 @@ document.querySelectorAll('#actKinds button').forEach(function (b) {
 // Where the minute's work runs: inside Rushes Helper on a Mac (HOW-IT-WORKS.md → Rushes on this Mac), or the server's runner
 const ON_MAC = <?= on_mac() ? 'true' : 'false' ?>, WHERE = ON_MAC ? 'on this Mac' : 'on the server';
 const CHIP = ON_MAC ? "the Mac's media engine" : 'the video chip';      // what makes the proxies
-const TITLES = { overview: 'Overview', transfers: 'Transfers', cache: 'Cache',
+const TITLES = { overview: 'Overview', transfers: 'Copying', cache: 'Cache',
                  duplicates: 'Duplicates', describe: 'Describe',
                  activity: 'Activity', projects: "Editors' projects" };
 
@@ -583,6 +583,7 @@ function show(which) {
   // Overview shows the tiles and the cards; a section shows its own thing.
   // Activity in full: the short feed beside it would only repeat it
   document.querySelector('.with-side').classList.toggle('no-side', which === 'activity');
+  if ($('pwBanner')) $('pwBanner').hidden = which !== 'overview';      // said where it is acted on: Overview (Setup has the form itself)
   $('tiles').hidden = (which !== 'overview');
   $('cards').hidden = (which !== 'overview');
   $('repeats').hidden = (which !== 'overview');
@@ -590,7 +591,12 @@ function show(which) {
   if (which === 'cache') { loadCache(); loadRemoved(); }
   if (which === 'duplicates') { loadDup(); loadRemoved(); }
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
+  if (window.lastState) drawHelper(window.lastState);     // the switches show (or go) at once, not at the next refresh
 }
+document.addEventListener('click', function (e) {
+  const a = e.target.closest && e.target.closest('[data-go-overview]'); if (!a) return;
+  e.preventDefault(); show('overview'); $('hctl').scrollIntoView({ block: 'start' });
+});
 document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
   b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
 });
@@ -1100,7 +1106,7 @@ function drawNow(d) {
 let armed = { what: '', until: 0 }, said = { text: '', until: 0 };
 function drawHelper(d) {
   const h = d.helper || {}, el = $('hctl');
-  el.hidden = !['overview', 'transfers'].includes(pane);   // the switches wherever the transfer shows
+  el.hidden = pane !== 'overview';   // every on/off switch in one place: Overview, the dashboard
   if (el.hidden) return;
   const how = h.how === 'service' ? 'runs in the background' : h.how === 'window' ? 'runs in a Terminal window' : '';
   const seen = h.seen ? (h.fresh ? 'seen ' + h.seen_ago : 'not heard from since ' + h.seen_ago) : 'not started yet';
@@ -1207,7 +1213,7 @@ async function load() {
 
   drawTiles(d);
   drawNow(d);
-  drawHelper(d);
+  window.lastState = d; drawHelper(d);
   drawDescribeTools(d.helper);
   drawProxies(d.proxies);
   drawProxyTest(d);
@@ -1451,14 +1457,15 @@ function drawDescribeTools(h) {
     : d.phase === 'installing' ? '<b>Installing the AI on ' + esc(h.label) + '</b>' + steps()
     : !an.model ? 'The helper on <b>' + esc(h.label) + '</b> has not said yet whether it can describe footage.'
     // Ready: one main switch (describing on, or paused) with what it is doing now; the schedule a small switch below
+    // Ready: whether it is on (its switch is on Overview, with every other one) and what it is doing now; the schedule here
     : an.ready ? '<div class="aimain">' +
-        '<button class="sw big' + (descPaused ? '' : ' on') + '" role="switch" aria-checked="' + !descPaused + '" aria-label="Describing" data-an="' +
-          (descPaused ? 'describe-resume' : 'describe-pause') + '" title="' + (descPaused ? 'Start describing' : 'Pause describing') + '"></button>' +
+        '<span class="dot' + (descPaused ? ' off' : ' ok') + '" style="width:10px;height:10px;border-radius:50%;flex:none;background:var(--' + (descPaused ? 'warn' : 'ok') + ')"></span>' +
         '<div class="t"><b>' + (descPaused ? 'Paused' : 'Describing') + '</b><small>' + esc(
-          descPaused ? 'Nothing more is described until you switch it on. What is done is kept; copying carries on.'
+          descPaused ? 'Nothing more is described until it is switched on again, on Overview. What is done is kept; copying carries on.'
           : d.phase === 'analysing' ? 'Now: ' + (d.label || d.source || '') + (d.of ? ' · ' + d.n + ' of ' + d.of : '') + ' — switching off stops after the file it is on'
           : d.note ? d.note.charAt(0).toUpperCase() + d.note.slice(1)
           : 'On: folders on the list below are described as soon as their proxies are made') + '</small></div>' +
+        '<a class="btn quiet" href="#overview" data-go-overview>On/off is on Overview →</a>' +
         '<span class="ok" style="white-space:nowrap">✓ AI ready<span class="infotip" tabindex="0" data-tip="' + esc('On ' + h.label + '. Vision model ' + an.model + ', speech ' +
           (an.speech ? an.speech.split('/').pop() : 'off') + '. Both run on that Mac itself; nothing is sent anywhere.') + '">i</span></span></div>' +
       '<div class="airow"><button class="sw' + (h.describe_night ? ' on' : '') + '" role="switch" aria-checked="' + !!h.describe_night +

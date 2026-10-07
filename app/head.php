@@ -133,14 +133,15 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
       return '<a href="' . $href . '"' . ($go !== '' ? ' data-go="' . $go . '"' : '') . '>' . $label . '</a>'; }; ?>
   <h2>Find and bring in</h2>
   <?= $m('Search', '/db/find.php') ?><?= $m('Upload from this phone', '/upload.php') ?><?= $m('Ingest a card', '/ingest.php') ?>
-  <h2>Manage the archive</h2>
-  <?= $m('Overview', '/db/admin.php#overview', 'overview') ?><?= $m('Transfers', '/db/admin.php#transfers', 'transfers') ?>
+  <h2>Manage</h2>
+  <?= $m('Overview', '/db/admin.php#overview', 'overview') ?>
+  <h2>Transfer</h2>
+  <?= $m('Copying', '/db/admin.php#transfers', 'transfers') ?><?= $m('Reorganize', '/structure.php') ?>
   <?= $m('Duplicates', '/db/admin.php#duplicates', 'duplicates') ?><?= $m('Cache', '/db/admin.php#cache', 'cache') ?>
+  <h2>Footage</h2>
   <?= $m('Describe', '/db/admin.php#describe', 'describe') ?><?= $m("Editors' projects", '/db/admin.php#projects', 'projects') ?>
-  <?= $m('Reorganize', '/structure.php') ?>
   <h2>System</h2>
-  <?= $m('Activity', '/db/admin.php#activity', 'activity') ?>
-  <?= $m('Setup', '/setup.php') ?>
+  <?= $m('Activity', '/db/admin.php#activity', 'activity') ?><?= $m('Setup', '/setup.php') ?>
   <div class="mnav-foot">
     <button type="button" id="mTheme">Light or dark</button>
     <button type="button" id="mWho" onclick="document.getElementById('hMenu').click(); document.getElementById('hWho').click()">Your name, for Activity</button>
