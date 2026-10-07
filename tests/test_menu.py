@@ -167,6 +167,11 @@ class UpdateWindowTests(unittest.TestCase):
             w = m.Window(); w.in_menu = True
             w.act("check-updates", {})                   # a menu closes when clicked: the window says the answer
         self.assertTrue(os.path.exists(m.CHECK_NOW)); self.assertEqual(opened, [["open", "-n", m.APP]])
+        # the window was already open (macOS only brings it to the front): it still answers, at its next look
+        w = m.Window(); w.s["step"] = "home"; done = []
+        w.act = lambda do, a: done.append(do)
+        self.assertTrue(m.asked_from_menu(w)); self.assertEqual(done, ["check-updates"])
+        self.assertFalse(os.path.exists(m.CHECK_NOW)); self.assertFalse(m.asked_from_menu(w), "answered once, not at every look")
         w = m.Window(); w.set(said="✓ Updated to 0.12.10")
         self.assertEqual(w.state()["said"], "✓ Updated to 0.12.10", "news just after the update")
         w.said_time -= 61

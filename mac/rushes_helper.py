@@ -1490,18 +1490,29 @@ async function poll() {
 </script></body></html>"""
 
 
+def asked_from_menu(w):
+    """Update or Check for updates, chosen in the menu bar, done in this window where it shows.
+    Looked for when the window opens and every time the page asks how things are: a window
+    already open is only brought to the front by macOS (launcher.c), never started again."""
+    if w.s["step"] != "home":
+        return False
+    for note, do in ((UPDATE_NOW, "update-app"), (CHECK_NOW, "check-updates")):
+        try:
+            fresh = time.time() - os.path.getmtime(note) < 120
+            os.remove(note)
+        except OSError:
+            continue
+        if fresh:
+            w.act(do, {})
+            return True
+    return False
+
+
 def serve(port, key):
     w = Window()
     log(f"window opened ({w.s['step']})")
-    if w.s["step"] == "home":
-        if os.path.exists(UPDATE_NOW) and time.time() - os.path.getmtime(UPDATE_NOW) < 60:
-            os.remove(UPDATE_NOW)
-            w.act("update-app", {})                      # asked from the menu bar: done here, step by step
-        elif os.path.exists(CHECK_NOW) and time.time() - os.path.getmtime(CHECK_NOW) < 60:
-            os.remove(CHECK_NOW)
-            w.act("check-updates", {})                   # asked from the menu bar: the answer shows here
-        elif os.path.exists(UPDATED) and time.time() - os.path.getmtime(UPDATED) < 120:
-            w.set(said=update_said())                    # the window the update opened: how it went
+    if not asked_from_menu(w) and w.s["step"] == "home" and os.path.exists(UPDATED) and time.time() - os.path.getmtime(UPDATED) < 120:
+        w.set(said=update_said())                        # the window the update opened: how it went
 
     class H(http.server.BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -1525,6 +1536,7 @@ def serve(port, key):
                 except OSError:
                     return self._send(200, "The list is missing from this copy of the app. It is also at github.com/x0on/rushes (CREDITS.md).", "text/plain")
             if self.path == f"/{key}/state":
+                asked_from_menu(w)                       # the menu bar asked while this window was open
                 return self._send(200, json.dumps(w.state()))
             self._send(404, "{}")
 

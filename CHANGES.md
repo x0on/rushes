@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.21 — October 2026
+
+- **Check for updates and Update in the menu bar work when the Rushes window
+  is already open.** macOS only brings an open window to the front, so the
+  request waited unread; the open window now looks for it every moment and
+  answers at once.
+
 ## 0.12.20 — October 2026
 
 - **Sounds play, pictures show:** an MP3, WAV, M4A, AAC, AIFF or FLAC plays
