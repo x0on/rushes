@@ -30,7 +30,8 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   before a file gets its name), and it only adds: a file already there is
   checked, a *different* file with the same name is never replaced but
   reported, and nothing on the backup drive is ever deleted. Recently Removed
-  is not backed up. It refuses a folder on the same disk as the archive (that
+  and Rushes' own records are not backed up, and the drive must really be
+  mounted (an empty folder left where it was is the system disk). It refuses a folder on the same disk as the archive (that
   is not a second copy) or inside it. Not in Search, and its records are kept
   apart from where footage came from. Overview has a **Backed up** tile: when
   the last good run was, red when a nightly one is two days late; "What runs

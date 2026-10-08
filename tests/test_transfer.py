@@ -421,7 +421,7 @@ class BackupTests(unittest.TestCase):
         args = ['ingest.py', '--source', str(self.archive), '--into', str(self.into), '--backup', stamp, '--apply']
         landed = []
         with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO), \
-             patch.object(self.mod, 'backup_refused', return_value=''), \
+             patch.object(self.mod, 'backup_refused', return_value=''), patch.object(self.mod, 'drive_there', return_value=True), \
              patch.object(self.mod._CHECKPOINTS, 'landed', side_effect=lambda *a: landed.append(a)):
             try: self.mod.main(); code = 0
             except SystemExit as e: code = e.code
@@ -437,6 +437,7 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual((self.into / 'Parks/2026/a.mov').read_bytes(), b'a' * 10)
         self.assertFalse((self.into / '_Recently Removed').exists(), 'what waits to be deleted is not backed up')
+        self.assertFalse((self.into / '_rushes').exists(), "Rushes' own records change every day: not backed up")
         self.assertEqual(landed, [], 'a backup is not the archive: nothing goes into search')
         self.assertFalse(self.mod.ORIGIN.exists() and list(self.mod.ORIGIN.glob('*.tsv')), 'the footage record is left alone')
         self.assertTrue(list((self.mod.STATUS / 'backup').glob('*backup.tsv')))
@@ -458,11 +459,20 @@ class BackupTests(unittest.TestCase):
         self.assertEqual((self.into / 'c.mov').read_bytes(), b'c' * 5)
         self.assertIn('1 could not be copied', (self.mod.STATUS / 'ingest-history.tsv').read_text().splitlines()[-1])
 
+    def test_an_archive_that_shows_no_files_is_not_a_backup(self):
+        code, _ = self.backup()
+        self.assertEqual(code, 1)
+        self.assertFalse(self.mod.DONE.exists() and 'backup' in self.mod.DONE.read_text())
+        self.assertIn('backup-interrupted', (self.mod.STATUS / 'ingest-history.tsv').read_text())
+
     def test_refused_on_the_same_disk_and_inside_the_archive(self):
         self.drive = self.root / 'drive'; self.drive.mkdir()
+        self.assertIn('not connected', self.mod.backup_refused(str(self.archive), str(self.drive / 'Rushes backup')),
+                      'an empty folder where a drive was mounted is not the drive')
+        there = patch.object(self.mod, 'drive_there', return_value=True); there.start(); self.addCleanup(there.stop)
         self.assertIn('same disk', self.mod.backup_refused(str(self.archive), str(self.drive / 'Rushes backup')))
         self.assertIn('inside the archive', self.mod.backup_refused(str(self.archive), str(self.archive / 'Rushes backup')))
-        self.assertIn('not connected', self.mod.backup_refused(str(self.archive), '/nowhere/Rushes backup'))
+        self.assertTrue(self.mod.backup_refused(str(self.archive), '/nowhere/Rushes backup'))
         real = os.stat
         class S:                                            # another disk: every folder its own device number
             def __init__(s, p): s.r, s.st_dev = real(p), hash(str(p)) % 100000

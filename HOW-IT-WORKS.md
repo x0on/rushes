@@ -497,8 +497,15 @@ reports, never the archive's own), the folder's name, and **Every night** or
   name is never replaced: it is reported as could not be copied, and stays as
   it was. **Nothing on the backup drive is ever deleted**, even what has gone
   from the archive: a backup that followed deletions would lose a file twice.
-- **Left out:** Recently Removed, and what the copy always leaves out (names
-  starting with a dot, the system's own folders).
+- **Left out:** Recently Removed; Rushes' own records (`_rushes`: they change
+  every day, and a backup never replaces a file, so they would be reported
+  every night); and what the copy always leaves out (names starting with a dot,
+  the system's own folders).
+- **The drive must be mounted,** not only a folder of that name: a Mac can
+  leave an empty folder where a drive was, and that folder is on the system
+  disk. A run that stops (drive full, unplugged, refused) is tried again five
+  minutes later, never at once; one where the archive shows no files is not
+  counted as a backup.
 - **Refused:** a folder on the same disk as the archive (that is not a second
   copy), one inside the archive, or a backup drive the archive is inside. Said in
   the record, nothing copied.

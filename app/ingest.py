@@ -2602,6 +2602,12 @@ def disk_free(path):
         return None
 
 
+def drive_there(path):
+    """A backup drive is there when it is mounted: an empty folder left where it was mounted
+    (a Mac can leave one in /Volumes) is the system disk, and a backup must never fill that."""
+    return os.path.ismount(path)
+
+
 def backup_refused(source, into):
     """Why a backup of source into `into` must not run, or "". A backup on the same disk is not
     a backup; one inside the archive would be backed up again and again; and the archive
@@ -2609,7 +2615,7 @@ def backup_refused(source, into):
     if not source or not into or not os.path.isabs(into):
         return "a backup needs the archive and a folder on another drive"
     drive = os.path.dirname(into.rstrip("/"))
-    if not os.path.isdir(drive):
+    if not drive_there(drive):
         return f"{drive} is not connected"
     if ts.inside(into, NAS_MOUNT) or ts.inside(into, source):
         return f"{into} is inside the archive"
@@ -2891,7 +2897,7 @@ def watch(root, every=20):
             if verb == "backup":
                 dest, _, stamp = into.partition("\t")
                 drive = os.path.dirname(dest.rstrip("/"))
-                if not os.path.isdir(drive):
+                if not drive_there(drive):
                     # The backup drive is not plugged in: said, and the rest carries on. Nothing is marked done:
                     # it runs when the drive is back (tonight's run, or the next).
                     if _said_once(f"nodrive {drive}"):
@@ -2900,7 +2906,8 @@ def watch(root, every=20):
                     continue
                 did = True
                 print(f"\n=== backup of the archive  →  {dest} ===")
-                run_self("--source", path, "--into", dest, "--backup", stamp, "--apply")
+                if run_self("--source", path, "--into", dest, "--backup", stamp, "--apply"):
+                    wait(300)          # stopped (full, refused, unplugged): tried again in five minutes, never at once
                 break
             if verb == "copy" and path in c.get("skip", []):
                 continue                               # skipped from Manage
@@ -3365,7 +3372,7 @@ def main():
     except OSError:
         pass                                      # missing: handled just below
     gone = lambda: (not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT)
-                    or bool(a.backup) and not os.path.isdir(os.path.dirname(a.into.rstrip("/"))))
+                    or bool(a.backup) and not drive_there(os.path.dirname(a.into.rstrip("/"))))
     if gone():
         # Missing is not empty. Nothing is marked done; the watcher waits.
         print(f"Cannot see {a.source if not os.path.isdir(a.source) else NAS_MOUNT}. Nothing copied.")
@@ -3382,7 +3389,9 @@ def main():
     if a.backup:
         os.makedirs(a.into, exist_ok=True)
         # what the archive keeps only for a while is not backed up: Recently Removed
-        skip_dirs = tuple(os.path.join(a.source.rstrip("/"), d) + os.sep for d in ("_Recently Removed", "_duplicates", "_rollback"))
+        # and Rushes' own records (_rushes), which change every day: a backup never replaces a file, so
+        # they would be reported every night. ponytail: kept as versions when backups keep versions
+        skip_dirs = tuple(os.path.join(a.source.rstrip("/"), d) + os.sep for d in ("_Recently Removed", "_duplicates", "_rollback", "_rushes"))
     # A folder from a server is copied EXACTLY as it sits there, under a folder
     # named for the server: share/Departments/Parks/X lands as
     # ARCHIVE/share/Departments/Parks/X. Copying never decides where
@@ -3439,6 +3448,10 @@ def main():
     # A folder that had files when it was listed, and now shows none, is a
     # share that came back wrong (half-mounted, or renamed by the Mac) — not
     # an empty folder. Marking it done would skip it for ever.
+    if a.backup and walked == 0:
+        print(f"\n*** {a.source} shows no files: not counted as a backup. Check the archive is connected properly.")
+        history("backup-interrupted", f"{a.backup} {a.into}", 0, 0, 0, "the archive showed no files")
+        sys.exit(1)
     if not a.into and walked == 0:
         had = 0
         for l in open(STATUS / "ingest-sections.tsv", errors="replace") if (STATUS / "ingest-sections.tsv").exists() else []:

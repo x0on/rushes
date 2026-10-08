@@ -104,7 +104,10 @@ $chosen = array_flip(@file($chosen_f, FILE_IGNORE_NEW_LINES) ?: []);
 $d = settings()['duplicates'] ?? [];
 $passing = array_merge($d['never_keep'] ?? [], $d['card_dumps'] ?? []);
 $all = plan_groups($lines, $top);
-foreach (plan_groups(plan_lines($left), $top) as $k => $v) $all[$k] = ['kind' => 'across'] + $v;
+foreach ($all as $k => &$v) $v['keep'] = $k;
+unset($v);
+// a file kept for both: its copy in the same job is planned, the one in another job left alone, shown apart
+foreach (plan_groups(plan_lines($left), $top) as $k => $v) $all[isset($all[$k]) ? "$k\0across" : $k] = ['kind' => 'across', 'keep' => $k] + $v;
 $boxes = []; $files = 0; $bytes = 0;
 foreach (['folder', 'job', 'across'] as $k) $boxes[$k] = ['files' => 0, 'bytes' => 0, 'groups' => 0, 'jobs' => []];
 foreach ($all as $v) {
@@ -134,7 +137,7 @@ $kind = (string)($_GET['kind'] ?? ''); $want = (string)($_GET['folder'] ?? '');
 $rows = [];
 foreach ($all as $k => $g)
     if (($kind === '' || $g['kind'] === $kind) && ($want === '' || $g['job'] === $want))
-        $rows[] = ['keep' => $k, 'size' => $g['size'], 'moves' => $g['moves'], 'kind' => $g['kind'], 'bytes' => $g['size'] * count($g['moves'])];
+        $rows[] = ['keep' => $g['keep'], 'size' => $g['size'], 'moves' => $g['moves'], 'kind' => $g['kind'], 'bytes' => $g['size'] * count($g['moves'])];
 usort($rows, fn($a, $b) => $b['bytes'] <=> $a['bytes']);
 $off = max(0, (int)($_GET['offset'] ?? 0)); $lim = min(200, max(1, (int)($_GET['limit'] ?? 50)));
 $page = array_slice($rows, $off, $lim);

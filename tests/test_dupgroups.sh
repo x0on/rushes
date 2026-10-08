@@ -16,7 +16,7 @@ printf '%s\t%s\t%s\n' 3000000000 "$A/Cards/c1/a.mov" "$A/Library/Parks/a.mov" 30
   1000 "$A/Cards/c1/b.mov" "$A/Library/Parks/b.mov" > "$W/dedupe-plan.tsv"
 printf '{"built":"2026-10-06T10:00:00"}' > "$W/dedupe-plan.tsv.meta"
 mkdir -p "$A/Parks Promo" "$A/Library Opening"; printf y > "$A/Parks Promo/m.mov"; printf y > "$A/Library Opening/m.mov"
-printf '%s\t%s\t%s\n' 500 "$A/Parks Promo/m.mov" "$A/Library Opening/m.mov" > "$W/dedupe-left.tsv"
+printf '%s\t%s\t%s\n' 500 "$A/Parks Promo/m.mov" "$A/Library Opening/m.mov" 1000 "$A/Elsewhere/b.mov" "$A/Library/Parks/b.mov" > "$W/dedupe-left.tsv"
 printf '2048 3\n' > "$W/holding-kb.txt"; echo $(( $(date +%s) - 8 * 86400 )) > "$W/removed-at.txt"
 (cd "$R" && "$PHP" -S 127.0.0.1:18680 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18680
@@ -32,14 +32,15 @@ assert g[0]["keep"].endswith("Library/Parks/a.mov") and len(g[0]["moves"]) == 2,
 assert g[0]["why"] == "It is on the shelf, where it belongs", g[0]["why"]
 b = d["boxes"]
 assert b["job"]["files"] == 3 and [j["name"] for j in b["job"]["jobs"]] == ["Cards"], b
-assert b["folder"]["files"] == 0 and b["across"]["files"] == 1, b
+assert b["folder"]["files"] == 0 and b["across"]["files"] == 2, b
 assert g[0]["kind"] == "job", g[0]
 ' && ok "a group per file, the biggest first, the copy kept and why, three kinds (folder, job, across)" || no "groups"
 curl -s -b "$R/cj" "$U/db/dupgroups.php?kind=across" | python3 -c '
 import json, sys
 d = json.load(sys.stdin); g = d["groups"]
-assert len(g) == 1 and g[0]["kind"] == "across" and g[0]["why"].startswith("Left alone"), g
-' && ok "copies in different jobs: shown, said to be left alone" || no "across"
+assert len(g) == 2 and all(x["kind"] == "across" and x["why"].startswith("Left alone") for x in g), g
+assert any(x["keep"].endswith("Library/Parks/b.mov") and x["moves"][0].endswith("Elsewhere/b.mov") for x in g), g
+' && ok "copies in different jobs: shown, said to be left alone, even beside a planned copy of the same file" || no "across"
 curl -s -b "$R/cj" -d action=pick -d kind=folder "$U/db/dupgroups.php" | grep -q "Nothing of that kind" && ok "Remove for a kind with nothing in it: said, nothing written" || no "empty pick"
 curl -s -b "$R/cj" -d action=pick -d kind=job -d folder=Cards "$U/db/dupgroups.php" > /dev/null
 [ "$(sort "$W/dedupe-pick.txt" | tr '\n' ' ')" = "$A/Cards/c1/a.mov $A/Cards/c1/b.mov $A/Cards/c2/a.mov " ] && ok "Remove for one job: its copies written down for dedupe.sh" || no "pick: $(cat "$W/dedupe-pick.txt")"

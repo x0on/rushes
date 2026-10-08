@@ -46,7 +46,7 @@ function backup_due(?int $now = null): string {
     if (empty($b['nightly'])) return '';
     $h = (int)date('G', $now);
     if ($h >= BACKUP_NIGHT[1] && $h < BACKUP_NIGHT[0]) return '';
-    $night = 'night-' . date('Y-m-d', $h < BACKUP_NIGHT[1] ? $now - 86400 : $now);   // the evening it started
+    $night = 'night-' . date('Y-m-d', $h < BACKUP_NIGHT[1] ? strtotime('-1 day', $now) : $now);   // the evening it started
     return isset($done[$night]) ? '' : $night;
 }
 
