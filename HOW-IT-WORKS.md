@@ -365,7 +365,7 @@ so in the job's log (`make_way()` in `runner.py`).
    the page asks every 5 s. The first time, the helper counts the card's files.
    A card is a drive with a camera's folder at the top: `DCIM`, `PRIVATE`,
    `CLIPS`, `XDROOT`, `AVCHD`, `CONTENTS` or `M4ROOT`. Other drives are copied
-   through Transfers instead.
+   through Copying instead.
 2. **Choose the department** (or client, or project) and, for each day on the
    card, what was shot. A card's days come from its files' modification times.
    Rushes builds the destination; nobody types a path:
@@ -439,13 +439,30 @@ VPN (INSTALL.md).
   says the upload was cut off. A page cannot keep the files chosen: choosing
   the same ones again carries on from what arrived.
 
-### Folders from an old server: Transfers
+### Copying: a whole server in, or the archive out (the backup)
+
+**Manage → Copying** starts with **From → To**, chosen from lists, never typed:
+
+- **A source → the archive:** a whole server or drive brought in, folder by
+  folder, once (below).
+- **The archive → another drive:** the backup, every night or only when asked
+  ([The backup](#the-backup)).
+- Anything else (a drive straight onto another drive) is not something Copying
+  does: bring it in, and back the archive up. With drives kept where they are
+  (Setup 01), nothing is brought in, so only the backup is offered.
+
+With nothing chosen, the page says what it is for. Cards and new shoots come
+in through Ingest, not here.
+
+#### Folders from an old server
 
 For bringing over a whole server, folder by folder:
 
-1. Add the server under **Setup → 03 Where footage comes from**.
-2. **Manage → Transfers** lists its folders ("sections") and what is already in
-   the archive.
+1. Add the server under **Setup → 03 Where footage comes from** (From's last
+   line goes there).
+2. Choose it under From, the archive under To, and press **List its folders**:
+   the helper lists its folders ("sections"), shown beside what is already in
+   the archive. Listing adds to the list, it never takes anything off it.
 3. Tick folders, then press **Copy the ticked ones** and confirm.
    - **Tick everything** ticks them all.
    - Unticking folders that were waiting turns the button into **Clear the
@@ -459,7 +476,45 @@ For bringing over a whole server, folder by folder:
 A folder lands at `ARCHIVE/<source name>/<its path on the server>`, keeping the
 server's layout exactly.
 
-**In the code:** `db/admin.php` (`drawMove`, `drawTransfer`), `queue.php` (the
+#### The backup
+
+The archive, copied into a folder on another drive (`<drive>/Rushes backup` by
+default), keeping its layout. Set under Copying: the drive (only one the helper
+reports, never the archive's own), the folder's name, and **Every night** or
+**Only when I press Back up now**.
+
+- **When:** from 10 pm to 7 am, once a night, after anything else the helper has
+  to copy (a card someone is standing there with comes first). **Back up now**
+  asks for one run at once, besides. A run is named for its night (or its
+  press), so it is done once; one that stops part-way carries on the next time.
+- **How:** the same careful copy as everything else ([How a file is
+  copied](#how-a-file-is-copied)), with `--backup` (`ingest.py`): written under
+  a temporary name, read back from the backup drive and compared, and only then
+  given its name.
+- **Only adds.** A file already there with the same name is read in full, both
+  copies (remembered fingerprints: a second night reads only what changed), and
+  counts as backed up only if every byte matches. A *different* file with that
+  name is never replaced: it is reported as could not be copied, and stays as
+  it was. **Nothing on the backup drive is ever deleted**, even what has gone
+  from the archive: a backup that followed deletions would lose a file twice.
+- **Left out:** Recently Removed, and what the copy always leaves out (names
+  starting with a dot, the system's own folders).
+- **Refused:** a folder on the same disk as the archive (that is not a second
+  copy), one inside the archive, or a backup drive the archive is inside. Said in
+  the record, nothing copied.
+- **Kept apart:** not in Search, and its record of every file goes to
+  `_rushes/backup/`, not with the records of where footage came from (Relink and
+  Reorganize read those).
+- **Seen:** each run in the helper's history (backed up, stopped part-way, waited
+  because the drive was not plugged in); on Copying, the last good run and the
+  last few; on Overview, a **Backed up** tile, red when a nightly backup has not
+  succeeded for two days; and a line in What runs by itself.
+
+**In the code:** `db/backup.php` (the choice, `backup_due()`, `backup_line()`
+added to the helper's queue by `db/helper.php`), `ingest.py` (`--backup`,
+`backup_refused()`, the `backup` line in `watch()`), `db/admin.php` (`drawCopy`).
+
+**In the code (bringing in):** `db/admin.php` (`drawMove`, `drawTransfer`), `queue.php` (the
 folder branch), `db/transfers.php` (the saved transfer), `db/transfer.php` (the
 helper reports progress), and in `ingest.py`, `watch()`, `sections()`
 (`--sections`) and `source_root()`. `transfer_state.py` keeps progress on the
@@ -1045,16 +1100,37 @@ anything can be recovered.
 
 **Manage → Duplicates** has one button to start: **Find duplicates**. It does
 the scan and the plan (1 and 2 below) one after the other, and moves nothing.
-Then the page leads with what it found ("7.1 GB in 3 extra copies") and the
-files that exist more than once, the biggest first: the copy Rushes keeps,
+Then the page leads with what it found ("7.1 GB in 3 extra copies"), in three
+kinds, from the safest, so a person makes three decisions and not one per file
+(`db/dupgroups.php`):
+
+- **Extra copies in the same folder:** every other copy is beside the one kept
+  ("IMG_3241 2.HEIC"). A few examples, and one **Remove**.
+- **Copies in other folders of the same job** (the same top folder), or in
+  folders that only pass files through (card dumps, `Copied_…`): a project may
+  use one, so each job has **Show** and its own **Remove**.
+- **The same file in different jobs:** left alone, never in the plan
+  (`dedupe-left.tsv`). Each job's project may point at its own copy, and moving
+  it would make that project's media go offline. Shown, so the space is known.
+  A copy in a folder that only passes files through is the exception: it goes,
+  as before.
+
+**Show the files** opens one kind (or job): each file, the copy Rushes keeps,
 marked **Keeps**, with an ⓘ saying why (on the shelf, where it belongs; the
 others are in folders that only pass files through; the shortest path; or
-your choice), and the copies that would go. **Keep this one** beside any
-other copy makes it the one that stays, in the plan itself
-(`db/dupgroups.php`); the other copies go instead. A chip per top folder shows
-one folder's copies at a time. **Remove** carries out the plan (3), **Recover**
-undoes it (4), **Find again** looks again. Nobody has to choose a rule first:
-Rushes keeps the shelf's copy over a card dump's.
+your choice), and the copies that would go, with where the paths differ shown
+bright. **Keep this one** beside any other copy makes it the one that stays,
+in the plan itself; the other copies go instead. Each **Remove** writes down
+its copies (`dedupe-pick.txt`) and carries out only those, which must also be
+in the plan (3); the rest stay planned. **Recover** undoes it (4), **Find
+again** looks again. Nobody has to choose a rule first: Rushes keeps the
+shelf's copy over a card dump's.
+
+Never compared: the system's own files (`._` sidecars, `.DS_Store`: rules.json
+→ `system_junk`) and editing caches (rules.json → `cache`), which Cache looks
+after. Premiere makes the same audio preview in every project that uses a
+clip, and a Mac writes nearly identical `._` files on exFAT drives: neither is
+a duplicate anyone should decide about.
 
 1. **The scan** compares every file by content. On a NAS it is done by
    Czkawka, a separate duplicate finder running in a container on the archive

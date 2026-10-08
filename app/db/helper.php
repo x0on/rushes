@@ -20,6 +20,7 @@
 // They hand out only what is already on the share for anyone who can mount it,
 // and the one thing a GET can change is nothing.
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/backup.php';     // the nightly backup, when one is due, at the end of the queue
 
 const HELPER_FILES = ['ingest.py', 'transfer_state.py', 'analyze.py', 'release.py'];
 // The fingerprint (SHA-256) of the certificate Rushes Helper is signed with.
@@ -55,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['version'])) out(rushes_version(), 'text/plain');
     // The work: only for the paired helper (pair.php), once there is one.
     // The mark of the helper's code: a helper checks for new code only when it changes.
-    if (isset($_GET['queue'])) { helper_gate(); header('X-Rushes-Code: ' . substr(hash('sha256', json_encode(helper_hashes())), 0, 16)); out((string)@file_get_contents(web_dir() . '/ingest-queue.tsv'), 'text/plain; charset=utf-8'); }
+    if (isset($_GET['queue'])) { helper_gate(); header('X-Rushes-Code: ' . substr(hash('sha256', json_encode(helper_hashes())), 0, 16)); out((string)@file_get_contents(web_dir() . '/ingest-queue.tsv') . backup_line(), 'text/plain; charset=utf-8'); }
     // What an editor's Watcher sent (watcher.php), or a phone (upload.php), for
     // the helper to place: its list (batch.tsv), then each file. Only the paired helper is given them.
     if (isset($_GET['inbox'])) {

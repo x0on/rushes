@@ -15,8 +15,8 @@ for f in Library/Parks/a.mov Cards/c1/a.mov Cards/c2/a.mov Library/Parks/b.mov C
 printf '%s\t%s\t%s\n' 3000000000 "$A/Cards/c1/a.mov" "$A/Library/Parks/a.mov" 3000000000 "$A/Cards/c2/a.mov" "$A/Library/Parks/a.mov" \
   1000 "$A/Cards/c1/b.mov" "$A/Library/Parks/b.mov" > "$W/dedupe-plan.tsv"
 printf '{"built":"2026-10-06T10:00:00"}' > "$W/dedupe-plan.tsv.meta"
-mkdir -p "$A/Parks Promo" "$A/Mayor"; printf y > "$A/Parks Promo/m.mov"; printf y > "$A/Mayor/m.mov"
-printf '%s\t%s\t%s\n' 500 "$A/Parks Promo/m.mov" "$A/Mayor/m.mov" > "$W/dedupe-left.tsv"
+mkdir -p "$A/Parks Promo" "$A/Library Opening"; printf y > "$A/Parks Promo/m.mov"; printf y > "$A/Library Opening/m.mov"
+printf '%s\t%s\t%s\n' 500 "$A/Parks Promo/m.mov" "$A/Library Opening/m.mov" > "$W/dedupe-left.tsv"
 printf '2048 3\n' > "$W/holding-kb.txt"; echo $(( $(date +%s) - 8 * 86400 )) > "$W/removed-at.txt"
 (cd "$R" && "$PHP" -S 127.0.0.1:18680 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18680

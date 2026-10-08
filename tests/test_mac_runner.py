@@ -60,7 +60,7 @@ class MacJobs(unittest.TestCase):
         for i in (1, 2):                              # identical frames of a sequence: never moved
             self.put(f"Parks/matte/m_{i:05d}.png", b"same")
         # never compared: the system's sidecars, and Premiere's previews (Cache looks after those)
-        for d in ("Parks", "Mayor"):
+        for d in ("Parks", "Library"):
             self.put(f"{d}/._clip.mov", b"\0" * 4096); self.put(f"{d}/Audio Previews/x 48000.cfa", b"cfa" * 100)
         self.assertTrue(self.r.build_index())
         self.r.job("scan", {})
@@ -97,7 +97,7 @@ class MacJobs(unittest.TestCase):
 
     def test_different_jobs_left_alone_and_remove_one_kind(self):
         same = os.urandom(200_000)
-        a = self.put("Parks Promo/clip.mov", same); b = self.put("Mayor Message/clip.mov", same)   # two jobs
+        a = self.put("Parks Promo/clip.mov", same); b = self.put("Library Opening/clip.mov", same)   # two jobs
         img = os.urandom(5000)
         i1 = self.put("Parks Promo/photos/IMG_1.HEIC", img); i2 = self.put("Parks Promo/photos/IMG_1 2.HEIC", img)
         w = os.urandom(7000)

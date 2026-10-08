@@ -190,7 +190,7 @@ What could go wrong, what was decided, and where it stands.
 | Anyone who can write to the archive share publishes a page | Pages wait for approval, like scripts | Done |
 | Anyone who can write to the archive share, or the network, changes the helper's code | Signed releases (`release.py`); the built-in helper runs only a checked copy | Done |
 | Another website makes a browser press Rushes' buttons | Requests from other websites refused | Done |
-| No backup of the footage (RAID is not a backup) | A second machine with a one-way copy that keeps versions, mounted by nobody; Rushes shows when it last ran and counts it as a copy | When a second machine is available |
+| No backup of the footage (RAID is not a backup) | A second machine with a one-way copy that keeps versions, mounted by nobody; Rushes shows when it last ran and counts it as a copy | Begun in 0.12.26: Copying backs the archive up onto another drive every night, adding only, never deleting, its last good run on Overview. Still to come: versions, and a machine nobody mounts |
 | Ransomware encrypts every share a computer has mounted | Snapshots; few accounts with write access; a backup with versions; the NAS never on the internet | Depends on the installation (INSTALL.md) |
 | A mistaken delete or move in Finder | The archive read-only for people; projects on a separate share; recycle bin on | Depends on the installation |
 | Running out of space: logs and records grow | Rotate logs, show growth, warn early | Mostly done: logs trimmed; growth not shown yet |
@@ -372,7 +372,8 @@ Each needs its own discussion before it is built.
 - **Versions found by what they show:** every version is described, so files whose shots match one for one (stills, descriptions, length) can be joined even when their names differ, and a name-based join whose footage differs can be flagged.
 - **Long takes:** a take longer than 30 s is described as one shot today; it should get a still every so often.
 - **Speech:** the speech model cannot be downloaded on some networks; let it be installed from a folder the person already has.
-- **Backups:** the person picks where (any network share or drive, its login kept in the Keychain), found by its address and never by a fixed folder name.
+- **Backups, the next steps** (the first is in 0.12.26, Manage → Copying): a network share's login kept in the Keychain and the share found by its address, never by a fixed folder name; backing up one drive kept in place, not only the archive; a "Kept twice" count that includes the backup; a file changed in the archive kept as a new version on the backup rather than reported.
+- **The working set:** copy chosen years or departments from the full archive onto a faster working drive (the QNAP after its rebuild), with Search saying where each file is.
 - **The copy script from an old server:** what it learnt (a share coming back under another name, a file security software blocks, a folder that hangs) belongs in Rushes' own transfers.
 - **A Making proxies switch** of its own beside Describing.
 - **The folder table's counts:** the proxies column shows the last run only, and "could not be described" counts files whose speech failed.

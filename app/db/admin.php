@@ -49,6 +49,14 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .tag { font-size: 11px; font-weight: 650; border-radius: 9px; padding: 1px 8px; background: var(--ok-bg); color: var(--ok); white-space: nowrap }
   .tag.go { background: var(--raised); color: var(--muted) }
   .cp .lnk { font-size: 12px; white-space: nowrap }
+  .cp-route { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
+  .cp-route label, .cp-opts > label { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted) }
+  .cp-route select, .cp-opts input[type=text], .cp-opts input:not([type]) { padding: 7px 10px; font: 13.5px var(--font); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); min-width: 200px }
+  .cp-route .arrow { color: var(--muted); font-size: 16px }
+  .cp-opts { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-top: 12px }
+  .cp-when { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px }
+  .bk .runs .row small { color: var(--muted); margin-left: 6px }
   .cp .p .same { opacity: .55 } .cp .p b { font-weight: 600; color: var(--fg) }     /* where two copies' paths differ */
   .dbox { margin-top: 12px } .dbox .in { padding: 12px 14px } .dbox .in > p { margin: 0 0 10px }
   .dbox .ex { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--line) }
@@ -172,6 +180,29 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
 
       <!-- ══ transfers ══ -->
       <section id="pane-transfers" hidden>
+        <!-- From → To, chosen here (HOW-IT-WORKS.md → Copying): a whole drive into the archive, once;
+             or the archive onto another drive, once or every night (db/backup.php) -->
+        <div class="panel" id="cpPick" style="margin-top:8px">
+          <header><b>What to copy</b><?= $tip('Copying is the careful way to move a lot at once. Each file is checked after it lands; a stop (a drive unplugged, Pause) carries on where it was; nothing already there is copied twice, nothing different is ever replaced, and nothing is ever deleted. Cards and new shoots come in through Ingest instead.') ?></header>
+          <div style="padding:14px">
+            <div class="cp-route">
+              <label>From <select id="cpFrom"></select></label>
+              <span class="arrow">&rarr;</span>
+              <label>To <select id="cpTo"></select></label>
+            </div>
+            <div id="cpOpts" class="cp-opts" hidden>
+              <label>Folder on that drive <input id="cpFolder" value="Rushes backup" maxlength="80"></label>
+              <span class="cp-when">
+                <label><input type="radio" name="cpWhen" value="1" checked> Every night</label>
+                <label><input type="radio" name="cpWhen" value="0"> Only when I press Back up now</label>
+              </span>
+            </div>
+            <p class="note" id="cpExplain" style="margin:10px 0 0"></p>
+            <div class="btns" style="margin-top:12px"><button class="btn" id="cpGo" type="button" hidden></button><span class="note" id="cpSaid"></span></div>
+          </div>
+        </div>
+        <div id="cpBackup"></div>
+        <div id="cpBring">
         <div class="head" style="margin:26px 0 12px">
           <h1 style="font-size:14px">Copying from <span id="from">&mdash;</span>
             &rarr; <span id="to">&mdash;</span></h1>
@@ -191,6 +222,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <button class="btn" id="goCopy" disabled>Copy the ticked ones</button>
           <button class="btn quiet" id="allTodo">Tick everything</button>
           <span class="note" id="selnote">Nothing ticked.</span>
+        </div>
         </div>
         <p class="note" id="watchhint" style="margin:16px 0 0"></p>
       </section>
@@ -576,6 +608,7 @@ function show(which) {
   $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
   if (which === 'cache') { loadCache(); loadRemoved(); }
   if (which === 'duplicates') { loadDup(); loadRemoved(); }
+  if (which === 'transfers') loadCopy();
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
   if (window.lastState) drawHelper(window.lastState);     // the switches show (or go) at once, not at the next refresh
 }
@@ -980,8 +1013,10 @@ function drawTransfer(j, c, paused) {
   el.appendChild(hc);
 }
 
+let lastLanded = [];
 function drawMove(d) {
   const landed = d.landed || [];
+  lastLanded = landed;
   $('nTransfers').textContent = secs.length ? secs.length : '';
 
   const s = JSON.stringify([secs, landed]);
@@ -1084,6 +1119,120 @@ async function sendQueue(paths, list, btn, was) {
   setTimeout(function () { btn.textContent = was; btn.disabled = false; load(); }, 1400);
 }
 
+// ── Copying: From → To (db/backup.php) ─────────────────────────────────────
+// A source into the archive (the folders below, ticked and copied once), or the archive onto
+// another drive: the backup, once or every night. Chosen here, never typed: the drives are the
+// ones the helper reports.
+let cpData = null, cpAt = 0, cpWas = { from: null, to: null };
+const ARCH = '@archive';
+async function loadCopy() {
+  try { cpData = await (await fetch('backup.php?t=' + Date.now())).json(); } catch (e) { return; }
+  if (cpData.error) return;
+  cpAt = Date.now(); drawCopy();
+}
+// by the calendar, not by hours: last night at 11:40 is "Yesterday" the next morning
+function dayWord(at) {
+  const d = new Date(at * 1000); d.setHours(0, 0, 0, 0);
+  const n = Math.round((new Date().setHours(0, 0, 0, 0) - d) / 86400000);
+  return n < 1 ? 'Today' : n === 1 ? 'Yesterday' : n + ' days ago';
+}
+function whenWords(at) {
+  if (!at) return 'never yet';
+  const d = new Date(at * 1000);
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const w = dayWord(at);
+  return (w === 'Today' ? 'today ' : w === 'Yesterday' ? 'yesterday ' : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ', ') + t;
+}
+function drawCopy() {
+  const r = cpData; if (!r) return;
+  const b = r.backup, drives = r.drives || [];
+  // the choices: the archive, the sources from Setup, and the drives the helper sees
+  const opt = function (v, label, on) { return '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+  const from = cpWas.from !== null ? cpWas.from : (b ? ARCH : (r.sources[0] || {}).path || ARCH);
+  const to = cpWas.to !== null ? cpWas.to : (b ? b.drive : ARCH);
+  $('cpFrom').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', from === ARCH) +
+    (r.in_place ? '' : r.sources.map(function (x) { return opt(x.path, x.label, from === x.path); }).join('')) +
+    opt('@add', r.in_place ? 'Drives are kept where they are (Setup)' : '+ Add a drive or folder… (Setup)', false);
+  $('cpTo').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', to === ARCH) +
+    drives.map(function (x) { return opt(x.path, x.name + ' · ' + tb(x.free) + ' free', to === x.path); }).join('') +
+    (b && !drives.some(function (x) { return x.path === b.drive; }) ? opt(b.drive, b.drive.split('/').pop() + ' (not plugged in)', to === b.drive) : '');
+  const f = $('cpFrom').value, t = $('cpTo').value;
+  const backup = f === ARCH && t !== ARCH, bring = f !== ARCH && t === ARCH;
+  $('cpOpts').hidden = !backup;
+  if (backup && b && b.drive === t && document.activeElement !== $('cpFolder')) {
+    $('cpFolder').value = b.folder;
+    document.querySelector('[name=cpWhen][value="' + (b.nightly ? 1 : 0) + '"]').checked = true;
+  }
+  const same = backup && b && b.drive === t && b.folder === $('cpFolder').value.trim() &&
+    String(+b.nightly) === document.querySelector('[name=cpWhen]:checked').value;
+  const name = ($('cpTo').selectedOptions[0] || {}).textContent || '';
+  $('cpExplain').innerHTML = backup
+    ? 'A second copy of the archive on <b>' + esc(name.split(' · ')[0]) + '</b>, in the folder named here, keeping its layout. Each night only what is new is copied; ' +
+      'a file that is already there is checked, never replaced, and nothing on that drive is ever deleted (Recently Removed is left out). It runs after the night\'s copies, from 10 pm.'
+    : bring ? 'Everything on <b>' + esc(($('cpFrom').selectedOptions[0] || {}).textContent) + '</b> into the archive, folder by folder, once. ' +
+      'List its folders, tick the ones you want below, and Copy. What the archive already has is skipped.'
+    : f !== ARCH && t !== ARCH ? 'From one drive straight onto another is not something Copying does: bring it into the archive, and back the archive up.'
+    : r.in_place ? 'Your drives stay where they are, so nothing needs bringing in: choose a drive under To, and the archive is backed up onto it.'
+    : 'Choose a drive under From to bring it into the archive, or one under To to back the archive up onto it.';
+  const go = $('cpGo');
+  go.hidden = !(backup && !same) && !bring;
+  go.textContent = bring ? 'List its folders' : b ? 'Save the change' : 'Set up the backup';
+  // the backup, once set: how it went, and what can be done
+  const bs = r.said, runs = r.runs || [];
+  const kinds = { 'backed-up': 'backed up', 'backup-interrupted': 'stopped part-way', 'backup-waiting': 'waited: drive not plugged in', 'backup-refused': 'refused' };
+  $('cpBackup').innerHTML = !b ? '' : '<div class="panel bk" style="margin-top:12px"><header><b>Backup onto ' + esc(b.drive.split('/').pop()) + ' / ' + esc(b.folder) + '</b>' +
+    '<span class="n">' + (b.nightly ? 'every night' : 'only when asked') + '</span></header><div style="padding:14px">' +
+    '<p style="margin:0 0 6px" class="' + (bs && bs.late ? 'bad' : '') + '">Last good backup: <b>' + esc(whenWords(bs && bs.at)) + '</b>' +
+      (bs && bs.at ? ' · ' + bs.files.toLocaleString() + ' copied (' + tb(bs.bytes) + ')' + (bs.note ? ', ' + esc(bs.note) : '') : '') +
+      (bs && bs.late ? ' — late: check the drive is plugged in and the helper running' : bs && bs.at ? ' ✓'
+        : b.nightly ? ' — the first runs tonight, from 10 pm (or press Back up now)' : ' — press Back up now') + '</p>' +
+    (r.due ? '<p class="note" style="margin:0 0 6px"><span class="spin"></span>' + (r.due.indexOf('now-') === 0 ? 'Asked: ' : 'Tonight\'s: ') +
+      'the helper runs it once the copies before it are done' + (r.helper_fresh ? '' : ' — the helper is not running right now') + '.</p>' : '') +
+    (runs.length ? '<details class="fold runs" style="margin:6px 0 10px"><summary>The last runs</summary>' + runs.map(function (x) {
+      return '<div class="row"><span class="nm">' + esc(x.when) + ' · ' + esc(kinds[x.kind] || x.kind) +
+        '<small>' + (x.files ? x.files.toLocaleString() + ' copied, ' + tb(x.bytes) : '') + (x.note ? (x.files ? ' · ' : '') + esc(x.note) : '') + '</small></span></div>'; }).join('') + '</details>' : '') +
+    '<div class="btns"><button class="btn" id="bkNow" type="button"' + (r.due ? ' disabled' : '') + '>Back up now</button>' +
+    '<button class="btn quiet" id="bkOff" type="button">Turn off</button><span class="note" id="bkSaid"></span></div></div></div>';
+  // bringing in: the folders of the source, ticked and copied (below), shown once there is something
+  if (bring && !secs.length) {
+    $('from').textContent = ($('cpFrom').selectedOptions[0] || {}).textContent || 'the source';
+    $('todo').innerHTML = '<div class="empty">Its folders are not listed yet: press List its folders, above.</div>';
+  }
+  $('cpBring').hidden = !bring && !secs.length && !(lastLanded || []).length;
+  if ($('bkNow')) $('bkNow').onclick = function () { cpAsk('now', {}, this, 'Copies what is new onto ' + b.drive.split('/').pop() + ' now, after any copies already running. Deletes nothing.', 'Back up now'); };
+  if ($('bkOff')) $('bkOff').onclick = function () { cpAsk('off', {}, this, 'No more backups. Nothing on ' + b.drive.split('/').pop() + ' is deleted: the copy there stays as it is.', 'Turn off'); };
+}
+async function cpAsk(action, extra, btn, what, was) {
+  if (!sure(btn, what, 'cp:' + action)) return;
+  btn.disabled = true; btn.textContent = 'asked…';
+  try {
+    const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams(Object.assign({ action: action }, extra)) })).json();
+    if (x.error) throw new Error(x.error);
+    ($('bkSaid') || $('cpSaid')).textContent = x.said + ' ✓';
+    if (action === 'off') cpWas = { from: null, to: null };
+    loadCopy();
+  } catch (e) { btn.disabled = false; btn.textContent = was; $('cpSaid').textContent = 'Did not happen: ' + e.message; }
+}
+['cpFrom', 'cpTo'].forEach(function (id) {
+  $(id).onchange = function () {
+    if ($('cpFrom').value === '@add') { location.href = '/setup.php#sources'; return; }
+    cpWas = { from: $('cpFrom').value, to: $('cpTo').value }; $('cpSaid').textContent = ''; drawCopy();
+  };
+});
+$('cpFolder').oninput = function () { drawCopy(); };
+document.querySelectorAll('[name=cpWhen]').forEach(function (x) { x.onchange = drawCopy; });
+$('cpGo').onclick = function () {
+  const f = $('cpFrom').value, t = $('cpTo').value;
+  if (f !== ARCH && t === ARCH) {
+    // what is already on the list stays on it: listing adds, it never takes anything off
+    const keep = new Set([...ticked, ...secs.filter(function (x) { return x.state === 'queued'; }).map(function (x) { return x.path; })]);
+    sendQueue([...keep], f, this, 'List its folders'); $('cpSaid').textContent = 'Asked ✓ The helper lists its folders within a minute; they appear below.'; return; }
+  const nightly = document.querySelector('[name=cpWhen]:checked').value;
+  cpAsk('save', { drive: t, folder: $('cpFolder').value.trim(), nightly: nightly }, this,
+    'The archive is copied onto ' + (($('cpTo').selectedOptions[0] || {}).textContent || '').split(' · ')[0] + ' / ' + ($('cpFolder').value.trim() || 'Rushes backup') +
+    (nightly === '1' ? ', every night from 10 pm.' : ', when you press Back up now.') + ' Deletes nothing there.', this.textContent);
+};
+
 // ── tiles: two that are always true, then only what is ─────────────────────
 function drawTiles(d) {
   const t = [];
@@ -1110,6 +1259,14 @@ function drawTiles(d) {
         new Date(cp.at * 1000).toLocaleDateString([], {day: 'numeric', month: 'short'}) + '</div></div>');
   }
 
+  // The backup (Manage → Copying), once one is set: when the last good one was, red when late
+  const bk = d.backup;
+  if (bk) {
+    t.push('<button class="tile' + (bk.late ? ' bad' : '') + '" data-go-copy="1"><div class="lab">Backed up</div>' +
+      '<div class="big">' + (bk.at ? dayWord(bk.at) : 'Not yet') + '</div>' +
+      '<div class="sub">onto ' + esc(bk.drive) + (bk.late ? ' · late' : bk.at ? ' ✓' : '') + '</div></button>');
+  }
+
   // Everything past here is conditional. Someone with a tidy archive and nothing
   // to bring over sees two tiles and no buttons, which is the correct screen.
   (d.conditions || []).forEach(function (c, i) {
@@ -1123,6 +1280,7 @@ function drawTiles(d) {
   });
 
   $('tiles').innerHTML = t.join('');
+  $('tiles').querySelectorAll('[data-go-copy]').forEach(function (b) { b.onclick = function () { show('transfers'); }; });
   $('tiles').querySelectorAll('[data-c]').forEach(function (b) {
     b.onclick = function () {
       const c = d.conditions[+b.dataset.c];
@@ -1342,6 +1500,8 @@ async function load() {
     : '';
 
   drawMove(d);
+  if (pane === 'transfers' && Date.now() - cpAt > 20000) loadCopy();      // the backup's state, now and then
+  else if (cpData) $('cpBring').hidden = !($('cpFrom').value !== ARCH && $('cpTo').value === ARCH) && !secs.length && !lastLanded.length;
 
   const tq = d.queued || [];
   if (busy && !d.running && !tq.length) busy = null;

@@ -33,7 +33,7 @@
 # when card dumps are kept. The highest total loses; nothing here names a folder.
 # Never touched: @Recycle — moving files OUT of it would undelete them.
 #
-# Copies in two different jobs (two top folders: "Parks Promo" and "Mayor Message") are left
+# Copies in two different jobs (two top folders: "Parks Promo" and "Library Opening") are left
 # alone, in LEFT, unless a rule above says the one that would go is in a folder that only passes
 # files through: each job's project may point at its own copy, and moving it makes the project's
 # media go offline. Copies within one job (the same top folder) are planned as before.

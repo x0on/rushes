@@ -3,6 +3,42 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.26 — October 2026
+
+- **Duplicates in three kinds, three decisions.** Instead of one list of
+  every copy with a row of folder chips: **Extra copies in the same folder**
+  ("IMG_3241 2.HEIC" beside "IMG_3241.HEIC", a clip saved twice under two
+  names), with a few examples and one Remove; **Copies in other folders of the
+  same job**, job by job, each with Show and Remove; and **The same file in
+  different jobs**, which is left alone: each job's project may point at its
+  own copy, and removing one would make its media go offline. The files are
+  folded until asked for (Show the files), and where two copies' paths differ
+  is shown bright, the rest dimmed: `AUDIO/`**`MATERIAL/`**`Footsteps.wav`.
+- **Duplicates no longer counts the system's own files or editing caches.**
+  The hidden `._` files a Mac writes on drives like an exFAT T7 (each belongs
+  to the file beside it, and they all look alike) and Premiere's audio
+  previews (`.cfa`, alike across projects by design) were shown as hundreds of
+  copies. The scan leaves them out; Cache looks after the caches.
+- **Copying chooses From and To on the page.** A drive or server into the
+  archive, folder by folder, once (what it did, now with List its folders
+  right there); or **the archive onto another drive: the backup**, every night
+  or only when asked. With nothing chosen, the page says what it is for instead
+  of showing two empty boxes.
+- **The backup** (Manage → Copying): the archive into a folder on another
+  drive, keeping its layout, from 10 pm once the night's copies are done.
+  It uses the same careful copy as everything else (read back and compared
+  before a file gets its name), and it only adds: a file already there is
+  checked, a *different* file with the same name is never replaced but
+  reported, and nothing on the backup drive is ever deleted. Recently Removed
+  is not backed up. It refuses a folder on the same disk as the archive (that
+  is not a second copy) or inside it. Not in Search, and its records are kept
+  apart from where footage came from. Overview has a **Backed up** tile: when
+  the last good run was, red when a nightly one is two days late; "What runs
+  by itself" lists it too.
+- **An ⓘ near the right edge opens to the left** (and one near the bottom
+  opens upwards), so its explanation is never cut off under the Activity
+  column.
+
 ## 0.12.25 — October 2026
 
 - **Setup is a tree, not a wall of settings.** Each section is one line,

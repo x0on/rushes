@@ -66,6 +66,11 @@ check(str_contains($html, 'id="rlGo"') && !str_contains($html, 'id="pane-tools"'
       "relinking after a tidy-up is in Editors' projects; Jobs and tools is in Setup, and an old link lands there");
 check(str_contains($html, '<h2>Transfer</h2>') && str_contains($html, '<h2>Footage</h2>') && str_contains($html, '> Copying') && str_contains($html, "pane !== 'overview'"),
       'the menu: Overview, then Transfer, Footage and System; the switches only on Overview');
+check(str_contains($html, 'id="dBoxes"') && !str_contains($html, 'id="dFolders"') && str_contains($html, "action: 'pick'"),
+      'Duplicates: three kinds with their own Remove, no row of folder chips');
+check(str_contains($html, 'id="cpFrom"') && str_contains($html, 'id="cpTo"') && str_contains($html, "fetch('backup.php") && str_contains($html, 'data-go-copy'),
+      'Copying: From and To chosen on the page, the backup, and its tile on Overview');
+check(str_contains($html, "classList.toggle('tip-l'"), 'an ⓘ on the right opens to the left');
 check(!str_contains($html, 'Back to search') && substr_count($html, 'href="/setup.php"') >= 1, 'the menu has no second way back to Search');
 ob_start(); include "$root/app/setup.php"; $html = ob_get_clean();
 check(str_contains($html, 'id="plan"') && str_contains($html, '1 department, in Library') && str_contains($html, 'form="pP" type="text" name="d_name[0]" value="Parks"'),

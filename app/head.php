@@ -75,16 +75,6 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
     tick();
   };
 
-  // An ⓘ near the right or the bottom of the window opens its explanation the other way,
-  // so it never runs under the Activity column or off the screen (tokens.css → .infotip)
-  var tipSide = function (e) {
-    var t = e.target.closest && e.target.closest('.infotip'); if (!t) return;
-    var r = t.getBoundingClientRect();
-    t.classList.toggle('tip-l', r.left > innerWidth / 2);
-    t.classList.toggle('tip-u', r.bottom > innerHeight - 160);
-  };
-  document.addEventListener('mouseover', tipSide); document.addEventListener('focusin', tipSide);
-
   // Asking twice, on the button itself, never in a pop-up: the first press turns
   // the button into "Sure? …" and says beside it what will happen; a second
   // press within six seconds does it (sure() returns true). The key keeps the
@@ -105,6 +95,17 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
     }, 6100);
     return false;
   };
+</script>
+<script>
+  // An ⓘ near the right or the bottom of the window opens its explanation the other way,
+  // so it never runs under the Activity column or off the screen (tokens.css → .infotip)
+  var tipSide = function (e) {
+    var t = e && e.target && e.target.closest && e.target.closest('.infotip'); if (!t) return;
+    var r = t.getBoundingClientRect();
+    t.classList.toggle('tip-l', r.left > innerWidth / 2);
+    t.classList.toggle('tip-u', r.bottom > innerHeight - 160);
+  };
+  document.addEventListener('mouseover', tipSide); document.addEventListener('focusin', tipSide);
 </script>
 
 <header class="topbar">

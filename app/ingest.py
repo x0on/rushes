@@ -392,7 +392,7 @@ def read_back(path):
     return h.hexdigest()
 
 
-def copy_verified(src, dest, size, on_bytes=None, also=None):
+def copy_verified(src, dest, size, on_bytes=None, also=None, within=None):
     """The one careful copy (HOW-IT-WORKS.md → How a file is copied), for every
     file Rushes copies: cards, old servers, editors' deliveries. Written under a
     temporary name while its fingerprint is taken, stored on the disk (fsync),
@@ -402,10 +402,11 @@ def copy_verified(src, dest, size, on_bytes=None, also=None):
     also: another fingerprint to take on the same read (a delivery's own).
     The temporary file is new and this copy's alone, and the real name is
     given only if nothing has it by then: a file there is never replaced.
-    Every copy lands in the archive, where it really leads (shortcuts followed).
+    Every copy lands in the archive, where it really leads (shortcuts followed);
+    a backup (within=its folder on the other drive) lands in that folder, the same way.
     -> (fingerprint, algo). Raises OSError and leaves nothing behind."""
-    if not ts.inside(dest, NAS_MOUNT):
-        raise OSError(f"{dest} does not lead into the archive (a shortcut to somewhere else?) — not copied")
+    if not ts.inside(dest, within or NAS_MOUNT):
+        raise OSError(f"{dest} does not lead into {'the backup folder' if within else 'the archive'} (a shortcut to somewhere else?) — not copied")
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     h, algo = new_fingerprint()              # the original's fingerprint, taken while reading it anyway
     before = os.stat(src)
@@ -807,10 +808,11 @@ class Dropped:
 
 class Origin:
     """One run's record: a file in _rushes/origin, one line per file."""
-    def __init__(self, kind, source, root, name, into):
-        ORIGIN.mkdir(parents=True, exist_ok=True)
+    def __init__(self, kind, source, root, name, into, where=None):
+        where = where or ORIGIN                  # a backup's record goes elsewhere: it is not where footage lives
+        where.mkdir(parents=True, exist_ok=True)
         self.run = time.strftime("%Y%m%d-%H%M%S")
-        self.path = ORIGIN / f"{self.run} {name} {kind}.tsv"   # one file per run, never shared
+        self.path = where / f"{self.run} {name} {kind}.tsv"   # one file per run, never shared
         self.server = server_of(root)
         self.n = defaultdict(int)
         self.f = open(self.path, "a")
@@ -2587,6 +2589,47 @@ def free_bytes(path=NAS_MOUNT):
     except OSError:
         return None
 
+BACKUP_FLOOR = 20 * 1024 ** 3     # ponytail: a backup drive keeps 20 GB free; a setting if anyone needs more
+
+
+def disk_free(path):
+    """Free space where path is, as that disk counts it (a backup drive: not the archive)."""
+    while path and not os.path.isdir(path):
+        path = os.path.dirname(path)
+    try:
+        st = os.statvfs(path); return st.f_bavail * st.f_frsize
+    except OSError:
+        return None
+
+
+def backup_refused(source, into):
+    """Why a backup of source into `into` must not run, or "". A backup on the same disk is not
+    a backup; one inside the archive would be backed up again and again; and the archive
+    inside the backup folder would copy into itself."""
+    if not source or not into or not os.path.isabs(into):
+        return "a backup needs the archive and a folder on another drive"
+    drive = os.path.dirname(into.rstrip("/"))
+    if not os.path.isdir(drive):
+        return f"{drive} is not connected"
+    if ts.inside(into, NAS_MOUNT) or ts.inside(into, source):
+        return f"{into} is inside the archive"
+    if ts.inside(source, into):
+        return "the archive is inside the backup folder"
+    try:
+        if os.stat(drive).st_dev == os.stat(source).st_dev:
+            return "the backup folder is on the same disk as the archive — that is not a second copy"
+    except OSError as e:
+        return f"cannot look at it ({e})"
+    return ""
+
+
+_said = set()
+def _said_once(what):
+    """True the first time something is said in this run of the helper."""
+    if what in _said: return False
+    _said.add(what); return True
+
+
 def watch(root, every=20):
     print(f"watching {QUEUE_URL}")
     if "--service" in sys.argv:
@@ -2676,6 +2719,9 @@ def watch(root, every=20):
                 want.append(("analyze", f[1], f[2] if len(f) > 2 and f[2].isdigit() else ""))
             elif len(f) >= 2 and f[0] in ("tidy", "untidy", "deliver", "upload") and f[1]:
                 want.append((f[0], f[1], ""))
+            elif len(f) >= 4 and f[0] == "backup" and f[1].startswith("/") and f[2].startswith("/") and f[3]:
+                # the archive, the folder on the backup drive, and which night (or press) this is
+                want.append(("backup", f[1], f[2] + "\t" + f[3]))
             elif len(f) >= 3 and f[0] == "ingest" and f[1] and f[2]:
                 # a card, the folder it goes in, and — for a card that spans
                 # several days — which day's files belong in that folder
@@ -2730,7 +2776,8 @@ def watch(root, every=20):
         item_done = lambda p: job_items[p]["phase"] in ("done", "removed")
         finished = lambda v, p, i: ((v == "copy" and (item_done(p) if p in job_items else p in done)) or (v == "ingest" and i.split("\t")[0] in done)
                                     or (v == "list" and p in listed) or (v in ("tidy", "untidy", "deliver", "upload") and f"{v} {p}" in done)
-                                    or (v == "analyze" and f"analyze {p}{' ' + i if i else ''}" in done))
+                                    or (v == "analyze" and f"analyze {p}{' ' + i if i else ''}" in done)
+                                    or (v == "backup" and f"backup {i.split(chr(9))[-1]}" in done))
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
         # A tidy-up works inside the archive, and a delivery comes from the
         # Deliveries share, so a source drive going away stops neither.
@@ -2841,6 +2888,20 @@ def watch(root, every=20):
                 did = True
                 print(f"\n=== photos and video from a phone: {path} ===")
                 run_self("--upload", path); break
+            if verb == "backup":
+                dest, _, stamp = into.partition("\t")
+                drive = os.path.dirname(dest.rstrip("/"))
+                if not os.path.isdir(drive):
+                    # The backup drive is not plugged in: said, and the rest carries on. Nothing is marked done:
+                    # it runs when the drive is back (tonight's run, or the next).
+                    if _said_once(f"nodrive {drive}"):
+                        print(f"  backup waits: {drive} is not connected")
+                        history("backup-waiting", f"{stamp} {dest}", 0, 0, 0, f"{os.path.basename(drive)} is not connected")
+                    continue
+                did = True
+                print(f"\n=== backup of the archive  →  {dest} ===")
+                run_self("--source", path, "--into", dest, "--backup", stamp, "--apply")
+                break
             if verb == "copy" and path in c.get("skip", []):
                 continue                               # skipped from Manage
             item = job_items.get(path) if verb == "copy" else None
@@ -3233,6 +3294,8 @@ def main():
     ap.add_argument("--into", help="copy the whole source into exactly this folder, "
                                    "keeping its layout (a card into its shoot folder)")
     ap.add_argument("--day", help="with --into: only the files recorded on this day (YYYY-MM-DD)")
+    ap.add_argument("--backup", metavar="STAMP", help="with --into: a backup of the archive onto another drive "
+                    "(Manage → Copying): lands outside the archive, never in search, never deletes or replaces")
     ap.add_argument("--apply", action="store_true", help="actually copy")
     ap.add_argument("--undo", action="store_true", help="roll the last run back")
     ap.add_argument("--refresh-manifest", action="store_true")
@@ -3269,7 +3332,13 @@ def main():
     # The one boundary every copy must respect: it lands inside the archive.
     # Whatever went wrong upstream, a copy aimed anywhere else stops here.
     inside = lambda p: ts.inside(p, NAS_MOUNT)   # where it really leads, shortcuts followed
-    for where in ([a.into] if a.into else [a.root] if (a.source or a.trace) else []):
+    if a.backup:
+        # A backup is the one copy that lands outside the archive, so it has its own boundary:
+        # on another disk, never inside the archive, and the archive never inside it.
+        why = backup_refused(a.source, a.into)
+        if why:
+            print(f"Refused: {why}. Nothing copied."); history("backup-refused", f"{a.backup} {a.into}", 0, 0, 0, why); sys.exit(1)
+    for where in ([] if a.backup else [a.into] if a.into else [a.root] if (a.source or a.trace) else []):
         if not inside(where):
             print(f"Refused: {where} is not inside the archive ({NAS_MOUNT}). Nothing copied.")
             sys.exit(1)
@@ -3295,7 +3364,8 @@ def main():
         print(DENIED); cp.report(a.job, a.source, "blocked", force=True); sys.exit(1)
     except OSError:
         pass                                      # missing: handled just below
-    gone = lambda: not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT)
+    gone = lambda: (not os.path.isdir(a.source) or not os.path.isdir(NAS_MOUNT)
+                    or bool(a.backup) and not os.path.isdir(os.path.dirname(a.into.rstrip("/"))))
     if gone():
         # Missing is not empty. Nothing is marked done; the watcher waits.
         print(f"Cannot see {a.source if not os.path.isdir(a.source) else NAS_MOUNT}. Nothing copied.")
@@ -3307,7 +3377,12 @@ def main():
     # a file already at its destination is skipped below, and a card brought in
     # twice under two names is what the duplicate finder is for.
     by_size = {} if a.into else load_manifest(a.refresh_manifest)
-    label = os.path.basename(a.into.rstrip("/")) if a.into else ""
+    label = "backup" if a.backup else os.path.basename(a.into.rstrip("/")) if a.into else ""
+    skip_dirs = ()
+    if a.backup:
+        os.makedirs(a.into, exist_ok=True)
+        # what the archive keeps only for a while is not backed up: Recently Removed
+        skip_dirs = tuple(os.path.join(a.source.rstrip("/"), d) + os.sep for d in ("_Recently Removed", "_duplicates", "_rollback"))
     # A folder from a server is copied EXACTLY as it sits there, under a folder
     # named for the server: share/Departments/Parks/X lands as
     # ARCHIVE/share/Departments/Parks/X. Copying never decides where
@@ -3328,6 +3403,8 @@ def main():
     with open(PLAN, "w") as plan:
         for i, src in enumerate(walk(a.source, everything=True), 1):
             walked = i
+            if skip_dirs and src.startswith(skip_dirs):
+                continue
             try: size = os.path.getsize(src)
             except OSError as e:
                 WALK_ERRORS.append(e); continue
@@ -3394,8 +3471,9 @@ def main():
     copied = failed = copied_b = 0
     done_b, speed, shown = 0, Speed(), [0.0]       # bytes read and written: the speed
     total_bytes, total_files = new_bytes + dup_bytes, new + dups
-    o = Origin("card" if a.into else "folder", a.source, src_root, src_name,
-               a.into or os.path.join(mirror, os.path.relpath(a.source, src_root)))
+    o = Origin("backup" if a.backup else "card" if a.into else "folder", a.source, src_root, src_name,
+               a.into or os.path.join(mirror, os.path.relpath(a.source, src_root)),
+               where=STATUS / "backup" if a.backup else None)
 
     def progress(name, force=False, phase="copying"):
         # Two readers: the live line (every 2 s: speed, time left, the file)
@@ -3452,15 +3530,16 @@ def main():
             # free space is asked once a minute (an external helper asks Rushes) and
             # what is copied meanwhile is taken off it, once it is copied (a copy that
             # failed left nothing behind, so it takes nothing off).
+            floor = BACKUP_FLOOR if a.backup else FLOOR
             if time.time() - room[1] > 60:
-                room[:] = [free_bytes(NAS_MOUNT), time.time()]
-            if room[0] is not None and room[0] - size < FLOOR:
-                raise OSError(errno.ENOSPC, f"only {room[0] / 1024 ** 3:.0f} GB free, and the floor is {FLOOR / 1024 ** 3:.0f} GB")
+                room[:] = [disk_free(a.into) if a.backup else free_bytes(NAS_MOUNT), time.time()]
+            if room[0] is not None and room[0] - size < floor:
+                raise OSError(errno.ENOSPC, f"only {room[0] / 1024 ** 3:.0f} GB free, and the floor is {floor / 1024 ** 3:.0f} GB")
             progress(name, force=True)
             def moved(n):
                 nonlocal done_b
                 done_b += n; progress(name)
-            hexd, algo = copy_verified(src, dest, size, moved)
+            hexd, algo = copy_verified(src, dest, size, moved, within=a.into if a.backup else None)
             if room[0] is not None: room[0] -= size
             log.write(f"{src}\t{dest}\n"); log.flush()
             # Kept in the where-it-came-from record: years from now, the archive
@@ -3468,7 +3547,8 @@ def main():
             copied += 1; copied_b += size; kind, note = "copied", f"verified {algo} {hexd}"
             if algo == "xxh128":
                 proof.append((dest, size, hexd))
-        cp.landed(dest, size)
+        if not a.backup:                     # a backup is not the archive: not in search
+            cp.landed(dest, size)
         cp.complete_file(a.job, a.source, src, size, kind)
         o.add(kind, src, dest, size, note)
 
@@ -3501,7 +3581,8 @@ def main():
                 if e.errno in (errno.ENOSPC, errno.EDQUOT):
                     # A full archive fails every file the same way: stop, say
                     # so once, and carry on from here when there is room.
-                    stopped = "the archive is full — free some space, then it carries on from here"; break
+                    stopped = ("the backup drive is full — free some space, then it carries on from here" if a.backup
+                               else "the archive is full — free some space, then it carries on from here"); break
                 if attempt == 1:
                     retry_next.append(f); continue
                 # Twice now. Write it down, say so, carry on with the rest:
@@ -3523,7 +3604,7 @@ def main():
         o.add("failed", getattr(e, "filename", "") or "", "", 0, f"could not be read: {e.strerror or e}")
     mhl_copied(top, proof, o, a.source)   # stopped part-way too: what did land is proven
     o.close()
-    key = a.into.rstrip("/") if a.into else a.source.rstrip("/")
+    key = f"backup {a.backup}" if a.backup else a.into.rstrip("/") if a.into else a.source.rstrip("/")
 
     if stopped or gone():
         why = stopped or "the source or the archive disconnected"
@@ -3531,8 +3612,21 @@ def main():
         print("    Everything copied so far is kept. This folder carries on from here next time.")
         progress("", force=True, phase="paused" if why == "paused from Manage" else "interrupted")
         cp.flush(force=True)
-        history("interrupted", key, copied, copied_b, time.time() - t0, why)
+        history("backup-interrupted" if a.backup else "interrupted", f"{a.backup} {a.into}" if a.backup else key,
+                copied, copied_b, time.time() - t0, why)
         sys.exit(1)
+
+    if a.backup:
+        # Said once, for the page (db/backup.php reads it): how many, how much, what could not be
+        history("backed-up", f"{a.backup} {a.into}", copied, copied_b, time.time() - t0,
+                f"{o.n['already']:,} already there · {failed} could not be copied" if failed
+                else f"{o.n['already']:,} already there")
+        print(f"\nbacked up: {copied:,} copied, {o.n['already']:,} already there" + (f", {failed} could not be copied" if failed else ""))
+        print(f"  every file: _rushes/backup/{o.path.name}")
+        status(phase="done", source=a.source, label=label, copied=copied, failed=failed, of=new)
+        with open(DONE, "a") as f:
+            f.write(key + "\n")
+        return
 
     if os.path.isdir(top):
         leave_a_note(top, o, a.source, src_name)

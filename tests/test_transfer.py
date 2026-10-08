@@ -411,6 +411,66 @@ class CopyTests(unittest.TestCase):
         self.assertEqual(args[args.index('--root')+1], str(self.archive))
 
 
+class BackupTests(unittest.TestCase):
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+    """The archive onto another drive (Manage → Copying): only adds and checks, never replaces a
+    different file, never deletes, never in search, its record kept apart from where footage lives."""
+    def backup(self, stamp='night-2026-10-08'):
+        self.drive = self.root / 'drive'; self.drive.mkdir(exist_ok=True)
+        self.into = self.drive / 'Rushes backup'
+        args = ['ingest.py', '--source', str(self.archive), '--into', str(self.into), '--backup', stamp, '--apply']
+        landed = []
+        with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO), \
+             patch.object(self.mod, 'backup_refused', return_value=''), \
+             patch.object(self.mod._CHECKPOINTS, 'landed', side_effect=lambda *a: landed.append(a)):
+            try: self.mod.main(); code = 0
+            except SystemExit as e: code = e.code
+            self.out = sys.stdout.getvalue()
+        return code, landed
+
+    def test_the_archive_lands_on_the_other_drive_layout_kept_not_in_search(self):
+        (self.archive / 'Parks/2026').mkdir(parents=True)
+        (self.archive / 'Parks/2026/a.mov').write_bytes(b'a' * 10)
+        (self.archive / '_Recently Removed/x').mkdir(parents=True)
+        (self.archive / '_Recently Removed/x/old.mov').write_bytes(b'o')
+        code, landed = self.backup()
+        self.assertEqual(code, 0)
+        self.assertEqual((self.into / 'Parks/2026/a.mov').read_bytes(), b'a' * 10)
+        self.assertFalse((self.into / '_Recently Removed').exists(), 'what waits to be deleted is not backed up')
+        self.assertEqual(landed, [], 'a backup is not the archive: nothing goes into search')
+        self.assertFalse(self.mod.ORIGIN.exists() and list(self.mod.ORIGIN.glob('*.tsv')), 'the footage record is left alone')
+        self.assertTrue(list((self.mod.STATUS / 'backup').glob('*backup.tsv')))
+        hist = (self.mod.STATUS / 'ingest-history.tsv').read_text()
+        self.assertIn('\tbacked-up\tnight-2026-10-08 ' + str(self.into) + '\t1\t10\t', hist)
+        self.assertIn('backup night-2026-10-08', self.mod.DONE.read_text())
+
+    def test_never_replaces_a_different_file_and_never_deletes(self):
+        (self.archive / 'a.mov').write_bytes(b'a' * 10); (self.archive / 'b.mov').write_bytes(b'b' * 10)
+        self.backup()
+        (self.archive / 'a.mov').write_bytes(b'A' * 10)        # changed in the archive, same name
+        (self.archive / 'b.mov').unlink()                       # gone from the archive
+        (self.archive / 'c.mov').write_bytes(b'c' * 5)          # new
+        with patch.object(self.mod.time, 'sleep'):
+            code, _ = self.backup('now-1')
+        self.assertEqual(code, 0)
+        self.assertEqual((self.into / 'a.mov').read_bytes(), b'a' * 10, 'the copy there is never replaced')
+        self.assertEqual((self.into / 'b.mov').read_bytes(), b'b' * 10, 'nothing on the backup is deleted')
+        self.assertEqual((self.into / 'c.mov').read_bytes(), b'c' * 5)
+        self.assertIn('1 could not be copied', (self.mod.STATUS / 'ingest-history.tsv').read_text().splitlines()[-1])
+
+    def test_refused_on_the_same_disk_and_inside_the_archive(self):
+        self.drive = self.root / 'drive'; self.drive.mkdir()
+        self.assertIn('same disk', self.mod.backup_refused(str(self.archive), str(self.drive / 'Rushes backup')))
+        self.assertIn('inside the archive', self.mod.backup_refused(str(self.archive), str(self.archive / 'Rushes backup')))
+        self.assertIn('not connected', self.mod.backup_refused(str(self.archive), '/nowhere/Rushes backup'))
+        real = os.stat
+        class S:                                            # another disk: every folder its own device number
+            def __init__(s, p): s.r, s.st_dev = real(p), hash(str(p)) % 100000
+            def __getattr__(s, n): return getattr(s.r, n)
+        with patch.object(self.mod.os, 'stat', side_effect=lambda p, *a, **k: S(p)):
+            self.assertEqual(self.mod.backup_refused(str(self.archive), str(self.drive / 'Rushes backup')), '')
+
+
 class TraceResumeTests(unittest.TestCase):
     """Matching earlier copies keeps the originals it has listed, folder by folder."""
     setUp, tearDown = CopyTests.setUp, CopyTests.tearDown

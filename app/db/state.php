@@ -9,6 +9,7 @@
 // A condition appears only when it applies. No conditions is itself an answer.
 
 require_once __DIR__ . '/transfers.php';
+require_once __DIR__ . '/backup.php';
 db_init();
 $transfer = transfer_summary(transfer_current());
 // An unfinished transfer tells its own story (its card says blocked, stopped,
@@ -450,11 +451,15 @@ $repeats = [
         $mtime('waiting.tsv'), is_file("$WEB/survey-now") ? 'asked — within a minute' : 'ok', ['check-updates', 'Check now']]]),
     ['Copy of the database', 'once a day, checked first; a week of copies in _rushes/db-copies',
         $mtime('db-copied'), is_readable("$WEB/db-damaged.txt") ? 'stopped — the check failed' : 'ok'],
+    // The backup (Manage → Copying), when one is set: every night, or only when asked
+    ...(($bk = backup_said()) ? [['The backup onto ' . $bk['drive'], $bk['nightly'] ? 'every night, 10 pm to 7 am, once the copies are done; never deletes' : 'only when you press Back up now',
+        $bk['at'], $bk['late'] ? 'late — the last good one was ' . ($bk['days'] === null ? 'never' : $bk['days'] . ' days ago') : 'ok']] : []),
     ['The helper' . (($hv['host'] ?? '') !== '' ? ' on ' . $hv['host'] : ''), 'says what is plugged in every 20 s (less when Rushes does not answer); stops by itself if a share stops answering',
         (int)($hv['at'] ?? 0), ($mac['phase'] ?? '') === 'blocked' && ($mac['source'] ?? '') === '' ? 'stopped — Try again now' : 'ok'],
 ];
 echo json_encode([
     'repeats'  => $repeats,
+    'backup'   => backup_said(),
     'transfer' => $transfer,
     'search' => ['state' => $pendingSearch ? ($sync === 'retrying' ? 'retrying' : 'updating') : 'current', 'updated' => $searchAt],
     'archive'  => ['files' => $files, 'bytes' => $bytes,
