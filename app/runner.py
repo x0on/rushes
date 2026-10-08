@@ -300,10 +300,12 @@ class Runner:
                               if here == "0" else f"{name} is plugged in again")
         if self.may_v():
             def df():
-                u = shutil.disk_usage(a)       # the columns of df -P, in KB, as state.php reads them
-                self.write("disk.txt", f"archive {u.total // 1024} {u.used // 1024} {u.free // 1024} "
-                                       f"{round(100 * u.used / u.total) if u.total else 0}% {a}\n")
+                total, free = space(a)         # the columns of df -P, in KB, as state.php reads them
+                used = max(0, total - free)
+                self.write("disk.txt", f"archive {total // 1024} {used // 1024} {free // 1024} "
+                                       f"{round(100 * used / total) if total else 0}% {a}\n")
             self.v("free space", df)
+        self.mounts_said()
         # Drives that come and go: what is plugged in now. One that has just come
         # back (or was just added) is listed again by itself.
         ds = self.drives()
@@ -348,6 +350,28 @@ class Runner:
             self.say(f"{name}: {e}")
 
     # ── upkeep ───────────────────────────────────────────────────────────────
+    def mounts_said(self, every=300):
+        """mounts.json, for Overview → Drives: each volume this Mac sees, whether it is a network
+        share (from the list of mounts, which asks no share anything) and its size as df gives it.
+        Every five minutes; a share that does not answer within a few seconds is left out, never waited on."""
+        if time.time() - getattr(self, "_mounts_at", 0) < every:
+            return
+        self._mounts_at = time.time()
+        kinds = {}
+        try:
+            out = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout
+            for line in out.splitlines():      # "//u@srv/Share on /Volumes/Share (smbfs, …)" or "… on /mnt/x type nfs (…)"
+                m = re.match(r".+? on (.+?) (?:\((\w+)|type (\S+))", line)
+                if m: kinds[m.group(1)] = m.group(2) or m.group(3)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        said = {}
+        for m in mounts():
+            fs = kinds.get(m, "")
+            total, free = space(m, quiet=True)
+            said[m] = {"fs": fs, "net": fs in NET_FS, "total": total, "free": free}
+        self.write("mounts.json", json.dumps({"at": int(time.time()), "mounts": said}))
+
     def upkeep(self):
         self.stalled = False
         for n in TRIM:                                   # logs that only grow: the newest 1 MB stays
@@ -1234,6 +1258,25 @@ def walk(top, out, tick=None):
 def drive_key(d):
     """A drive's key in file names: its ID, or (before it was ever seen) its place in Setup."""
     return re.sub(r"[^A-Za-z0-9-]", "_", d.get("id") or hashlib.sha1(d["source"].encode()).hexdigest())
+
+
+NET_FS = ("smbfs", "afpfs", "nfs", "webdav", "cifs", "smb3", "sshfs", "fuse.sshfs")
+
+
+def space(path, quiet=False):
+    """-> (total, free) in bytes, as df gives them. Python's own (statvfs) wraps round on a Mac for a
+    big network share (27 TB free of 5 TB); df asks the way Finder does. A share that does not answer
+    within 8 s is not waited on: (0, 0) when quiet, otherwise Python's figure."""
+    try:
+        r = subprocess.run(["df", "-kP", path], capture_output=True, text=True, timeout=8)
+        f = r.stdout.splitlines()[-1].split() if r.returncode == 0 else []
+        if len(f) >= 4 and f[1].isdigit() and f[3].isdigit():
+            return int(f[1]) * 1024, int(f[3]) * 1024
+    except (OSError, subprocess.SubprocessError, IndexError):
+        if quiet: return 0, 0
+    if quiet: return 0, 0
+    u = shutil.disk_usage(path)
+    return u.total, u.free
 
 
 def mount_of(path):

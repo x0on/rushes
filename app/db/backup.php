@@ -13,7 +13,8 @@
 //   POST action=save from=<drive> drive=… folder=… nightly=…   a copy from one drive onto another (copies[])
 //   POST action=now [id=]                                      a run now, besides the nightly one
 //   POST action=off [id=]                                      no more runs (nothing on any drive changes)
-//   POST action=source drive=<path>                            Copy once: that drive becomes a source (as Setup 03 would)
+//   POST action=source drive=<path>                            that drive becomes a source (as Setup 03 would): Copy once, Add to Rushes
+//   POST action=unsource drive=<path>                          Overview → Remove from Rushes (nothing on it changes)
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/activity.php';
 
@@ -108,8 +109,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sourc
     $s['sources'][] = ['label' => $v['name'], 'path' => $drive, 'seen_by' => 'helper'];
     if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
     settings(true);
-    activity_add('changed', 'Added ' . $v['name'] . ' as a drive to copy from');
-    bk_said(200, ['ok' => true, 'said' => 'Added ' . $v['name'] . ' as a drive to copy from']);
+    $said = ($s['organise']['shape'] ?? '') === 'in_place'
+        ? 'Added ' . $v['name'] . ' to Rushes: its files are listed now, then found in Search by name'
+        : 'Added ' . $v['name'] . ' as a drive to copy from';
+    activity_add('changed', $said);
+    bk_said(200, ['ok' => true, 'said' => $said]);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unsource') {
+    // Overview → Drives: Remove from Rushes. Only takes it off the list (its files leave Search at the next
+    // listing, asked for now); nothing on the drive is touched. Never the archive.
+    $drive = rtrim((string)($_POST['drive'] ?? ''), '/');
+    $s = settings(); $kept = []; $gone = null;
+    foreach ($s['sources'] ?? [] as $r) { if (rtrim((string)($r['path'] ?? ''), '/') === $drive) $gone = $r; else $kept[] = $r; }
+    if (!$gone) bk_said(400, ['error' => 'That drive is not in Rushes.']);
+    $s['sources'] = $kept;
+    if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
+    settings(true);
+    @file_put_contents(web_dir() . '/queue/' . date('Ymd-His') . '-unsource.job', "ACTION=reindex\n");
+    $name = $gone['label'] ?? basename($drive);
+    activity_add('changed', "Took $name out of Rushes: its files leave Search; nothing on it was changed");
+    bk_said(200, ['ok' => true, 'said' => "$name taken out of Rushes"]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

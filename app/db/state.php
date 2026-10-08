@@ -37,12 +37,19 @@ $imported = (int)meta_get('imported_at', '0');
 // once then, not on every look. Adding up a million rows each time made every
 // page that asks this wait, and a busy archive (a disk rebuilding) made it time out.
 $sweep = array_map('cache_sql', cache_groups('sweep'));
-$for = $imported . ':' . $files . ':' . md5(implode('|', $sweep));
+$roots = catalogue_roots();
+$for = $imported . ':' . $files . ':' . md5(implode('|', $sweep) . '#' . implode('|', $roots));
 $tot = json_decode((string)meta_get('totals', ''), true);
 if (!is_array($tot) || ($tot['for'] ?? '') !== $for) {
     $j = $sweep ? db()->querySingle("SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM files WHERE " . implode(' OR ', $sweep), true) : null;
     $tot = ['for' => $for, 'bytes' => $files ? (int)db()->querySingle('SELECT COALESCE(SUM(bytes),0) FROM files') : 0,
-            'junk' => ['n' => (int)($j['n'] ?? 0), 'b' => (int)($j['b'] ?? 0)]];
+            'junk' => ['n' => (int)($j['n'] ?? 0), 'b' => (int)($j['b'] ?? 0)], 'roots' => []];
+    // how much of Search is on each drive (Overview → Drives): the archive, and each drive kept where it is
+    foreach ($roots as $r) {
+        $pre = rtrim($r, '/') . '/'; $L = strlen($pre);
+        $x = $files ? db()->querySingle("SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM files WHERE substr(path, 1, $L) = '" . SQLite3::escapeString($pre) . "'", true) : null;
+        $tot['roots'][rtrim($r, '/')] = [(int)($x['n'] ?? 0), (int)($x['b'] ?? 0)];
+    }
     meta_set('totals', json_encode($tot));
 }
 $bytes = $tot['bytes'];
@@ -472,15 +479,24 @@ $repeats = [
     ['The helper' . (($hv['host'] ?? '') !== '' ? ' on ' . $hv['host'] : ''), 'says what is plugged in every 20 s (less when Rushes does not answer); stops by itself if a share stops answering',
         (int)($hv['at'] ?? 0), ($mac['phase'] ?? '') === 'blocked' && ($mac['source'] ?? '') === '' ? 'stopped — Try again now' : 'ok'],
 ];
-// Overview → Drives: every drive and share the helper sees, what kind it is, how full, and what Rushes does with it
-$drives_now = [];
+// Overview → Drives. Two kinds: the drives Rushes uses (the archive, drives in Search, the backup's, copies'),
+// each with what it does, how much of Search is on it and how full it is; and the rest this Mac sees,
+// each with Add to Rushes. Kind and size from the Mac itself (runner.py mounts_said: the list of mounts
+// and df), not the helper's figures: Python's own wrap round on a big network share. A size that cannot
+// be right (more free than there is) is never shown.
+$mj = json_decode((string)@file_get_contents("$WEB/mounts.json"), true);
+$mnt = is_array($mj['mounts'] ?? null) ? $mj['mounts'] : [];
 $ha = helper_archive(); $dbk = settings()['backup'] ?? []; $cps = settings()['copies'] ?? [];
 $inSearch = array_flip(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()));
 $sources = array_flip(array_map(fn($r) => rtrim((string)($r['path'] ?? ''), '/'), settings()['sources'] ?? []));
 $listing = $progress['said'] ?? '';
+$drives_in = []; $drives_other = [];
 foreach ($hv['vols'] as $dv) {
-    $dp = rtrim($dv['path'], '/');
+    $dp = rtrim($dv['path'], '/'); $m = $mnt[$dp] ?? null;
     $dArch = $dv['archive'] || $ha === $dp || str_starts_with($ha . '/', $dp . '/');
+    [$tt, $ff] = $m && ($m['total'] ?? 0) > 0 ? [(int)$m['total'], (int)$m['free']] : [(int)$dv['total'], (int)$dv['free']];
+    if ($tt <= 0 || $ff < 0 || $ff > $tt) { $tt = 0; $ff = 0; }          // not reported, or not possible: not shown
+    $kind = $dArch ? 'archive' : ($dv['card'] ? 'card' : (($m['net'] ?? false) || $dv['net'] ? 'nas' : 'drive'));
     $droles = [];
     if ($dArch) $droles[] = 'The archive';
     if (isset($inSearch[$dp])) $droles[] = 'In Search';
@@ -490,15 +506,19 @@ foreach ($hv['vols'] as $dv) {
         if (($job['drive'] ?? '') === $dv['path']) $droles[] = 'Copy of ' . ($job['from_name'] ?? 'a drive') . ' goes here';
         if (($job['from'] ?? '') === $dv['path']) $droles[] = 'Copied onto ' . basename((string)($job['drive'] ?? ''));
     }
-    if ($dv['card']) $droles[] = 'A card: Ingest';
     $dnow = $listing !== '' && str_starts_with($listing, $dv['name'] . ' · ') ? 'Listing now · ' . substr($listing, strlen($dv['name'] . ' · ')) : '';
-    $drives_now[] = ['name' => $dv['name'], 'kind' => $dArch ? 'archive' : ($dv['card'] ? 'card' : ($dv['net'] ? 'nas' : 'drive')),
-                     'total' => $dv['total'], 'free' => $dv['free'], 'roles' => array_values(array_unique($droles)), 'now' => $dnow];
+    $root = $dArch ? rtrim(archive_dir(), '/') : $dp;
+    $one = ['name' => $dv['name'], 'path' => $dv['path'], 'kind' => $kind, 'total' => $tt, 'free' => $ff,
+            'roles' => array_values(array_unique($droles)), 'now' => $dnow,
+            'files' => $tot['roots'][$root][0] ?? null, 'bytes' => $tot['roots'][$root][1] ?? null];
+    if ($droles && !$dv['card']) $drives_in[] = $one; else $drives_other[] = $one;
 }
-usort($drives_now, fn($a, $b) => [$a['kind'] !== 'archive', !$a['roles'], $a['name']] <=> [$b['kind'] !== 'archive', !$b['roles'], $b['name']]);
+usort($drives_in, fn($a, $b) => [$a['kind'] !== 'archive', $a['name']] <=> [$b['kind'] !== 'archive', $b['name']]);
+usort($drives_other, fn($a, $b) => [$a['kind'] === 'card', $a['name']] <=> [$b['kind'] === 'card', $b['name']]);
 
 echo json_encode([
-    'drives_now' => $drives_now, 'helper_seen' => (int)($hv['at'] ?? 0),
+    'drives_in' => $drives_in, 'drives_other' => $drives_other, 'helper_seen' => (int)($hv['at'] ?? 0),
+    'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
     'repeats'  => $repeats,
     'backup'   => backup_said(),
     'transfer' => $transfer,

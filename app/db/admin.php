@@ -49,6 +49,13 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .tag { font-size: 11px; font-weight: 650; border-radius: 9px; padding: 1px 8px; background: var(--ok-bg); color: var(--ok); white-space: nowrap }
   .tag.go { background: var(--raised); color: var(--muted) }
   .cp .lnk { font-size: 12px; white-space: nowrap }
+  .ov-now { margin: 4px 0 12px; font-size: 13.5px; color: var(--muted) } .ov-now b { color: var(--fg); font-weight: 600 }
+  .drv-c .meter i { background: var(--muted) } .drv-c .meter i.hot { background: var(--warn) } .drv-c .meter i.full { background: var(--bad) }
+  .drv-c .inS { font-size: 12px; margin-top: 4px } .drv-c .acts { margin-top: 8px } .drv-c .acts .lnk { font-size: 12px }
+  .also { padding: 4px 14px 12px } .also .row { gap: 10px; flex-wrap: wrap; padding: 7px 0; border-top: 1px solid var(--line) }
+  .also .row svg { width: 20px; height: 20px; color: var(--muted); flex: none } .also .row .nm { flex: 1; min-width: 160px }
+  .also .row .nm small { color: var(--muted); margin-left: 8px }
+  #worth .row { gap: 10px; flex-wrap: wrap } #worth .row .nm { flex: 1; min-width: 200px } #worth .row .nm small { display: block; color: var(--muted) }
   .drvs { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 12px 14px 14px }
   .drv-c { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); min-width: 0 }
   .drv-c .top { display: flex; gap: 10px; align-items: center } .drv-c .top svg { flex: none; width: 28px; height: 28px; color: var(--muted) }
@@ -176,9 +183,13 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       <?php endif; ?>
 
       <!-- always true, then only what is -->
+      <!-- what is happening, in one line -->
+      <p class="ov-now" id="ovNow"></p>
       <div class="tiles" id="tiles"></div>
-      <!-- the drives: what is connected, what kind, how full, and what Rushes does with each (state.php drives_now) -->
+      <!-- the drives Rushes uses, and the rest this Mac sees (state.php drives_in, drives_other) -->
       <div class="panel" id="drivesNow" style="margin-top:14px" hidden></div>
+      <!-- only when there is something: a suggestion each, with the page that handles it -->
+      <div class="panel" id="worth" style="margin-top:14px" hidden></div>
 
       <!-- what the helper is doing this second -->
       <div class="now" id="now" hidden></div>
@@ -627,6 +638,8 @@ function show(which) {
   if ($('pwBanner')) $('pwBanner').hidden = which !== 'overview';      // said where it is acted on: Overview (Setup has the form itself)
   $('tiles').hidden = (which !== 'overview');
   $('drivesNow').hidden = which !== 'overview' || !$('drivesNow').innerHTML;
+  $('worth').hidden = which !== 'overview' || !$('worth').innerHTML;
+  $('ovNow').hidden = which !== 'overview';
   $('cards').hidden = (which !== 'overview');
   $('repeats').hidden = (which !== 'overview');
   $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
@@ -1327,33 +1340,78 @@ $('cpGo').onclick = function () {
 // and what Rushes does with it, so plugging one in shows at once
 const DRV_ICON = <?= json_encode(['archive' => icon('archive', 1.6), 'nas' => icon('server', 1.6), 'drive' => icon('drive', 1.6), 'card' => icon('card', 1.6)]) ?>;
 const DRV_KIND = { archive: 'the archive', nas: 'network share (NAS)', drive: 'drive plugged in', card: 'card' };
+function drvMeter(x) {
+  if (!x.total) return '<div class="sp">' + (x.kind === 'nas' ? 'size not reported by the share' : 'size not reported') + '</div>';
+  const used = Math.round((x.total - x.free) / x.total * 100);
+  return '<div class="meter"><i class="' + (used >= 90 ? 'full' : used >= 80 ? 'hot' : '') + '" style="width:' + used + '%"></i></div>' +
+    '<div class="sp">' + tb(x.free) + ' free of ' + tb(x.total) + (used >= 80 ? ' · ' + used + '% full' : '') + '</div>';
+}
 function drawDrives(d) {
-  const ds = d.drives_now || [];
-  $('drivesNow').innerHTML = !ds.length ? '' : '<header><b>Drives</b><span class="n">' + ds.length + ' connected' +
-    (d.helper_seen ? ' · looked ' + new Date(d.helper_seen * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + '</span></header>' +
-    '<div class="drvs">' + ds.map(function (x) {
-      const used = x.total ? Math.round((x.total - x.free) / x.total * 100) : 0;
+  const ins = d.drives_in || [], other = d.drives_other || [];
+  const inPlace = !!d.in_place;
+  $('drivesNow').innerHTML = !ins.length && !other.length ? '' :
+    '<header><b>Drives in Rushes</b><span class="n">' + ins.length + (ins.length === 1 ? ' drive' : ' drives') +
+      (d.helper_seen ? ' · looked ' + new Date(d.helper_seen * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + '</span></header>' +
+    '<div class="drvs">' + ins.map(function (x) {
+      const own = x.roles.indexOf('In Search') >= 0 || x.roles.indexOf('To copy from') >= 0;
       return '<div class="drv-c' + (x.kind === 'archive' ? ' arch' : '') + '"><div class="top">' + DRV_ICON[x.kind] +
         '<div style="min-width:0"><b>' + esc(x.name) + '</b><div class="kind">' + DRV_KIND[x.kind] + '</div></div></div>' +
-        (x.total ? '<div class="meter"><i' + (used >= 90 ? ' class="full"' : '') + ' style="width:' + used + '%"></i></div>' +
-          '<div class="sp">' + tb(x.free) + ' free of ' + tb(x.total) + '</div>' : '') +
-        (x.roles.length ? '<div class="roles">' + x.roles.map(function (r) { return '<span>' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
-        (x.now ? '<div class="lnow"><span class="spin" style="margin-right:6px"></span>' + esc(x.now) + '</div>' : '') + '</div>';
-    }).join('') + '</div>';
-  $('drivesNow').hidden = pane !== 'overview' || !ds.length;
+        drvMeter(x) +
+        (x.files != null && (x.kind === 'archive' || x.roles.indexOf('In Search') >= 0)
+          ? '<div class="inS">' + (x.files ? x.files.toLocaleString() + ' files in Search · ' + tb(x.bytes) : x.now ? '' : 'Not in Search yet') + '</div>' : '') +
+        '<div class="roles">' + x.roles.map(function (r) { return '<span>' + esc(r) + '</span>'; }).join('') + '</div>' +
+        (x.now ? '<div class="lnow"><span class="spin" style="margin-right:6px"></span>' + esc(x.now) + '</div>' : '') +
+        (own ? '<div class="acts"><button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button></div>' : '') +
+        '</div>';
+    }).join('') + '</div>' +
+    (other.length ? '<div class="also"><div class="note" style="margin:4px 0 2px">Also on this Mac: Rushes sees them, and does nothing with them.</div>' +
+      other.map(function (x) {
+        return '<div class="row">' + DRV_ICON[x.kind] + '<span class="nm">' + esc(x.name) +
+          '<small>' + DRV_KIND[x.kind] + (x.total ? ' · ' + tb(x.total - x.free) + ' on it' : '') + '</small></span>' +
+          (x.kind === 'card' ? '<span class="note">use Ingest</span>'
+            : inPlace ? '<button class="btn quiet" data-addsrc="' + esc(x.path) + '" data-name="' + esc(x.name) + '" data-size="' + (x.total ? esc(tb(x.total - x.free)) : '') + '">Add to Rushes</button>'
+            : '<button class="btn quiet" data-copyfrom="' + esc(x.path) + '">Copy into the archive…</button>') + '</div>';
+      }).join('') + '</div>' : '');
+  $('drivesNow').hidden = pane !== 'overview' || (!ins.length && !other.length);
+  $('drivesNow').querySelectorAll('[data-addsrc]').forEach(function (b) {
+    b.onclick = async function () {
+      if (!sure(b, 'Its files become searchable by name. Listing ' + (b.dataset.size ? b.dataset.size + ' ' : '') + 'takes a while on a big share; nothing on it is moved or changed.', 'add:' + b.dataset.addsrc)) return;
+      b.disabled = true; b.textContent = 'adding…';
+      try {
+        const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: b.dataset.addsrc }) })).json();
+        if (x.error) throw new Error(x.error);
+        b.textContent = 'Added ✓ listing within a minute';
+      } catch (e) { b.disabled = false; b.textContent = 'Add to Rushes'; oops('Did not happen: ' + e.message); }
+    };
+  });
+  $('drivesNow').querySelectorAll('[data-unsource]').forEach(function (b) {
+    b.onclick = async function () {
+      if (!sure(b, 'Rushes stops listing ' + b.dataset.name + ': its files leave Search. Nothing on the drive is touched.', 'unsrc:' + b.dataset.unsource)) return;
+      b.disabled = true; b.textContent = 'removing…';
+      try {
+        const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'unsource', drive: b.dataset.unsource }) })).json();
+        if (x.error) throw new Error(x.error);
+        b.textContent = 'Removed ✓';
+      } catch (e) { b.disabled = false; b.textContent = 'Remove from Rushes'; oops('Did not happen: ' + e.message); }
+    };
+  });
+  $('drivesNow').querySelectorAll('[data-copyfrom]').forEach(function (b) {
+    b.onclick = function () { cpWas = { from: b.dataset.copyfrom, to: '@archive' }; show('transfers'); loadCopy(); };
+  });
 }
 function drawTiles(d) {
   drawDrives(d);
   const t = [];
-  t.push('<div class="tile"><div class="lab">In the archive</div>' +
-    '<div class="big">' + d.archive.files.toLocaleString() + '</div>' +
-    '<div class="sub">' + tb(d.archive.bytes) + '</div></div>');
-
-  const pct  = d.disk.pct || 0;
-  const tone = pct >= 90 ? ' bad' : pct >= 80 ? ' warn' : '';
-  t.push('<div class="tile' + tone + '"><div class="lab">Free space</div>' +
-    '<div class="big">' + tb(d.disk.free) + '</div>' +
-    '<div class="sub">' + pct + '% used</div></div>');
+  // what is happening, in one line
+  $('ovNow').innerHTML = d.running ? '<span class="spin" style="margin-right:6px"></span><b>' + esc(window.nowSaid(d)) + '</b>'
+    : 'Nothing running' + (d.backup && d.backup.at ? ' · last backup ' + esc(whenWords(d.backup.at)) + (d.backup.late ? ' (late)' : ' ✓') : '') + '.';
+  // the headline: what is in Search, and on how many drives; why it has not grown yet, while a drive is listed
+  const ins = d.drives_in || [], listing = ins.filter(function (x) { return x.now; });
+  const searched = ins.filter(function (x) { return x.kind === 'archive' || x.roles.indexOf('In Search') >= 0; }).length || 1;
+  t.push('<div class="tile"><div class="lab">In Search</div>' +
+    '<div class="big">' + d.archive.files.toLocaleString() + ' files</div>' +
+    '<div class="sub">' + tb(d.archive.bytes) + ', on ' + searched + (searched === 1 ? ' drive' : ' drives') +
+      (listing.length ? ' · ' + esc(listing.map(function (x) { return x.name; }).join(', ')) + ' still being listed…' : '') + '</div></div>');
 
   // How many copies: the archive is one; the place each file came from, still
   // holding it, is a second. Shown once the helper has looked (weekly).
@@ -1376,16 +1434,21 @@ function drawTiles(d) {
       '<div class="sub">onto ' + esc(bk.drive) + (bk.late ? ' · late' : bk.at ? ' ✓' : '') + '</div></button>');
   }
 
-  // Everything past here is conditional. Someone with a tidy archive and nothing
-  // to bring over sees two tiles and no buttons, which is the correct screen.
-  (d.conditions || []).forEach(function (c, i) {
-    if (!c.tile) return;
-    const cls = c.level === 'bad' ? ' bad' : c.level === 'warn' ? ' warn' : ' act';
-    t.push('<button class="tile' + cls + '" data-c="' + i + '">' +
-      '<div class="lab">' + esc(c.tile.lab) + '</div>' +
-      '<div class="big">' + esc(c.tile.big) + '</div>' +
-      '<div class="sub">' + esc(c.tile.sub) + '</div>' +
-      (c.act ? '<div class="go">' + esc(c.act[1]) + ' →</div>' : '') + '</button>');
+  // Worth a look: only when there is something, one line each, with the page that handles it
+  const ws = (d.conditions || []).map(function (c, i) { return [c, i]; }).filter(function (x) { return x[0].tile; });
+  const arch = ins.find(function (x) { return x.kind === 'archive'; });
+  const full = arch && arch.total ? Math.round((arch.total - arch.free) / arch.total * 100) : 0;
+  $('worth').innerHTML = !ws.length && full < 85 ? '' : '<header><b>Worth a look</b></header><div style="padding:4px 14px 10px">' +
+    (full >= 85 ? '<div class="row"><span class="nm"><span class="' + (full >= 90 ? 'bad' : '') + '">' + esc(arch.name) + ' is ' + full + '% full</span>' +
+      '<small>' + tb(arch.free) + ' free. Duplicates and Cache show what could go.</small></span></div>' : '') +
+    ws.map(function (x) {
+      const c = x[0];
+      return '<div class="row"><span class="nm"><span class="' + (c.level === 'bad' ? 'bad' : '') + '">' + esc(c.tile.lab + ': ' + c.tile.big) + '</span>' +
+        '<small>' + esc(c.tile.sub) + '</small></span>' + (c.act ? '<button class="btn quiet" data-c="' + x[1] + '">' + esc(c.act[1]) + '</button>' : '') + '</div>';
+    }).join('') + '</div>';
+  $('worth').hidden = pane !== 'overview' || !$('worth').innerHTML;
+  $('worth').querySelectorAll('[data-c]').forEach(function (b) {
+    b.onclick = function () { const c = d.conditions[+b.dataset.c]; if (c && c.act) act(c.act[0], b); };
   });
 
   $('tiles').innerHTML = t.join('');

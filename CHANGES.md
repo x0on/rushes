@@ -3,6 +3,19 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.32 — October 2026
+
+- **Overview, rethought around the drives.** From the top:
+  - **What is happening, in one line:** "Listing the files · publicaffairs · 29,500 files so far", or "Nothing running · last backup last night ✓".
+  - **In Search:** how many files and how much, on how many drives. While a drive is being listed it says so, so a number that has not grown yet is explained.
+  - **Drives in Rushes:** the archive, the drives in Search, the backup's and the copies', each with how much of Search is on it, how full it is and what it is for. **Remove from Rushes** takes one off the list; nothing on it is touched.
+  - **Also on this Mac:** the drives Rushes sees and does nothing with, each with **Add to Rushes** (asked twice, with its size; its files are listed and found by name). When drives are copied into the archive, the button is **Copy into the archive…**, which opens Copying with that drive chosen.
+  - **Worth a look:** only when there is something (cache to clear, a drive filling up, a copy that stopped), one line each, with its button.
+- **Sizes that are right, or none.** A Mac gives Python wrong figures for a big network share (it said 27.61 TB free of 5.86 TB). Rushes now asks the way Finder does (df), every five minutes, and never waits on a share that does not answer. A size that cannot be right is not shown. The archive's own free space is read the same way.
+- **What each drive is comes from the Mac itself:** a network share shows as one, whatever the helper reported.
+- **Bars are grey,** amber from 80% full, red from 90%. Full is never green.
+- **The free-space tile is gone:** free space is on each drive now. Cache and the other suggestions moved to Worth a look.
+
 ## 0.12.31 — October 2026
 
 - **Overview shows the drives.** One card per drive and share the helper
