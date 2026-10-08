@@ -304,4 +304,21 @@ check(db()->querySingle("SELECT asis FROM media m JOIN files f ON f.id = m.file_
 $_GET = ['p' => $talk]; ob_start(); include web_dir() . '/db/play.php'; $played = ob_get_clean();
 check($played === 'tk', 'Search plays a light video from the original itself');
 $_GET = [];
+// A drive's three levels (db/drive.php): per folder, videos only; previews or played as they are; described
+require_once web_dir() . '/db/drive.php'; analysis_init();
+$lv = "$arch/Levels test";
+foreach (['A/one.mov' => 'video', 'A/two.mov' => 'video', 'A/still.jpg' => 'image', 'B/three.mp4' => 'video', 'loose.mov' => 'video'] as $rel => $k)
+    db()->exec("INSERT INTO files (path, name, kind, bytes) VALUES ('" . SQLite3::escapeString("$lv/$rel") . "', '" . basename($rel) . "', '$k', 10)");
+$id = fn($rel) => (int)db()->querySingle("SELECT id FROM files WHERE path = '" . SQLite3::escapeString("$lv/$rel") . "'");
+db()->exec("INSERT OR REPLACE INTO media (file_id, proxy_at) VALUES (" . $id('A/one.mov') . ", 1)");
+db()->exec("INSERT OR REPLACE INTO media (file_id, asis) VALUES (" . $id('B/three.mp4') . ", '1')");
+db()->exec("INSERT INTO moments (fp, path, kind) VALUES ('lv', '" . SQLite3::escapeString("$lv/A/one.mov") . "', 'shot')");
+$L = drive_levels($arch, 'Levels test', true); $by = array_column($L['folders'], null, 'name');
+check($L['total']['n'] === 5 && $L['total']['v'] === 4 && $L['total']['p'] === 2 && $L['total']['d'] === 1
+      && $by['A']['v'] === 2 && $by['A']['p'] === 1 && $by['A']['d'] === 1 && $by['B']['p'] === 1 && $by['']['n'] === 1,
+      "a drive's levels: files, videos, playable (a preview, or as it is) and described, per folder and loose");
+check(drive_levels($arch, 'Levels test')['at'] === $L['at'] && drive_levels("$arch/Levels", '', true)['total']['n'] === 0,
+      "a drive's levels are kept for a while, and a folder's name is never a prefix of another's");
+check(archive_folder_is('ARCHIVE') === 'waiting' && archive_folder_is('_rushes') === 'own' && archive_folder_is('PROXIES') === 'own',
+      'the archive: what copies brought in waits to be filed; Rushes\' own folders are not footage');
 echo "Server tests complete. Fixture: $root\n";

@@ -66,6 +66,24 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .drv-c .roles { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px }
   .drv-c .roles span { font-size: 11px; border-radius: 9px; padding: 1px 8px; background: var(--raised); color: var(--fg) }
   .drv-c .lnow { font-size: 12px; margin-top: 6px }
+  /* the three levels (db/drive.php): on each card, and big on the drive's own page */
+  .drv-c.open { cursor: pointer } .drv-c.open:hover { border-color: var(--muted) }
+  .lvs { margin-top: 8px; display: grid; gap: 3px }
+  .lv { display: grid; grid-template-columns: 74px 1fr 64px; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted) }
+  .lv i { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden } .lv i b { display: block; height: 100%; background: var(--ok) }
+  .lv em { font-style: normal; text-align: right; color: var(--fg) }
+  .drv-c .more { font-size: 11.5px; color: var(--muted); margin-top: 6px }
+  .dlv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding: 12px 14px 14px }
+  .dlv > div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg) }
+  .dlv .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650 }
+  .dlv .big { font-size: 20px; font-weight: 650; margin: 2px 0 6px } .dlv .lv { grid-template-columns: 1fr } .dlv .lv i { height: 6px }
+  .dlv p { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; line-height: 1.5 }
+  .dlv .btn { margin-top: 8px; white-space: normal; max-width: 100% }
+  #dvFolders td.n, #dvFolders th.n { text-align: right; white-space: nowrap }
+  #dvFolders .pc { display: inline-block; width: 46px; height: 4px; border-radius: 2px; background: var(--raised); vertical-align: middle; margin-left: 6px; overflow: hidden }
+  #dvFolders .pc b { display: block; height: 100%; background: var(--ok) }
+  #dvFolders tr.wait td:first-child small { color: var(--warn) }
+  .crumbs { font-size: 13px; padding: 10px 14px 0 } .crumbs a { color: var(--muted) }
   .cp-what { margin: 0 0 14px; font-size: 13px; color: var(--muted) } .cp-what p { margin: 0 0 4px; max-width: 90ch }
   .cp-what b { color: var(--fg) }
   .cp-route { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
@@ -283,6 +301,23 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <div class="btns" style="padding:10px 14px" id="dMoreBox" hidden><button class="btn quiet" id="dMore">Show more</button></div>
         </div>
         <div id="rrDup"></div>
+      </section>
+
+      <!-- ══ one drive (Overview → a card): its three levels, its folders, what can be done on it ══ -->
+      <section id="pane-drive" hidden>
+        <div class="panel big-head" style="margin-top:8px">
+          <div class="bh"><div class="t"><div class="bh-n" id="dvHead"></div><div class="note" id="dvSub"></div></div>
+            <a href="#" class="note" id="dvBack">&larr; All drives</a></div>
+          <div class="btns" id="dvActs"></div>
+          <p class="note" id="dvSaid" style="margin:8px 0 0"></p>
+        </div>
+        <div class="panel" style="margin-top:12px"><div class="dlv" id="dvLevels"></div></div>
+        <div class="panel" style="margin-top:12px">
+          <header><b>Folders</b><span class="n" id="dvAt"></span></header>
+          <div class="crumbs" id="dvCrumbs"></div>
+          <div id="dvFolders" style="padding:8px 14px 14px"></div>
+        </div>
+        <div id="rrDrive"></div>
       </section>
 
       <!-- ══ cache ══ -->
@@ -603,6 +638,7 @@ const tb  = function (b) {
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
 let pane = 'overview', latestTransfer = null, quiet = 0;
+let drv = null;                       // the drive whose page is open (a card from state.php drives_in), and the folder in it
 let lastRunning = '';                 // the job the runner says it is doing (state.php)
 // Activity's filter: everything, or one kind (activity.php names them)
 let actKind = 'all';
@@ -619,7 +655,7 @@ document.querySelectorAll('#actKinds button').forEach(function (b) {
 const ON_MAC = <?= on_mac() ? 'true' : 'false' ?>, WHERE = ON_MAC ? 'on this Mac' : 'on the server';
 const CHIP = ON_MAC ? "the Mac's media engine" : 'the video chip';      // what makes the proxies
 const TITLES = { overview: 'Overview', transfers: 'Copying', cache: 'Cache',
-                 duplicates: 'Duplicates', describe: 'Describe',
+                 duplicates: 'Duplicates', describe: 'Describe', drive: 'Drive',
                  activity: 'Activity', projects: "Editors' projects" };
 
 function show(which) {
@@ -629,7 +665,8 @@ function show(which) {
     if (b.dataset.go === which) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  ['transfers', 'duplicates', 'cache', 'describe', 'projects', 'activity'].forEach(function (p) {
+  if (which === 'drive' && !drv) which = pane = 'overview';     // a reload on #drive: which drive is not kept
+  ['transfers', 'duplicates', 'cache', 'describe', 'projects', 'activity', 'drive'].forEach(function (p) {
     $('pane-' + p).hidden = (p !== which);
   });
   // Overview shows the tiles and the cards; a section shows its own thing.
@@ -646,6 +683,7 @@ function show(which) {
   if (which === 'cache') { loadCache(); loadRemoved(); }
   if (which === 'duplicates') { loadDup(); loadRemoved(); }
   if (which === 'transfers') loadCopy();
+  if (which === 'drive') { loadDrive(); loadRemoved(); }
   try { history.replaceState(null, '', '#' + which); } catch (e) {}
   if (window.lastState) drawHelper(window.lastState);     // the switches show (or go) at once, not at the next refresh
 }
@@ -840,9 +878,9 @@ async function loadRemoved() {
   let r;
   try { r = await (await fetch('removed.php?t=' + Date.now())).json(); } catch (e) { return; }
   if (r.error) return;
-  const html = '<div class="panel rr"><header><b>Recently Removed</b>' +
+  const rrHtml = function (places) { return '<div class="panel rr"><header><b>Recently Removed</b>' +
     '<span class="infotip" tabindex="0" data-tip="What Remove took out of the way, on the same drive, in a folder called _Recently Removed. Nothing in it is deleted until you press Delete All. Rushes suggests keeping it ' + r.wait_days + ' days, in case something was needed.">i</span></header>' +
-    r.places.map(function (p) {
+    places.map(function (p) {
       const days = p.at ? Math.floor((Date.now() / 1000 - p.at) / 86400) : 0;
       const left = Math.max(0, r.wait_days - days);
       const when = !p.files ? 'Empty' : (p.at ? 'removed ' + (days < 1 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago') : '') +
@@ -850,8 +888,12 @@ async function loadRemoved() {
       return '<div class="row"><span class="nm">' + esc(p.name) + '<small>' + (p.files ? tb(p.bytes) + ' · ' + p.files.toLocaleString() + ' files · ' : '') + esc(when) + '</small></span>' +
         (p.files && r.mac ? '<button class="btn quiet" data-empty="' + esc(p.drive) + '" data-ready="' + (p.ready ? 1 : 0) + '" data-left="' + left + '" data-name="' + esc(p.name) +
           '" data-size="' + esc(tb(p.bytes)) + '">Delete All</button>' : '') + '</div>';
-    }).join('') + '</div>';
+    }).join('') + '</div>'; };
+  const html = rrHtml(r.places);
   ['rrDup', 'rrCache'].forEach(function (id) { $(id).innerHTML = html; });
+  // a drive's page: its own Recently Removed only (the archive's is the one with drive '')
+  const mine = drv && r.places.filter(function (p) { return p.drive === (drv.kind === 'archive' ? '' : drv.source); });
+  $('rrDrive').innerHTML = mine && mine.length ? '<div style="margin-top:12px">' + rrHtml(mine) + '</div>' : '';
   document.querySelectorAll('[data-empty]').forEach(function (b) {
     b.onclick = function () {
       const what = 'Deletes everything in Recently Removed on ' + b.dataset.name + ' (' + b.dataset.size + '), for good: it cannot be recovered.' +
@@ -1346,21 +1388,143 @@ function drvMeter(x) {
   return '<div class="meter"><i class="' + (used >= 90 ? 'full' : used >= 80 ? 'hot' : '') + '" style="width:' + used + '%"></i></div>' +
     '<div class="sp">' + tb(x.free) + ' free of ' + tb(x.total) + (used >= 80 ? ' · ' + used + '% full' : '') + '</div>';
 }
+// ── one drive: the three levels (db/drive.php) ─────────────────────────────
+// Searchable: in Search by name. Playable: its videos play in Search (a preview was made, or it plays
+// as it is). Described: the AI wrote down what is in them. A percentage is rounded down: 100% means all.
+const pct = function (a, b) { return b ? (a >= b ? 100 : Math.floor(a / b * 100)) : 0; };
+function lvRow(lab, val, p) {
+  return '<div class="lv"><span>' + lab + '</span><i><b style="width:' + p + '%"></b></i><em>' + val + '</em></div>';
+}
+function drvLevels(x) {
+  const L = x.levels; if (!L) return '';
+  return '<div class="lvs">' +
+    lvRow('Searchable', x.now ? 'listing…' : L.n ? '✓' : '—', x.now ? 50 : L.n ? 100 : 0) +
+    lvRow('Playable', L.v ? pct(L.p, L.v) + '%' : 'no videos', pct(L.p, L.v)) +
+    lvRow('Described', L.v ? pct(L.d, L.v) + '%' : 'no videos', pct(L.d, L.v)) + '</div>';
+}
+function openDrive(x) {
+  if (!x) return;
+  drv = Object.assign({}, x, { in: '' }); show('drive'); window.scrollTo(0, 0);
+}
+async function loadDrive(fresh) {
+  if (!drv) return;
+  const arch = drv.kind === 'archive', n = function (v) { return (+v || 0).toLocaleString(); };
+  $('dvHead').textContent = drv.name; $('title').textContent = drv.name;
+  $('dvSub').textContent = DRV_KIND[drv.kind] + (drv.total ? ' · ' + tb(drv.free) + ' free of ' + tb(drv.total) : '') +
+    (drv.roles && drv.roles.length ? ' · ' + drv.roles.join(' · ') : '');
+  $('dvBack').onclick = function (e) { e.preventDefault(); drv = null; show('overview'); };
+  $('dvFolders').innerHTML = '<div class="note">Counting…</div>';
+  let r;
+  try { r = await (await fetch('drive.php?path=' + encodeURIComponent(drv.root) + '&in=' + encodeURIComponent(drv.in) + (fresh ? '&fresh=1' : '') + '&t=' + Date.now())).json(); }
+  catch (e) { $('dvFolders').innerHTML = '<div class="note bad">Could not count: ' + esc(e.message) + '</div>'; return; }
+  if (r.error) { $('dvFolders').innerHTML = '<div class="note bad">' + esc(r.error) + '</div>'; return; }
+  const T = r.total, top = drv.in === '';
+
+  // the three levels, for the whole drive (or the folder open), each with what moves it on
+  const lv = function (lab, big, p, say, btn) {
+    return '<div><div class="lab">' + lab + '</div><div class="big">' + big + '</div><div class="lv"><i><b style="width:' + p + '%"></b></i></div>' +
+      '<p>' + say + '</p>' + (btn || '') + '</div>';
+  };
+  const where = top ? drv.name : drv.in;
+  const keptHere = arch ? '' : ' Previews for a drive kept where it is come in a next version: Rushes will first ask where to keep them, and show how much room and time they take.';
+  $('dvLevels').innerHTML =
+    lv('Searchable by name', drv.now && !T.n ? 'Listing…' : n(T.n) + ' files', drv.now ? 50 : T.n ? 100 : 0,
+      drv.now ? esc(drv.now) + '. Files show up in Search as they are listed.' : tb(T.b) + ' · found in Search by their names and folders.' +
+        (arch ? '' : ' Listed again every night, while it is plugged in.')) +
+    lv('Playable', T.v ? pct(T.p, T.v) + '%' : 'No videos', pct(T.p, T.v),
+      T.v ? n(T.p) + ' of ' + n(T.v) + ' videos play in Search: a light preview of each was made, or it plays as it is.' + keptHere : 'Nothing here to make previews of.',
+      arch && !top && (T.v > T.p || T.v > T.d) ? '<button class="btn quiet" data-dv="prep" data-f="' + esc(drv.in) + '">Make previews and descriptions</button>'
+        : arch && T.v > T.p ? '<p>Pick folders below: each goes on the list, previews first, then descriptions.</p>' : '') +
+    lv('Described', T.v ? pct(T.d, T.v) + '%' : 'No videos', pct(T.d, T.v),
+      T.v ? n(T.d) + ' of ' + n(T.v) + ' videos described by the AI: every shot in words, and everything said, so Search finds what is in them. It needs the previews first.' : 'Nothing here to describe.');
+
+  // the archive: what the copies brought in, not on the shelf yet
+  const w = T.wait;
+  $('dvAt').innerHTML = 'counted ' + esc(whenWords(r.at)) + ' · <a href="#" data-dv="count">count again</a>';
+  $('dvCrumbs').innerHTML = top ? '' : '<a href="#" data-in="">' + esc(drv.name) + '</a>' + drv.in.split('/').map(function (part, i, all) {
+    return ' / ' + (i === all.length - 1 ? '<b>' + esc(part) + '</b>' : '<a href="#" data-in="' + esc(all.slice(0, i + 1).join('/')) + '">' + esc(part) + '</a>');
+  }).join('');
+  const rows = r.folders.filter(function (f) { return f.name !== ''; }), loose = r.folders.find(function (f) { return f.name === ''; });
+  $('dvFolders').innerHTML = (w && w.n ? '<div class="banner warn" style="margin:0 0 10px"><div class="txt"><b>' + n(w.n) + ' files waiting to be filed · ' + tb(w.b) +
+      '</b><br>Copied in, not on the archive\'s shelf yet. Tidy up shows where each folder goes, and moves nothing until you say so.</div>' +
+      '<a class="btn" href="/structure.php">Tidy up</a></div>' : '') +
+    (!rows.length ? '<div class="note">' + (loose ? n(loose.n) + ' files, no folders.' : 'Nothing in Search here.') + '</div>' :
+    '<table class="prep"><thead><tr><th>Folder</th><th class="n">Files</th><th class="n">Size</th><th class="n">Playable</th><th class="n">Described</th><th></th></tr></thead><tbody>' +
+    rows.map(function (f) {
+      const path = (drv.in ? drv.in + '/' : '') + f.name;
+      const bar = function (a) { return f.v ? pct(a, f.v) + '%<span class="pc"><b style="width:' + pct(a, f.v) + '%"></b></span>' : '<span class="dim">—</span>'; };
+      return '<tr' + (f.is === 'waiting' ? ' class="wait"' : '') + '><td><a href="#" data-in="' + esc(path) + '">' + esc(f.name) + '</a>' +
+          (f.is === 'waiting' ? ' <small>waiting to be filed</small>' : '') + '</td>' +
+        '<td class="n">' + n(f.n) + '</td><td class="n">' + tb(f.b) + '</td><td class="n">' + bar(f.p) + '</td><td class="n">' + bar(f.d) + '</td>' +
+        '<td class="n">' + (arch && f.v && (f.p < f.v || f.d < f.v) ? '<button class="lnk" data-dv="prep" data-f="' + esc(path) + '">Make previews and descriptions</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table>' +
+    (loose ? '<p class="note" style="margin:8px 0 0">And ' + n(loose.n) + ' files loose in ' + esc(where) + '.</p>' : ''));
+
+  // what can be done on this drive: each opens the page that does it, set to this drive
+  const isSrc = drv.roles && (drv.roles.indexOf('In Search') >= 0 || drv.roles.indexOf('To copy from') >= 0);
+  $('dvActs').innerHTML =
+    '<button class="btn quiet" data-dv="dup">Find duplicates on this drive</button>' +
+    (arch ? '<button class="btn quiet" data-dv="cache">Clear editing cache</button>' : '') +
+    '<button class="btn quiet" data-dv="copy">' + (arch ? 'Back up the archive…' : 'Copy this drive…') + '</button>' +
+    (arch ? '<button class="btn quiet" data-dv="describe">Previews and descriptions, in order</button>' : '') +
+    (isSrc && !arch ? '<button class="btn quiet" data-dv="unsource">Remove from Rushes</button>' : '');
+
+  document.querySelectorAll('#pane-drive [data-in]').forEach(function (a) {
+    a.onclick = function (e) { e.preventDefault(); drv.in = a.dataset.in; loadDrive(); };
+  });
+  document.querySelectorAll('#pane-drive [data-dv]').forEach(function (b) {
+    b.onclick = async function (e) {
+      const k = b.dataset.dv; if (e) e.preventDefault();
+      if (k === 'count') { loadDrive(true); return; }
+      if (k === 'dup') { show('duplicates'); $('dupDrive').value = arch ? '' : drv.source; dupList = null; loadDup(); loadRemoved(); return; }
+      if (k === 'cache') { show('cache'); return; }
+      if (k === 'describe') { show('describe'); return; }
+      if (k === 'copy') { cpWas = { from: arch ? '@archive' : drv.path, to: null }; show('transfers'); loadCopy(); return; }
+      if (k === 'unsource') {
+        if (!sure(b, 'Rushes stops listing ' + drv.name + ': its files leave Search. Nothing on the drive is touched.', 'unsrc:' + drv.path)) return;
+        b.disabled = true; b.textContent = 'removing…';
+        try {
+          const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'unsource', drive: drv.path }) })).json();
+          if (x.error) throw new Error(x.error);
+          $('dvSaid').textContent = 'Removed ✓ ' + drv.name + ' leaves Search within a minute. Nothing on it was touched.'; b.textContent = 'Removed ✓';
+        } catch (e) { b.disabled = false; b.textContent = 'Remove from Rushes'; oops('Did not happen: ' + e.message); }
+        return;
+      }
+      if (k === 'prep') {
+        // the same list as Describe: previews first, then descriptions, folders one at a time, top to bottom
+        const f = b.dataset.f;
+        if (!f) { show('describe'); return; }
+        b.disabled = true; const was = b.textContent; b.textContent = 'adding…';
+        try {
+          const x = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'prepare', path: f }) })).json();
+          if (x.error) throw new Error(x.error);
+          b.textContent = 'On the list ✓';
+          $('dvSaid').innerHTML = 'Added ✓ <b>' + esc(f) + '</b> is on the list: previews first, then descriptions. Folders run one at a time, top to bottom; ' +
+            '<a href="#" data-go-describe="1">Describe</a> shows the list and changes the order.';
+          const g = $('dvSaid').querySelector('[data-go-describe]'); if (g) g.onclick = function (e) { e.preventDefault(); show('describe'); };
+        } catch (e) { b.disabled = false; b.textContent = was; $('dvSaid').textContent = 'Did not happen: ' + e.message; }
+      }
+    };
+  });
+}
 function drawDrives(d) {
   const ins = d.drives_in || [], other = d.drives_other || [];
   const inPlace = !!d.in_place;
+  if (drv) { const nx = ins.find(function (x) { return x.path === drv.path; }); if (nx) drv = Object.assign(nx, { in: drv.in }); }
   $('drivesNow').innerHTML = !ins.length && !other.length ? '' :
     '<header><b>Drives in Rushes</b><span class="n">' + ins.length + (ins.length === 1 ? ' drive' : ' drives') +
       (d.helper_seen ? ' · looked ' + new Date(d.helper_seen * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + '</span></header>' +
     '<div class="drvs">' + ins.map(function (x) {
       const own = x.roles.indexOf('In Search') >= 0 || x.roles.indexOf('To copy from') >= 0;
-      return '<div class="drv-c' + (x.kind === 'archive' ? ' arch' : '') + '"><div class="top">' + DRV_ICON[x.kind] +
+      return '<div class="drv-c' + (x.kind === 'archive' ? ' arch' : '') + (x.levels ? ' open" data-open="' + esc(x.path) + '" title="Open ' + esc(x.name) : '') + '"><div class="top">' + DRV_ICON[x.kind] +
         '<div style="min-width:0"><b>' + esc(x.name) + '</b><div class="kind">' + DRV_KIND[x.kind] + '</div></div></div>' +
         drvMeter(x) +
         (x.files != null && (x.kind === 'archive' || x.roles.indexOf('In Search') >= 0)
           ? '<div class="inS">' + (x.files ? x.files.toLocaleString() + ' files in Search · ' + tb(x.bytes) : x.now ? '' : 'Not in Search yet') + '</div>' : '') +
         '<div class="roles">' + x.roles.map(function (r) { return '<span>' + esc(r) + '</span>'; }).join('') + '</div>' +
         (x.now ? '<div class="lnow"><span class="spin" style="margin-right:6px"></span>' + esc(x.now) + '</div>' : '') +
+        drvLevels(x) +
+        (x.levels && x.levels.wait && x.levels.wait.n ? '<div class="more"><span class="bad" style="color:var(--warn)">' + x.levels.wait.n.toLocaleString() + ' files waiting to be filed</span></div>' : '') +
         (own ? '<div class="acts"><button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button></div>' : '') +
         '</div>';
     }).join('') + '</div>' +
@@ -1393,6 +1557,12 @@ function drawDrives(d) {
         if (x.error) throw new Error(x.error);
         b.textContent = 'Removed ✓';
       } catch (e) { b.disabled = false; b.textContent = 'Remove from Rushes'; oops('Did not happen: ' + e.message); }
+    };
+  });
+  $('drivesNow').querySelectorAll('[data-open]').forEach(function (c) {
+    c.onclick = function (e) {
+      if (e.target.closest('button')) return;                 // its own buttons (Remove from Rushes) are not "open"
+      openDrive((d.drives_in || []).find(function (x) { return x.path === c.dataset.open; }));
     };
   });
   $('drivesNow').querySelectorAll('[data-copyfrom]').forEach(function (b) {

@@ -3,10 +3,20 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.33 — October 2026
+
+The first step of Rushes organised around drives. Nothing here copies, moves or deletes anything new.
+
+- **Each drive card has three levels:** Searchable (its files are found by name), Playable (the share of its videos that play in Search) and Described (the share the AI described). They are counted from Search, so an unplugged drive still shows where it was.
+- **A card opens the drive's own page:** the three levels with what moves each one on, its folders with their own progress (a folder opens to its folders), and what can be done on it: Find duplicates, Clear editing cache, Back up / Copy this drive, Remove from Rushes, and its own Recently Removed.
+- **Previews and descriptions, folder by folder:** on the archive's page, each folder has **Make previews and descriptions**, which puts it on Describe's list. The list's order is the order they are made in.
+- **Waiting to be filed:** the archive's card and page say how many files were copied in and are not on the shelf yet, with **Tidy up**.
+- Previews for drives kept where they are come next: they need a place, asked per drive.
+
 ## 0.12.32 — October 2026
 
 - **Overview, rethought around the drives.** From the top:
-  - **What is happening, in one line:** "Listing the files · publicaffairs · 29,500 files so far", or "Nothing running · last backup last night ✓".
+  - **What is happening, in one line:** "Listing the files · Studio Share · 29,500 files so far", or "Nothing running · last backup last night ✓".
   - **In Search:** how many files and how much, on how many drives. While a drive is being listed it says so, so a number that has not grown yet is explained.
   - **Drives in Rushes:** the archive, the drives in Search, the backup's and the copies', each with how much of Search is on it, how full it is and what it is for. **Remove from Rushes** takes one off the list; nothing on it is touched.
   - **Also on this Mac:** the drives Rushes sees and does nothing with, each with **Add to Rushes** (asked twice, with its size; its files are listed and found by name). When drives are copied into the archive, the button is **Copy into the archive…**, which opens Copying with that drive chosen.
@@ -25,14 +35,14 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
   "A card: Ingest". While a drive is being listed, its card says so, with
   how many files so far.
 - **What is happening, in words.** The top bar, Activity and the column beside
-  every page say "Listing the files · publicaffairs · 48,210 files so far"
+  every page say "Listing the files · Studio Share · 48,210 files so far"
   instead of "reindex · 100%". That 100% was a number left over from an older
   job; each job's progress is now only its own. Every job has a plain name
   (Finding duplicates, Removing duplicate copies, Making proxies…), and
   Activity's full list starts with what is happening now. When a drive just
-  plugged in or added has been listed, Activity says "Listed publicaffairs:
+  plugged in or added has been listed, Activity says "Listed Studio Share:
   96,400 files, found in Search by name".
-- **Setup says what happened when a drive is added:** "publicaffairs added.
+- **Setup says what happened when a drive is added:** "Studio Share added.
   Rushes is listing its files now…", or, when drives are copied into the
   archive (Setup 01), that it is a place to copy from and how to make its
   files searchable instead. Section 04 says that too, before anyone wonders.

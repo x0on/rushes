@@ -1317,10 +1317,41 @@ width.
 
 **Tiles:**
 
-- **In the archive:** files and size.
-- **Free space:** warns at 80% full, alarms at 90%.
+- **In Search:** files and size, on how many drives.
 - **Kept twice:** how much has a second copy.
 - One tile for each thing that needs you. Pressing it is the button.
+
+**Drives in Rushes:** one card per drive: the archive, each drive kept where it
+is, and the backup's. Each card has how full it is, what it is for, and three
+levels (`db/drive.php`):
+
+| Level | Means |
+|---|---|
+| Searchable | its files are in Search by name |
+| Playable | the share of its videos that play in Search: a preview (proxy) was made, or the original is light enough to play as it is |
+| Described | the share of its videos the AI described (a row in `moments`) |
+
+They are counted from the search database only, so an unplugged drive still
+shows where it was, and kept 15 minutes (a new file list counts again at once).
+A percentage is rounded down: 100% means every video.
+
+**A drive's page** opens from its card:
+
+- the three levels for the whole drive, each saying what moves it on;
+- its folders, with files, size, playable and described for each; a folder opens
+  to its own folders. On the archive, each folder has **Make previews and
+  descriptions**, which puts it on Describe's list (previews first, then
+  descriptions, one folder at a time, top to bottom);
+- on the archive, **N files waiting to be filed**: what is in `ARCHIVE` (where
+  copies land) and in top folders outside the shelf, with **Tidy up**
+  (Reorganize). Rushes' own folders (`_rushes`, `PROXIES`, the bin) are not counted;
+- its actions: **Find duplicates on this drive**, **Clear editing cache** (the
+  archive), **Back up the archive… / Copy this drive…** (Copying, with it chosen),
+  **Remove from Rushes** (a drive kept where it is);
+- its own **Recently Removed**, with Delete All asked twice as everywhere.
+
+Previews for a drive kept where it is are not made yet: they need a place to be
+kept, which Rushes will ask for per drive, with the room and time they take.
 
 **Cards** say what is true right now, in plain words, with a button when there
 is something to do:

@@ -73,6 +73,8 @@ check(str_contains($html, 'id="cpFrom"') && str_contains($html, 'id="cpTo"') && 
 check(str_contains($html, "classList.toggle('tip-l'"), 'an ⓘ on the right opens to the left');
 check(str_contains($html, 'id="drivesNow"') && str_contains($html, 'DRV_ICON') && str_contains($html, 'running_said') && str_contains($html, 'data-addsrc')
       && str_contains($html, 'id="worth"') && !str_contains($html, "'Free space'"), 'Overview: drives in Rushes and the rest with Add to Rushes, Worth a look, no lone free-space tile; what is running in words');
+check(str_contains($html, 'id="pane-drive"') && str_contains($html, 'function openDrive') && str_contains($html, 'drive.php?path=') && str_contains($html, 'id="rrDrive"'),
+      'a drive card opens its own page: levels, folders, actions, its Recently Removed');
 check(!str_contains($html, 'Back to search') && substr_count($html, 'href="/setup.php"') >= 1, 'the menu has no second way back to Search');
 ob_start(); include "$root/app/setup.php"; $html = ob_get_clean();
 check(str_contains($html, 'id="plan"') && str_contains($html, '1 department, in Library') && str_contains($html, 'form="pP" type="text" name="d_name[0]" value="Parks"'),

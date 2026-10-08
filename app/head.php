@@ -97,7 +97,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   };
 </script>
 <script>
-  // What is running, in words, and how far: "Listing the files · publicaffairs · 48,210 files so far"
+  // What is running, in words, and how far: "Listing the files · Studio Share · 48,210 files so far"
   window.nowSaid = function (d) {
     var p = d.progress, w = d.running_said || d.running || '';
     return w + (!p ? '' : p.said ? ' · ' + p.said : p.pct != null ? ' · ' + p.pct + '%' : '');

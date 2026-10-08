@@ -10,6 +10,7 @@
 
 require_once __DIR__ . '/transfers.php';
 require_once __DIR__ . '/backup.php';
+require_once __DIR__ . '/drive.php';
 db_init();
 $transfer = transfer_summary(transfer_current());
 // An unfinished transfer tells its own story (its card says blocked, stopped,
@@ -490,6 +491,7 @@ $ha = helper_archive(); $dbk = settings()['backup'] ?? []; $cps = settings()['co
 $inSearch = array_flip(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()));
 $sources = array_flip(array_map(fn($r) => rtrim((string)($r['path'] ?? ''), '/'), settings()['sources'] ?? []));
 $listing = $progress['said'] ?? '';
+$seenSrc = array_column(array_map(fn($d) => [rtrim((string)$d['path'], '/'), (string)$d['source']], drives_seen()), 1, 0);
 $drives_in = []; $drives_other = [];
 foreach ($hv['vols'] as $dv) {
     $dp = rtrim($dv['path'], '/'); $m = $mnt[$dp] ?? null;
@@ -511,6 +513,8 @@ foreach ($hv['vols'] as $dv) {
     $one = ['name' => $dv['name'], 'path' => $dv['path'], 'kind' => $kind, 'total' => $tt, 'free' => $ff,
             'roles' => array_values(array_unique($droles)), 'now' => $dnow,
             'files' => $tot['roots'][$root][0] ?? null, 'bytes' => $tot['roots'][$root][1] ?? null];
+    // the card's three levels, and the drive's page (db/drive.php): only for what Search covers
+    if (isset($tot['roots'][$root])) { $one['root'] = $root; $one['levels'] = drive_levels($root)['total']; $one['source'] = $seenSrc[$root] ?? ''; }
     if ($droles && !$dv['card']) $drives_in[] = $one; else $drives_other[] = $one;
 }
 usort($drives_in, fn($a, $b) => [$a['kind'] !== 'archive', $a['name']] <=> [$b['kind'] !== 'archive', $b['name']]);
