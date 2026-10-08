@@ -3,6 +3,15 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.27 — October 2026
+
+- **Copying says what it is for, before anything is chosen.** Its box is now
+  "Copy or back up", with one line for each: **Copy once** (a whole drive or
+  server into the archive: From that drive, To the archive) and **Back up** (a
+  second copy of the archive on another drive, every night or when asked: From
+  the archive, To that drive; it only adds). When no other drive is plugged in,
+  it says so: To only offers the archive until one is connected.
+
 ## 0.12.26 — October 2026
 
 - **Duplicates in three kinds, three decisions.** Instead of one list of

@@ -49,6 +49,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .tag { font-size: 11px; font-weight: 650; border-radius: 9px; padding: 1px 8px; background: var(--ok-bg); color: var(--ok); white-space: nowrap }
   .tag.go { background: var(--raised); color: var(--muted) }
   .cp .lnk { font-size: 12px; white-space: nowrap }
+  .cp-what { margin: 0 0 14px; font-size: 13px; color: var(--muted) } .cp-what p { margin: 0 0 4px; max-width: 90ch }
+  .cp-what b { color: var(--fg) }
   .cp-route { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
   .cp-route label, .cp-opts > label { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted) }
   .cp-route select, .cp-opts input[type=text], .cp-opts input:not([type]) { padding: 7px 10px; font: 13.5px var(--font); border: 1px solid var(--line);
@@ -183,8 +185,15 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
         <!-- From → To, chosen here (HOW-IT-WORKS.md → Copying): a whole drive into the archive, once;
              or the archive onto another drive, once or every night (db/backup.php) -->
         <div class="panel" id="cpPick" style="margin-top:8px">
-          <header><b>What to copy</b><?= $tip('Copying is the careful way to move a lot at once. Each file is checked after it lands; a stop (a drive unplugged, Pause) carries on where it was; nothing already there is copied twice, nothing different is ever replaced, and nothing is ever deleted. Cards and new shoots come in through Ingest instead.') ?></header>
+          <header><b>Copy or back up</b><?= $tip('Copying is the careful way to move a lot at once. Each file is checked after it lands; a stop (a drive unplugged, Pause) carries on where it was; nothing already there is copied twice, nothing different is ever replaced, and nothing is ever deleted. Cards and new shoots come in through Ingest instead.') ?></header>
           <div style="padding:14px">
+            <!-- what this page is for, said before anything is chosen: two jobs, one From → To -->
+            <div class="cp-what">
+              <p><b>Copy once</b> &mdash; a whole drive or server into the archive, folder by folder. From: that drive &rarr; To: the archive.
+                (Cards and new shoots come in through Ingest.)</p>
+              <p><b>Back up</b> &mdash; a second copy of the archive on another drive, every night or when you ask. From: the archive &rarr; To: that drive.
+                It only adds: nothing on that drive is ever replaced or deleted.</p>
+            </div>
             <div class="cp-route">
               <label>From <select id="cpFrom"></select></label>
               <span class="arrow">&rarr;</span>
@@ -1172,8 +1181,10 @@ function drawCopy() {
     : bring ? 'Everything on <b>' + esc(($('cpFrom').selectedOptions[0] || {}).textContent) + '</b> into the archive, folder by folder, once. ' +
       'List its folders, tick the ones you want below, and Copy. What the archive already has is skipped.'
     : f !== ARCH && t !== ARCH ? 'From one drive straight onto another is not something Copying does: bring it into the archive, and back the archive up.'
-    : r.in_place ? 'Your drives stay where they are, so nothing needs bringing in: choose a drive under To, and the archive is backed up onto it.'
-    : 'Choose a drive under From to bring it into the archive, or one under To to back the archive up onto it.';
+    : r.in_place ? 'Your drives stay where they are, so nothing needs copying in: choose a drive under To, and the archive is backed up onto it.' +
+      (drives.length ? '' : ' No other drive is plugged in right now: connect one and it appears under To within a minute.')
+    : !drives.length ? 'No other drive is plugged in, so To only offers the archive. Connect a USB drive or a network share (a NAS) and it appears under To within a minute.'
+    : 'Choose a drive under From to copy it in, or one under To to back the archive up onto it.';
   const go = $('cpGo');
   go.hidden = !(backup && !same) && !bring;
   go.textContent = bring ? 'List its folders' : b ? 'Save the change' : 'Set up the backup';
