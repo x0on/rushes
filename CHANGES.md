@@ -3,6 +3,15 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.28 — October 2026
+
+- **Copy once: the drive is chosen right on Copying.** From lists every drive
+  and network share the helper sees, with how much is on it, and the ones
+  copied from before (marked when unplugged). Pressing List its folders adds a
+  new one as a source by itself, as Setup would: no detour to Setup. A card is
+  shown greyed out ("a card: use Ingest"). Only a drive the helper reported is
+  ever taken, never a typed path, a card or the archive itself.
+
 ## 0.12.27 — October 2026
 
 - **Copying says what it is for, before anything is chosen.** Its box is now

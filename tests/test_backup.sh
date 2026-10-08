@@ -11,7 +11,7 @@ A="$R/Archive"; W="$R/web"
 mkdir -p "$W" "$A"
 cp -r "$HERE/app/." "$W/"
 printf '{"name":"Rushes","archive":{"local":"%s","web":"%s","runs_on":"mac","label":"Archive"},"helper":{"mode":"built_in"}}\n' "$A" "$W" > "$W/settings.json"
-printf 'at\t%s\nvol\t/Volumes/Spare\tSpare\t8000\t6000\t0\t0\t0\t0\nvol\t%s\tArchive\t8000\t100\t0\t1\t0\t0\n' "$(date +%s)" "$A" > "$W/helper-volumes.tsv"
+printf 'at\t%s\nvol\t/Volumes/Spare\tSpare\t8000\t6000\t0\t0\t0\t0\nvol\t%s\tArchive\t8000\t100\t0\t1\t0\t0\nvol\t/Volumes/EOS\tEOS\t64\t10\t1\t0\t0\t0\n' "$(date +%s)" "$A" > "$W/helper-volumes.tsv"
 (cd "$R" && "$PHP" -S 127.0.0.1:18681 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18681
 ok() { echo "PASS $1"; }
@@ -29,6 +29,14 @@ import json, sys
 d = json.load(sys.stdin)
 assert d["into"] == "/Volumes/Spare/Back up" and [x["name"] for x in d["drives"]] == ["Spare"], d
 ' && ok "the choice, and only drives that are not the archive" || no "get"
+case "$(curl -s -b "$R/cj" -d action=source -d drive=/Volumes/EOS "$U/db/backup.php")" in
+  *"cards come in through Ingest"*) ok "Copy once never takes a card" ;; *) no "card taken" ;; esac
+case "$(curl -s -b "$R/cj" -d action=source -d drive=/etc "$U/db/backup.php")" in
+  *"helper can see"*) ok "nor a typed path" ;; *) no "typed source" ;; esac
+curl -s -b "$R/cj" -d action=source -d drive=/Volumes/Spare "$U/db/backup.php" > /dev/null
+curl -s -b "$R/cj" -d action=source -d drive=/Volumes/Spare "$U/db/backup.php" > /dev/null
+[ "$(grep -o '"/Volumes/Spare"' "$W/settings.json" | wc -l | tr -d ' ')" = 2 ] && grep -q '"seen_by": "helper"' "$W/settings.json" \
+  && ok "a drive picked on Copying becomes a source, once" || no "source: $(cat "$W/settings.json")"
 cd "$W"
 due() { "$PHP" -r 'require "db/backup.php"; echo backup_due((int)$argv[1]);' "$1"; }
 [ "$(due "$(date -d '2026-10-08 15:00' +%s)")" = "" ] && ok "in the day: nothing due" || no "day: $(due "$(date -d '2026-10-08 15:00' +%s)")"

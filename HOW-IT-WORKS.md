@@ -458,11 +458,16 @@ in through Ingest, not here.
 
 For bringing over a whole server, folder by folder:
 
-1. Add the server under **Setup → 03 Where footage comes from** (From's last
-   line goes there).
-2. Choose it under From, the archive under To, and press **List its folders**:
-   the helper lists its folders ("sections"), shown beside what is already in
-   the archive. Listing adds to the list, it never takes anything off it.
+1. Choose it under **From**: every drive and network share the helper sees is
+   there (with how much is on it), and the ones copied from before, even
+   unplugged. A card is shown greyed out: cards come in through Ingest.
+2. The archive under To, and press **List its folders**. A drive not copied
+   from before becomes a source by itself (`db/backup.php`, `action=source`:
+   only one the helper reported, never a card or the archive), as Setup → 03
+   Where footage comes from would make it; that is where it is renamed or
+   removed later. The helper lists its folders ("sections"), shown beside what
+   is already in the archive. Listing adds to the list, it never takes anything
+   off it.
 3. Tick folders, then press **Copy the ticked ones** and confirm.
    - **Tick everything** ticks them all.
    - Unticking folders that were waiting turns the button into **Clear the

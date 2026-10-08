@@ -12,6 +12,7 @@
 //   POST action=save drive=<path> folder=<name> nightly=0|1    (signed in)
 //   POST action=now                                            a run now, besides the nightly one
 //   POST action=off                                            no backup (nothing on the drive changes)
+//   POST action=source drive=<path>                            Copy once: that drive becomes a source (as Setup 03 would)
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/activity.php';
 
@@ -77,6 +78,23 @@ header('Cache-Control: no-store');
 function bk_said(int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); exit; }
 if (!signed_in()) bk_said(403, ['error' => 'sign in first']);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'source') {
+    // Copy once, From a drive picked on Copying: added to the sources here, so nobody has to go to Setup.
+    // Only a drive the helper reported (never a path typed in a browser), never a card (Ingest) or the archive.
+    $drive = (string)($_POST['drive'] ?? '');
+    $v = array_column(helper_volumes()['vols'], null, 'path')[$drive] ?? null;
+    if (!$v) bk_said(400, ['error' => 'That drive is not one the helper can see right now.']);
+    if ($v['card']) bk_said(400, ['error' => 'That is a card: cards come in through Ingest.']);
+    if ($v['archive'] || str_starts_with(helper_archive() . '/', rtrim($drive, '/') . '/')) bk_said(400, ['error' => 'That is the archive itself.']);
+    $s = settings();
+    if (in_array($drive, array_column($s['sources'] ?? [], 'path'), true)) bk_said(200, ['ok' => true, 'said' => '']);
+    $s['sources'][] = ['label' => $v['name'], 'path' => $drive, 'seen_by' => 'helper'];
+    if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
+    settings(true);
+    activity_add('changed', 'Added ' . $v['name'] . ' as a drive to copy from');
+    bk_said(200, ['ok' => true, 'said' => 'Added ' . $v['name'] . ' as a drive to copy from']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $s = settings(); $b = $s['backup'] ?? []; $do = (string)($_POST['action'] ?? '');
     if ($do === 'save') {
@@ -111,8 +129,10 @@ bk_said(200, [
     'backup' => backup_set() ?: null, 'into' => backup_set() ? backup_into(backup_set()) : '',
     'said' => backup_said(), 'runs' => backup_runs(), 'due' => backup_due(),
     'archive' => helper_archive(), 'helper_fresh' => $hv['fresh'],
+    // every drive and share the helper sees, but the archive's own: To for the backup, From for Copy once (cards greyed there)
     'drives' => array_values(array_map(fn($v) => ['path' => $v['path'], 'name' => $v['name'], 'free' => $v['free'], 'total' => $v['total']],
-                  array_filter($hv['vols'], fn($v) => !$v['card'] && !$v['archive'] && rtrim($v['path'], '/') !== helper_archive()))),
+                  array_filter($hv['vols'], fn($v) => !$v['card'] && !$v['archive'] && !str_starts_with(helper_archive() . '/', rtrim($v['path'], '/') . '/')))),
+    'cards' => array_values(array_map(fn($v) => ['path' => $v['path'], 'name' => $v['name']], array_filter($hv['vols'], fn($v) => $v['card']))),
     'night' => BACKUP_NIGHT,
     // what can be brought in (Setup → Where footage comes from); with drives kept where they are, nothing is
     'sources' => array_map(fn($r) => ['label' => $r['label'] ?? basename($r['path']), 'path' => $r['path']], settings()['sources'] ?? []),

@@ -1032,7 +1032,8 @@ function drawMove(d) {
   if (s === sig) return;                 // no redraw, so your ticks survive
   sig = s;
 
-  $('from').textContent = (d.route && d.route.from) || 'the source';
+  const picked = cpFromName();
+  $('from').textContent = (d.route && d.route.from) || picked || 'the source';
   $('to').textContent   = (d.route && d.route.to)   || 'the archive';
 
   $('todo').innerHTML = secs.length ? secs.map(function (x) {
@@ -1046,7 +1047,7 @@ function drawMove(d) {
         ? '<button class="ghost" data-s="' + esc(x.path) + '">split</button>' : '') +
       '<span class="n">' + x.files.toLocaleString() + '</span>' +
       '<span class="sz">' + tb(x.bytes) + '</span></div>';
-  }).join('') : '<div class="empty">Nothing left to bring over.</div>';
+  }).join('') : '<div class="empty">' + (picked ? 'Its folders are not listed yet: press List its folders, above (the helper takes a minute).' : 'Nothing left to bring over.') + '</div>';
 
   $('landed').innerHTML = landed.length ? landed.map(function (x) {
     return '<div class="row"><span class="nm">' + esc(x.name) + '</span>' +
@@ -1152,6 +1153,11 @@ function whenWords(at) {
   const w = dayWord(at);
   return (w === 'Today' ? 'today ' : w === 'Yesterday' ? 'yesterday ' : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ', ') + t;
 }
+// the drive chosen under From for Copy once, by its name alone ('' when it is the archive)
+function cpFromName() {
+  const o = $('cpFrom') && $('cpFrom').selectedOptions[0];
+  return o && o.value !== '@archive' && $('cpTo').value === '@archive' ? o.textContent.split(' · ')[0].replace(/ \(not plugged in\)$/, '') : '';
+}
 function drawCopy() {
   const r = cpData; if (!r) return;
   const b = r.backup, drives = r.drives || [];
@@ -1159,9 +1165,13 @@ function drawCopy() {
   const opt = function (v, label, on) { return '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(label) + '</option>'; };
   const from = cpWas.from !== null ? cpWas.from : (b ? ARCH : (r.sources[0] || {}).path || ARCH);
   const to = cpWas.to !== null ? cpWas.to : (b ? b.drive : ARCH);
-  $('cpFrom').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', from === ARCH) +
-    (r.in_place ? '' : r.sources.map(function (x) { return opt(x.path, x.label, from === x.path); }).join('')) +
-    opt('@add', r.in_place ? 'Drives are kept where they are (Setup)' : '+ Add a drive or folder… (Setup)', false);
+  // From: every drive and share the helper sees, and the ones copied from before (even unplugged); a card greyed: Ingest
+  const plugged = {}; drives.forEach(function (x) { plugged[x.path] = x; });
+  const known = {}; r.sources.forEach(function (x) { known[x.path] = x; });
+  $('cpFrom').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', from === ARCH) + (r.in_place ? '' :
+    drives.map(function (x) { return opt(x.path, (known[x.path] ? known[x.path].label : x.name) + ' · ' + tb(x.total - x.free) + ' on it', from === x.path); }).join('') +
+    r.sources.filter(function (x) { return !plugged[x.path]; }).map(function (x) { return opt(x.path, x.label + ' (not plugged in)', from === x.path); }).join('') +
+    (r.cards || []).map(function (x) { return '<option disabled>' + esc(x.name) + ' (a card: use Ingest)</option>'; }).join(''));
   $('cpTo').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', to === ARCH) +
     drives.map(function (x) { return opt(x.path, x.name + ' · ' + tb(x.free) + ' free', to === x.path); }).join('') +
     (b && !drives.some(function (x) { return x.path === b.drive; }) ? opt(b.drive, b.drive.split('/').pop() + ' (not plugged in)', to === b.drive) : '');
@@ -1178,12 +1188,12 @@ function drawCopy() {
   $('cpExplain').innerHTML = backup
     ? 'A second copy of the archive on <b>' + esc(name.split(' · ')[0]) + '</b>, in the folder named here, keeping its layout. Each night only what is new is copied; ' +
       'a file that is already there is checked, never replaced, and nothing on that drive is ever deleted (Recently Removed is left out). It runs after the night\'s copies, from 10 pm.'
-    : bring ? 'Everything on <b>' + esc(($('cpFrom').selectedOptions[0] || {}).textContent) + '</b> into the archive, folder by folder, once. ' +
+    : bring ? 'Everything on <b>' + esc(cpFromName()) + '</b> into the archive, folder by folder, once. ' +
       'List its folders, tick the ones you want below, and Copy. What the archive already has is skipped.'
     : f !== ARCH && t !== ARCH ? 'From one drive straight onto another is not something Copying does: bring it into the archive, and back the archive up.'
     : r.in_place ? 'Your drives stay where they are, so nothing needs copying in: choose a drive under To, and the archive is backed up onto it.' +
       (drives.length ? '' : ' No other drive is plugged in right now: connect one and it appears under To within a minute.')
-    : !drives.length ? 'No other drive is plugged in, so To only offers the archive. Connect a USB drive or a network share (a NAS) and it appears under To within a minute.'
+    : !drives.length ? 'No other drive is plugged in, so From and To only offer the archive. Connect a USB drive or a network share (a NAS) and it appears in both within a minute.'
     : 'Choose a drive under From to copy it in, or one under To to back the archive up onto it.';
   const go = $('cpGo');
   go.hidden = !(backup && !same) && !bring;
@@ -1206,7 +1216,7 @@ function drawCopy() {
     '<button class="btn quiet" id="bkOff" type="button">Turn off</button><span class="note" id="bkSaid"></span></div></div></div>';
   // bringing in: the folders of the source, ticked and copied (below), shown once there is something
   if (bring && !secs.length) {
-    $('from').textContent = ($('cpFrom').selectedOptions[0] || {}).textContent || 'the source';
+    $('from').textContent = cpFromName() || 'the source';
     $('todo').innerHTML = '<div class="empty">Its folders are not listed yet: press List its folders, above.</div>';
   }
   $('cpBring').hidden = !bring && !secs.length && !(lastLanded || []).length;
@@ -1235,9 +1245,20 @@ document.querySelectorAll('[name=cpWhen]').forEach(function (x) { x.onchange = d
 $('cpGo').onclick = function () {
   const f = $('cpFrom').value, t = $('cpTo').value;
   if (f !== ARCH && t === ARCH) {
-    // what is already on the list stays on it: listing adds, it never takes anything off
-    const keep = new Set([...ticked, ...secs.filter(function (x) { return x.state === 'queued'; }).map(function (x) { return x.path; })]);
-    sendQueue([...keep], f, this, 'List its folders'); $('cpSaid').textContent = 'Asked ✓ The helper lists its folders within a minute; they appear below.'; return; }
+    const go = this;
+    // a drive picked here becomes a source by itself (db/backup.php: only one the helper reported), then is listed
+    (cpData.sources.some(function (x) { return x.path === f; }) ? Promise.resolve({}) :
+      fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: f }) }).then(function (x) { return x.json(); }))
+    .then(function (x) {
+      if (x.error) { $('cpSaid').textContent = 'Did not happen: ' + x.error; return; }
+      // what is already on the list stays on it: listing adds, it never takes anything off
+      const keep = new Set([...ticked, ...secs.filter(function (x) { return x.state === 'queued'; }).map(function (x) { return x.path; })]);
+      sendQueue([...keep], f, go, 'List its folders');
+      $('cpSaid').textContent = (x.said ? x.said + ' ✓ ' : '') + 'The helper lists its folders within a minute; they appear below.';
+      loadCopy();
+    });
+    return;
+  }
   const nightly = document.querySelector('[name=cpWhen]:checked').value;
   cpAsk('save', { drive: t, folder: $('cpFolder').value.trim(), nightly: nightly }, this,
     'The archive is copied onto ' + (($('cpTo').selectedOptions[0] || {}).textContent || '').split(' · ')[0] + ' / ' + ($('cpFolder').value.trim() || 'Rushes backup') +
