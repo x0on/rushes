@@ -252,6 +252,7 @@ button.tile:hover { border-color: var(--accent) }
           padding: 11px 14px; font-size: 13px; margin: 0 0 12px;
           border: 1px solid var(--line); background: var(--surface) }
 .banner.bad  { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad) }
+span.bad, p.bad { color: var(--bad) }      /* a warning said in words: red, in either theme */
 .banner.warn { border-color: var(--warn); background: var(--warn-bg); color: var(--warn) }
 .banner.ok   { border-color: var(--ok);   background: var(--ok-bg);   color: var(--ok) }
 .banner .txt { flex: 1; min-width: 0; color: var(--fg) }

@@ -213,23 +213,23 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
         <div id="cpBackup"></div>
         <div id="cpBring">
         <div class="head" style="margin:26px 0 12px">
-          <h1 style="font-size:14px">Copying from <span id="from">&mdash;</span>
-            &rarr; <span id="to">&mdash;</span></h1>
+          <h1 style="font-size:14px">Copy from <span id="from">&mdash;</span>
+            into <span id="to">&mdash;</span></h1>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="panes">
           <div class="panel">
-            <header><b>Still to come</b><span class="n" id="leftSum"></span></header>
+            <header><b>Not copied yet</b><span class="n" id="leftSum"></span></header>
             <div class="scroll" id="todo"></div>
           </div>
           <div class="panel">
-            <header><b>Already in the archive</b><span class="n" id="rightSum"></span></header>
+            <header><b>Already copied</b><span class="n" id="rightSum"></span></header>
             <div class="scroll" id="landed"></div>
           </div>
         </div>
         <p class="note" id="queuenote" style="margin:12px 0 0"></p>
         <div class="btns" style="margin-top:12px">
-          <button class="btn" id="goCopy" disabled>Copy the ticked ones</button>
-          <button class="btn quiet" id="allTodo">Tick everything</button>
+          <button class="btn" id="goCopy" disabled>Copy</button>
+          <button class="btn quiet" id="allTodo">Tick all</button>
           <span class="note" id="selnote">Nothing ticked.</span>
         </div>
         </div>
@@ -1047,7 +1047,7 @@ function drawMove(d) {
         ? '<button class="ghost" data-s="' + esc(x.path) + '">split</button>' : '') +
       '<span class="n">' + x.files.toLocaleString() + '</span>' +
       '<span class="sz">' + tb(x.bytes) + '</span></div>';
-  }).join('') : '<div class="empty">' + (picked ? 'Its folders are not listed yet: press List its folders, above (the helper takes a minute).' : 'Nothing left to bring over.') + '</div>';
+  }).join('') : '<div class="empty">' + (picked ? (cpLooking === picked ? 'Looking inside ' + picked + '… (about a minute)' : 'Press Continue, above, to see its folders.') : 'Nothing left to copy.') + '</div>';
 
   $('landed').innerHTML = landed.length ? landed.map(function (x) {
     return '<div class="row"><span class="nm">' + esc(x.name) + '</span>' +
@@ -1088,11 +1088,14 @@ function count() {
                   .reduce(function (n, x) { return n + x.bytes; }, 0);
   const off = secs.filter(function (x) { return x.state === 'queued' && !ticked.has(x.path); }).length;
   $('goCopy').disabled = !ticked.size && !off;
-  $('goCopy').textContent = ticked.size ? 'Copy the ' + ticked.size + ' ticked'
-                          : (off ? 'Clear the list' : 'Copy the ticked ones');
-  $('selnote').textContent = ticked.size
-    ? tb(b) + ' selected — less whatever is already here.'
-    : 'Nothing ticked.';
+  $('goCopy').textContent = ticked.size ? 'Copy ' + ticked.size + (ticked.size === 1 ? ' folder' : ' folders') + ' · ' + tb(b)
+                          : (off ? 'Clear the list' : 'Copy');
+  // the space it needs, against the archive's free space: said before, not found out part-way
+  const free = (window.lastState && lastState.disk && lastState.disk.free) || (cpData && cpData.archive_free);   // state's: right on big network volumes too
+  $('selnote').innerHTML = !ticked.size ? 'Tick the folders to copy.'
+    : free && b > free ? '<span class="bad">' + tb(b) + ' ticked, and ' + esc(cpData ? cpData.archive_name : 'the archive') + ' has ' + tb(free) + ' free: it would stop part-way.</span> ' +
+      'What the archive already has is not copied again, so it may need less.'
+    : 'What the archive already has is skipped.' + (free && cpData ? ' ' + esc(cpData.archive_name) + ' has ' + tb(free) + ' free.' : '');
 }
 
 $('allTodo').onclick = function () {
@@ -1107,7 +1110,7 @@ $('goCopy').onclick = async function () {
   if (!sure($('goCopy'), paths.length + ' folder(s), one after another, in this order; anything already in the archive is skipped.' +
       (dropped ? ' ' + dropped + ' that were queued are unticked, so they come off the list (anything already copied stays).' : ''),
       'handover')) return;
-  await sendQueue(paths, '', $('goCopy'), 'Copy the ticked ones');
+  await sendQueue(paths, '', $('goCopy'), 'Copy');
 };
 
 // What is ticked IS the want: press Copy and the list becomes exactly that,
@@ -1133,7 +1136,7 @@ async function sendQueue(paths, list, btn, was) {
 // A source into the archive (the folders below, ticked and copied once), or the archive onto
 // another drive: the backup, once or every night. Chosen here, never typed: the drives are the
 // ones the helper reports.
-let cpData = null, cpAt = 0, cpWas = { from: null, to: null };
+let cpData = null, cpAt = 0, cpWas = { from: null, to: null }, cpLooking = '';
 const ARCH = '@archive';
 async function loadCopy() {
   try { cpData = await (await fetch('backup.php?t=' + Date.now())).json(); } catch (e) { return; }
@@ -1168,11 +1171,12 @@ function drawCopy() {
   // From: every drive and share the helper sees, and the ones copied from before (even unplugged); a card greyed: Ingest
   const plugged = {}; drives.forEach(function (x) { plugged[x.path] = x; });
   const known = {}; r.sources.forEach(function (x) { known[x.path] = x; });
-  $('cpFrom').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', from === ARCH) + (r.in_place ? '' :
+  const arch = 'The archive (' + r.archive_name + ')' + (r.archive_free ? ' · ' + tb(r.archive_free) + ' free' : '');
+  $('cpFrom').innerHTML = opt(ARCH, arch, from === ARCH) + (r.in_place ? '' :
     drives.map(function (x) { return opt(x.path, (known[x.path] ? known[x.path].label : x.name) + ' · ' + tb(x.total - x.free) + ' on it', from === x.path); }).join('') +
     r.sources.filter(function (x) { return !plugged[x.path]; }).map(function (x) { return opt(x.path, x.label + ' (not plugged in)', from === x.path); }).join('') +
     (r.cards || []).map(function (x) { return '<option disabled>' + esc(x.name) + ' (a card: use Ingest)</option>'; }).join(''));
-  $('cpTo').innerHTML = opt(ARCH, 'The archive (' + r.archive_name + ')', to === ARCH) +
+  $('cpTo').innerHTML = opt(ARCH, arch, to === ARCH) +
     drives.map(function (x) { return opt(x.path, x.name + ' · ' + tb(x.free) + ' free', to === x.path); }).join('') +
     (b && !drives.some(function (x) { return x.path === b.drive; }) ? opt(b.drive, b.drive.split('/').pop() + ' (not plugged in)', to === b.drive) : '');
   const f = $('cpFrom').value, t = $('cpTo').value;
@@ -1189,7 +1193,7 @@ function drawCopy() {
     ? 'A second copy of the archive on <b>' + esc(name.split(' · ')[0]) + '</b>, in the folder named here, keeping its layout. Each night only what is new is copied; ' +
       'a file that is already there is checked, never replaced, and nothing on that drive is ever deleted (Recently Removed is left out). It runs after the night\'s copies, from 10 pm.'
     : bring ? 'Everything on <b>' + esc(cpFromName()) + '</b> into the archive, folder by folder, once. ' +
-      'List its folders, tick the ones you want below, and Copy. What the archive already has is skipped.'
+      'Press Continue to see its folders, then tick the ones to copy. Nothing is copied until you press Copy.'
     : f !== ARCH && t !== ARCH ? 'From one drive straight onto another is not something Copying does: bring it into the archive, and back the archive up.'
     : r.in_place ? 'Your drives stay where they are, so nothing needs copying in: choose a drive under To, and the archive is backed up onto it.' +
       (drives.length ? '' : ' No other drive is plugged in right now: connect one and it appears under To within a minute.')
@@ -1197,7 +1201,7 @@ function drawCopy() {
     : 'Choose a drive under From to copy it in, or one under To to back the archive up onto it.';
   const go = $('cpGo');
   go.hidden = !(backup && !same) && !bring;
-  go.textContent = bring ? 'List its folders' : b ? 'Save the change' : 'Set up the backup';
+  go.textContent = bring ? 'Continue' : b ? 'Save the change' : 'Set up the backup';
   // the backup, once set: how it went, and what can be done
   const bs = r.said, runs = r.runs || [];
   const kinds = { 'backed-up': 'backed up', 'backup-interrupted': 'stopped part-way', 'backup-waiting': 'waited: drive not plugged in', 'backup-refused': 'refused' };
@@ -1217,7 +1221,7 @@ function drawCopy() {
   // bringing in: the folders of the source, ticked and copied (below), shown once there is something
   if (bring && !secs.length) {
     $('from').textContent = cpFromName() || 'the source';
-    $('todo').innerHTML = '<div class="empty">Its folders are not listed yet: press List its folders, above.</div>';
+    $('todo').innerHTML = '<div class="empty">' + (cpLooking === cpFromName() ? 'Looking inside ' + esc(cpLooking) + '… (about a minute)' : 'Press Continue, above, to see its folders.') + '</div>';
   }
   $('cpBring').hidden = !bring && !secs.length && !(lastLanded || []).length;
   if ($('bkNow')) $('bkNow').onclick = function () { cpAsk('now', {}, this, 'Copies what is new onto ' + b.drive.split('/').pop() + ' now, after any copies already running. Deletes nothing.', 'Back up now'); };
@@ -1253,8 +1257,9 @@ $('cpGo').onclick = function () {
       if (x.error) { $('cpSaid').textContent = 'Did not happen: ' + x.error; return; }
       // what is already on the list stays on it: listing adds, it never takes anything off
       const keep = new Set([...ticked, ...secs.filter(function (x) { return x.state === 'queued'; }).map(function (x) { return x.path; })]);
-      sendQueue([...keep], f, go, 'List its folders');
-      $('cpSaid').textContent = (x.said ? x.said + ' ✓ ' : '') + 'The helper lists its folders within a minute; they appear below.';
+      cpLooking = cpFromName();
+      sendQueue([...keep], f, go, 'Continue');
+      $('cpSaid').textContent = (x.said ? x.said + ' ✓ ' : '') + 'Looking inside ' + cpLooking + '; its folders appear below within a minute.';
       loadCopy();
     });
     return;

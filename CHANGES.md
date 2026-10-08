@@ -3,11 +3,23 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.29 — October 2026
+
+- **Copy once in plain words.** Choose the drive, press **Continue**, tick
+  the folders, press **Copy 12 folders · 3.4 TB**. The two lists are
+  "Not copied yet" and "Already copied"; while the helper looks inside the
+  drive it says "Looking inside RAID 2…". (It was "List its folders", "Still
+  to come", "Copy the ticked ones".)
+- **Space, said before it starts.** Beside Copy, the archive's free space;
+  ticking more than that says so in red: it would stop part-way. A warning, not
+  a block: what the archive already has is not copied again.
+- **The archive shows its free space** in From and To, like every other drive.
+
 ## 0.12.28 — October 2026
 
 - **Copy once: the drive is chosen right on Copying.** From lists every drive
   and network share the helper sees, with how much is on it, and the ones
-  copied from before (marked when unplugged). Pressing List its folders adds a
+  copied from before (marked when unplugged). Pressing Continue adds a
   new one as a source by itself, as Setup would: no detour to Setup. A card is
   shown greyed out ("a card: use Ingest"). Only a drive the helper reported is
   ever taken, never a typed path, a card or the archive itself.

@@ -461,15 +461,18 @@ For bringing over a whole server, folder by folder:
 1. Choose it under **From**: every drive and network share the helper sees is
    there (with how much is on it), and the ones copied from before, even
    unplugged. A card is shown greyed out: cards come in through Ingest.
-2. The archive under To, and press **List its folders**. A drive not copied
+2. The archive under To, and press **Continue**. A drive not copied
    from before becomes a source by itself (`db/backup.php`, `action=source`:
    only one the helper reported, never a card or the archive), as Setup → 03
    Where footage comes from would make it; that is where it is renamed or
    removed later. The helper lists its folders ("sections"), shown beside what
    is already in the archive. Listing adds to the list, it never takes anything
    off it.
-3. Tick folders, then press **Copy the ticked ones** and confirm.
-   - **Tick everything** ticks them all.
+3. Tick folders, then press **Copy** (it says how many and how big: "Copy 12
+   folders · 3.4 TB") and confirm. Beside it, the archive's free space; when
+   what is ticked is more than that, it says so in red before anything starts
+   (it may need less: what the archive already has is not copied again).
+   - **Tick all** ticks them all.
    - Unticking folders that were waiting turns the button into **Clear the
      list**: those come off the transfer.
    - Ticking a folder that was skipped un-skips it.

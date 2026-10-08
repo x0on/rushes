@@ -138,4 +138,5 @@ bk_said(200, [
     'sources' => array_map(fn($r) => ['label' => $r['label'] ?? basename($r['path']), 'path' => $r['path']], settings()['sources'] ?? []),
     'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
     'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()),
+    'archive_free' => (int)(@disk_free_space(archive_dir()) ?: 0),
 ]);
