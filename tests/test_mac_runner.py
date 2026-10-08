@@ -59,13 +59,18 @@ class MacJobs(unittest.TestCase):
         self.put("Card dumps/card 1/B.mov", bytes(other))
         for i in (1, 2):                              # identical frames of a sequence: never moved
             self.put(f"Parks/matte/m_{i:05d}.png", b"same")
+        # never compared: the system's sidecars, and Premiere's previews (Cache looks after those)
+        for d in ("Parks", "Mayor"):
+            self.put(f"{d}/._clip.mov", b"\0" * 4096); self.put(f"{d}/Audio Previews/x 48000.cfa", b"cfa" * 100)
         self.assertTrue(self.r.build_index())
         self.r.job("scan", {})
         res = open(os.path.join(self.web, "results_duplicates.txt")).read()
         self.assertEqual(res.count("---- Size"), 2, res)            # the clip, and the frames
         self.assertIn(f'"{copy}"', res); self.assertNotIn("B.mov", res)
+        self.assertNotIn("._clip", res); self.assertNotIn(".cfa", res)
         self.assertTrue(os.path.getsize(os.path.join(self.web, "dup-hashes.tsv")))
-        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        # the card dump is in another top folder: it goes only because a rule says it passes files through
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n500\tcontains\t/Card dumps/\n")
         self.r.job("plan", {"KEEP_SIDE": "short"})
         plan = open(os.path.join(self.web, "dedupe-plan.tsv")).read().splitlines()
         self.assertEqual(len(plan), 1, plan)
@@ -83,12 +88,39 @@ class MacJobs(unittest.TestCase):
 
     def test_mtimes_with_a_macs_stat(self):
         old = self.put("Parks/old.mov", b"x" * 5000); os.utime(old, (1e9, 1e9))
-        new = self.put("A long folder name/new.mov", b"x" * 5000)
+        new = self.put("Parks/A long folder name/new.mov", b"x" * 5000)
         self.r.build_index(); self.r.job("scan", {})
         open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
         self.r.job("plan", {"KEEP_SIDE": "oldest"})
         self.assertEqual(open(os.path.join(self.web, "dedupe-plan.tsv")).read().split("\t")[1:],
                          [new, old + "\n"], self.log())
+
+    def test_different_jobs_left_alone_and_remove_one_kind(self):
+        same = os.urandom(200_000)
+        a = self.put("Parks Promo/clip.mov", same); b = self.put("Mayor Message/clip.mov", same)   # two jobs
+        img = os.urandom(5000)
+        i1 = self.put("Parks Promo/photos/IMG_1.HEIC", img); i2 = self.put("Parks Promo/photos/IMG_1 2.HEIC", img)
+        w = os.urandom(7000)
+        w1 = self.put("Parks Promo/AUDIO/steps.wav", w); w2 = self.put("Parks Promo/AUDIO/MATERIAL/steps.wav", w)
+        self.r.build_index(); self.r.job("scan", {})
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        self.r.job("plan", {"KEEP_SIDE": "short"})
+        plan = [l.split("\t") for l in open(os.path.join(self.web, "dedupe-plan.tsv")).read().splitlines()]
+        self.assertEqual(sorted(p[1] for p in plan), sorted([i2, w2]), plan)
+        left = open(os.path.join(self.web, "dedupe-left.tsv")).read()
+        self.assertIn(a if a in left.split("\t")[1] else b, left); self.assertEqual(len(left.splitlines()), 1, left)
+        # Remove for one kind: only the copy written down moves; the other stays planned
+        open(os.path.join(self.web, "dedupe-pick.txt"), "w").write(i2 + "\n")
+        self.r.job("apply", {"KEEP_SIDE": "short", "PICK": "1"})
+        self.assertFalse(os.path.exists(i2)); self.assertTrue(os.path.isfile(w2) and os.path.isfile(a) and os.path.isfile(b))
+        rest = open(os.path.join(self.web, "dedupe-plan.tsv")).read()
+        self.assertNotIn(i2, rest); self.assertIn(w2, rest)
+        self.assertFalse(os.path.exists(os.path.join(self.web, "dedupe-plan.tsv.done")), "not all of it: not shown as done")
+        self.assertFalse(os.path.exists(os.path.join(self.web, "dedupe-pick.txt")), "used once")
+        open(os.path.join(self.web, "dedupe-pick.txt"), "w").write(w2 + "\n" + a + "\n")     # a copy not in the plan: ignored
+        self.r.job("apply", {"KEEP_SIDE": "short", "PICK": "1"})
+        self.assertFalse(os.path.exists(w2)); self.assertTrue(os.path.isfile(a) and os.path.isfile(b), "different jobs: never moved")
+        self.assertTrue(os.path.exists(os.path.join(self.web, "dedupe-plan.tsv.done")))
 
     def caches(self):
         files = [self.put("Edit/Media Cache Files/a.cfa", b"c" * 10),
@@ -133,7 +165,7 @@ class MacJobs(unittest.TestCase):
     def test_delete_all_deletes_only_recently_removed_when_asked(self):
         big = os.urandom(5000)
         kept = self.put("Parks/A.mov", big); copy = self.put("Card dumps/card 1/A.mov", big)    # the longer path goes
-        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")    # run.php writes them
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n500\tcontains\t/Card dumps/\n")    # run.php writes them
         self.r.build_index(); self.r.job("find", {})
         self.assertEqual(len(open(os.path.join(self.web, "dedupe-plan.tsv")).read().splitlines()), 1, "Find: scan and plan in one")
         self.r.job("apply", {"WHO": "Ana"})
@@ -153,7 +185,7 @@ class MacJobs(unittest.TestCase):
         # the last good one. verify says so, and Delete All keeps it.
         big = os.urandom(5000)
         kept = self.put("Parks/A.mov", big); self.put("Card dumps/card 1/A.mov", big)
-        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n500\tcontains\t/Card dumps/\n")
         self.r.build_index(); self.r.job("find", {}); self.r.job("apply", {})
         held = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/A.mov")
         open(kept, "wb").write(b"B" * 5000)
@@ -194,7 +226,7 @@ class MacJobs(unittest.TestCase):
         # Review of 0.12.5 (comment 2): a drive that lists folders but stalls reading a file.
         big = os.urandom(5000)
         self.put("Parks/A.mov", big); self.put("Card dumps/card 1/A.mov", big)
-        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n")
+        open(os.path.join(self.web, "dedupe-rules.tsv"), "w").write("1000\tcontains\t/@Recycle/\n500\tcontains\t/Card dumps/\n")
         self.r.build_index(); self.r.job("find", {}); self.r.job("apply", {})
         held = os.path.join(self.a, "_Recently Removed", "Card dumps/card 1/A.mov")
         stuck = __import__("threading").Event()
@@ -305,7 +337,7 @@ class Drives(MacJobs):
         both = os.urandom(5000)
         self.put("Parks/same.mov", both); on_drive = self.drive("Card/same.mov", both)
         twice = os.urandom(7000)
-        a = self.drive("A/clip.mov", twice); b = self.drive("A long folder/clip.mov", twice)
+        a = self.drive("A/clip.mov", twice); b = self.drive("A/A long folder/clip.mov", twice)
         self.minute(); self.minute()
         self.r.job("scan", {})
         summary = json.load(open(os.path.join(self.web, "dup-summary.json")))
@@ -315,7 +347,7 @@ class Drives(MacJobs):
         src = os.path.join(self.vol, "Films 1")
         self.r.job("plan", {"KEEP_SIDE": "short", "DRIVE": src})
         self.r.job("apply", {"KEEP_SIDE": "short", "DRIVE": src})
-        self.assertTrue(os.path.isfile(os.path.join(src, "_Recently Removed", "A long folder/clip.mov")) and os.path.isfile(a))
+        self.assertTrue(os.path.isfile(os.path.join(src, "_Recently Removed", "A/A long folder/clip.mov")) and os.path.isfile(a))
         self.assertTrue(os.path.isfile(on_drive), "the copy on another drive than the archive's stays")
         self.assertEqual(open(os.path.join(self.web, "holding-kb-UUID-ONE.txt")).read().split()[1], "1", "the drive's own Recently Removed")
         self.r.job("verify", {"DRIVE": src})

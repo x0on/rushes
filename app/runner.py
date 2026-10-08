@@ -809,7 +809,11 @@ class Runner:
             if sfx:
                 self.log(f"  on {top}")
             files = dict(RESULTS=self.p(f"results_duplicates{sfx}.txt"), PLAN=self.p(f"dedupe-plan{sfx}.tsv"),
-                         MTIMES=self.p(f"dedupe-mtimes{sfx}.txt"), ARCH=top)
+                         MTIMES=self.p(f"dedupe-mtimes{sfx}.txt"), LEFT=self.p(f"dedupe-left{sfx}.tsv"), ARCH=top)
+            # Remove for one box or one job: the copies the page wrote down (db/dupgroups.php); dedupe.sh
+            # takes only those that are also in the plan
+            if action == "apply" and f.get("PICK") == "1":
+                files["PICK"] = self.p(f"dedupe-pick{sfx}.txt")
             if action == "verify":
                 q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", f.get("QUERY", ""))[:200]
                 if ".." in q:
@@ -930,6 +934,7 @@ class Runner:
         def root_of(path):
             return next((r for r in roots if path.startswith(r[1] + "/")), None)
         skip = tuple(r[1] + x for r in roots for x in (f"/{HOLD}/", f"/{OLD_HOLD}/", "/_rushes/"))
+        aside = self.not_compared()
         by_size, listed = {}, set()
         with open(self.p("manifest.tsv"), encoding="utf-8", errors="surrogateescape") as m:
             for line in m:
@@ -937,7 +942,7 @@ class Runner:
                 listed.add(path)
                 r = root_of(path)
                 if (not size.isdigit() or int(size) == 0 or r is None or not r[2] or path.startswith(skip)
-                        or "/@Recycle/" in path or '"' in path):
+                        or "/@Recycle/" in path or '"' in path or aside(path)):
                     continue                             # a drive not plugged in is not read now
                 by_size.setdefault(int(size), []).append(path)
         groups = {k: v for k, v in by_size.items() if len(v) > 1}
@@ -1035,6 +1040,29 @@ class Runner:
         self.log(f"scan done: {len(out):,} sets of identical files, {n:,} copies beyond the first ({b / 1e9:,.1f} GB)"
                  + (f"; {len(across):,} of those sets are on more than one drive, and are left alone" if across else "")
                  + (f"; {unread:,} files could not be read and were left out" if unread else ""))
+
+    def not_compared(self):
+        """-> path -> True for what Duplicates never compares: the system's own files (._ sidecars,
+        .DS_Store: rules.json → system_junk; nearly empty and alike, but each belongs to the file
+        beside it) and editing caches, which Manage → Cache looks after (Premiere's previews are
+        alike across projects by design)."""
+        try:
+            with open(self.p("rules.json")) as f:
+                r = json.load(f)
+        except (OSError, ValueError):
+            r = {}
+        j, c = r.get("system_junk", {}), r.get("cache", {})
+        groups = [g for k in ("sweep", "keep") for g in c.get(k, []) if isinstance(g, dict)]
+        exts = {e.lower() for g in groups for e in g.get("ext", [])}
+        parts = [x.lower() for g in groups for x in g.get("path_contains", [])] + [x.lower() for x in j.get("path_contains", [])]
+        names, starts = set(j.get("name_is", [])), tuple(j.get("name_starts", []))
+        def aside(path):
+            name = path.rsplit("/", 1)[-1]
+            if name in names or (starts and name.startswith(starts)):
+                return True
+            low = path.lower()
+            return os.path.splitext(low)[1][1:] in exts or any(x in low for x in parts)
+        return aside
 
     # ── editing caches ───────────────────────────────────────────────────────
     def cache_rule(self, path):

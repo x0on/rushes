@@ -502,6 +502,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
     STILLS=$(field STILLS "$job")
     EXCLUDE=$(field EXCLUDE "$job")
     QUERY=$(field QUERY "$job")
+    PICK=""; [ "$(field PICK "$job")" = 1 ] && PICK=$WEB/dedupe-pick.txt     # Remove for one box or job (db/dupgroups.php)
     SCRIPTS=$(grep '^SCRIPT=' "$job" 2>/dev/null | cut -d= -f2-)
     PAGES=$(grep '^PAGE=' "$job" 2>/dev/null | cut -d= -f2-)
     rm -f "$job"
@@ -533,7 +534,7 @@ for job in $(ls -1 "$Q"/*.job 2>/dev/null | sort); do
             KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh $WEB/dedupe.sh >> "$LOG" 2>&1
             ;;
         apply)
-            KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh $WEB/dedupe.sh --apply >> "$LOG" 2>&1
+            PICK="$PICK" KEEP_SIDE="$KEEP_SIDE" DEST="$DEST" sh $WEB/dedupe.sh --apply >> "$LOG" 2>&1
             refresh_state
             ;;
         undo)

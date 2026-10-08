@@ -15,6 +15,8 @@
 #   KEEP_SIDE=oldest    the earliest-written copy wins — usually the original
 #   DEST=/share/VIDEO/_duplicates       where moved files go
 #   RESULTS=/share/Web/results_duplicates.txt
+#   PICK=/share/Web/dedupe-pick.txt    --apply moves only these copies (one path a line), and the
+#                                       plan keeps the rest for later
 #
 # NEVER moved, whatever the rule says: numbered image-sequence frames
 # (name_00007.png). A static matte legitimately has thousands of identical
@@ -31,6 +33,11 @@
 # when card dumps are kept. The highest total loses; nothing here names a folder.
 # Never touched: @Recycle — moving files OUT of it would undelete them.
 #
+# Copies in two different jobs (two top folders: "Parks Promo" and "Mayor Message") are left
+# alone, in LEFT, unless a rule above says the one that would go is in a folder that only passes
+# files through: each job's project may point at its own copy, and moving it makes the project's
+# media go offline. Copies within one job (the same top folder) are planned as before.
+#
 # Safety: a file moves only if it still exists, its size matches the scan, and
 # the copy being kept is present on disk right now.
 
@@ -44,6 +51,8 @@ PLAN=${PLAN:-$WEB/dedupe-plan.tsv}
 LOG=${LOG:-$WEB/dedupe-moves.tsv}
 MTIMES=${MTIMES:-$WEB/dedupe-mtimes.txt}
 RULES=${RULES:-$WEB/dedupe-rules.tsv}
+LEFT=${LEFT:-$WEB/dedupe-left.tsv}
+PICK=${PICK:-}
 KEEP_SIDE=${KEEP_SIDE:-project}
 TAB=$(printf '\t')
 # a file's size: GNU and BusyBox stat say it with -c, a Mac's (BSD) with -f
@@ -109,7 +118,8 @@ if [ "$KEEP_SIDE" = "oldest" ]; then
 fi
 
 # ---------- build the plan ----------
-awk -v OFS="$TAB" -v keep_side="$KEEP_SIDE" -v mtimes="$MTIMES" -v rules="$RULES" '
+: > "$LEFT"; rm -f "$PLAN.done"
+awk -v OFS="$TAB" -v keep_side="$KEEP_SIDE" -v mtimes="$MTIMES" -v rules="$RULES" -v left="$LEFT" -v share="$SHARE/" '
 BEGIN {
     while ((getline line < rules) > 0) {
         if (split(line, f, "\t") < 3) continue
@@ -141,6 +151,8 @@ function score(p) {
         return penalty(p) * 1000000000000 + (p in mt ? mt[p] : 2000000000)
     return penalty(p) + length(p) / 10000    # tie-break: shorter path wins
 }
+# the job a path is in: its top folder in the archive (or the drive)
+function job(p) { if (index(p, share) != 1) return ""; p = substr(p, length(share) + 1); return index(p, "/") ? substr(p, 1, index(p, "/") - 1) : "" }
 function flush(   i, best) {
     if (seq) { n = 0; seq = 0; skipped_seq++; return }
     if (n < 2) { n = 0; return }
@@ -150,6 +162,7 @@ function flush(   i, best) {
         if (i == best) continue
         if (path[i] ~ /\/@Recycle\//) continue
         if (kept(path[i])) continue
+        if (job(path[i]) != job(path[best]) && penalty(path[i]) == 0) { print bytes, path[i], path[best] > left; continue }
         print bytes, path[i], path[best]
     }
     n = 0
@@ -181,6 +194,7 @@ printf '{"keep_side":"%s","dest":"%s","built":"%s"}\n' \
 fi
 
 echo "plan: $PLAN"
+[ -s "$LEFT" ] && echo "  $(wc -l < "$LEFT" | tr -d ' ') copies are in different jobs: left alone (each project may use its own)"
 awk -F"$TAB" '{n++; b += $1} END {
     printf "  %d files to move, %.1f GB (freed only once the folder is deleted)\n", n, b / 1073741824
 }' "$PLAN"
@@ -199,8 +213,15 @@ fi
 # (verify.sh) until the file leaves the holding folder.
 echo "# apply $(date '+%Y-%m-%d %H:%M:%S') keep_side=$KEEP_SIDE" >> "$LOG"
 moved=0; skipped=0
-total=$(wc -l < "$PLAN")
-echo "moving $total files..." 
+# PICK: only the copies a person chose on the page (one box, one job); the rest wait in the plan
+WORK=$PLAN
+if [ -n "$PICK" ]; then
+    [ -f "$PICK" ] || { echo "nothing chosen to remove ($PICK is missing)"; exit 1; }
+    WORK=$PLAN.pick
+    awk -F"$TAB" 'NR == FNR { w[$0] = 1; next } ($2 in w)' "$PICK" "$PLAN" > "$WORK"
+fi
+total=$(wc -l < "$WORK" | tr -d ' ')
+echo "moving $total files..."
 while IFS="$TAB" read -r bytes src keep; do
     if [ ! -f "$src" ]; then
         printf 'SRC-MISSING\t%s\n' "$src" >> "$LOG"; skipped=$((skipped + 1)); continue
@@ -230,8 +251,16 @@ while IFS="$TAB" read -r bytes src keep; do
     if [ $((done_n % 250)) -eq 0 ]; then
         echo "progress: $done_n of $total ($((done_n * 100 / total))%)"
     fi
-done < "$PLAN"
+done < "$WORK"
 
+# PLAN.done: the whole plan was carried out (the page then shows it as removed, with Recover)
+touch "$PLAN.done"
+if [ -n "$PICK" ]; then
+    # what was not chosen stays planned, for later; when everything was chosen the plan is left as it was
+    awk -F"$TAB" 'NR == FNR { w[$0] = 1; next } !($2 in w)' "$PICK" "$PLAN" > "$PLAN.rest"
+    if [ -s "$PLAN.rest" ]; then mv "$PLAN.rest" "$PLAN"; rm -f "$PLAN.done"; else rm -f "$PLAN.rest"; fi
+    rm -f "$WORK" "$PICK"
+fi
 echo "moved $moved files, skipped $skipped"
 echo "log: $LOG   (undo with: sh $0 --undo)"
 # ponytail: the runner re-reads the share after any job that moves files

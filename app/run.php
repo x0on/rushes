@@ -26,6 +26,7 @@ $keep_side = $_POST['keep_side'] ?? 'project';
 $HOLD      = on_mac() ? '_Recently Removed' : '_duplicates';
 $dest      = $_POST['dest']      ?? archive_dir() . "/$HOLD";
 $stills    = ($_POST['stills'] ?? '0') === '1' ? '1' : '0';
+$pick      = ($_POST['pick'] ?? '') === '1' ? '1' : '';      // Remove takes only what Duplicates wrote down (dedupe-pick.txt)
 $exclude   = preg_replace('/[^A-Za-z0-9 ,_.\/-]/', '', $_POST['exclude'] ?? '');
 // letters of any language (Fútbol, Año), digits, and a few marks; the runner checks again
 // a drive kept where it is (Setup 01 and 03), for the duplicates jobs: by its place in Setup
@@ -83,7 +84,8 @@ $jobs = $action === 'find' && !on_mac() ? ['scan', 'plan'] : [$action];
 foreach ($jobs as $i => $one) {
     $file = $QUEUE . '/' . date('Ymd-His') . "-$i" . substr(md5(uniqid('', true)), 0, 6) . '.job';
     $body = "ACTION=$one\nKEEP_SIDE=$keep_side\nDEST=$dest\nSTILLS=$stills\nEXCLUDE=$exclude\nQUERY=$query\nWHO=$who\n"
-          . ($drive !== '' && preg_match('/^[^\r\n=]+$/', $drive) ? "DRIVE=$drive\n" : '');
+          . ($drive !== '' && preg_match('/^[^\r\n=]+$/', $drive) ? "DRIVE=$drive\n" : '')
+          . ($pick !== '' && $one === 'apply' ? "PICK=1\n" : '');
     if (@file_put_contents($file, $body) === false) {
         http_response_code(500);
         echo json_encode(['error' => 'could not write job file — is the queue folder in the web folder writable?']);
