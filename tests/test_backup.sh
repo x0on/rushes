@@ -11,7 +11,7 @@ A="$R/Archive"; W="$R/web"
 mkdir -p "$W" "$A"
 cp -r "$HERE/app/." "$W/"
 printf '{"name":"Rushes","archive":{"local":"%s","web":"%s","runs_on":"mac","label":"Archive"},"helper":{"mode":"built_in"}}\n' "$A" "$W" > "$W/settings.json"
-printf 'at\t%s\nvol\t/Volumes/Spare\tSpare\t8000\t6000\t0\t0\t0\t0\nvol\t%s\tArchive\t8000\t100\t0\t1\t0\t0\nvol\t/Volumes/EOS\tEOS\t64\t10\t1\t0\t0\t0\n' "$(date +%s)" "$A" > "$W/helper-volumes.tsv"
+printf 'at\t%s\nvol\t/Volumes/Spare\tSpare\t8000\t6000\t0\t0\t0\t0\nvol\t%s\tArchive\t8000\t100\t0\t1\t0\t0\nvol\t/Volumes/EOS\tEOS\t64\t10\t1\t0\t0\t0\nvol\t/Volumes/RAID 2\tRAID 2\t9000\t300\t0\t0\t0\t0\n' "$(date +%s)" "$A" > "$W/helper-volumes.tsv"
 (cd "$R" && "$PHP" -S 127.0.0.1:18681 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18681
 ok() { echo "PASS $1"; }
@@ -27,7 +27,7 @@ curl -s -b "$R/cj" -d action=save -d drive=/Volumes/Spare --data-urlencode "fold
 curl -s -b "$R/cj" "$U/db/backup.php" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
-assert d["into"] == "/Volumes/Spare/Back up" and [x["name"] for x in d["drives"]] == ["Spare"], d
+assert d["into"] == "/Volumes/Spare/Back up" and [x["name"] for x in d["drives"]] == ["Spare", "RAID 2"], d
 ' && ok "the choice, and only drives that are not the archive" || no "get"
 case "$(curl -s -b "$R/cj" -d action=source -d drive=/Volumes/EOS "$U/db/backup.php")" in
   *"cards come in through Ingest"*) ok "Copy once never takes a card" ;; *) no "card taken" ;; esac
@@ -50,3 +50,14 @@ curl -s -b "$R/cj" -d action=now "$U/db/backup.php" > /dev/null
   && ok "Back up now: handed to the helper as a line of its queue" || no "line"
 case "$(curl -s -b "$R/cj" -d action=off "$U/db/backup.php")" in *'"ok":true'*) ;; *) no "off" ;; esac
 (cd "$W" && "$PHP" -r 'require "db/backup.php"; echo "[" . backup_line() . "]";') | grep -q '^\[\]$' && ok "turned off: nothing more is asked" || no "still asked"
+# a drive onto another: never onto itself or the archive, "once" handed to the helper now, taken off by its id
+case "$(curl -s -b "$R/cj" -d action=save --data-urlencode "from=/Volumes/RAID 2" --data-urlencode "drive=/Volumes/RAID 2" "$U/db/backup.php")" in
+  *"same drive"*) ok "a drive is never copied onto itself" ;; *) no "onto itself" ;; esac
+case "$(curl -s -b "$R/cj" -d action=save --data-urlencode "from=/Volumes/RAID 2" --data-urlencode "drive=$A" "$U/db/backup.php")" in
+  *"archive is on that drive"*) ok "nor onto the archive's drive" ;; *) no "onto the archive" ;; esac
+curl -s -b "$R/cj" -d action=save --data-urlencode "from=/Volumes/RAID 2" -d drive=/Volumes/Spare -d nightly=0 "$U/db/backup.php" > /dev/null
+(cd "$W" && "$PHP" -r 'require "db/backup.php"; echo backup_line();') | grep -q "^backup	/Volumes/RAID 2	/Volumes/Spare/RAID 2 copy	now-[0-9-]*~[0-9a-f]\{6\}$" \
+  && ok "a drive onto another, once: handed to the helper now, into '<drive> copy'" || no "copy line: $(cd "$W" && "$PHP" -r 'require "db/backup.php"; echo backup_line();')"
+ID=$(python3 -c "import json;print(json.load(open('$W/settings.json'))['copies'][0]['id'])")
+curl -s -b "$R/cj" -d action=off -d id=$ID "$U/db/backup.php" | grep -q '"ok":true' && ! grep -q '"copies": \[\s*{' "$W/settings.json" \
+  && ok "taken off the list by its id" || no "off: $(cat "$W/settings.json")"

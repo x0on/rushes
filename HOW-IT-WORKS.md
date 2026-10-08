@@ -525,6 +525,23 @@ reports, never the archive's own), the folder's name, and **Every night** or
   last few; on Overview, a **Backed up** tile, red when a nightly backup has not
   succeeded for two days; and a line in What runs by itself.
 
+#### A drive onto another
+
+The same copy, from any drive or share the helper sees onto another: an
+editor's drive cloned, an old drive given a second copy before it fails, a
+server copied to a NAS. From that drive, To the other, a folder there
+(`<drive> copy` by default), and **Once, now** or **Every night**. One job per
+pair of drives (`copies` in settings), each with its own box on Copying: the
+last good run, the last runs, **Copy again now** and **Take off the list**
+(which deletes nothing anywhere).
+
+Everything above holds: only adds, never replaces or deletes, read back and
+compared, refused onto the same disk, inside the source, or into the archive.
+Not in Search: it is not the archive. Its runs are named `…~<id>`, so two jobs on
+the same night are never taken for one. A drive that is not plugged in makes
+that job wait, and never holds up the rest. Before it starts, Copying says when
+what is on From is more than what is free on To.
+
 **In the code:** `db/backup.php` (the choice, `backup_due()`, `backup_line()`
 added to the helper's queue by `db/helper.php`), `ingest.py` (`--backup`,
 `backup_refused()`, the `backup` line in `watch()`), `db/admin.php` (`drawCopy`).

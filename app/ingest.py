@@ -2617,10 +2617,12 @@ def backup_refused(source, into):
     drive = os.path.dirname(into.rstrip("/"))
     if not drive_there(drive):
         return f"{drive} is not connected"
-    if ts.inside(into, NAS_MOUNT) or ts.inside(into, source):
+    if ts.inside(into, NAS_MOUNT):
         return f"{into} is inside the archive"
+    if ts.inside(into, source):
+        return f"{into} is inside what it copies"
     if ts.inside(source, into):
-        return "the archive is inside the backup folder"
+        return "what it copies is inside the folder it copies into"
     try:
         if os.stat(drive).st_dev == os.stat(source).st_dev:
             return "the backup folder is on the same disk as the archive — that is not a second copy"
@@ -2787,7 +2789,8 @@ def watch(root, every=20):
         pending = [(v, p, i) for v, p, i in want if not finished(v, p, i)]
         # A tidy-up works inside the archive, and a delivery comes from the
         # Deliveries share, so a source drive going away stops neither.
-        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy", "deliver", "upload")]
+        # (a backup or drive copy whose drive is away waits by itself, below: it never stops the rest)
+        copies = [p for v, p, _ in pending if v not in ("tidy", "untidy", "deliver", "upload", "backup")]
         try:
             gone = within("sources", 30, lambda: [p for p in copies if not os.path.isdir(p)]) if copies else []
         except Stalled:
@@ -2897,6 +2900,11 @@ def watch(root, every=20):
             if verb == "backup":
                 dest, _, stamp = into.partition("\t")
                 drive = os.path.dirname(dest.rstrip("/"))
+                if not os.path.isdir(path):
+                    if _said_once(f"nosource {path}"):
+                        print(f"  copy waits: {path} is not connected")
+                        history("backup-waiting", f"{stamp} {dest}", 0, 0, 0, f"{os.path.basename(path.rstrip('/'))} is not connected")
+                    continue
                 if not drive_there(drive):
                     # The backup drive is not plugged in: said, and the rest carries on. Nothing is marked done:
                     # it runs when the drive is back (tonight's run, or the next).
@@ -2905,7 +2913,7 @@ def watch(root, every=20):
                         history("backup-waiting", f"{stamp} {dest}", 0, 0, 0, f"{os.path.basename(drive)} is not connected")
                     continue
                 did = True
-                print(f"\n=== backup of the archive  →  {dest} ===")
+                print(f"\n=== {'backup of the archive' if path.rstrip('/') == root.rstrip('/') else 'copy of ' + path}  →  {dest} ===")
                 if run_self("--source", path, "--into", dest, "--backup", stamp, "--apply"):
                     wait(300)          # stopped (full, refused, unplugged): tried again in five minutes, never at once
                 break
@@ -3449,8 +3457,8 @@ def main():
     # share that came back wrong (half-mounted, or renamed by the Mac) — not
     # an empty folder. Marking it done would skip it for ever.
     if a.backup and walked == 0:
-        print(f"\n*** {a.source} shows no files: not counted as a backup. Check the archive is connected properly.")
-        history("backup-interrupted", f"{a.backup} {a.into}", 0, 0, 0, "the archive showed no files")
+        print(f"\n*** {a.source} shows no files: not counted as a copy. Check it is connected properly.")
+        history("backup-interrupted", f"{a.backup} {a.into}", 0, 0, 0, f"{os.path.basename(a.source.rstrip('/'))} showed no files")
         sys.exit(1)
     if not a.into and walked == 0:
         had = 0

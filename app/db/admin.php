@@ -193,6 +193,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
                 (Cards and new shoots come in through Ingest.)</p>
               <p><b>Back up</b> &mdash; a second copy of the archive on another drive, every night or when you ask. From: the archive &rarr; To: that drive.
                 It only adds: nothing on that drive is ever replaced or deleted.</p>
+              <p><b>Copy a drive onto another</b> &mdash; a copy of one drive kept on another, once or every night. From: that drive &rarr; To: the other drive.
+                Not added to Search: it is not the archive.</p>
             </div>
             <div class="cp-route">
               <label>From <select id="cpFrom"></select></label>
@@ -203,7 +205,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
               <label>Folder on that drive <input id="cpFolder" value="Rushes backup" maxlength="80"></label>
               <span class="cp-when">
                 <label><input type="radio" name="cpWhen" value="1" checked> Every night</label>
-                <label><input type="radio" name="cpWhen" value="0"> Only when I press Back up now</label>
+                <label><input type="radio" name="cpWhen" value="0"> <span id="cpOnce">Only when I press Back up now</span></label>
               </span>
             </div>
             <p class="note" id="cpExplain" style="margin:10px 0 0"></p>
@@ -1136,7 +1138,7 @@ async function sendQueue(paths, list, btn, was) {
 // A source into the archive (the folders below, ticked and copied once), or the archive onto
 // another drive: the backup, once or every night. Chosen here, never typed: the drives are the
 // ones the helper reports.
-let cpData = null, cpAt = 0, cpWas = { from: null, to: null }, cpLooking = '';
+let cpData = null, cpAt = 0, cpWas = { from: null, to: null }, cpLooking = '', cpOptsFor = '';
 const ARCH = '@archive';
 async function loadCopy() {
   try { cpData = await (await fetch('backup.php?t=' + Date.now())).json(); } catch (e) { return; }
@@ -1166,7 +1168,7 @@ function drawCopy() {
   const b = r.backup, drives = r.drives || [];
   // the choices: the archive, the sources from Setup, and the drives the helper sees
   const opt = function (v, label, on) { return '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(label) + '</option>'; };
-  const from = cpWas.from !== null ? cpWas.from : (b ? ARCH : (r.sources[0] || {}).path || ARCH);
+  const from = cpWas.from !== null ? cpWas.from : ARCH;
   const to = cpWas.to !== null ? cpWas.to : (b ? b.drive : ARCH);
   // From: every drive and share the helper sees, and the ones copied from before (even unplugged); a card greyed: Ingest
   const plugged = {}; drives.forEach(function (x) { plugged[x.path] = x; });
@@ -1180,61 +1182,90 @@ function drawCopy() {
     drives.map(function (x) { return opt(x.path, x.name + ' · ' + tb(x.free) + ' free', to === x.path); }).join('') +
     (b && !drives.some(function (x) { return x.path === b.drive; }) ? opt(b.drive, b.drive.split('/').pop() + ' (not plugged in)', to === b.drive) : '');
   const f = $('cpFrom').value, t = $('cpTo').value;
-  const backup = f === ARCH && t !== ARCH, bring = f !== ARCH && t === ARCH;
-  $('cpOpts').hidden = !backup;
-  if (backup && b && b.drive === t && document.activeElement !== $('cpFolder')) {
-    $('cpFolder').value = b.folder;
-    document.querySelector('[name=cpWhen][value="' + (b.nightly ? 1 : 0) + '"]').checked = true;
+  const backup = f === ARCH && t !== ARCH, bring = f !== ARCH && t === ARCH, copy = f !== ARCH && t !== ARCH && f !== t;
+  const fromName = (($('cpFrom').selectedOptions[0] || {}).textContent || '').split(' · ')[0];
+  // the job these choices are: the archive's backup, or a copy of one drive onto another (one per pair)
+  const job = backup ? (b && b.drive === t ? b : null) : copy ? (r.copies || []).find(function (c) { return c.from === f && c.drive === t; }) : null;
+  $('cpOpts').hidden = !backup && !copy;
+  $('cpOnce').textContent = copy ? 'Once, now' : 'Only when I press Back up now';
+  const key = f + '|' + t;
+  if ((backup || copy) && cpOptsFor !== key && document.activeElement !== $('cpFolder')) {
+    // a new pair chosen: its saved choices, or the defaults (a copy: once, into "<drive> copy")
+    cpOptsFor = key;
+    $('cpFolder').value = job ? job.folder : copy ? fromName + ' copy' : 'Rushes backup';
+    document.querySelector('[name=cpWhen][value="' + (job ? +job.nightly : copy ? 0 : 1) + '"]').checked = true;
   }
-  const same = backup && b && b.drive === t && b.folder === $('cpFolder').value.trim() &&
-    String(+b.nightly) === document.querySelector('[name=cpWhen]:checked').value;
+  const when = document.querySelector('[name=cpWhen]:checked').value;
+  const same = job && job.folder === $('cpFolder').value.trim() && String(+job.nightly) === when;
   const name = ($('cpTo').selectedOptions[0] || {}).textContent || '';
-  $('cpExplain').innerHTML = backup
+  $('cpExplain').innerHTML = copy
+    ? 'A copy of <b>' + esc(fromName) + '</b> on <b>' + esc(name.split(' · ')[0]) + '</b>, in the folder named here, keeping its layout. ' +
+      'It only adds and checks: a file already there is never replaced, and nothing on either drive is deleted. ' +
+      (when === '1' ? 'Every night from 10 pm only what is new is copied. ' : '') + 'This copy is not added to Search: it is not the archive.'
+    : f !== ARCH && f === t ? 'From and To are the same drive.'
+    : backup
     ? 'A second copy of the archive on <b>' + esc(name.split(' · ')[0]) + '</b>, in the folder named here, keeping its layout. Each night only what is new is copied; ' +
       'a file that is already there is checked, never replaced, and nothing on that drive is ever deleted (Recently Removed is left out). It runs after the night\'s copies, from 10 pm.'
     : bring ? 'Everything on <b>' + esc(cpFromName()) + '</b> into the archive, folder by folder, once. ' +
       'Press Continue to see its folders, then tick the ones to copy. Nothing is copied until you press Copy.'
-    : f !== ARCH && t !== ARCH ? 'From one drive straight onto another is not something Copying does: bring it into the archive, and back the archive up.'
     : r.in_place ? 'Your drives stay where they are, so nothing needs copying in: choose a drive under To, and the archive is backed up onto it.' +
       (drives.length ? '' : ' No other drive is plugged in right now: connect one and it appears under To within a minute.')
     : !drives.length ? 'No other drive is plugged in, so From and To only offer the archive. Connect a USB drive or a network share (a NAS) and it appears in both within a minute.'
     : 'Choose a drive under From to copy it in, or one under To to back the archive up onto it.';
+  // room: what is on From against what is free on To, said before it starts (a warning: what is there already is skipped)
+  const dest = drives.find(function (x) { return x.path === t; }), src = drives.find(function (x) { return x.path === f; });
+  const need = copy && src ? src.total - src.free : backup && window.lastState && lastState.archive ? lastState.archive.bytes : 0;
+  if ((backup || copy) && dest && need > dest.free)
+    $('cpExplain').innerHTML += '<br><span class="bad">' + (copy ? esc(fromName) + ' has ' : 'The archive is ') + tb(need) + (copy ? ' on it' : '') +
+      ', and ' + esc(dest.name) + ' has ' + tb(dest.free) + ' free: it would stop part-way.</span> What is already there is not copied again.';
   const go = $('cpGo');
-  go.hidden = !(backup && !same) && !bring;
-  go.textContent = bring ? 'Continue' : b ? 'Save the change' : 'Set up the backup';
-  // the backup, once set: how it went, and what can be done
-  const bs = r.said, runs = r.runs || [];
-  const kinds = { 'backed-up': 'backed up', 'backup-interrupted': 'stopped part-way', 'backup-waiting': 'waited: drive not plugged in', 'backup-refused': 'refused' };
-  $('cpBackup').innerHTML = !b ? '' : '<div class="panel bk" style="margin-top:12px"><header><b>Backup onto ' + esc(b.drive.split('/').pop()) + ' / ' + esc(b.folder) + '</b>' +
-    '<span class="n">' + (b.nightly ? 'every night' : 'only when asked') + '</span></header><div style="padding:14px">' +
-    '<p style="margin:0 0 6px" class="' + (bs && bs.late ? 'bad' : '') + '">Last good backup: <b>' + esc(whenWords(bs && bs.at)) + '</b>' +
-      (bs && bs.at ? ' · ' + bs.files.toLocaleString() + ' copied (' + tb(bs.bytes) + ')' + (bs.note ? ', ' + esc(bs.note) : '') : '') +
-      (bs && bs.late ? ' — late: check the drive is plugged in and the helper running' : bs && bs.at ? ' ✓'
-        : b.nightly ? ' — the first runs tonight, from 10 pm (or press Back up now)' : ' — press Back up now') + '</p>' +
-    (r.due ? '<p class="note" style="margin:0 0 6px"><span class="spin"></span>' + (r.due.indexOf('now-') === 0 ? 'Asked: ' : 'Tonight\'s: ') +
-      'the helper runs it once the copies before it are done' + (r.helper_fresh ? '' : ' — the helper is not running right now') + '.</p>' : '') +
-    (runs.length ? '<details class="fold runs" style="margin:6px 0 10px"><summary>The last runs</summary>' + runs.map(function (x) {
-      return '<div class="row"><span class="nm">' + esc(x.when) + ' · ' + esc(kinds[x.kind] || x.kind) +
-        '<small>' + (x.files ? x.files.toLocaleString() + ' copied, ' + tb(x.bytes) : '') + (x.note ? (x.files ? ' · ' : '') + esc(x.note) : '') + '</small></span></div>'; }).join('') + '</details>' : '') +
-    '<div class="btns"><button class="btn" id="bkNow" type="button"' + (r.due ? ' disabled' : '') + '>Back up now</button>' +
-    '<button class="btn quiet" id="bkOff" type="button">Turn off</button><span class="note" id="bkSaid"></span></div></div></div>';
+  go.hidden = !((backup || copy) && !same) && !bring;
+  go.textContent = bring ? 'Continue' : copy ? (job ? 'Save the change' : when === '1' ? 'Set the copy' : 'Copy now') : b ? 'Save the change' : 'Set up the backup';
+  // the backup, and each drive copy, once set: how it went, and what can be done
+  $('cpBackup').innerHTML = (b ? jobPanel(Object.assign({ id: 'archive', said: r.said, runs: r.runs, due: r.due }, b), r) : '') +
+    (r.copies || []).map(function (c) { return jobPanel(c, r); }).join('');
+  $('cpBackup').querySelectorAll('[data-now]').forEach(function (x) {
+    x.onclick = function () { cpAsk('now', { id: x.dataset.now }, x, 'Copies what is new onto ' + x.dataset.to + ' now, after any copies already running. Deletes nothing.', x.textContent); };
+  });
+  $('cpBackup').querySelectorAll('[data-off]').forEach(function (x) {
+    x.onclick = function () { cpAsk('off', { id: x.dataset.off }, x, 'No more runs. Nothing on ' + x.dataset.to + ' is deleted: the copy there stays as it is.', x.textContent); };
+  });
   // bringing in: the folders of the source, ticked and copied (below), shown once there is something
   if (bring && !secs.length) {
     $('from').textContent = cpFromName() || 'the source';
     $('todo').innerHTML = '<div class="empty">' + (cpLooking === cpFromName() ? 'Looking inside ' + esc(cpLooking) + '… (about a minute)' : 'Press Continue, above, to see its folders.') + '</div>';
   }
   $('cpBring').hidden = !bring && !secs.length && !(lastLanded || []).length;
-  if ($('bkNow')) $('bkNow').onclick = function () { cpAsk('now', {}, this, 'Copies what is new onto ' + b.drive.split('/').pop() + ' now, after any copies already running. Deletes nothing.', 'Back up now'); };
-  if ($('bkOff')) $('bkOff').onclick = function () { cpAsk('off', {}, this, 'No more backups. Nothing on ' + b.drive.split('/').pop() + ' is deleted: the copy there stays as it is.', 'Turn off'); };
+}
+// One job's box: the archive's backup, or a drive copied onto another
+function jobPanel(j, r) {
+  const arch = j.id === 'archive', bs = j.said, runs = j.runs || [], to = j.drive.split('/').pop();
+  const word = arch ? 'backup' : 'copy';
+  const kinds = { 'backed-up': arch ? 'backed up' : 'copied', 'backup-interrupted': 'stopped part-way', 'backup-waiting': 'waited: a drive not plugged in', 'backup-refused': 'refused' };
+  return '<div class="panel bk" style="margin-top:12px"><header><b>' + (arch ? 'Backup of the archive' : esc(j.from_name)) + ' onto ' + esc(to) + ' / ' + esc(j.folder) + '</b>' +
+    '<span class="n">' + (j.nightly ? 'every night' : arch ? 'only when asked' : 'once') + '</span></header><div style="padding:14px">' +
+    '<p style="margin:0 0 6px" class="' + (bs && bs.late ? 'bad' : '') + '">Last good ' + word + ': <b>' + esc(whenWords(bs && bs.at)) + '</b>' +
+      (bs && bs.at ? ' · ' + bs.files.toLocaleString() + ' copied (' + tb(bs.bytes) + ')' + (bs.note ? ', ' + esc(bs.note) : '') : '') +
+      (bs && bs.late ? ' — late: check the drives are plugged in and the helper running' : bs && bs.at ? ' ✓'
+        : j.nightly ? ' — the first runs tonight, from 10 pm' : j.due ? '' : ' — press ' + (arch ? 'Back up now' : 'Copy again now')) + '</p>' +
+    (j.due ? '<p class="note" style="margin:0 0 6px"><span class="spin" style="margin-right:6px"></span>' + (j.due.indexOf('now-') === 0 ? 'Asked: ' : 'Tonight\'s: ') +
+      'the helper runs it once the copies before it are done' + (r.helper_fresh ? '' : ' — the helper is not running right now') + '.</p>' : '') +
+    (runs.length ? '<details class="fold runs" style="margin:6px 0 10px"><summary>The last runs</summary>' + runs.map(function (x) {
+      return '<div class="row"><span class="nm">' + esc(x.when) + ' · ' + esc(kinds[x.kind] || x.kind) +
+        '<small>' + (x.files ? x.files.toLocaleString() + ' copied, ' + tb(x.bytes) : '') + (x.note ? (x.files ? ' · ' : '') + esc(x.note) : '') + '</small></span></div>'; }).join('') + '</details>' : '') +
+    '<div class="btns"><button class="btn" type="button" data-now="' + esc(j.id) + '" data-to="' + esc(to) + '"' + (j.due ? ' disabled' : '') + '>' + (arch ? 'Back up now' : 'Copy again now') + '</button>' +
+    '<button class="btn quiet" type="button" data-off="' + esc(j.id) + '" data-to="' + esc(to) + '">' + (arch ? 'Turn off' : 'Take off the list') + '</button></div></div></div>';
 }
 async function cpAsk(action, extra, btn, what, was) {
-  if (!sure(btn, what, 'cp:' + action)) return;
+  was = String(was).replace(/^Sure\? /, '');
+  if (!sure(btn, what, 'cp:' + action + ':' + (extra.id || ''))) return;
   btn.disabled = true; btn.textContent = 'asked…';
   try {
     const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams(Object.assign({ action: action }, extra)) })).json();
     if (x.error) throw new Error(x.error);
-    ($('bkSaid') || $('cpSaid')).textContent = x.said + ' ✓';
-    if (action === 'off') cpWas = { from: null, to: null };
+    $('cpSaid').textContent = x.said + ' ✓';
+    btn.disabled = false; btn.textContent = was;
+    if (action === 'off') { cpWas = { from: null, to: null }; cpOptsFor = ''; }
     loadCopy();
   } catch (e) { btn.disabled = false; btn.textContent = was; $('cpSaid').textContent = 'Did not happen: ' + e.message; }
 }
@@ -1264,9 +1295,17 @@ $('cpGo').onclick = function () {
     });
     return;
   }
-  const nightly = document.querySelector('[name=cpWhen]:checked').value;
-  cpAsk('save', { drive: t, folder: $('cpFolder').value.trim(), nightly: nightly }, this,
-    'The archive is copied onto ' + (($('cpTo').selectedOptions[0] || {}).textContent || '').split(' · ')[0] + ' / ' + ($('cpFolder').value.trim() || 'Rushes backup') +
+  const nightly = document.querySelector('[name=cpWhen]:checked').value, folder = $('cpFolder').value.trim();
+  const onto = (($('cpTo').selectedOptions[0] || {}).textContent || '').split(' · ')[0];
+  if (f !== ARCH) {          // a drive onto another
+    const what = (($('cpFrom').selectedOptions[0] || {}).textContent || '').split(' · ')[0];
+    cpAsk('save', { from: f, drive: t, folder: folder, nightly: nightly }, this,
+      what + ' is copied onto ' + onto + ' / ' + (folder || what + ' copy') + (nightly === '1' ? ', every night from 10 pm.' : ', starting within a minute.') +
+      ' Only adds: nothing on either drive is replaced or deleted.', this.textContent);
+    return;
+  }
+  cpAsk('save', { drive: t, folder: folder, nightly: nightly }, this,
+    'The archive is copied onto ' + onto + ' / ' + (folder || 'Rushes backup') +
     (nightly === '1' ? ', every night from 10 pm.' : ', when you press Back up now.') + ' Deletes nothing there.', this.textContent);
 };
 

@@ -10,8 +10,9 @@
 //
 //   GET                                           {backup, drives, last, runs, due, archive}
 //   POST action=save drive=<path> folder=<name> nightly=0|1    (signed in)
-//   POST action=now                                            a run now, besides the nightly one
-//   POST action=off                                            no backup (nothing on the drive changes)
+//   POST action=save from=<drive> drive=… folder=… nightly=…   a copy from one drive onto another (copies[])
+//   POST action=now [id=]                                      a run now, besides the nightly one
+//   POST action=off [id=]                                      no more runs (nothing on any drive changes)
 //   POST action=source drive=<path>                            Copy once: that drive becomes a source (as Setup 03 would)
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/activity.php';
@@ -20,52 +21,68 @@ const BACKUP_NIGHT = [22, 7];       // ponytail: 10 pm to 7 am, as describing; a
 
 function backup_set(): array { return settings()['backup'] ?? []; }
 
-// Where on the backup drive: <drive>/<folder>, as the helper sees it
+// The copies from one drive onto another (Copy onto another drive): each its own id, from, drive, folder, when
+function drive_copies(): array { return array_values(array_filter(settings()['copies'] ?? [], fn($c) => ($c['drive'] ?? '') !== '' && ($c['from'] ?? '') !== '')); }
+
+// Every job: the archive's backup (id "archive", from the archive) and each drive copy
+function backup_jobs(): array {
+    $b = backup_set();
+    return array_merge(($b['drive'] ?? '') !== '' ? [['id' => 'archive', 'from' => helper_archive()] + $b] : [], drive_copies());
+}
+
+// Where on the other drive: <drive>/<folder>, as the helper sees it
 function backup_into(array $b): string { return rtrim($b['drive'] ?? '', '/') . '/' . ($b['folder'] ?? 'Rushes backup'); }
 
-// The helper's runs of it, newest first: [when, kind, stamp, into, files, bytes, note]
-function backup_runs(int $n = 8): array {
+// The helper's runs, newest first: [when, kind, stamp, into, files, bytes, note]; one job's when $into is given
+function backup_runs(int $n = 8, ?string $into = null): array {
     $out = [];
     foreach (array_reverse(@file(web_dir() . '/ingest-history.tsv') ?: []) as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if (count($f) < 5 || !str_starts_with($f[1], 'backup') && $f[1] !== 'backed-up') continue;
-        [$stamp, $into] = array_pad(explode(' ', $f[2], 2), 2, '');
-        $out[] = ['when' => $f[0], 'kind' => $f[1], 'stamp' => $stamp, 'into' => $into, 'files' => (int)$f[3],
+        [$stamp, $at] = array_pad(explode(' ', $f[2], 2), 2, '');
+        if ($into !== null && $at !== $into) continue;
+        $out[] = ['when' => $f[0], 'kind' => $f[1], 'stamp' => $stamp, 'into' => $at, 'files' => (int)$f[3],
                   'bytes' => (int)$f[4], 'note' => $f[6] ?? ''];
         if (count($out) >= $n) break;
     }
     return $out;
 }
 
-// The run due now, if any: one asked with Back up now, or tonight's. -> its stamp, or ''
-function backup_due(?int $now = null): string {
-    $b = backup_set(); $now ??= time();
+// The run of one job due now, if any: one asked for, or tonight's. -> its stamp, or ''
+// A drive copy's stamps end in ~<id>, so two jobs on the same night are never taken for one (the helper's done list).
+function backup_due(?int $now = null, ?array $job = null): string {
+    $b = $job ?? (backup_set() ? ['id' => 'archive'] + backup_set() : []); $now ??= time();
     if (($b['drive'] ?? '') === '') return '';
     $done = [];
-    foreach (backup_runs(200) as $r) if ($r['kind'] === 'backed-up') $done[$r['stamp']] = true;
+    foreach (backup_runs(400, backup_into($b)) as $r) if ($r['kind'] === 'backed-up') $done[$r['stamp']] = true;
     if (($b['asked'] ?? '') !== '' && !isset($done[$b['asked']])) return $b['asked'];
     if (empty($b['nightly'])) return '';
     $h = (int)date('G', $now);
     if ($h >= BACKUP_NIGHT[1] && $h < BACKUP_NIGHT[0]) return '';
-    $night = 'night-' . date('Y-m-d', $h < BACKUP_NIGHT[1] ? strtotime('-1 day', $now) : $now);   // the evening it started
+    $night = 'night-' . date('Y-m-d', $h < BACKUP_NIGHT[1] ? strtotime('-1 day', $now) : $now)   // the evening it started
+           . (($b['id'] ?? 'archive') === 'archive' ? '' : '~' . $b['id']);
     return isset($done[$night]) ? '' : $night;
 }
 
-// For the helper's queue: "backup <archive> <into> <stamp>", or ''
+// For the helper's queue: one "backup <from> <into> <stamp>" line per job due, or ''
 function backup_line(): string {
-    $s = backup_due(); $from = helper_archive();
-    return $s !== '' && $from !== '' ? "backup\t$from\t" . backup_into(backup_set()) . "\t$s\n" : '';
+    $out = '';
+    foreach (backup_jobs() as $j) {
+        $s = backup_due(null, $j);
+        if ($s !== '' && ($j['from'] ?? '') !== '') $out .= "backup\t{$j['from']}\t" . backup_into($j) . "\t$s\n";
+    }
+    return $out;
 }
 
-// The Overview tile and the line on Copying: when the last good backup was, plainly
-function backup_said(): ?array {
-    $b = backup_set();
+// When the last good run was, plainly: the archive's backup (the Overview tile), or one drive copy
+function backup_said(?array $job = null): ?array {
+    $b = $job ?? (backup_set() ? ['id' => 'archive'] + backup_set() : []);
     if (($b['drive'] ?? '') === '') return null;
     $last = null;
-    foreach (backup_runs(200) as $r) if ($r['kind'] === 'backed-up') { $last = $r; break; }
+    foreach (backup_runs(400, backup_into($b)) as $r) if ($r['kind'] === 'backed-up') { $last = $r; break; }
     $at = $last ? (int)strtotime($last['when']) : 0;
     $days = $at ? (int)floor((time() - $at) / 86400) : null;
-    // late: a nightly backup with no good run for two days (or none since it was set, a day and a half ago)
+    // late: a nightly one with no good run for two days (or none since it was set, a day and a half ago)
     $late = !empty($b['nightly']) && ($days !== null ? $days >= 2 : time() - (int)($b['since'] ?? 0) > 36 * 3600);
     return ['at' => $at, 'days' => $days, 'late' => $late, 'nightly' => !empty($b['nightly']),
             'drive' => basename($b['drive']), 'note' => $last['note'] ?? '', 'files' => $last['files'] ?? 0, 'bytes' => $last['bytes'] ?? 0];
@@ -96,28 +113,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sourc
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $s = settings(); $b = $s['backup'] ?? []; $do = (string)($_POST['action'] ?? '');
+    // One job at a time: the archive's backup (id "archive", or no id), or a copy from one drive onto another
+    $s = settings(); $do = (string)($_POST['action'] ?? ''); $seen = array_column(helper_volumes()['vols'], null, 'path');
+    $id = (string)($_POST['id'] ?? ''); $from = (string)($_POST['from'] ?? '');
+    $onArchive = fn($p) => str_starts_with(helper_archive() . '/', rtrim($p, '/') . '/') || str_starts_with(rtrim($p, '/') . '/', helper_archive() . '/');
     if ($do === 'save') {
         $drive = (string)($_POST['drive'] ?? '');
-        $seen = array_column(helper_volumes()['vols'], null, 'path');
-        // Only a drive the helper reported, never a path typed in a browser; never the archive's own
+        // Only drives the helper reported, never a path typed in a browser; never onto the archive's own drive
         if (!isset($seen[$drive])) bk_said(400, ['error' => 'Choose a drive the helper can see right now.']);
-        if ($seen[$drive]['archive'] || str_starts_with(helper_archive() . '/', rtrim($drive, '/') . '/'))
-            bk_said(400, ['error' => 'The archive is on that drive: a backup goes on another one.']);
+        if ($seen[$drive]['archive'] || $onArchive($drive))
+            bk_said(400, ['error' => 'The archive is on that drive: copies go on another one.']);
+        if ($from !== '') {
+            if (!isset($seen[$from]) || $seen[$from]['card']) bk_said(400, ['error' => 'Copy from a drive the helper can see right now (a card comes in through Ingest).']);
+            if ($from === $drive) bk_said(400, ['error' => 'From and To are the same drive.']);
+            if ($seen[$from]['archive'] || $onArchive($from)) $from = '';       // the archive: that is the backup
+        }
         $folder = trim(preg_replace('/[\x00-\x1f\/\\\\:*?"<>|]+/', ' ', (string)($_POST['folder'] ?? '')));
         $folder = ltrim(mb_substr($folder, 0, 80), '. ');
-        if ($folder === '') $folder = 'Rushes backup';
-        $b = ['drive' => $drive, 'folder' => $folder, 'nightly' => ($_POST['nightly'] ?? '') === '1', 'since' => (int)($b['since'] ?? time())]
-           + array_intersect_key($b, ['asked' => 1]);
-        $said = 'Backup set: the archive onto ' . $seen[$drive]['name'] . ' / ' . $folder . ($b['nightly'] ? ', every night' : ', when asked');
-    } elseif ($do === 'now') {
-        if (($b['drive'] ?? '') === '') bk_said(400, ['error' => 'Choose where the backup goes first.']);
-        $b['asked'] = 'now-' . date('Ymd-His');
-        $said = 'Asked for a backup now, onto ' . basename($b['drive']);
-    } elseif ($do === 'off') {
-        $b = []; $said = 'Backup turned off (nothing on the backup drive changes)';
+        if ($folder === '') $folder = $from === '' ? 'Rushes backup' : $seen[$from]['name'] . ' copy';
+        $nightly = ($_POST['nightly'] ?? '') === '1';
+        if ($from === '') {
+            $b = $s['backup'] ?? [];
+            $s['backup'] = ['drive' => $drive, 'folder' => $folder, 'nightly' => $nightly, 'since' => (int)($b['since'] ?? time())]
+                         + array_intersect_key($b, ['asked' => 1]);
+            $said = 'Backup set: the archive onto ' . $seen[$drive]['name'] . ' / ' . $folder . ($nightly ? ', every night' : ', when asked');
+        } else {
+            // a drive onto another: one job per pair; "once" runs now, "every night" from tonight
+            $id = substr(md5("$from|$drive"), 0, 6); $kept = [];
+            foreach ($s['copies'] ?? [] as $c) if (($c['id'] ?? '') !== $id) $kept[] = $c;
+            $kept[] = ['id' => $id, 'from' => $from, 'from_name' => $seen[$from]['name'], 'drive' => $drive, 'folder' => $folder,
+                       'nightly' => $nightly, 'since' => time()] + ($nightly ? [] : ['asked' => 'now-' . date('Ymd-His') . "~$id"]);
+            $s['copies'] = $kept;
+            $said = 'Copy set: ' . $seen[$from]['name'] . ' onto ' . $seen[$drive]['name'] . ' / ' . $folder . ($nightly ? ', every night' : ', now');
+        }
+    } elseif ($do === 'now' || $do === 'off') {
+        if ($id === '' || $id === 'archive') {
+            if (($s['backup']['drive'] ?? '') === '') bk_said(400, ['error' => 'Choose where the backup goes first.']);
+            $name = basename($s['backup']['drive']);
+            if ($do === 'now') { $s['backup']['asked'] = 'now-' . date('Ymd-His'); $said = "Asked for a backup now, onto $name"; }
+            else { $s['backup'] = []; $said = 'Backup turned off (nothing on the backup drive changes)'; }
+        } else {
+            $i = array_search($id, array_column($s['copies'] ?? [], 'id'), true);
+            if ($i === false) bk_said(400, ['error' => 'That copy is not on the list any more.']);
+            $c = $s['copies'][$i];
+            if ($do === 'now') { $s['copies'][$i]['asked'] = 'now-' . date('Ymd-His') . "~$id"; $said = "Asked to copy {$c['from_name']} onto " . basename($c['drive']) . ' now'; }
+            else { array_splice($s['copies'], $i, 1); $said = "Copy of {$c['from_name']} onto " . basename($c['drive']) . ' taken off the list (nothing on either drive changes)'; }
+        }
     } else bk_said(400, ['error' => 'unknown action']);
-    $s['backup'] = $b;
     if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
     settings(true);
     activity_add('changed', $said);
@@ -127,7 +169,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $hv = helper_volumes();
 bk_said(200, [
     'backup' => backup_set() ?: null, 'into' => backup_set() ? backup_into(backup_set()) : '',
-    'said' => backup_said(), 'runs' => backup_runs(), 'due' => backup_due(),
+    'said' => backup_said(), 'runs' => backup_set() ? backup_runs(8, backup_into(backup_set())) : [], 'due' => backup_due(),
+    // copies from one drive onto another, each with how it went
+    'copies' => array_map(fn($c) => $c + ['into' => backup_into($c), 'said' => backup_said($c), 'runs' => backup_runs(8, backup_into($c)),
+                                           'due' => backup_due(null, $c)], drive_copies()),
     'archive' => helper_archive(), 'helper_fresh' => $hv['fresh'],
     // every drive and share the helper sees, but the archive's own: To for the backup, From for Copy once (cards greyed there)
     'drives' => array_values(array_map(fn($v) => ['path' => $v['path'], 'name' => $v['name'], 'free' => $v['free'], 'total' => $v['total']],

@@ -3,6 +3,18 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.30 — October 2026
+
+- **Copy a drive onto another.** From any drive or share the helper sees, To
+  another, into a folder there (`RAID 2 copy` by default), **once, now** or
+  **every night**. The same careful copy as the backup: it only adds, never
+  replaces or deletes, reads every file back, refuses the same disk, the drive
+  itself and the archive. Not added to Search. Each pair gets its own box on
+  Copying with its last good run, **Copy again now** and **Take off the list**.
+  A drive that is unplugged makes only that copy wait.
+- **Room, said before it starts:** when what is on From (or the archive, for
+  the backup) is more than what is free on To, Copying says so in red.
+
 ## 0.12.29 — October 2026
 
 - **Copy once in plain words.** Choose the drive, press **Continue**, tick

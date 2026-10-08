@@ -465,6 +465,22 @@ class BackupTests(unittest.TestCase):
         self.assertFalse(self.mod.DONE.exists() and 'backup' in self.mod.DONE.read_text())
         self.assertIn('backup-interrupted', (self.mod.STATUS / 'ingest-history.tsv').read_text())
 
+    def test_a_drive_copied_onto_another_drive_never_into_the_archive(self):
+        other = self.root / 'RAID 2'; (other / 'Events').mkdir(parents=True)
+        (other / 'Events/b.mov').write_bytes(b'b' * 7)
+        self.drive = self.root / 'drive'; self.drive.mkdir()
+        self.into = self.drive / 'RAID 2 copy'
+        args = ['ingest.py', '--source', str(other), '--into', str(self.into), '--backup', 'now-1~ab12cd', '--apply']
+        with patch.object(sys, 'argv', args), patch('sys.stdout', new_callable=io.StringIO), \
+             patch.object(self.mod, 'backup_refused', return_value=''), patch.object(self.mod, 'drive_there', return_value=True):
+            self.mod.main()
+        self.assertEqual((self.into / 'Events/b.mov').read_bytes(), b'b' * 7)
+        self.assertEqual([p.name for p in self.archive.iterdir() if p.name != '_rushes'], [], 'nothing lands in the archive')
+        self.assertIn('backup now-1~ab12cd', self.mod.DONE.read_text())
+        there = patch.object(self.mod, 'drive_there', return_value=True); there.start(); self.addCleanup(there.stop)
+        self.assertIn('inside what it copies', self.mod.backup_refused(str(other), str(other / 'copy')))
+        self.assertIn('inside the archive', self.mod.backup_refused(str(other), str(self.archive / 'copy')))
+
     def test_refused_on_the_same_disk_and_inside_the_archive(self):
         self.drive = self.root / 'drive'; self.drive.mkdir()
         self.assertIn('not connected', self.mod.backup_refused(str(self.archive), str(self.drive / 'Rushes backup')),
