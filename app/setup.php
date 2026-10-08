@@ -145,6 +145,7 @@ if (($_POST['_save'] ?? '') === '1') {
         $ok = ($who === 'helper' && isset($hpath[$p])) || ($who === 'archive' && isset($lpath[$p]));
         if (!$ok) $bad[] = 'That source is no longer plugged in. Pick it again.';
         elseif (!in_array($p, array_column($kept, 'path'), true)) {
+            $added = trim((string)($_POST['add_label'] ?? '')) ?: basename(str_replace('\\', '/', rtrim($p, '/\\'))) ?: $p;
             $kept[] = ['label' => trim((string)($_POST['add_label'] ?? '')) ?: basename(str_replace('\\', '/', rtrim($p, '/\\'))) ?: $p,
                        'path' => $p, 'seen_by' => $who];
         }
@@ -171,7 +172,7 @@ if (($_POST['_save'] ?? '') === '1') {
         $json = json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if (@file_put_contents("$file.new", $json . "\n") !== false && @rename("$file.new", $file)) {
             settings(true); runner_paths();             // the runner reads where the archive is from its own line
-            header('Location: /setup.php?saved=1'); exit;
+            header('Location: /setup.php?saved=1' . (!empty($added) ? '&added=' . rawurlencode($added) . '#sources' : '')); exit;
         }
         @unlink("$file.new");
         $said = 'Could not write settings.json — is the web folder writable?';
@@ -220,7 +221,7 @@ foreach ($hv['vols'] as $v) {
                 'folders' => array_values(array_map(fn($d) => ['name' => $d, 'path' => helper_join($v['path'], $d, $hv['os'])],
                               array_filter($v['top'], fn($d) => !in_array($d, $noise, true))))];
 }
-foreach ($local as $v) {
+foreach ($hmode !== 'external' && $hv['vols'] ? [] : $local as $v) {       // built in: the helper's list IS this machine's
     if ($v['path'] === s_path('archive.local', '')) continue;
     $offer[] = ['who' => 'archive', 'path' => $v['path'], 'name' => $v['name'], 'size' => 0,
                 'where' => 'a share on this machine',
@@ -388,7 +389,11 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
         <span class="sub">Where things are on this installation.</span></div>
 
       <?php if ($said === 'ok'): ?>
-        <div class="banner ok"><div class="txt">Saved. Every page reads the new settings on its next load.</div></div>
+        <div class="banner ok"><div class="txt"><?php if (($added = (string)($_GET['added'] ?? '')) !== ''): ?>
+          <b><?= $e($added) ?> added.</b> <?= ($s['organise']['shape'] ?? '') === 'in_place'
+            ? 'Rushes is listing its files now, within a minute: the top bar and Activity show how far, and Search finds them by name when it is done. Nothing on it is moved.'
+            : 'It is a place to copy from: Manage → Copying. (Its files are not in Search: for that, choose “each drive keeps its files” in 01.)' ?>
+        <?php else: ?>Saved. Every page reads the new settings on its next load.<?php endif; ?></div></div>
       <?php elseif ($said): ?>
         <div class="banner bad"><div class="txt"><b>Nothing was saved.</b><?= $e($said) ?></div></div>
       <?php endif; ?>
@@ -614,6 +619,8 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
           </div>
         <?php endforeach; ?>
         <?php if (!($s['sources'] ?? [])): ?><p class="note" style="margin:0">None yet.</p><?php endif; ?>
+        <?php if ($shape !== 'in_place'): ?><p class="note" style="margin:8px 0 0">Drives added here are places to copy from (Manage → Copying).
+          Their files are not in Search: to search a drive where it is, choose “each drive keeps its files” in 01.</p><?php endif; ?>
 
         <div class="btns" style="margin-top:14px">
           <button type="button" class="btn quiet tab-i" id="addOpen"><?= icon('plus', 2) ?> Add a drive or folder</button>
@@ -1083,7 +1090,7 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
         try {
           var d = await (await fetch('/db/state.php?t=' + Date.now())).json(), tq = d.queued || [];
           $('toolState').innerHTML =
-            (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running) + '</b>' + (d.progress ? ' · ' + d.progress.pct + '%' : '') + '</p>' : '') +
+            (d.running ? '<p><span class="spin"></span>Running: <b>' + esc(TOOL[d.running] || d.running_said || d.running) + '</b>' + (d.progress && d.progress.said ? ' · ' + esc(d.progress.said) : d.progress && d.progress.pct != null ? ' · ' + d.progress.pct + '%' : '') + '</p>' : '') +
             (tq.length ? '<p>Asked: <b>' + tq.map(function (x) { return esc(TOOL[x] || x); }).join(', ') + '</b> — it starts at the next turn, within a minute</p>' : '') +
             (!d.running && !tq.length ? '<p>Nothing running ✓</p>' : '') +
             (d.gpu_test ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px"><b>Video chip test</b> · ' +

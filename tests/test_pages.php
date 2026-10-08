@@ -71,6 +71,7 @@ check(str_contains($html, 'id="dBoxes"') && !str_contains($html, 'id="dFolders"'
 check(str_contains($html, 'id="cpFrom"') && str_contains($html, 'id="cpTo"') && str_contains($html, "fetch('backup.php") && str_contains($html, 'data-go-copy'),
       'Copying: From and To chosen on the page, the backup, and its tile on Overview');
 check(str_contains($html, "classList.toggle('tip-l'"), 'an ⓘ on the right opens to the left');
+check(str_contains($html, 'id="drivesNow"') && str_contains($html, 'DRV_ICON') && str_contains($html, 'running_said'), 'Overview shows the drives, and what is running is said in words');
 check(!str_contains($html, 'Back to search') && substr_count($html, 'href="/setup.php"') >= 1, 'the menu has no second way back to Search');
 ob_start(); include "$root/app/setup.php"; $html = ob_get_clean();
 check(str_contains($html, 'id="plan"') && str_contains($html, '1 department, in Library') && str_contains($html, 'form="pP" type="text" name="d_name[0]" value="Parks"'),

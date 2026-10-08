@@ -97,6 +97,11 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   };
 </script>
 <script>
+  // What is running, in words, and how far: "Listing the files · publicaffairs · 48,210 files so far"
+  window.nowSaid = function (d) {
+    var p = d.progress, w = d.running_said || d.running || '';
+    return w + (!p ? '' : p.said ? ' · ' + p.said : p.pct != null ? ' · ' + p.pct + '%' : '');
+  };
   // An ⓘ near the right or the bottom of the window opens its explanation the other way,
   // so it never runs under the Activity column or off the screen (tokens.css → .infotip)
   var tipSide = function (e) {
@@ -283,7 +288,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
           : jw && /interrupted|blocked|stopped/.test(j.phase) ? ' off' : (s.runner && s.runner.ok ? '' : ' off'));
         $('hWhat').textContent = h ? h.short
           : jw ? jw
-          : s.running ? (s.progress ? s.running + ' · ' + s.progress.pct + '%' : s.running)
+          : s.running ? window.nowSaid(s)
           : (c && c.stale && /copying|looking|tracing|tidying/.test(c.phase)) ? 'the helper went quiet'
           : (s.runner && s.runner.ok ? 'nothing running' : 'not picking up jobs');
         $('hPulse').title = h ? h.title + (h.facts ? ' — ' + h.facts.map(function (f) { return f[0] + ' ' + f[1]; }).join(', ') : '') : 'what is moving right now';

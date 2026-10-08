@@ -64,9 +64,24 @@ $runner_ok = $alive && ($now - $alive) < limit('runner_silent_seconds', 180);
 $progress = null;
 if ($running && is_readable("$WEB/job.log")) {
     $tail = @file_get_contents("$WEB/job.log", false, null, max(0, filesize("$WEB/job.log") - 8000));
+    // only what this job said: after its header (a ===… line), never an older job's 100%
+    if (($h = strrpos($tail, str_repeat('=', 62))) !== false) $tail = substr($tail, $h);
     if (preg_match_all('/progress: (\d+) of (\d+) \((\d+)%\)/', $tail, $m))
         $progress = ['done' => (int)end($m[1]), 'total' => (int)end($m[2]), 'pct' => (int)end($m[3])];
+    elseif (preg_match_all('/listing: (.+?) · ([\d,]+) files so far/', $tail, $m))
+        $progress = ['pct' => null, 'said' => end($m[1]) . ' · ' . end($m[2]) . ' files so far'];
 }
+// What is running, in words (the top bar, Activity): never a job's internal name
+$running_said = $running === null ? null : ([
+    'reindex' => 'Listing the files', 'manifest' => 'Listing the files', 'import' => 'Updating search',
+    'find' => 'Finding duplicates', 'scan' => 'Finding duplicates', 'plan' => 'Planning which copies go',
+    'apply' => 'Removing duplicate copies', 'undo' => 'Putting copies back', 'verify' => 'Checking removed copies',
+    'empty' => 'Deleting Recently Removed', 'holding' => 'Measuring Recently Removed', 'df' => 'Measuring free space',
+    'cacheclean' => 'Moving cache files aside', 'cache-undo' => 'Putting cache files back',
+    'proxy-plan' => 'Counting videos without proxies', 'proxy-build' => 'Making proxies', 'proxy-remake' => 'Making proxies again',
+    'proxy-stop' => 'Stopping proxies', 'proxy-test' => 'Testing proxy quality', 'gpu-test' => 'Testing the video chip',
+    'organize-undo' => 'Undoing the old layout', 'reset-breaker' => 'Trying the archive again',
+][$running] ?? ucfirst(str_replace('-', ' ', $running)));
 
 $mac = [];
 foreach (@file("$WEB/ingest-status.tsv") ?: [] as $l) {
@@ -457,7 +472,33 @@ $repeats = [
     ['The helper' . (($hv['host'] ?? '') !== '' ? ' on ' . $hv['host'] : ''), 'says what is plugged in every 20 s (less when Rushes does not answer); stops by itself if a share stops answering',
         (int)($hv['at'] ?? 0), ($mac['phase'] ?? '') === 'blocked' && ($mac['source'] ?? '') === '' ? 'stopped — Try again now' : 'ok'],
 ];
+// Overview → Drives: every drive and share the helper sees, what kind it is, how full, and what Rushes does with it
+$drives_now = [];
+$ha = helper_archive(); $dbk = settings()['backup'] ?? []; $cps = settings()['copies'] ?? [];
+$inSearch = array_flip(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()));
+$sources = array_flip(array_map(fn($r) => rtrim((string)($r['path'] ?? ''), '/'), settings()['sources'] ?? []));
+$listing = $progress['said'] ?? '';
+foreach ($hv['vols'] as $dv) {
+    $dp = rtrim($dv['path'], '/');
+    $dArch = $dv['archive'] || $ha === $dp || str_starts_with($ha . '/', $dp . '/');
+    $droles = [];
+    if ($dArch) $droles[] = 'The archive';
+    if (isset($inSearch[$dp])) $droles[] = 'In Search';
+    elseif (isset($sources[$dp]) && !$dArch) $droles[] = 'To copy from';
+    if (($dbk['drive'] ?? '') === $dv['path']) $droles[] = 'Backup goes here';
+    foreach ($cps as $job) {
+        if (($job['drive'] ?? '') === $dv['path']) $droles[] = 'Copy of ' . ($job['from_name'] ?? 'a drive') . ' goes here';
+        if (($job['from'] ?? '') === $dv['path']) $droles[] = 'Copied onto ' . basename((string)($job['drive'] ?? ''));
+    }
+    if ($dv['card']) $droles[] = 'A card: Ingest';
+    $dnow = $listing !== '' && str_starts_with($listing, $dv['name'] . ' · ') ? 'Listing now · ' . substr($listing, strlen($dv['name'] . ' · ')) : '';
+    $drives_now[] = ['name' => $dv['name'], 'kind' => $dArch ? 'archive' : ($dv['card'] ? 'card' : ($dv['net'] ? 'nas' : 'drive')),
+                     'total' => $dv['total'], 'free' => $dv['free'], 'roles' => array_values(array_unique($droles)), 'now' => $dnow];
+}
+usort($drives_now, fn($a, $b) => [$a['kind'] !== 'archive', !$a['roles'], $a['name']] <=> [$b['kind'] !== 'archive', !$b['roles'], $b['name']]);
+
 echo json_encode([
+    'drives_now' => $drives_now, 'helper_seen' => (int)($hv['at'] ?? 0),
     'repeats'  => $repeats,
     'backup'   => backup_said(),
     'transfer' => $transfer,
@@ -466,7 +507,7 @@ echo json_encode([
                    'imported' => $imported, 'imported_ago' => $ago($searchAt)],
     'disk'     => $disk,
     'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive), 'stopped' => $stopped],
-    'running'  => $running, 'progress' => $progress,
+    'running'  => $running, 'running_said' => $running_said, 'progress' => $progress,
     // asked from Manage, waiting for the runner's next turn
     'queued'   => array_values(array_filter(array_map(fn($j) => preg_match('/^ACTION=(.+)$/m', (string)@file_get_contents($j), $m) ? trim($m[1]) : '',
                     glob("$WEB/queue/*.job") ?: []))),

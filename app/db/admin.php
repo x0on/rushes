@@ -49,6 +49,16 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .tag { font-size: 11px; font-weight: 650; border-radius: 9px; padding: 1px 8px; background: var(--ok-bg); color: var(--ok); white-space: nowrap }
   .tag.go { background: var(--raised); color: var(--muted) }
   .cp .lnk { font-size: 12px; white-space: nowrap }
+  .drvs { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 12px 14px 14px }
+  .drv-c { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); min-width: 0 }
+  .drv-c .top { display: flex; gap: 10px; align-items: center } .drv-c .top svg { flex: none; width: 28px; height: 28px; color: var(--muted) }
+  .drv-c.arch .top svg { color: var(--accent, var(--fg)) }
+  .drv-c b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .drv-c .kind { font-size: 11.5px; color: var(--muted) }
+  .drv-c .meter { margin: 8px 0 4px } .drv-c .sp { font-size: 12px; color: var(--muted) }
+  .drv-c .roles { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px }
+  .drv-c .roles span { font-size: 11px; border-radius: 9px; padding: 1px 8px; background: var(--raised); color: var(--fg) }
+  .drv-c .lnow { font-size: 12px; margin-top: 6px }
   .cp-what { margin: 0 0 14px; font-size: 13px; color: var(--muted) } .cp-what p { margin: 0 0 4px; max-width: 90ch }
   .cp-what b { color: var(--fg) }
   .cp-route { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
@@ -167,6 +177,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
 
       <!-- always true, then only what is -->
       <div class="tiles" id="tiles"></div>
+      <!-- the drives: what is connected, what kind, how full, and what Rushes does with each (state.php drives_now) -->
+      <div class="panel" id="drivesNow" style="margin-top:14px" hidden></div>
 
       <!-- what the helper is doing this second -->
       <div class="now" id="now" hidden></div>
@@ -614,6 +626,7 @@ function show(which) {
   document.querySelector('.with-side').classList.toggle('no-side', which === 'activity');
   if ($('pwBanner')) $('pwBanner').hidden = which !== 'overview';      // said where it is acted on: Overview (Setup has the form itself)
   $('tiles').hidden = (which !== 'overview');
+  $('drivesNow').hidden = which !== 'overview' || !$('drivesNow').innerHTML;
   $('cards').hidden = (which !== 'overview');
   $('repeats').hidden = (which !== 'overview');
   $('transferSummary').hidden = !latestTransfer || !['overview','transfers'].includes(which);
@@ -1310,7 +1323,27 @@ $('cpGo').onclick = function () {
 };
 
 // ── tiles: two that are always true, then only what is ─────────────────────
+// Overview → Drives: an icon for what each is (the archive, a NAS share, a drive, a card), how full,
+// and what Rushes does with it, so plugging one in shows at once
+const DRV_ICON = <?= json_encode(['archive' => icon('archive', 1.6), 'nas' => icon('server', 1.6), 'drive' => icon('drive', 1.6), 'card' => icon('card', 1.6)]) ?>;
+const DRV_KIND = { archive: 'the archive', nas: 'network share (NAS)', drive: 'drive plugged in', card: 'card' };
+function drawDrives(d) {
+  const ds = d.drives_now || [];
+  $('drivesNow').innerHTML = !ds.length ? '' : '<header><b>Drives</b><span class="n">' + ds.length + ' connected' +
+    (d.helper_seen ? ' · looked ' + new Date(d.helper_seen * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + '</span></header>' +
+    '<div class="drvs">' + ds.map(function (x) {
+      const used = x.total ? Math.round((x.total - x.free) / x.total * 100) : 0;
+      return '<div class="drv-c' + (x.kind === 'archive' ? ' arch' : '') + '"><div class="top">' + DRV_ICON[x.kind] +
+        '<div style="min-width:0"><b>' + esc(x.name) + '</b><div class="kind">' + DRV_KIND[x.kind] + '</div></div></div>' +
+        (x.total ? '<div class="meter"><i' + (used >= 90 ? ' class="full"' : '') + ' style="width:' + used + '%"></i></div>' +
+          '<div class="sp">' + tb(x.free) + ' free of ' + tb(x.total) + '</div>' : '') +
+        (x.roles.length ? '<div class="roles">' + x.roles.map(function (r) { return '<span>' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
+        (x.now ? '<div class="lnow"><span class="spin" style="margin-right:6px"></span>' + esc(x.now) + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
+  $('drivesNow').hidden = pane !== 'overview' || !ds.length;
+}
 function drawTiles(d) {
+  drawDrives(d);
   const t = [];
   t.push('<div class="tile"><div class="lab">In the archive</div>' +
     '<div class="big">' + d.archive.files.toLocaleString() + '</div>' +
@@ -1545,13 +1578,14 @@ async function load() {
   };
   const recent = d.recent || [];
   const evs = recent.filter(function (r) { return actKind === 'all' || r.kind === actKind || (actKind === 'changed' && r.kind === 'people'); }).map(ev);
-  $('events').innerHTML = evs.length ? evs.join('') : '<div class="empty">Nothing ' + (actKind === 'all' ? 'yet.' : 'of this kind yet.') + '</div>';
-  $('sideLog').innerHTML = (d.running
-      ? '<div class="ev"><span class="ico">•</span><div class="t">' + esc(d.running) +
-        '<small>running now' + (d.progress ? ' · ' + d.progress.pct + '%' : '') + '</small>' +
-        '<div class="bar' + (d.progress ? '' : ' wait') + '"><i style="width:' +
-        ((d.progress && d.progress.pct) || 0) + '%"></i></div></div></div>'
-      : '') + (recent.length ? recent.slice(0, 12).map(ev).join('') : '<div class="empty">Nothing yet.</div>');
+  // what is happening now, in words and how far, first: in Activity and in the column beside every page
+  const nowRow = d.running
+      ? '<div class="ev"><span class="ico"><span class="spin"></span></span><div class="t">' + esc(d.running_said || d.running) +
+        '<small>happening now' + (d.progress && d.progress.said ? ' · ' + esc(d.progress.said) : d.progress && d.progress.pct != null ? ' · ' + d.progress.pct + '%' : '') + '</small>' +
+        '<div class="bar' + (d.progress && d.progress.pct != null ? '' : ' wait') + '"><i style="width:' +
+        ((d.progress && d.progress.pct) || 0) + '%"></i></div></div></div>' : '';
+  $('events').innerHTML = (actKind === 'all' ? nowRow : '') + (evs.length ? evs.join('') : '<div class="empty">Nothing ' + (actKind === 'all' ? 'yet.' : 'of this kind yet.') + '</div>');
+  $('sideLog').innerHTML = nowRow + (recent.length ? recent.slice(0, 12).map(ev).join('') : '<div class="empty">Nothing yet.</div>');
   $('sideNow').textContent = d.runner && d.runner.ok
     ? 'Picking up jobs · checked ' + (d.runner.ago || 'just now')
     : d.runner && d.runner.stopped ? 'Stopped: nothing runs until Start' : 'Not picking up jobs';

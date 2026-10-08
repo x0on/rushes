@@ -3,6 +3,30 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.31 — October 2026
+
+- **Overview shows the drives.** One card per drive and share the helper
+  sees, with an icon for what it is (the archive, a network share, a drive
+  plugged in, a card), how full it is, and what Rushes does with it: The
+  archive, In Search, To copy from, Backup goes here, a copy going there, or
+  "A card: Ingest". While a drive is being listed, its card says so, with
+  how many files so far.
+- **What is happening, in words.** The top bar, Activity and the column beside
+  every page say "Listing the files · publicaffairs · 48,210 files so far"
+  instead of "reindex · 100%". That 100% was a number left over from an older
+  job; each job's progress is now only its own. Every job has a plain name
+  (Finding duplicates, Removing duplicate copies, Making proxies…), and
+  Activity's full list starts with what is happening now. When a drive just
+  plugged in or added has been listed, Activity says "Listed publicaffairs:
+  96,400 files, found in Search by name".
+- **Setup says what happened when a drive is added:** "publicaffairs added.
+  Rushes is listing its files now…", or, when drives are copied into the
+  archive (Setup 01), that it is a place to copy from and how to make its
+  files searchable instead. Section 04 says that too, before anyone wonders.
+- **Add a drive lists each drive once.** On a Mac the helper is part of
+  Rushes, so its list and this machine's were the same drives twice, with the
+  system disk among them.
+
 ## 0.12.30 — October 2026
 
 - **Copy a drive onto another.** From any drive or share the helper sees, To

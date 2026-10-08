@@ -239,6 +239,8 @@ function icon(string $name, float $w = 1.7): string {
         'project'    => '<path d="m12 3 9 4.6-9 4.6-9-4.6Z"/><path d="m3 12.2 9 4.6 9-4.6"/><path d="m3 16.6 9 4.6 9-4.6"/>',
         'file'       => '<path d="M6 3.5h7.5L19 9v11.5H6Z"/><path d="M13.5 3.5V9H19"/>',
         'camera'     => '<path d="M3.5 8.5a2 2 0 0 1 2-2h2.3l1.5-2h5.4l1.5 2h2.3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.6"/>',
+        'drive'      => '<rect x="3" y="7.5" width="18" height="9" rx="2"/><path d="M6.8 12h.01M10 12h.01"/><path d="M14 13.5h3.5"/>',
+        'card'       => '<path d="M8 3.5h8.5L19.5 6.5v12a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11z"/><path d="M10 3.8v3M13 3.8v3M16 4.5v2.5"/>',
         'server'     => '<rect x="4" y="3.5" width="16" height="5.5" rx="1.5"/><rect x="4" y="9.3" width="16" height="5.5" rx="1.5"/><rect x="4" y="15" width="16" height="5.5" rx="1.5"/><path d="M7.5 6.2h.01M7.5 12h.01M7.5 17.8h.01"/>',
         'info'       => '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6h.01"/>',
         'plus'       => '<path d="M12 5v14M5 12h14"/>',
@@ -332,7 +334,9 @@ function helper_volumes(): array {
             $vols[$f[1]] = ['path' => $f[1], 'name' => $f[2], 'total' => (int)$f[3],
                             'free' => (int)$f[4], 'card' => $f[5] === '1',
                             'archive' => $f[6] === '1', 'files' => (int)$f[7],
-                            'bytes' => (int)$f[8], 'top' => [], 'days' => []];
+                            'bytes' => (int)$f[8], 'top' => [], 'days' => [], 'net' => false];
+        } elseif ($f[0] === 'net' && count($f) === 2 && isset($vols[$f[1]])) {
+            $vols[$f[1]]['net'] = true;
         } elseif ($f[0] === 'dir' && count($f) === 3 && isset($vols[$f[1]])) {
             $vols[$f[1]]['top'][] = $f[2];
         } elseif ($f[0] === 'day' && count($f) === 5 && isset($vols[$f[1]])) {

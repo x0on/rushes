@@ -47,8 +47,8 @@ $SIDE_SELF = $SIDE_SELF ?? false;
     try {
       var d = await (await fetch('/db/state.php?t=' + Date.now())).json(), recent = d.recent || [];
       document.getElementById('sideLog').innerHTML = (d.running
-          ? '<div class="ev"><span class="ico">•</span><div class="t">' + esc(d.running) + '<small>running now' +
-            (d.progress ? ' · ' + d.progress.pct + '%' : '') + '</small></div></div>' : '') +
+          ? '<div class="ev"><span class="ico"><span class="spin"></span></span><div class="t">' + esc(d.running_said || d.running) + '<small>happening now' +
+            (d.progress && d.progress.said ? ' · ' + esc(d.progress.said) : d.progress && d.progress.pct != null ? ' · ' + d.progress.pct + '%' : '') + '</small></div></div>' : '') +
         (recent.length ? recent.slice(0, 12).map(ev).join('') : '<div class="empty">Nothing yet.</div>');
       document.getElementById('sideNow').textContent = d.runner && d.runner.ok ? 'Picking up jobs · checked ' + (d.runner.ago || 'just now')
         : d.runner && d.runner.stopped ? 'Stopped: nothing runs until Start' : 'Not picking up jobs';

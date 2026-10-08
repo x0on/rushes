@@ -25,6 +25,8 @@ foreach (explode("\n", $raw) as $l) {
     } elseif ($f[0] === 'day' && count($f) === 5 && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f[2])
               && ctype_digit($f[3]) && ctype_digit($f[4])) {
         $keep[] = $l;                         // how many files the card holds from each day
+    } elseif ($f[0] === 'net' && count($f) === 2 && str_starts_with($f[1], '/')) {
+        $keep[] = $l;                         // that volume is a network share (a NAS), not a drive
     } elseif ($f[0] === 'dir' && count($f) === 3 && $f[2] !== ''
               && !str_contains($f[2], '/') && !str_contains($f[2], '\\')) {
         $keep[] = $l;

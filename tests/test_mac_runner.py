@@ -327,8 +327,10 @@ class Drives(MacJobs):
         said = [l.split("\t")[1:] for l in open(os.path.join(self.web, "activity.tsv")).read().splitlines()]
         self.assertEqual([t for _, _, t in said if "Films 1" in t], [
             "Films 1 was plugged in: its list of files is made again",
+            "Listed Films 1: 1 file, found in Search by name",
             "Films 1 was unplugged: Search keeps showing its files, marked not plugged in",
-            "Films 1 was plugged in again: its list of files is made again"], "Activity says when a drive comes and goes")
+            "Films 1 was plugged in again: its list of files is made again",
+            "Listed Films 1: 1 file, found in Search by name"], "Activity says when a drive comes and goes, and when it is listed")
         self.ids["Films 1"] = "UUID-SOMEONE-ELSES"
         self.drive("x.mov", b"x", name="Films 1")               # another drive takes the old name: not it
         self.assertEqual(self.minute()["Films 1"]["path"], os.path.join(self.vol, "Films 1 1"))

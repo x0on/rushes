@@ -315,7 +315,7 @@ class Runner:
                                                           or before[d["source"]].get("path") != d["path"]      # found under another name
                                                           or not os.path.exists(self.drive_list(d)))]
             if back and not any(x.endswith("-drive.job") for x in os.listdir(self.p("queue"))):
-                self.write(f"queue/{time.strftime('%Y%m%d-%H%M%S')}-drive.job", "ACTION=reindex\n")
+                self.write(f"queue/{time.strftime('%Y%m%d-%H%M%S')}-drive.job", "ACTION=reindex\nDRIVES=1\n")
                 self.say("plugged in: " + ", ".join(d["name"] for d in back) + " — its list is made again")
             for d in ds:
                 b = before.get(d["source"])
@@ -788,7 +788,7 @@ class Runner:
             return
         if action in ("reindex", "manifest"):
             self.log("walking the archive once — file list and search index together")
-            self.build_index()
+            self.build_index(said=f.get("DRIVES") == "1")
         elif action == "reset-breaker":
             for n in ("video-tripped.txt", "video-stalls.txt"):
                 try: os.remove(self.p(n))
@@ -1135,7 +1135,16 @@ class Runner:
         self.log(f"recovered {n} cache files")
         return n
 
-    def build_manifest(self):
+    def listing(self, name):
+        """-> tick(n) for walk(): "listing: <name> · 12,500 files so far" in the log, every few seconds
+        (db/state.php reads it, so the top bar and Activity say what is being listed and how far)."""
+        last = [0.0]
+        def tick(n):
+            if time.time() - last[0] > 3:
+                last[0] = time.time(); self.log(f"listing: {name} · {n:,} files so far")
+        return tick
+
+    def build_manifest(self, said=False):
         """size<TAB>path for every file on the archive (manifest.tsv). A folder
         that cannot be read means a partial list, and a partial list never
         replaces a complete one. Returns a line for the log, or raises."""
@@ -1146,7 +1155,7 @@ class Runner:
         new = self.p("manifest.tsv.new")
         with open(new, "w", encoding="utf-8", errors="surrogateescape") as out:
             try:
-                n, odd = walk(a, out)
+                n, odd = walk(a, out, self.listing(self.settings().get("archive", {}).get("label") or os.path.basename(a.rstrip("/")) or "the archive"))
             except OSError as e:
                 out.close(); os.remove(new)
                 raise RuntimeError(f"could not read {getattr(e, 'filename', '') or 'a folder'} ({e.strerror or e})")
@@ -1157,9 +1166,11 @@ class Runner:
                 if d["connected"]:
                     try:
                         with open(keep + ".new", "w", encoding="utf-8", errors="surrogateescape") as dl:
-                            dn, dodd = walk(d["path"], dl)
+                            dn, dodd = walk(d["path"], dl, self.listing(d["name"]))
                         os.replace(keep + ".new", keep); odd += dodd
                         self.log(f"  {d['name']}: {dn} files")
+                        if said:            # just plugged in or added: said in Activity, with how many
+                            self.activity("changed", f"Listed {d['name']}: {dn:,} {'file' if dn == 1 else 'files'}, found in Search by name")
                     except OSError as e:
                         self.log(f"  {d['name']} could not be read ({e.strerror or e}): its last list is kept")
                 elif os.path.exists(keep):
@@ -1178,10 +1189,10 @@ class Runner:
         os.replace(new, self.p("manifest.tsv"))
         return n, odd
 
-    def build_index(self):
+    def build_index(self, said=False):
         """One walk, two files: index.txt is the manifest without its sizes."""
         try:
-            n, odd = self.build_manifest()
+            n, odd = self.build_manifest(said)
         except Exception as e:
             self.log(f"File list not replaced ({e}); keeping the previous one"); return False
         with open(self.p("manifest.tsv"), encoding="utf-8", errors="surrogateescape") as m, \
@@ -1194,8 +1205,9 @@ class Runner:
         return True
 
 
-def walk(top, out):
+def walk(top, out, tick=None):
     """size<TAB>path for every file under top, into out; -> (files, names left out).
+    tick(n): told how many so far, now and then (the page says it as it goes).
     Raises OSError when a folder or file cannot be read: a partial list is never a list."""
     errors, n, odd = [], 0, 0
     # ponytail: symbolic links are not followed (find -L did); add when an archive needs them
@@ -1210,6 +1222,8 @@ def walk(top, out):
             except OSError as e:
                 errors.append(e); break
             out.write(f"{size}\t{path}\n"); n += 1
+            if tick and n % 500 == 0:
+                tick(n)
         if errors:
             break
     if errors:

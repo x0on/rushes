@@ -573,7 +573,7 @@ def volumes():
                 except OSError:
                     seen = _netlook[r] = [time.time(), None]
             if seen and seen[1]:
-                out.append(seen[1])
+                out.append(dict(seen[1], net=True))         # a network share: said, so the page can show it as one
             continue
         _looking[0] = r                       # which drive it is on, in case one stops answering
         try:
@@ -2114,6 +2114,8 @@ def look_forever(every=20):
                 lines += ["\t".join(["day", v["path"], d, str(c[0]), str(c[1])])
                           for d, c in sorted(days.items())]
                 lines += ["\t".join(["dir", v["path"], d]) for d in v["top"] if ok(d)]
+                if v.get("net"):
+                    lines.append("net\t" + v["path"])          # a network share, not a drive plugged in
             _looked[:] = [lines, time.time()]
         except Exception:
             pass
