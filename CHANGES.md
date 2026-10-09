@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.36 — October 2026
+
+- **Quit quits.** Quit from the menu bar now closes the Rushes window too. Left open, it kept the app "in use", and a new version could not replace it.
+- **Stopped says so, with the switch.** When Rushes is stopped (after Quit, or Work → Run in the background off), its window says "Rushes is stopped: nothing runs", with a **Turn Rushes on** button right there, also in place of "Open Rushes". No more connection errors under it, and no "Starting Rushes …" while nothing is starting.
+
 ## 0.12.35 — October 2026
 
 - **Overview said "The archive is not answering" when it was.** One drive or file name that is not valid UTF-8 (written by an old Windows machine, say) made the whole status answer empty, and the Mac app's switches went grey. Such a name is now shown with a replacement character instead, and everything else carries on. The drive pages, Reorganize, Activity and Duplicates answer the same way.

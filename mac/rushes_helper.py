@@ -850,6 +850,10 @@ class Window:
             # From the menu bar: like turning off Run in the background. It stays
             # off, also after a restart, until it is turned on in its window.
             log("quit from the menu bar")
+            # The window is its own process (opened from Finder or the menu): it goes too, first — stopping
+            # the service ends this process as well. Left open, it kept the app "in use", and a new version
+            # could not replace it.
+            subprocess.run(["pkill", "-f", "rushes_helper.py --window"], capture_output=True)
             stop_service()
         elif do in ("watch-pause", "watch-resume") and WATCHER:
             p = os.path.join(WDIR, "paused")
@@ -1154,7 +1158,10 @@ async function act(d, extra) {
   poll();
 }
 // Open Rushes, only once Rushes answers: "Starting Rushes …" until then (Rushes on this Mac)
-function openBtn(s, go) { return s.local_up === false ? btn('Starting Rushes …', 'open-rushes', go, true) : btn('Open Rushes', 'open-rushes', go); }
+function openBtn(s, go) {
+  if (s.local && !s.running) return btn('Turn Rushes on', 'service-on', go, !!s.busy);      // stopped: not "starting", it is off
+  return s.local_up === false ? btn('Starting Rushes …', 'open-rushes', go, true) : btn('Open Rushes', 'open-rushes', go);
+}
 // What is seldom pressed is a quiet link, not a button that looks as important as Done
 function lnk(label, d, cls) { return '<button class="lnk' + (cls ? ' ' + cls : '') + '" data-do="' + d + '">' + esc(label) + '</button>'; }
 function btn(label, d, go, dis) { return '<button' + (go ? ' class="go"' : '') + (dis ? ' disabled' : '') + ' data-do="' + d + '">' + esc(label) + '</button>'; }
@@ -1349,13 +1356,16 @@ const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Wa
   analysing:'Describing footage', tidying:'Tidying up', idle:'Nothing to describe', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
 function home(s) {
   const n = s.now || {}, on = s.running, L = s.local;
-  const state = !on ? '<span class="dot"></span><b>Stopped</b> — Rushes does nothing until you turn it on in Work.'
+  // Stopped (Quit, or the Work switch): said once, plainly, with the switch right here; no error text below it
+  const state = !on ? '<span class="dot"></span><b>Rushes is stopped</b> — nothing runs: no copying, no listing, and the Manage pages do not open.' +
+      '<div style="margin-top:10px">' + btn('Turn Rushes on', 'service-on', true, !!s.busy) + '</div>'
     : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work. Work turns it back on.'
     : '<span class="dot ok"></span><b>Rushes is running</b>';
   const where = L ? 'Archive: ' + esc(base(L.archive)) + (L.there ? '' : ' — <b>not plugged in</b>: Search still shows its files, marked not plugged in')
     : 'Connected to Rushes at ' + esc(s.url);
-  const now = s.rushes === null ? '<span class="spin"></span>Asking Rushes …'
+  const now = !on ? '<span class="muted">Nothing, while Rushes is stopped.</span>'
+    : s.rushes === null ? '<span class="spin"></span>Asking Rushes …'
     : !s.rushes ? '<span class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '). Activity\'s technical log still shows this Mac\'s work.</span>'
     : n.phase ? '<b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(base(n.source)) : '') +
         (n.note ? '<div class="muted">' + esc(n.note) + '</div>' : '') + (n.file ? '<div class="muted">now: ' + esc(base(n.file)) + '</div>' : '')
@@ -1430,7 +1440,7 @@ function home(s) {
       (unpaired ? '<div class="box"><div class="head"><div class="t"><b>Not paired with Rushes yet</b><small class="muted" style="display:block">Rushes gives this Mac no work until it is: Other devices has the place for the code.</small></div>' +
         '<button data-page="dev">Pair…</button></div></div>' : '') +
       '<div class="box"><div class="head" style="margin-bottom:8px"><div class="t muted">Lately</div><button class="lnk" data-page="act">See all activity →</button></div>' +
-        (ev.length ? feed(ev.slice(0, 4), false) : '<p class="muted">' + (s.activity === undefined ? 'Asking Rushes …' : 'Nothing yet.') + '</p>') + '</div>';
+        (ev.length ? feed(ev.slice(0, 4), false) : '<p class="muted">' + (!on ? 'Shown again once Rushes is on.' : s.activity === undefined ? 'Asking Rushes …' : 'Nothing yet.') + '</p>') + '</div>';
   }
 }
 // The place to type the code, until this Mac is the one Rushes gives work to (a Rushes server, not on this Mac)
