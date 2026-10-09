@@ -89,6 +89,7 @@ if (($_POST['_plan'] ?? '') === '1') {
     if (!$rows) $pBad[] = 'The list is empty. Ingest needs at least one ' . strtolower(shelf_word()) . '.';
     if (!$pBad) {
         $s = settings();
+        usort($rows, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));   // A to Z, as everywhere they are listed
         $s['organise']['departments'] = $rows;
         if (save_settings($s)) { header('Location: /setup.php?plan=1#plan'); exit; }
         $pBad[] = 'Could not write settings.json — is the web folder writable?';
@@ -138,6 +139,7 @@ if (($_POST['_save'] ?? '') === '1') {
         if (!empty($_POST['s_drop'][$i])) continue;
         $n = trim((string)($_POST['s_label'][$i] ?? ''));
         if ($n !== '') $r['label'] = $n;
+        if (in_array($_POST['s_how'][$i] ?? '', ['in_place', 'copy'], true)) $r['how'] = $_POST['s_how'][$i];
         $kept[] = $r;
     }
     // A new one, from the picker. Which machine sees it is decided by which
@@ -283,7 +285,7 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
   .opt input { position: absolute; opacity: 0; pointer-events: none }
   .soon { font-size: 10.5px; font-weight: 650; border-radius: 9px; padding: 1px 8px;
           background: var(--raised); color: var(--muted); margin-left: 6px }
-  .src { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 10px; align-items: center;
+  .src { display: grid; grid-template-columns: 1fr 1.6fr auto auto; gap: 10px; align-items: center;
          padding: 10px 0; border-top: 1px solid var(--line-soft) }
   .src:first-of-type { border-top: 0; padding-top: 0 }
   .src .where { font-family: var(--mono); font-size: 12px; color: var(--muted); word-break: break-all }
@@ -362,8 +364,9 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
   .kinds { display: flex; gap: 8px; flex-wrap: wrap }
   .opt.sm { padding: 8px 14px } .opt.sm b { margin: 0 }
   .two-in { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; max-width: 420px }
-  .dep, .dep-h { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center }
-  .dep { padding: 7px 0; border-top: 1px solid var(--line-soft) }
+  .dep, .dep-h { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; max-width: 680px }
+  .dep { padding: 3px 0; border-top: 1px solid var(--line-soft) }
+  .dep input[type=text], .dep select { padding-top: 5px; padding-bottom: 5px; font-size: 13px }
   .dep.new select { color: var(--muted) }
   .dep label.x { font-size: 12.5px; color: var(--muted); white-space: nowrap; cursor: pointer }
   .dep-h { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 0 0 6px }
@@ -403,7 +406,7 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
 
       <!-- ══ 01 the decision everything else follows ══ -->
       <details class="grp sec" id="shape"<?= $is('shape') ? ' open' : '' ?><?= $done(isset($s['organise']['shape'])) ?>>
-        <summary><h2><span><?= $num() ?> /</span> How media is organised<?= $tip('The one decision that changes what every other page does.') ?><?= $here_('shape') ?></h2>
+        <summary><h2><span><?= $num() ?> /</span> How media is organised<?= $tip('What Rushes does with a drive unless you say otherwise. Each drive is asked on its own when you add it (Overview), and can be changed in 03.') ?><?= $here_('shape') ?></h2>
           <span class="val"><?= $shape === 'in_place' ? 'Left on its own drives' : 'Brought to one place' ?></span>
           <span class="chg">Change</span></summary>
         <div class="pick">
@@ -430,6 +433,13 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
         <label class="f"><span>What to call it</span>
           <input type="text" name="name" value="<?= $e($s['name'] ?? 'Rushes') ?>"></label>
 
+        <?php if (on_mac()): ?>
+          <!-- shown, not chosen: one place changes it, the drive's own card (HOW-IT-WORKS.md → Changing the archive) -->
+          <label class="f"><span>Where it lives</span></label>
+          <div class="seen" style="margin-bottom:14px"><b><?= $e($aDrive ?: basename($aLoc)) ?></b> &mdash; <?= $e($aLoc) ?><br>
+            To make another drive the archive: <a href="db/admin.php#overview">Manage &rarr; Overview</a>, on that drive&rsquo;s card, <b>Make this the archive</b>.
+            Every part of Rushes switches at once.</div>
+        <?php else: ?>
         <label class="f"><span>Where it lives, on this machine</span>
           <select name="a_local">
             <?php $seen = false; foreach ($local as $v): $seen = $seen || $v['path'] === $aLoc; ?>
@@ -438,6 +448,7 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
               <option value="<?= $e($aLoc) ?>" selected><?= $e($aLoc) ?> (not visible right now)</option>
             <?php endif; ?>
           </select></label>
+        <?php endif; ?>
 
         <?php if (on_mac()): ?>
           <!-- Rushes on this Mac (HOW-IT-WORKS.md → Rushes on this Mac): its address is this Mac's own -->
@@ -563,7 +574,9 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
             <span class="note">Saves nothing yet.</span></div>
         <?php else: ?>
           <p class="note" style="margin:0 0 10px">Every shoot goes on one of these shelves, and Ingest offers exactly this list.
-             A linked folder is used as it is &mdash; nothing is renamed, so no Premiere project breaks.</p>
+             A linked folder is used as it is &mdash; nothing is renamed, so no Premiere project breaks.
+             This only links each one to a folder already in <?= $e($shelfShown) ?>: what is inside the folders,
+             Reorganize finds and files.</p>
           <div class="dep-h"><span><?= $e($ONE) ?></span><span>Its folder in <?= $e($shelfShown) ?></span><span></span></div>
           <?php foreach ($rows as $i => $r): ?>
             <div class="dep<?= ($r['folder'] ?? '') === '' ? ' new' : '' ?>">
@@ -623,6 +636,10 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
                                                       : ($d['seen'] ? 'not plugged in since ' . $e(ago_words((int)$d['seen'])) : 'not plugged in yet') ?>
                 <?php if ($rp['files']): ?><br><?= $e($rp['line']) ?><?php endif; ?>
               <?php endforeach; ?></small></div>
+            <?php $how = source_in_place($r) ? 'in_place' : 'copy'; ?>
+            <select name="s_how[<?= $i ?>]" aria-label="How Rushes looks after it" style="width:auto">
+              <option value="in_place" <?= $how === 'in_place' ? 'selected' : '' ?>>searched where it is</option>
+              <option value="copy" <?= $how === 'copy' ? 'selected' : '' ?>>copied into the archive</option></select>
             <label class="x"><input type="checkbox" name="s_drop[<?= $i ?>]" value="1"> remove</label>
           </div>
         <?php endforeach; ?>
@@ -663,12 +680,12 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
         <label class="f"><span>Where it finds the archive</span>
           <select name="a_helper">
             <?php $seen = false; foreach ($hv['vols'] as $v): $seen = $seen || $v['path'] === $aHlp; ?>
-              <option value="<?= $e($v['path']) ?>" <?= $v['path'] === $aHlp ? 'selected' : '' ?>><?= $e($v['name']) ?><?= $v['archive'] ? ' — this is the archive ✓' : '' ?></option>
+              <option value="<?= $e($v['path']) ?>" <?= $v['path'] === $aHlp ? 'selected' : '' ?>><?= $e($v['name']) ?><?= $v['rushes'] ? ' — this is the archive ✓' : '' ?></option>
             <?php endforeach; if (!$seen && $aHlp): ?>
               <option value="<?= $e($aHlp) ?>" selected><?= $e($aHlp) ?> (not reported right now)</option>
             <?php endif; ?>
           </select>
-          <?php $found = array_values(array_filter($hv['vols'], fn($v) => $v['archive'])); ?>
+          <?php $found = array_values(array_filter($hv['vols'], fn($v) => $v['rushes'])); ?>
           <?php if ($found && $found[0]['path'] === $aHlp): ?>
             <div class="seen ok">✓ The <?= $e($hname) ?> can see the archive there.</div>
           <?php elseif ($found): ?>

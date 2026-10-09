@@ -226,21 +226,22 @@ class Runner:
             return {}
 
     def drives(self):
-        """The drives catalogued where they are: Setup 03's list, when Setup 01 says
-        to leave media on its own drives. Each is known by its volume's own ID, not
+        """The drives catalogued where they are: those in Setup 03's list kept where
+        they are (each drive's own choice when added; Setup 01's for older ones). Each is known by its volume's own ID, not
         its name: a drive plugged in under another name (or "X 1") is found by
         its ID, and another drive that takes its name is not taken for it.
         -> [{source, name, id, path, connected, seen}] (drives.json)."""
         s, a = self.settings(), self.arch()
-        if (s.get("organise") or {}).get("shape") != "in_place":
-            return []
+        shape = (s.get("organise") or {}).get("shape")    # a drive added before it was asked how follows Setup 01
         try:
             known = {d["source"]: d for d in json.load(open(self.p("drives.json")))}
         except (OSError, ValueError, KeyError, TypeError):
             known = {}
         out = []
         for src in s.get("sources") or []:
-            p = str((src or {}).get("path", "")).rstrip("/")
+            if not isinstance(src, dict) or src.get("how", shape) != "in_place":
+                continue                                   # a place to copy from, not searched where it is
+            p = str(src.get("path", "")).rstrip("/")
             if not p.startswith("/") or ".." in p.split("/") or (a and (p == a or p.startswith(a + "/") or a.startswith(p + "/"))):
                 continue                                   # not a drive of its own: the archive, or inside it
             was = known.get(p, {})
@@ -812,7 +813,7 @@ class Runner:
             return
         if action in ("reindex", "manifest"):
             self.log("walking the archive once — file list and search index together")
-            self.build_index(said=f.get("DRIVES") == "1")
+            self.build_index(said=f.get("DRIVES") == "1", moved=f.get("NEW_ARCHIVE") == "1")
         elif action == "reset-breaker":
             for n in ("video-tripped.txt", "video-stalls.txt"):
                 try: os.remove(self.p(n))
@@ -1168,7 +1169,7 @@ class Runner:
                 last[0] = time.time(); self.log(f"listing: {name} · {n:,} files so far")
         return tick
 
-    def build_manifest(self, said=False):
+    def build_manifest(self, said=False, moved=False):
         """size<TAB>path for every file on the archive (manifest.tsv). A folder
         that cannot be read means a partial list, and a partial list never
         replaces a complete one. Returns a line for the log, or raises."""
@@ -1205,7 +1206,8 @@ class Runner:
                             out.write(line); n += 1
         old = sum(1 for _ in open(self.p("manifest.tsv"), "rb")) if os.path.exists(self.p("manifest.tsv")) else 0
         # the same guard as runner.sh and sync.php: less than half the last list is a drive that answered partly
-        if (old > 1000 and n < old // 2) or (old and not n):
+        # a new archive (Make this the archive) is another drive: its list is not held against the last one
+        if (old > 1000 and n < old // 2 and not moved) or (old and not n):
             os.replace(new, self.p("manifest-rejected.tsv"))
             raise RuntimeError(f"refused: {n} files listed where the last list had {old} — kept the last list "
                                "(the new one is manifest-rejected.tsv)")
@@ -1213,10 +1215,10 @@ class Runner:
         os.replace(new, self.p("manifest.tsv"))
         return n, odd
 
-    def build_index(self, said=False):
+    def build_index(self, said=False, moved=False):
         """One walk, two files: index.txt is the manifest without its sizes."""
         try:
-            n, odd = self.build_manifest(said)
+            n, odd = self.build_manifest(said, moved)
         except Exception as e:
             self.log(f"File list not replaced ({e}); keeping the previous one"); return False
         with open(self.p("manifest.tsv"), encoding="utf-8", errors="surrogateescape") as m, \

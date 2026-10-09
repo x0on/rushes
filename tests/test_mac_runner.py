@@ -307,6 +307,27 @@ class Drives(MacJobs):
         self.r.minute(); self.r.busy["jobs"].join(); self.r.busy["upkeep"].join(60)
         return {d["name"]: d for d in json.load(open(os.path.join(self.web, "drives.json")))}
 
+    def test_each_drive_says_how_it_is_kept(self):
+        # asked per drive (Overview): its own answer wins over Setup 01's
+        os.makedirs(os.path.join(self.vol, "Films 1")); os.makedirs(os.path.join(self.vol, "Other"))
+        s = json.load(open(os.path.join(self.web, "settings.json")))
+        s["organise"] = {"shape": "one_place"}
+        s["sources"] = [{"label": "Films 1", "path": os.path.join(self.vol, "Films 1"), "how": "in_place"},
+                        {"label": "Other", "path": os.path.join(self.vol, "Other"), "how": "copy"},
+                        {"label": "Old", "path": os.path.join(self.vol, "Old")}]          # before it was asked: Setup 01
+        json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
+        self.assertEqual([d["name"] for d in self.r.drives()], ["Films 1"])
+
+    def test_a_new_archive_is_not_held_against_the_old_list(self):
+        for i in range(1200): self.put(f"Parks/{i}.mov", b"a")
+        self.assertTrue(self.r.build_index())
+        new = os.path.join(self.t, "New"); os.makedirs(new); open(os.path.join(new, "x.mov"), "wb").write(b"x")
+        s = json.load(open(os.path.join(self.web, "settings.json"))); s["archive"]["local"] = new; s["sources"] = []
+        json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
+        self.assertFalse(self.r.build_index(), "an ordinary list a tenth the size is still refused")
+        self.assertTrue(self.r.build_index(moved=True))
+        self.assertEqual(open(os.path.join(self.web, "index.txt")).read().count("\n"), 1)
+
     def test_a_drive_is_listed_kept_while_away_and_found_under_another_name(self):
         self.put("Parks/a.mov", b"a")
         clip = self.drive("Shoots/2019/b.mov", b"bb")

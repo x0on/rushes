@@ -823,6 +823,8 @@ class Window:
             self.set(step="later")
         elif do == "open-rushes" and local_up() is False:
             self.set(said="Rushes is still starting on this Mac. It opens in a moment: Open Rushes is ready when it answers.")
+        elif do == "open-overview" and local():
+            subprocess.run(["open", s["url"] + "/db/admin.php#overview"])
         elif do == "open-rushes":
             subprocess.run(["open", s["url"] + ("/db/admin.php#projects" if WATCHER else "/" if local() else "/db/admin.php")])
         elif do == "local-pick":
@@ -1213,7 +1215,8 @@ function draw() {
   // Set up: the side panel is the menu (its pages); setting up: it shows the steps
   const atHome = s.step === 'home', pages = s.watcher ? WPAGES : PAGES;
   if (atHome && !pages.some(x => x[0] === page)) page = 'ov';
-  $('navtop').innerHTML = atHome ? openBtn(s, true) : '';
+  // stopped, Overview has the one Turn Rushes on: not a second one beside it
+  $('navtop').innerHTML = atHome && !(s.local && !s.running && page === 'ov') ? openBtn(s, true) : '';
   $('navfoot').innerHTML = atHome ? 'Version ' + esc(s.version) + ' · <button class="lnk" data-credits="1">What it is made of</button>' : '';
   $('steps').innerHTML = atHome ? pages.map(x => '<li class="pg' + (x[0] === page ? ' on' : '') + '" data-page="' + x[0] + '">' + x[1] +
       '</li>').join('')
@@ -1398,8 +1401,9 @@ function home(s) {
       ? '<div class="box"><div class="head"><div class="t"><span class="dot' + (L.there ? ' ok' : ' warn') + '"></span><b>' + esc(base(L.archive)) + '</b><small class="muted" style="display:block">' +
           esc(L.archive) + ' · ' + (L.there ? 'plugged in' + (st && st.free ? ' · ' + size(st.free) + ' free' : '') : 'not plugged in: plug it in and Rushes carries on by itself') + '</small></div>' +
           btn('Show in Finder', 'reveal-archive', false, !L.there) + '</div></div>' +
-        '<div class="box"><div class="head"><div class="t">Move Rushes somewhere else<small class="muted" style="display:block">Another drive on this Mac, or a Rushes server on your network. Your footage is not touched.</small></div>' +
-          btn('Change…', 'change-where') + '</div></div>'
+        '<div class="box"><div class="head"><div class="t">Another drive as the archive<small class="muted" style="display:block">In Rushes → Manage → Overview, on that drive\'s card: <b>Make this the archive</b>. Every part of Rushes switches at once, nothing is moved, and you choose what this drive becomes.</small></div>' +
+          btn('Open Overview', 'open-overview', false, !s.rushes) + '</div></div>' +
+        '<p class="muted" style="font-size:12.5px">A Rushes server on your network instead of this Mac? <button class="lnk" data-do="change-where">Use a server…</button></p>'
       : '<div class="box"><div class="head"><div class="t"><span class="dot' + (s.rushes ? ' ok' : ' warn') + '"></span><b>A Rushes server</b><small class="muted" style="display:block">' + esc(s.url) +
           ' · ' + (s.rushes ? 'answering' : s.rushes === null ? 'asking …' : 'not answering right now') + '. This Mac does its copying and describing.</small></div>' + btn('Change…', 'change-where') + '</div></div>') +
       '<p style="margin-top:28px;font-size:12.5px"><button class="lnk danger" data-do="remove">Remove Rushes from this Mac…</button> <span class="muted">· it stops and no longer starts at login; the archive and its footage stay.</span></p>';

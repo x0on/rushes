@@ -13,7 +13,8 @@
 //   POST action=save from=<drive> drive=… folder=… nightly=…   a copy from one drive onto another (copies[])
 //   POST action=now [id=]                                      a run now, besides the nightly one
 //   POST action=off [id=]                                      no more runs (nothing on any drive changes)
-//   POST action=source drive=<path>                            that drive becomes a source (as Setup 03 would): Copy once, Add to Rushes
+//   POST action=source drive=<path> [how=in_place|copy]        that drive becomes a source (as Setup 03 would): kept where it is, or copied from
+//   POST action=make_archive drive=<path> old=read|backup|forget  Overview → that drive becomes the archive
 //   POST action=unsource drive=<path>                          Overview → Remove from Rushes (nothing on it changes)
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/activity.php';
@@ -104,16 +105,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sourc
     if (!$v) bk_said(400, ['error' => 'That drive is not one the helper can see right now.']);
     if ($v['card']) bk_said(400, ['error' => 'That is a card: cards come in through Ingest.']);
     if ($v['archive'] || str_starts_with(helper_archive() . '/', rtrim($drive, '/') . '/')) bk_said(400, ['error' => 'That is the archive itself.']);
-    $s = settings();
-    if (in_array($drive, array_column($s['sources'] ?? [], 'path'), true)) bk_said(200, ['ok' => true, 'said' => '']);
-    $s['sources'][] = ['label' => $v['name'], 'path' => $drive, 'seen_by' => 'helper'];
+    // how: asked on Overview when it is added: kept where it is (searchable) or a place to copy from;
+    // asked again, the drive's answer changes (nothing on it is touched either way)
+    $how = in_array($_POST['how'] ?? '', ['in_place', 'copy'], true) ? $_POST['how']
+         : ((settings()['organise']['shape'] ?? '') === 'in_place' ? 'in_place' : 'copy');
+    $s = settings(); $at = array_search($drive, array_column($s['sources'] ?? [], 'path'), true);
+    if ($at !== false && (($s['sources'][$at]['how'] ?? '') === $how)) bk_said(200, ['ok' => true, 'said' => '']);
+    if ($at === false) $s['sources'][] = ['label' => $v['name'], 'path' => $drive, 'seen_by' => 'helper', 'how' => $how];
+    else $s['sources'][$at]['how'] = $how;
     if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
     settings(true);
-    $said = ($s['organise']['shape'] ?? '') === 'in_place'
-        ? 'Added ' . $v['name'] . ' to Rushes: its files are listed now, then found in Search by name'
-        : 'Added ' . $v['name'] . ' as a drive to copy from';
+    if ($how === 'in_place') @file_put_contents(web_dir() . '/queue/' . date('Ymd-His') . '-source.job', "ACTION=reindex\nDRIVES=1\n");
+    $said = $how === 'in_place'
+        ? 'Added ' . $v['name'] . ' to Rushes, kept where it is: its files are listed now, then found in Search by name'
+        : 'Added ' . $v['name'] . ' as a drive to copy into the archive';
     activity_add('changed', $said);
     bk_said(200, ['ok' => true, 'said' => $said]);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'make_archive') {
+    // Overview → a drive → Make this the archive (HOW-IT-WORKS.md → Changing the archive). One action for
+    // every place that knows the archive: settings.json (the pages, the minute's work, the Mac app's window),
+    // and the helper, which restarts with it (ingest.py follow_archive). The old archive becomes what the
+    // person chose: a drive still read in Search (old=read), where the archive is backed up (old=backup), or
+    // nothing to Rushes (old=forget). Nothing on either drive is moved, changed or deleted.
+    if (helper_mode() === 'external') bk_said(400, ['error' => 'Rushes runs on a server here: its archive is set in Setup → This archive.']);
+    $drive = rtrim((string)($_POST['drive'] ?? ''), '/'); $old = (string)($_POST['old'] ?? '');
+    $seen = array_column(helper_volumes()['vols'], null, 'path'); $v = $seen[$drive] ?? $seen[$drive . '/'] ?? null;
+    if (!$v) bk_said(400, ['error' => 'That drive is not one the helper can see right now: plug it in first.']);
+    if ($v['card']) bk_said(400, ['error' => 'That is a card: cards come in through Ingest.']);
+    if ($v['archive']) bk_said(400, ['error' => 'That is already the archive.']);
+    if (!in_array($old, ['read', 'backup', 'forget'], true)) bk_said(400, ['error' => 'Choose what the old archive becomes.']);
+    // as runner.py archive_ok(): a folder at least two deep, never a system folder or Rushes' own web folder
+    $wd = rtrim(web_dir(), '/');
+    if (!preg_match('#^/[^/]+/[^/]#', $drive) || str_contains("$drive/", '/.') || preg_match('#^/(System|Library|usr|bin|sbin|etc|private|Applications|dev)(/|$)#', $drive)
+        || $drive === $wd || str_starts_with($drive . '/', $wd . '/'))
+        bk_said(400, ['error' => 'That cannot be the archive.']);
+    if (!is_dir($drive) || !is_writable($drive))
+        bk_said(400, ['error' => "Rushes cannot write on {$v['name']}: the archive keeps its records there (in _rushes), so it has to be writable."]);
+    $s = settings(); $was = rtrim(archive_dir(), '/'); $wasName = $s['archive']['label'] ?? basename($was);
+    // the old archive's own drive, for a backup onto it: it has to be plugged in to be one
+    $wasVol = null; foreach ($seen as $p => $x) { $p = rtrim($p, '/'); if ($p !== '' && ($was === $p || str_starts_with($was . '/', $p . '/'))) $wasVol = $x; }
+    if ($old === 'backup' && !$wasVol) bk_said(400, ['error' => "$wasName is not plugged in: plug it in to make it the backup, or choose another answer."]);
+    // the new archive is no longer a drive of its own (nor anything on it), nor a place to copy from
+    $s['sources'] = array_values(array_filter($s['sources'] ?? [], function ($r) use ($drive) {
+        $p = rtrim((string)($r['path'] ?? ''), '/'); return $p !== $drive && !str_starts_with($p . '/', $drive . '/') && !str_starts_with($drive . '/', $p . '/'); }));
+    $s['archive']['local'] = $drive; $s['archive']['label'] = $v['name'];
+    if (helper_mode() !== 'external') $s['archive']['as_seen_from_helper'] = $drive;
+    $also = [];
+    if (($s['backup']['drive'] ?? '') !== '' && rtrim($s['backup']['drive'], '/') === $drive) {
+        unset($s['backup']); $also[] = 'the backup that went onto it is off (an archive is not backed up onto itself)';
+    }
+    if ($old === 'read' && $was !== '') {
+        $s['sources'][] = ['label' => $wasName, 'path' => $was, 'seen_by' => 'helper', 'how' => 'in_place'];
+        $also[] = "$wasName stays in Search, read where it is";
+    } elseif ($old === 'backup') {
+        $s['backup'] = ['drive' => $wasVol['path'], 'folder' => 'Rushes backup', 'nightly' => false, 'since' => time()];
+        $also[] = "the archive is backed up onto {$wasVol['name']} / Rushes backup when you start it (Copying → Back up); its footage there is left as it is";
+    } else {
+        $also[] = "$wasName is no longer in Rushes; its files leave Search and nothing on it was touched";
+    }
+    if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
+    settings(true);
+    @file_put_contents(web_dir() . '/queue/' . date('Ymd-His') . '-archive.job', "ACTION=reindex\nNEW_ARCHIVE=1\n" . ($old === 'read' ? "DRIVES=1\n" : ''));
+    $said = "{$v['name']} is the archive now (it was $wasName): " . implode('; ', $also) . '. Listing it now';
+    activity_add('changed', $said);
+    bk_said(200, ['ok' => true, 'said' => $said, 'name' => $v['name']]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unsource') {

@@ -45,7 +45,10 @@ function sync_search(bool $force = false): array {
         }
         fclose($fh); $fh = null;
         // A partial or unexpectedly empty inventory must not erase a working catalog.
-        $old = (int)$db->querySingle('SELECT COUNT(*) FROM files');
+        // Counted only where Search looks now: after Make this the archive, the old archive's files are not held
+        // against the new one ('0' sorts right after '/': every path under $r is below it)
+        $old = 0; $q = $db->prepare('SELECT COUNT(*) FROM files WHERE path >= ? AND path < ?');
+        foreach ($roots as $r) { $q->bindValue(1, $r); $q->bindValue(2, substr($r, 0, -1) . '0'); $old += (int)$q->execute()->fetchArray()[0]; $q->reset(); }
         if (!$n || ($old > 1000 && $n < $old * 0.5)) throw new RuntimeException('The file list is incomplete. The existing search catalog was kept.');
         $merge = $db->prepare('INSERT OR REPLACE INTO files_new (path,name,ext,kind,bytes,dept,year,event,why,seen_at)
             SELECT path,name,ext,kind,bytes,dept,year,event,why,seen_at FROM files WHERE seen_at >= ?');

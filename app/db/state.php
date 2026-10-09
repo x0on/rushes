@@ -489,7 +489,7 @@ $mj = json_decode((string)@file_get_contents("$WEB/mounts.json"), true);
 $mnt = is_array($mj['mounts'] ?? null) ? $mj['mounts'] : [];
 $ha = helper_archive(); $dbk = settings()['backup'] ?? []; $cps = settings()['copies'] ?? [];
 $inSearch = array_flip(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()));
-$sources = array_flip(array_map(fn($r) => rtrim((string)($r['path'] ?? ''), '/'), settings()['sources'] ?? []));
+$sources = []; foreach (settings()['sources'] ?? [] as $r) $sources[rtrim((string)($r['path'] ?? ''), '/')] = source_in_place($r);
 $listing = $progress['said'] ?? '';
 $seenSrc = array_column(array_map(fn($d) => [rtrim((string)$d['path'], '/'), (string)$d['source']], drives_seen()), 1, 0);
 $drives_in = []; $drives_other = [];
@@ -502,7 +502,7 @@ foreach ($hv['vols'] as $dv) {
     $droles = [];
     if ($dArch) $droles[] = 'The archive';
     if (isset($inSearch[$dp])) $droles[] = 'In Search';
-    elseif (isset($sources[$dp]) && !$dArch) $droles[] = 'To copy from';
+    elseif (isset($sources[$dp]) && !$dArch) $droles[] = $sources[$dp] ? 'In Search' : 'To copy from';   // kept where it is: listed within a minute
     if (($dbk['drive'] ?? '') === $dv['path']) $droles[] = 'Backup goes here';
     foreach ($cps as $job) {
         if (($job['drive'] ?? '') === $dv['path']) $droles[] = 'Copy of ' . ($job['from_name'] ?? 'a drive') . ' goes here';
@@ -526,6 +526,7 @@ usort($drives_other, fn($a, $b) => [$a['kind'] === 'card', $a['name']] <=> [$b['
 echo json_encode([
     'drives_in' => $drives_in, 'drives_other' => $drives_other, 'helper_seen' => (int)($hv['at'] ?? 0),
     'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
+    'can_make_archive' => helper_mode() !== 'external', 'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()),
     'repeats'  => $repeats,
     'backup'   => backup_said(),
     'transfer' => $transfer,

@@ -96,9 +96,16 @@ function archive_dir(): string { return s_path('archive.local', '/share/VIDEO');
 // runner last saw of each (drives.json: name, ID, where it is, plugged in or
 // not), so an unplugged drive's files stay in search and say where they are.
 function drives_seen(): array {
-    if ((settings()['organise']['shape'] ?? '') !== 'in_place') return [];
+    $here = array_flip(array_map(fn($r) => rtrim((string)($r['path'] ?? ''), '/'), array_filter(settings()['sources'] ?? [], 'source_in_place')));
+    if (!$here) return [];
     $d = json_decode((string)@file_get_contents(web_dir() . '/drives.json'), true);
-    return is_array($d) ? array_values(array_filter($d, fn($x) => is_array($x) && str_starts_with((string)($x['path'] ?? ''), '/'))) : [];
+    return is_array($d) ? array_values(array_filter($d, fn($x) => is_array($x) && str_starts_with((string)($x['path'] ?? ''), '/')
+                                                         && isset($here[rtrim((string)($x['source'] ?? ''), '/')]))) : [];
+}
+// How one drive is looked after, asked when it is added (HOW-IT-WORKS.md → Drives): 'in_place', kept where it
+// is and searchable, or 'copy', a place to copy from. A drive added before it was asked follows Setup 01.
+function source_in_place($src): bool {
+    return (is_array($src) ? ($src['how'] ?? (settings()['organise']['shape'] ?? '')) : '') === 'in_place';
 }
 // Where the catalogue's files may be: the archive, and each of those drives.
 function catalogue_roots(): array {
@@ -348,6 +355,14 @@ function helper_volumes(): array {
             $vols[$f[1]]['days'][] = ['day' => $f[2], 'files' => (int)$f[3], 'bytes' => (int)$f[4]];
         }
     }
+    // The archive is the one in Setup, not any drive with Rushes' records on it: a drive that was the
+    // archive keeps its _rushes folder ('rushes'), and stays an ordinary drive once another one is
+    $ha = rtrim(helper_archive(), '/\\');
+    foreach ($vols as &$v) {
+        $p = rtrim($v['path'], '/\\'); $v['rushes'] = $v['archive'];
+        if ($ha !== '') $v['archive'] = $p !== '' && ($ha === $p || str_starts_with($ha . '/', $p . '/') || str_starts_with($ha . '\\', $p . '\\'));
+    }
+    unset($v);
     return ['at' => $at, 'os' => $os, 'fresh' => $at && time() - $at < 90,
             'ver' => $ver, 'how' => $how, 'host' => $host, 'analysis' => $an, 'stuck' => $stuck,
             'vols' => array_values($vols)];
@@ -469,8 +484,10 @@ function ago_words(int $t): string {
 // nothing is renamed and no project breaks) or, if none is linked, a folder
 // with the department's own name, made the first time something is ingested.
 function departments(): array {
-    return array_values(array_filter(settings()['organise']['departments'] ?? [],
+    $d = array_values(array_filter(settings()['organise']['departments'] ?? [],
         fn($d) => is_array($d) && trim($d['name'] ?? '') !== ''));
+    usort($d, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));   // A to Z everywhere they are listed
+    return $d;
 }
 // A link counts only while its folder is on the shelf: one left from an older
 // shelf (001 VIDEO's misspelt POLICE DEPARTMNET, say) would otherwise make a new
@@ -491,7 +508,7 @@ function shelf_folders(): array {
     $out = [];
     foreach (@scandir(shelf_dir()) ?: [] as $f)
         if (!preg_match('/^[._@#$]/', $f) && !(shelf_is_top() && in_array($f, ['ARCHIVE', 'PROXIES', 'Projects'], true)) && is_dir(shelf_dir() . "/$f")) $out[] = $f;
-    sort($out);
+    usort($out, "strnatcasecmp");                 // A to Z, whatever the case
     return $out;
 }
 

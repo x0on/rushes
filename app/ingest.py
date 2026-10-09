@@ -2405,6 +2405,26 @@ def learn_where():
         move_to(want, "Setup in Rushes has a new address for it")
 
 
+_arch_looked = [0.0]
+
+def follow_archive():
+    """Make this the archive (Overview) changes settings.json: the helper restarts
+    with the new archive, between steps, as it follows a new address."""
+    if os.environ.get("NAS_MOUNT") or time.time() - _arch_looked[0] < 60:
+        return
+    _arch_looked[0] = time.time()
+    want = ((_remote_json("settings.json").get("archive") or {})
+            .get("local" if BUILT_IN else "as_seen_from_helper") or "").rstrip("/\\")
+    if not want or want == NAS_MOUNT.rstrip("/\\"):
+        return                                     # the same, or Rushes did not answer
+    if _describing.is_set():
+        print(f"  the archive is now {want}; following it once describing reaches a stopping point")
+        return
+    print(f"\n{time.strftime('%H:%M:%S')}  the archive is now {want} (it was {NAS_MOUNT}). Restarting with it …")
+    sys.stdout.flush()
+    os.execv(sys.executable, [sys.executable, "-u"] + [a for a in sys.argv if a != "-u"])
+
+
 def rushes_elsewhere():
     """The first other address Rushes answers at, or None."""
     for u in [ARG_URL] + _where().get("known", []):
@@ -2669,6 +2689,7 @@ def watch(root, every=20):
         update_self()                  # between steps only; restarts itself if it did
         trim_own_log()
         learn_where()                  # and follows Rushes to a new address, if it has one
+        follow_archive()               # and to a new archive (Make this the archive)
         checkpoints().flush()          # search updates still waiting, if any
         try:
             body = fetch_queue()

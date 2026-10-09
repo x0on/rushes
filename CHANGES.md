@@ -3,6 +3,17 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.37 — October 2026
+
+Rushes organised around drives: each drive is asked what it is, and the archive is changed in one place.
+
+- **Make this the archive**, on a drive's card in Overview. It asks what the old archive becomes (a drive still read in Search, where the archive is backed up, or nothing), asks twice, and then every part of Rushes switches at once: the pages, the helper, and the Mac app. The new archive is listed straight away. Nothing on either drive is moved, copied or deleted.
+- **No more "the archive" on the wrong drive.** A drive that used to be the archive was still called the archive (it keeps Rushes' records folder). Now only the archive Setup names is.
+- **Setup and the Mac app show the archive** and say where to change it, instead of each having its own picker. Changing it no longer goes back through the setup steps.
+- **Each drive is asked on its own:** a drive Rushes does nothing with yet offers **Search it where it is**, **Copy into the archive…** or **Make it the archive…**. Setup 03 shows and changes each drive's answer; Setup 01 is only the default.
+- **Departments A to Z everywhere:** Ingest, Reorganize, the drive pages and Setup. Setup's list is tighter, and says it only links each department to a folder already there; Reorganize files what is inside.
+- **One Turn Rushes on:** when Rushes is stopped, its window shows the button once, not twice.
+
 ## 0.12.36 — October 2026
 
 - **Quit quits.** Quit from the menu bar now closes the Rushes window too. Left open, it kept the app "in use", and a new version could not replace it.

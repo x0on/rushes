@@ -1710,10 +1710,59 @@ at `http://<this Mac's name>.local:8642`, and then:
 
 `tests/test_router.sh` checks this door.
 
+### Each drive asked on its own
+
+A drive plugged in that Rushes does nothing with yet is listed under
+Overview → **Also on this Mac**, with the three things it can be:
+
+- **Search it where it is:** its files are listed and found in Search by
+  name; nothing on it is moved or changed (a source with `how: in_place`).
+- **Copy into the archive…:** Copying opens with it as From.
+- **Make it the archive…:** see below.
+
+A drive that is a place to copy from has **Search it where it is** on its
+card too; Setup 03 shows and changes each drive's answer. A drive added
+before it was asked follows Setup 01, which is now only that default
+(`source_in_place()` in `db/config.php`, `drives()` in `runner.py`).
+
+### Changing the archive
+
+One action, on the drive's own card in Overview: **Make this the archive…**.
+It asks what the archive now becomes, and asks twice before it happens:
+
+- **A drive Rushes still reads:** it stays in Search, where it is.
+- **Where the archive is backed up:** Copying → Back up is set to copy the
+  archive onto it (`Rushes backup`), off until it is started; what is on it
+  now stays. It has to be plugged in.
+- **Nothing:** its files leave Search; nothing on it is touched.
+
+Every place that knows the archive switches at once: `settings.json`
+(`archive.local`, its label, and the helper's view of it), which the pages,
+the minute's work and the Mac app's window all read; the helper restarts
+itself with it between steps (`follow_archive()` in `ingest.py`, as it
+follows a new address). The new archive is listed straight away
+(`ACTION=reindex`, `NEW_ARCHIVE=1`): its list is not refused for being
+smaller than the old archive's, and Search counts the old list only where
+it still looks. Nothing on either drive is moved, copied or deleted. The
+new drive has to be writable: the archive keeps its records there
+(`_rushes`).
+
+Which drive is the archive is Setup's answer, not a guess: a drive that
+once was the archive keeps its `_rushes` folder, and the helper reports
+that (`rushes` in `helper_volumes()`), but it is an ordinary drive once
+another one is the archive. Setup → This archive and the Mac app's Archive
+page show the archive and say where to change it; on a Mac neither has a
+picker of its own. Only for Rushes on this Mac or with a built-in helper:
+a server's archive is set in Setup.
+
+**In the code:** `db/backup.php` (`make_archive`, `source` with `how`),
+`db/admin.php` (`mkPanel()`, `drawDrives()`), `runner.py`
+(`build_manifest(moved)`), `db/sync.php`, `ingest.py` (`follow_archive()`).
+
 ### Drives that come and go
 
 For a person whose footage lives on several drives that are not all plugged
-in at once (Setup 01: **Leave media on its own drives**; 03 lists them).
+in at once (each kept where it is: see above; Setup 03 lists them).
 Done by Rushes on a Mac (`runner.py`); a NAS's runner does not list drives
 yet.
 

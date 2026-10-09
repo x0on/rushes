@@ -51,6 +51,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .cp .lnk { font-size: 12px; white-space: nowrap }
   .ov-now { margin: 4px 0 12px; font-size: 13.5px; color: var(--muted) } .ov-now b { color: var(--fg); font-weight: 600 }
   .drv-c .meter i { background: var(--muted) } .drv-c .meter i.hot { background: var(--warn) } .drv-c .meter i.full { background: var(--bad) }
+  .mk { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; cursor: default; flex-basis: 100% }
+  .mk label { display: flex; gap: 6px; align-items: baseline; margin: 4px 0 } .mk small { color: var(--muted) } .mk .btns { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
   .drv-c .inS { font-size: 12px; margin-top: 4px } .drv-c .acts { margin-top: 8px } .drv-c .acts .lnk { font-size: 12px }
   .also { padding: 4px 14px 12px } .also .row { gap: 10px; flex-wrap: wrap; padding: 7px 0; border-top: 1px solid var(--line) }
   .also .row svg { width: 20px; height: 20px; color: var(--muted); flex: none } .also .row .nm { flex: 1; min-width: 160px }
@@ -1507,11 +1509,29 @@ async function loadDrive(fresh) {
     };
   });
 }
+// Make this the archive (HOW-IT-WORKS.md → Changing the archive): one question, on the drive itself: what the
+// archive now becomes. Kept open across redraws (mkOpen); asked twice before it happens.
+let mkOpen = '', mkOld = '', mkSaid = '';
+function mkPanel(x, oldName) {
+  if (mkOpen !== x.path) return '';
+  const o = function (v, t, sub) {
+    return '<label><input type="radio" name="mkOld" value="' + v + '"' + (mkOld === v ? ' checked' : '') + '><span>' + t + '<br><small>' + sub + '</small></span></label>'; };
+  return '<div class="mk"><b>' + esc(x.name) + ' becomes the archive.</b> What does ' + esc(oldName) + ' become?' +
+    o('read', 'A drive Rushes still reads', 'Its files stay in Search, where they are. Nothing on it changes.') +
+    o('backup', 'Where the archive is backed up', 'Copying → Back up copies the archive onto it, when you start it. What is on it now stays.') +
+    o('forget', 'Nothing: forget it', 'Its files leave Search. Nothing on it is touched; add it again any time.') +
+    '<div class="btns"><button class="btn" data-mkgo="' + esc(x.path) + '" data-name="' + esc(x.name) + '"' + (mkOld ? '' : ' disabled') + '>Make ' + esc(x.name) + ' the archive</button>' +
+    '<button class="lnk" data-mkno="1">Cancel</button></div>' +
+    '<div class="note" style="margin-top:6px">Nothing is moved, copied or deleted. Every part of Rushes switches to it at once, and it is listed straight away.</div></div>';
+}
 function drawDrives(d) {
   const ins = d.drives_in || [], other = d.drives_other || [];
   const inPlace = !!d.in_place;
+  const archNow = (ins.find(function (x) { return x.kind === 'archive'; }) || {}).name || d.archive_name || 'the archive now';
+  const canMk = d.can_make_archive !== false;
   if (drv) { const nx = ins.find(function (x) { return x.path === drv.path; }); if (nx) drv = Object.assign(nx, { in: drv.in }); }
   $('drivesNow').innerHTML = !ins.length && !other.length ? '' :
+    (mkSaid ? '<div class="banner ok" style="margin:10px 14px 0"><div class="txt">' + esc(mkSaid) + '</div></div>' : '') +
     '<header><b>Drives in Rushes</b><span class="n">' + ins.length + (ins.length === 1 ? ' drive' : ' drives') +
       (d.helper_seen ? ' · looked ' + new Date(d.helper_seen * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + '</span></header>' +
     '<div class="drvs">' + ins.map(function (x) {
@@ -1525,16 +1545,22 @@ function drawDrives(d) {
         (x.now ? '<div class="lnow"><span class="spin" style="margin-right:6px"></span>' + esc(x.now) + '</div>' : '') +
         drvLevels(x) +
         (x.levels && x.levels.wait && x.levels.wait.n ? '<div class="more"><span class="bad" style="color:var(--warn)">' + x.levels.wait.n.toLocaleString() + ' files waiting to be filed</span></div>' : '') +
-        (own ? '<div class="acts"><button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button></div>' : '') +
+        '<div class="acts">' + (own ? '<button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button>' : '') +
+          (x.roles.indexOf('To copy from') >= 0 ? ' · <button class="lnk" data-how="in_place" data-src="' + esc(x.path) + '">Search it where it is</button>' : '') +
+          (canMk && x.kind !== 'archive' && x.kind !== 'card' && mkOpen !== x.path ? (own ? ' · ' : '') + '<button class="lnk" data-mk="' + esc(x.path) + '">Make this the archive…</button>' : '') +
+        '</div>' + mkPanel(x, archNow) +
         '</div>';
     }).join('') + '</div>' +
     (other.length ? '<div class="also"><div class="note" style="margin:4px 0 2px">Also on this Mac: Rushes sees them, and does nothing with them.</div>' +
       other.map(function (x) {
         return '<div class="row">' + DRV_ICON[x.kind] + '<span class="nm">' + esc(x.name) +
           '<small>' + DRV_KIND[x.kind] + (x.total ? ' · ' + tb(x.total - x.free) + ' on it' : '') + '</small></span>' +
+          // asked for each drive, not once for all: kept where it is, copied in, or the archive itself
           (x.kind === 'card' ? '<span class="note">use Ingest</span>'
-            : inPlace ? '<button class="btn quiet" data-addsrc="' + esc(x.path) + '" data-name="' + esc(x.name) + '" data-size="' + (x.total ? esc(tb(x.total - x.free)) : '') + '">Add to Rushes</button>'
-            : '<button class="btn quiet" data-copyfrom="' + esc(x.path) + '">Copy into the archive…</button>') + '</div>';
+            : '<button class="btn quiet" data-addsrc="' + esc(x.path) + '" data-name="' + esc(x.name) + '" data-size="' + (x.total ? esc(tb(x.total - x.free)) : '') + '">Search it where it is</button>' +
+              '<button class="btn quiet" data-copyfrom="' + esc(x.path) + '">Copy into the archive…</button>' +
+              (canMk && mkOpen !== x.path ? '<button class="btn quiet" data-mk="' + esc(x.path) + '">Make it the archive…</button>' : '')) +
+          mkPanel(x, archNow) + '</div>';
       }).join('') + '</div>' : '');
   $('drivesNow').hidden = pane !== 'overview' || (!ins.length && !other.length);
   $('drivesNow').querySelectorAll('[data-addsrc]').forEach(function (b) {
@@ -1542,10 +1568,44 @@ function drawDrives(d) {
       if (!sure(b, 'Its files become searchable by name. Listing ' + (b.dataset.size ? b.dataset.size + ' ' : '') + 'takes a while on a big share; nothing on it is moved or changed.', 'add:' + b.dataset.addsrc)) return;
       b.disabled = true; b.textContent = 'adding…';
       try {
-        const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: b.dataset.addsrc }) })).json();
+        const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: b.dataset.addsrc, how: 'in_place' }) })).json();
         if (x.error) throw new Error(x.error);
         b.textContent = 'Added ✓ listing within a minute';
-      } catch (e) { b.disabled = false; b.textContent = 'Add to Rushes'; oops('Did not happen: ' + e.message); }
+      } catch (e) { b.disabled = false; b.textContent = 'Search it where it is'; oops('Did not happen: ' + e.message); }
+    };
+  });
+  $('drivesNow').querySelectorAll('[data-how]').forEach(function (b) {
+    b.onclick = async function () {
+      if (!sure(b, 'Its files become searchable by name, where they are. Nothing on it is moved or changed.', 'how:' + b.dataset.src)) return;
+      b.disabled = true; b.textContent = 'asking…';
+      try {
+        const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: b.dataset.src, how: b.dataset.how }) })).json();
+        if (x.error) throw new Error(x.error);
+        b.textContent = 'Done ✓ listing within a minute';
+      } catch (e) { b.disabled = false; b.textContent = 'Search it where it is'; oops('Did not happen: ' + e.message); }
+    };
+  });
+  $('drivesNow').querySelectorAll('[data-mk]').forEach(function (b) {
+    b.onclick = function () { mkOpen = b.dataset.mk; mkOld = ''; drawDrives(d); };
+  });
+  $('drivesNow').querySelectorAll('[data-mkno]').forEach(function (b) {
+    b.onclick = function () { mkOpen = ''; mkOld = ''; drawDrives(d); };
+  });
+  $('drivesNow').querySelectorAll('[name=mkOld]').forEach(function (r) {
+    r.onchange = function () { mkOld = r.value; const g = $('drivesNow').querySelector('[data-mkgo]'); if (g) g.disabled = false; };
+  });
+  $('drivesNow').querySelectorAll('[data-mkgo]').forEach(function (b) {
+    b.onclick = async function () {
+      if (!mkOld) return;
+      if (!sure(b, 'Every part of Rushes switches to ' + b.dataset.name + ' now. Nothing on any drive is moved or deleted.', 'mk:' + b.dataset.mkgo + ':' + mkOld)) return;
+      b.disabled = true; b.textContent = 'Switching…';
+      try {
+        const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'make_archive', drive: b.dataset.mkgo, old: mkOld }) })).json();
+        if (x.error) throw new Error(x.error);
+        mkOpen = ''; mkOld = '';
+        mkSaid = 'Running ✓ · ' + x.said + '.';
+        drawDrives(d); setTimeout(load, 1500);
+      } catch (e) { b.disabled = false; b.textContent = 'Make ' + b.dataset.name + ' the archive'; oops('Did not happen: ' + e.message); }
     };
   });
   $('drivesNow').querySelectorAll('[data-unsource]').forEach(function (b) {
@@ -1561,7 +1621,7 @@ function drawDrives(d) {
   });
   $('drivesNow').querySelectorAll('[data-open]').forEach(function (c) {
     c.onclick = function (e) {
-      if (e.target.closest('button')) return;                 // its own buttons (Remove from Rushes) are not "open"
+      if (e.target.closest('button, .mk')) return;            // its own buttons (Remove from Rushes) and questions are not "open"
       openDrive((d.drives_in || []).find(function (x) { return x.path === c.dataset.open; }));
     };
   });

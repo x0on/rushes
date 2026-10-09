@@ -61,3 +61,33 @@ curl -s -b "$R/cj" -d action=save --data-urlencode "from=/Volumes/RAID 2" -d dri
 ID=$(python3 -c "import json;print(json.load(open('$W/settings.json'))['copies'][0]['id'])")
 curl -s -b "$R/cj" -d action=off -d id=$ID "$U/db/backup.php" | grep -q '"ok":true' && ! grep -q '"copies": \[\s*{' "$W/settings.json" \
   && ok "taken off the list by its id" || no "off: $(cat "$W/settings.json")"
+# Make this the archive (Overview): one action for every place that knows the archive; the old one
+# becomes what was chosen; nothing on either drive is touched. A drive that once was the archive keeps
+# its _rushes folder (the helper's flag) and is not taken for the archive because of it.
+N="$R/New"; mkdir -p "$N"
+printf 'vol\t%s\tNew\t8000\t7000\t0\t0\t0\t0\nvol\t/Volumes/WasArch\tWasArch\t8000\t100\t0\t1\t0\t0\n' "$N" >> "$W/helper-volumes.tsv"
+(cd "$W" && "$PHP" -r 'require "db/config.php"; foreach (helper_volumes()["vols"] as $v) echo $v["name"], "=", (int)$v["archive"], (int)$v["rushes"], " ";') \
+  | grep -q "Archive=11 .*New=00 WasArch=01" && ok "the archive is the one in Setup, not any drive with Rushes' records on it" \
+  || no "flags: $(cd "$W" && "$PHP" -r 'require "db/config.php"; foreach (helper_volumes()["vols"] as $v) echo $v["name"], "=", (int)$v["archive"], (int)$v["rushes"], " ";')"
+case "$(curl -s -b "$R/cj" -d action=make_archive --data-urlencode "drive=$N" "$U/db/backup.php")" in
+  *"old archive becomes"*) ok "not without saying what the old archive becomes" ;; *) no "no old" ;; esac
+case "$(curl -s -b "$R/cj" -d action=make_archive -d drive=/Volumes/EOS -d old=read "$U/db/backup.php")" in
+  *"cards come in"*) ok "never a card" ;; *) no "card as archive" ;; esac
+case "$(curl -s -b "$R/cj" -d action=make_archive -d drive=/Volumes/RAID\ 2 -d old=read "$U/db/backup.php")" in
+  *"cannot write"*) ok "never a drive Rushes cannot write on" ;; *) no "unwritable" ;; esac
+mkdir -p "$W/queue"; rm -f "$W"/queue/*-archive.job
+curl -s -b "$R/cj" -d action=make_archive --data-urlencode "drive=$N" -d old=read "$U/db/backup.php" | grep -q '"ok":true' && python3 - "$W/settings.json" "$A" "$N" <<'PY' && grep -q NEW_ARCHIVE=1 "$W"/queue/*-archive.job && ok "made the archive: settings, the old one read where it is, listed now" || no "make: $(cat "$W/settings.json")"
+import json, sys
+s, a, n = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+assert s["archive"]["local"] == n and s["archive"]["as_seen_from_helper"] == n and s["archive"]["label"] == "New", s["archive"]
+assert {"label": "Archive", "path": a, "seen_by": "helper", "how": "in_place"} in s["sources"], s["sources"]
+PY
+(cd "$W" && "$PHP" -r 'require "db/config.php"; foreach (helper_volumes()["vols"] as $v) echo $v["name"], "=", (int)$v["archive"], " ";') | grep -q "Archive=0 .*New=1" \
+  && ok "the card that is the archive follows at once" || no "card flags"
+curl -s -b "$R/cj" -d action=make_archive --data-urlencode "drive=$A" -d old=backup "$U/db/backup.php" | grep -q '"ok":true' && python3 - "$W/settings.json" "$A" "$N" <<'PY' && ok "and back: the old one is where the archive is backed up, the new one no longer a drive of its own" || no "back: $(cat "$W/settings.json")"
+import json, sys
+s, a, n = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+assert s["archive"]["local"] == a and s["backup"]["drive"] == n and s["backup"]["nightly"] is False, s
+assert a not in [x["path"] for x in s["sources"]], s["sources"]
+PY
+[ -z "$(ls -A "$N")" ] && ok "nothing was written on either drive" || no "wrote: $(ls -A "$N")"
