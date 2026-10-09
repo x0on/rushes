@@ -1604,6 +1604,7 @@ function drawDrives(d) {
         if (x.error) throw new Error(x.error);
         mkOpen = ''; mkOld = '';
         mkSaid = 'Running ✓ · ' + x.said + '.';
+        setTimeout(function () { mkSaid = ''; }, 120000);          // Activity keeps it after that
         drawDrives(d); setTimeout(load, 1500);
       } catch (e) { b.disabled = false; b.textContent = 'Make ' + b.dataset.name + ' the archive'; oops('Did not happen: ' + e.message); }
     };

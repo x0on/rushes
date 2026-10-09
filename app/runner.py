@@ -1206,13 +1206,19 @@ class Runner:
                             out.write(line); n += 1
         old = sum(1 for _ in open(self.p("manifest.tsv"), "rb")) if os.path.exists(self.p("manifest.tsv")) else 0
         # the same guard as runner.sh and sync.php: less than half the last list is a drive that answered partly
-        # a new archive (Make this the archive) is another drive: its list is not held against the last one
-        if (old > 1000 and n < old // 2 and not moved) or (old and not n):
+        # a new archive (Make this the archive) is another drive: its list is not held against the last one,
+        # until its first list is in (archive-moved.txt, written by db/backup.php); it may be empty
+        try: moved = moved or open(self.p("archive-moved.txt")).read().strip() == a
+        except OSError: pass
+        if not moved and ((old > 1000 and n < old // 2) or (old and not n)):
             os.replace(new, self.p("manifest-rejected.tsv"))
             raise RuntimeError(f"refused: {n} files listed where the last list had {old} — kept the last list "
                                "(the new one is manifest-rejected.tsv)")
         self.write("manifest-started.txt", f"{started}\n")
         os.replace(new, self.p("manifest.tsv"))
+        if moved:
+            try: os.remove(self.p("archive-moved.txt"))
+            except OSError: pass
         return n, odd
 
     def build_index(self, said=False, moved=False):

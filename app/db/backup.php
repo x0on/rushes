@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'make_
     // and the helper, which restarts with it (ingest.py follow_archive). The old archive becomes what the
     // person chose: a drive still read in Search (old=read), where the archive is backed up (old=backup), or
     // nothing to Rushes (old=forget). Nothing on either drive is moved, changed or deleted.
-    if (helper_mode() === 'external') bk_said(400, ['error' => 'Rushes runs on a server here: its archive is set in Setup → This archive.']);
+    if (!on_mac() || helper_mode() === 'external') bk_said(400, ['error' => 'Rushes runs on a server here: its archive is set in Setup → This archive.']);
     $drive = rtrim((string)($_POST['drive'] ?? ''), '/'); $old = (string)($_POST['old'] ?? '');
     $seen = array_column(helper_volumes()['vols'], null, 'path'); $v = $seen[$drive] ?? $seen[$drive . '/'] ?? null;
     if (!$v) bk_said(400, ['error' => 'That drive is not one the helper can see right now: plug it in first.']);
@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'make_
     if (!in_array($old, ['read', 'backup', 'forget'], true)) bk_said(400, ['error' => 'Choose what the old archive becomes.']);
     // as runner.py archive_ok(): a folder at least two deep, never a system folder or Rushes' own web folder
     $wd = rtrim(web_dir(), '/');
-    if (!preg_match('#^/[^/]+/[^/]#', $drive) || str_contains("$drive/", '/.') || preg_match('#^/(System|Library|usr|bin|sbin|etc|private|Applications|dev)(/|$)#', $drive)
+    if (!preg_match('#^/[^/]+/[^/]#', $drive) || str_contains("$drive/", '/.') || preg_match('#^/(System|Library|usr|bin|sbin|etc|private|Applications|dev|Users/Shared)(/|$)#', $drive)
         || $drive === $wd || str_starts_with($drive . '/', $wd . '/'))
         bk_said(400, ['error' => 'That cannot be the archive.']);
     if (!is_dir($drive) || !is_writable($drive))
@@ -156,10 +156,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'make_
     if (($s['backup']['drive'] ?? '') !== '' && rtrim($s['backup']['drive'], '/') === $drive) {
         unset($s['backup']); $also[] = 'the backup that went onto it is off (an archive is not backed up onto itself)';
     }
+    $kept = array_values(array_filter($s['copies'] ?? [], fn($c) => rtrim((string)($c['drive'] ?? ''), '/') !== $drive));
+    if (count($kept) < count($s['copies'] ?? [])) { $s['copies'] = $kept; $also[] = 'the copies that went onto it are off'; }
     if ($old === 'read' && $was !== '') {
         $s['sources'][] = ['label' => $wasName, 'path' => $was, 'seen_by' => 'helper', 'how' => 'in_place'];
         $also[] = "$wasName stays in Search, read where it is";
     } elseif ($old === 'backup') {
+        $prev = rtrim((string)($s['backup']['drive'] ?? ''), '/');
+        if ($prev !== '' && $prev !== rtrim($wasVol['path'], '/')) $also[] = 'it replaces the backup onto ' . basename($prev);
         $s['backup'] = ['drive' => $wasVol['path'], 'folder' => 'Rushes backup', 'nightly' => false, 'since' => time()];
         $also[] = "the archive is backed up onto {$wasVol['name']} / Rushes backup when you start it (Copying → Back up); its footage there is left as it is";
     } else {
@@ -167,6 +171,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'make_
     }
     if (!save_settings($s)) bk_said(500, ['error' => 'Could not save — is the web folder writable?']);
     settings(true);
+    // kept until the new archive's first list is in (runner.py build_manifest): one failed try does not lose it
+    @file_put_contents(web_dir() . '/archive-moved.txt', "$drive\n");
     @file_put_contents(web_dir() . '/queue/' . date('Ymd-His') . '-archive.job', "ACTION=reindex\nNEW_ARCHIVE=1\n" . ($old === 'read' ? "DRIVES=1\n" : ''));
     $said = "{$v['name']} is the archive now (it was $wasName): " . implode('; ', $also) . '. Listing it now';
     activity_add('changed', $said);

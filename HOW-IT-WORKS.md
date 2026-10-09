@@ -1741,8 +1741,9 @@ Every place that knows the archive switches at once: `settings.json`
 the minute's work and the Mac app's window all read; the helper restarts
 itself with it between steps (`follow_archive()` in `ingest.py`, as it
 follows a new address). The new archive is listed straight away
-(`ACTION=reindex`, `NEW_ARCHIVE=1`): its list is not refused for being
-smaller than the old archive's, and Search counts the old list only where
+(`ACTION=reindex`, `NEW_ARCHIVE=1`, and `archive-moved.txt` until its first
+list is in): its list is not refused for being smaller than the old
+archive's, or empty, and Search counts the old list only where
 it still looks. Nothing on either drive is moved, copied or deleted. The
 new drive has to be writable: the archive keeps its records there
 (`_rushes`).
@@ -1752,8 +1753,9 @@ once was the archive keeps its `_rushes` folder, and the helper reports
 that (`rushes` in `helper_volumes()`), but it is an ordinary drive once
 another one is the archive. Setup → This archive and the Mac app's Archive
 page show the archive and say where to change it; on a Mac neither has a
-picker of its own. Only for Rushes on this Mac or with a built-in helper:
-a server's archive is set in Setup.
+picker of its own. Only for Rushes on a Mac: a server's archive is set in
+Setup. Copies or a backup that went onto the new archive's drive are turned
+off, and a backup onto the old one replaces any other (both said).
 
 **In the code:** `db/backup.php` (`make_archive`, `source` with `how`),
 `db/admin.php` (`mkPanel()`, `drawDrives()`), `runner.py`

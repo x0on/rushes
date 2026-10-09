@@ -360,7 +360,8 @@ function helper_volumes(): array {
     $ha = rtrim(helper_archive(), '/\\');
     foreach ($vols as &$v) {
         $p = rtrim($v['path'], '/\\'); $v['rushes'] = $v['archive'];
-        if ($ha !== '') $v['archive'] = $p !== '' && ($ha === $p || str_starts_with($ha . '/', $p . '/') || str_starts_with($ha . '\\', $p . '\\'));
+        // an external helper may spell a share otherwise (a drive letter for a server path): its own flag counts too
+        if ($ha !== '') $v['archive'] = (helper_mode() === 'external' && $v['rushes']) || $p !== '' && ($ha === $p || str_starts_with($ha . '/', $p . '/') || str_starts_with($ha . '\\', $p . '\\'));
     }
     unset($v);
     return ['at' => $at, 'os' => $os, 'fresh' => $at && time() - $at < 90,

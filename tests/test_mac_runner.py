@@ -327,6 +327,12 @@ class Drives(MacJobs):
         self.assertFalse(self.r.build_index(), "an ordinary list a tenth the size is still refused")
         self.assertTrue(self.r.build_index(moved=True))
         self.assertEqual(open(os.path.join(self.web, "index.txt")).read().count("\n"), 1)
+        # Make this the archive leaves a mark until the new archive's first list is in: a retry, an empty drive
+        empty = os.path.join(self.t, "Empty"); os.makedirs(empty)
+        s["archive"]["local"] = empty; json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
+        open(os.path.join(self.web, "archive-moved.txt"), "w").write(empty + "\n")
+        self.assertTrue(self.r.build_index(), "the new archive's first list, though empty")
+        self.assertFalse(os.path.exists(os.path.join(self.web, "archive-moved.txt")))
 
     def test_a_drive_is_listed_kept_while_away_and_found_under_another_name(self):
         self.put("Parks/a.mov", b"a")

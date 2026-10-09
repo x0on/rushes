@@ -49,7 +49,7 @@ function sync_search(bool $force = false): array {
         // against the new one ('0' sorts right after '/': every path under $r is below it)
         $old = 0; $q = $db->prepare('SELECT COUNT(*) FROM files WHERE path >= ? AND path < ?');
         foreach ($roots as $r) { $q->bindValue(1, $r); $q->bindValue(2, substr($r, 0, -1) . '0'); $old += (int)$q->execute()->fetchArray()[0]; $q->reset(); }
-        if (!$n || ($old > 1000 && $n < $old * 0.5)) throw new RuntimeException('The file list is incomplete. The existing search catalog was kept.');
+        if ((!$n && $old) || ($old > 1000 && $n < $old * 0.5)) throw new RuntimeException('The file list is incomplete. The existing search catalog was kept.');
         $merge = $db->prepare('INSERT OR REPLACE INTO files_new (path,name,ext,kind,bytes,dept,year,event,why,seen_at)
             SELECT path,name,ext,kind,bytes,dept,year,event,why,seen_at FROM files WHERE seen_at >= ?');
         $merge->bindValue(1, $cutoff, SQLITE3_INTEGER); $merge->execute();
