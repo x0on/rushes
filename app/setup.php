@@ -52,6 +52,9 @@ if (($_POST['_kind'] ?? '') === '1') {
         $s['organise']['kind'] = ['one' => $one, 'many' => $many];
         $s['organise']['shelves'] = $shelfPick;
         $s['organise']['add_at_ingest'] = ($_POST['open'] ?? '') === '1';
+        // folders left as they are (in Search, never filed): one per line, names only
+        $s['organise']['keep'] = array_values(array_unique(array_filter(array_map(fn($x) => trim(str_replace(['/', '\\', "\0"], '', $x)),
+            preg_split('/\R/', (string)($_POST['keep'] ?? ''))), 'strlen')));
         if (save_settings($s)) { header('Location: /setup.php?plan=kind#plan'); exit; }
         $pBad[] = 'Could not write settings.json — is the web folder writable?';
     }
@@ -531,6 +534,11 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
         <small>The shelf: every <?= $e($one) ?> has its own folder inside it, and every shoot is filed there.
           Make the folder in the archive first if it is not in the list.</small></label>
 
+        <label class="f" style="margin-top:16px"><span>Folders left as they are</span>
+          <textarea form="pK" name="keep" rows="2" style="min-height:0" placeholder="COD PHOTO GALLERY"><?= $e(implode("\n", kept_folders())) ?></textarea>
+          <small>One per line: a folder at the top of <?= $e($s['archive']['label'] ?? 'the archive') ?> (or of the shelf) that is not to be filed &mdash;
+            a photo library, say. Its files are in Search; Tidy up never offers it.</small></label>
+
         <p style="margin:16px 0 8px;font-size:13px"><b>Who can add a new <?= $e($one) ?>?</b></p>
         <div class="pick">
           <label class="opt"><input form="pK" type="radio" name="open" value="0" <?= !shelf_open() ? 'checked' : '' ?>>
@@ -540,7 +548,7 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
             <b>Anyone, while bringing a shoot in</b>
             <small>For a list that grows every week &mdash; projects. Ingest gets &ldquo;add a new one&rdquo;; the no-catch-all rule still applies.</small></label>
         </div>
-        <div class="btns" style="margin-top:14px"><button form="pK" class="btn quiet" type="submit">Save these three</button></div>
+        <div class="btns" style="margin-top:14px"><button form="pK" class="btn quiet" type="submit">Save</button></div>
 
         </details>
         <details class="sub" id="plan-list"<?= (shelf_chosen() && !$rows) || $pSaid === 'ok' || (str_starts_with((string)$pSaid, 'check')) || $pBad ? ' open' : '' ?>>

@@ -131,9 +131,12 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var dest = function (r, dept) {
         var d = data.depts.filter(function (x) { return x.name === dept; })[0];
         if (!d) return '';
+        // as tidy.php dest_for(): a drive copied onto the shelf files its folders, not its own name; the year
+        // (from the folder's name or its clips' dates) goes between the department and the folder
         var tail = r.base !== '' ? r.key.slice(r.base.length)
+                 : r.flat ? '/' + r.key.split('/').pop()
                  : '/' + (r.key.slice(r.root.length + 1) || r.root.split('/').pop());
-        return (SHELF + '/' + d.folder + tail).split('/').join(' / ');
+        return (SHELF + '/' + d.folder + (r.year ? '/' + r.year : '') + tail).split('/').join(' / ');
       };
 
       function sum() {
@@ -180,6 +183,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             return '<div class="tg' + (r.busy ? ' busy' : '') + '"><div><b>' + esc(shown(r)) + '</b>'
               + '<small>' + (r.dept ? '' : '<span class="tag">no ' + ONE + '</span>') + (r.here ? 'already in the archive · ' : 'copied in · ') + num(r.n) + ' file' + (r.n > 1 ? 's' : '') + ' · ' + size(r.bytes)
               + (r.eg ? ' · <span title="' + esc(r.eg) + '">e.g. …' + esc(mid(r.eg)) + '</span>' : '') + '</small>'
+              + (r.here ? '<small>' + (r.year ? '<b>' + esc(r.year) + '</b> · ' : 'no year · ') + esc(r.year_why || '') + '</small>' : '')
               + (r.busy ? '<small class="flag">Still being copied &mdash; those files wait for the next tidy-up.</small>' : '')
               + '</div><div><select id="tp' + i + '" aria-label="Goes to"><option value="">— leave it '
               + (r.here ? 'where it is' : 'in ARCHIVE') + ' —</option>' + opts + '</select>'

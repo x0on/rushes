@@ -123,47 +123,118 @@ function proposal(): array {
     return ['groups' => array_merge(array_values($g), $h), 'shelf' => $shelf, 'records' => count($recs), 'here' => count($h)];
 }
 
-// Folders already in the archive that are not on the shelf: from the catalogue,
-// grouped as the records are (a department in the path: that folder and the one
-// under it; none: the first two levels). here_files() calls $each(path, bytes,
-// key, base, dept, via) for every such file, so the plan can name exactly the
-// files a picked row counted, and no others.
+// Folders already in the archive that are not filed yet: from the catalogue. Two places:
+//   at the top of the archive, outside the shelf (an old server's layout, a drive's own folders);
+//   inside a named shelf, its own top folders that are not a department ("VIDEOS/VIDEO from QNAP":
+//   whole drives copied onto the shelf, to be filed from there). Never Rushes' own folders, and never
+//   a folder Setup says to leave as it is (kept_folders(): a photo library, say).
+// Grouped as the records are: a department in the path, that folder and the one under it; none, the
+// first two levels at the top (three inside the shelf: the drive, then its folders). here_files()
+// calls $each(path, bytes, key, base, dept, via, kind, root) for every such file, so the plan can
+// name exactly the files a picked row counted, and no others.
 function here_files(callable $each): void {
     require_once __DIR__ . '/schema.php';
     $a = rtrim(archive_dir(), '/'); $L = strlen($a) + 1;
-    $off_shelf = function (string $top) {
-        if ($top === '' || strpbrk($top[0], '_@.#') !== false || in_array($top, ['ARCHIVE', 'PROXIES'], true)) return false;   // Rushes' own, hidden, the bin
+    $kept = array_map('strtolower', kept_folders());
+    $names = array_map(fn($d) => strtolower($d['name']), departments());
+    $is_dept = fn(string $f) => $f === 'Projects' || dept_of_folder($f) !== null || in_array(strtolower($f), $names, true);
+    $own = fn(string $f) => $f === '' || strpbrk($f[0], '_@.#') !== false || in_array($f, ['ARCHIVE', 'PROXIES'], true);
+    $off_shelf = function (string $top) use ($kept, $is_dept, $own) {
+        if ($own($top) || in_array(strtolower($top), $kept, true)) return false;   // Rushes' own, hidden, the bin, kept as it is
         if (!shelf_is_top()) return $top !== shelf_name();
-        return $top !== 'Projects' && dept_of_folder($top) === null
-            && !in_array(strtolower($top), array_map(fn($d) => strtolower($d['name']), departments()), true);
+        return !$is_dept($top);
     };
-    $tops = [];
-    $q = db()->query("SELECT path, bytes FROM files WHERE substr(path, 1, " . $L . ") = '" . SQLite3::escapeString("$a/") . "'");
+    $sh = shelf_is_top() ? '' : shelf_name();
+    $tops = []; $inside = [];
+    $q = db()->query("SELECT path, bytes, kind FROM files WHERE substr(path, 1, " . $L . ") = '" . SQLite3::escapeString("$a/") . "'");
     while ($r = $q->fetchArray(SQLITE3_ASSOC)) {
         $parts = explode('/', substr($r['path'], $L));
-        if (count($parts) < 2) continue;                      // a file loose at the top: left where it is
-        $tops[$parts[0]] ??= $off_shelf($parts[0]);
-        if (!$tops[$parts[0]]) continue;
+        $root = $a; $levels = 2;
+        if ($sh !== '' && $parts[0] === $sh) {
+            array_shift($parts); $root = "$a/$sh"; $levels = 3;
+            if (count($parts) < 2) continue;                  // a file loose on the shelf: left where it is
+            $inside[$parts[0]] ??= !$own($parts[0]) && !$is_dept($parts[0]) && !in_array(strtolower($parts[0]), $kept, true);
+            if (!$inside[$parts[0]]) continue;                // a department's folder: filed already
+        } else {
+            if (count($parts) < 2) continue;                  // a file loose at the top: left where it is
+            $tops[$parts[0]] ??= $off_shelf($parts[0]);
+            if (!$tops[$parts[0]]) continue;
+        }
         array_pop($parts);
         $dept = null; $at_i = -1;
         foreach ($parts as $i => $c) if (($dept = dept_named($c)) !== null) { $at_i = $i; break; }
         if ($dept !== null) {
-            $base = "$a/" . implode('/', array_slice($parts, 0, $at_i + 1));
+            $base = "$root/" . implode('/', array_slice($parts, 0, $at_i + 1));
             $key  = $base . (isset($parts[$at_i + 1]) ? '/' . $parts[$at_i + 1] : '');
         } else {
-            $base = ''; $key = "$a/" . implode('/', array_slice($parts, 0, 2));
+            $base = ''; $key = "$root/" . implode('/', array_slice($parts, 0, $levels));
         }
-        $each($r['path'], (int)$r['bytes'], $key, $base, $dept, $dept !== null ? $parts[$at_i] : '');
+        $each($r['path'], (int)$r['bytes'], $key, $base, $dept, $dept !== null ? $parts[$at_i] : '', (string)$r['kind'], $root);
     }
 }
+
+// ── the year a folder goes under (VIDEOS / department / year / the folder) ──────────────────
+// Evidence, strongest first, and never a person's guess:
+//   1. a year written in the folder's own path ("STOC 2025", "2019/Kite Fest"), the deepest one;
+//   2. its clips' dates: for each clip the oldest believable date it carries. A copy can only make a
+//      date newer (Finder's "created" is the day of the copy), so the oldest is the closest to the shoot.
+//      What the catalogue holds is the camera's own date (media.recorded, read with the preview) and
+//      the file's modified date (kept by every copy Rushes and rsync make). Before 2005 or in the
+//      future is a clock never set, and is not believed.
+// The folder's year is the one most of its clips agree on (4 in 5, at least). Clips that disagree
+// mean no year: the folder goes straight under its department, whole, rather than in a wrong year.
+const YEAR_AGREE = 0.8;                 // ponytail: a fixed share; a setting if 4 in 5 proves too strict
+const YEAR_SAMPLE = 200;                // clips read per folder at most: the dates of a big folder agree long before
+function year_in(string $s): ?string {
+    // a year on its own ("STOC 2025") or the start of a date written as digits ("20260205BikeLanes")
+    return preg_match_all('/(?<![0-9])(20[0-3][0-9]|199[0-9])(?:(?![0-9])|(?=[01][0-9][0-3][0-9](?![0-9])))/', $s, $m) ? end($m[1]) : null;
+}
+function clip_year(string $path): ?string {
+    static $put = null, $get = null, $rec = null;
+    $db = db();
+    if ($put === null) {
+        $db->exec('CREATE TABLE IF NOT EXISTS filedates (path TEXT PRIMARY KEY, t INTEGER)');
+        $put = $db->prepare('INSERT OR REPLACE INTO filedates (path, t) VALUES (?, ?)');
+        $get = $db->prepare('SELECT t FROM filedates WHERE path = ?');
+        $rec = $db->prepare('SELECT m.recorded FROM files f JOIN media m ON m.file_id = f.id WHERE f.path = ?');
+    }
+    $get->bindValue(1, $path); $t = $get->execute()->fetchArray(SQLITE3_NUM)[0] ?? null; $get->reset();
+    if ($t === null) {
+        $ok = fn($x) => $x !== false && $x !== null && $x >= 1104537600 && $x <= time() + 86400;   // 2005-01-01 to now
+        $c = []; $m = @filemtime($path); if ($ok($m)) $c[] = $m;
+        $rec->bindValue(1, $path); $r = $rec->execute()->fetchArray(SQLITE3_NUM)[0] ?? ''; $rec->reset();
+        if ($r !== '' && $ok($x = strtotime((string)$r))) $c[] = $x;
+        $t = $c ? min($c) : 0;
+        $put->bindValue(1, $path); $put->bindValue(2, $t); $put->execute(); $put->reset();
+    }
+    return $t ? date('Y', (int)$t) : null;
+}
+// -> [year or null, why]
+function folder_year(string $key, string $root, array $clips): array {
+    $own = basename($key);
+    if (preg_match('/^(20[0-3][0-9]|199[0-9])$/', $own)) return [null, 'a year folder already'];
+    if (($y = year_in(substr($key, strlen($root)))) !== null) return [$y, 'year in the folder\'s name'];
+    if (!$clips) return [null, 'no clips to date it by'];
+    $step = max(1, intdiv(count($clips), YEAR_SAMPLE)); $n = [];
+    for ($i = 0; $i < count($clips); $i += $step) { if (($y = clip_year($clips[$i])) !== null) $n[$y] = ($n[$y] ?? 0) + 1; }
+    if (!$n) return [null, 'its clips carry no believable date'];
+    arsort($n); $top = array_key_first($n);
+    $say = implode(', ', array_map(fn($y, $k) => "$y × $k", array_keys(array_slice($n, 0, 3, true)), array_slice($n, 0, 3, true)));
+    // agreement among the clips that carry a date; the undated ones neither help nor stand in the way
+    return $n[$top] >= YEAR_AGREE * array_sum($n) ? [(string)$top, "clips: $say"] : [null, "clips disagree ($say): no year"];
+}
+
 function here_groups(): array {
-    $g = []; $a = rtrim(archive_dir(), '/');
-    here_files(function ($path, $bytes, $key, $base, $dept, $via) use (&$g, $a) {
-        if (!isset($g[$key])) $g[$key] = ['key' => $key, 'root' => $a, 'base' => $base, 'dept' => $dept,
-            'via' => $via, 'n' => 0, 'bytes' => 0, 'busy' => false, 'eg' => '', 'here' => true];
+    $g = []; $clips = [];
+    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind, $root) use (&$g, &$clips) {
+        if (!isset($g[$key])) $g[$key] = ['key' => $key, 'root' => $root, 'base' => $base, 'dept' => $dept,
+            'via' => $via, 'n' => 0, 'bytes' => 0, 'busy' => false, 'eg' => '', 'here' => true,
+            'flat' => shelf_name() !== '' && $root === rtrim(archive_dir(), '/') . '/' . shelf_name()];
         $g[$key]['n']++; $g[$key]['bytes'] += $bytes;
         if ($g[$key]['eg'] === '') $g[$key]['eg'] = substr($path, strlen($key));
+        if ($kind === 'video') $clips[$key][] = $path;
     });
+    foreach ($g as $k => $row) [$g[$k]['year'], $g[$k]['year_why']] = folder_year($k, $row['root'], $clips[$k] ?? []);
     ksort($g, SORT_NATURAL | SORT_FLAG_CASE);
     return array_values($g);
 }
@@ -172,10 +243,12 @@ function here_groups(): array {
 function dest_for(array $row, string $dept, string $shelf): ?string {
     $folder = dept_folder($dept);
     if ($folder === null) return null;
+    $inShelf = !empty($row['flat']);
     $tail = $row['base'] !== ''
         ? substr($row['key'], strlen($row['base']))                        // below the old department folder
-        : '/' . (substr($row['key'], strlen($row['root']) + 1) ?: basename($row['root']));   // the whole path, kept
-    return $shelf . '/' . $folder . $tail;
+        : ($inShelf ? '/' . basename($row['key'])                          // a drive copied onto the shelf: its folder, not the drive's name
+                    : '/' . (substr($row['key'], strlen($row['root']) + 1) ?: basename($row['root'])));   // the whole path, kept
+    return $shelf . '/' . $folder . (!empty($row['year']) ? '/' . $row['year'] : '') . $tail;
 }
 
 // The tidy-ups done so far, newest first, and whether each has been put back.

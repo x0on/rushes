@@ -275,6 +275,11 @@ function shelf_dir(): string {
     if (shelf_is_top()) return archive_dir();
     return archive_dir() . '/' . (shelf_name() !== '' ? shelf_name() : '.no-shelf-chosen');
 }
+// Folders at the top of the archive (or of the shelf) left as they are: in Search, never filed.
+// Setup → Archive structure, one per line (a photo library the shelf is not for, say).
+function kept_folders(): array {
+    return array_values(array_filter(array_map('trim', (array)(settings()['organise']['keep'] ?? [])), 'strlen'));
+}
 // The shelf as the start of a path inside the archive: '' at the top, "NAME/" otherwise.
 function shelf_rel(): string { return shelf_name() === '' ? '' : shelf_name() . '/'; }
 // The folders at the top of the archive that could be the shelf: not Rushes'

@@ -21,6 +21,7 @@ const LEVELS_KEEP = 900;      // ponytail: 15 minutes; a trigger on media/moment
 // What a top folder of the archive is: on the shelf, waiting to be filed, or Rushes' own (tidy.php's rules).
 function archive_folder_is(string $top): string {
     if ($top === '' || strpbrk($top[0], '_@.#') !== false || $top === 'PROXIES') return 'own';
+    if (in_array(strtolower($top), array_map('strtolower', kept_folders()), true)) return 'kept';   // in Search, never filed
     if ($top === 'ARCHIVE') return 'waiting';                 // where copies land before a tidy-up
     if (!shelf_chosen()) return '';                            // no structure yet: nothing is "waiting"
     return shelf_is_top() || $top === shelf_name() ? 'filed' : 'waiting';
@@ -55,6 +56,23 @@ function drive_levels(string $root, string $in = '', bool $fresh = false): array
         }
         foreach (['n', 'b', 'v', 'p', 'd'] as $k) $t[$k] += $one[$k];
         $folders[] = $one;
+    }
+    // a named shelf holds whole drives copied onto it too ("VIDEOS/VIDEO from QNAP"): its own folders that
+    // are not a department wait to be filed, as tidy.php here_files() offers them
+    if (isset($t['wait']) && !shelf_is_top()) {
+        $pre2 = $root . '/' . shelf_name() . '/'; $L2 = strlen($pre2);
+        $q2 = $db->prepare("SELECT substr(path, :s, instr(substr(path, :s), '/') - 1) seg, COUNT(*) n, COALESCE(SUM(bytes),0) b
+            FROM files WHERE path >= :pre AND path < :hi AND instr(substr(path, :s), '/') > 0 GROUP BY seg");
+        $q2->bindValue(':s', $L2 + 1); $q2->bindValue(':pre', $pre2); $q2->bindValue(':hi', substr($pre2, 0, -1) . '0');
+        $names = array_map(fn($d) => strtolower($d['name']), departments());
+        $keep = array_map('strtolower', kept_folders());
+        $r2 = $q2->execute();
+        while ($x = $r2->fetchArray(SQLITE3_ASSOC)) {
+            $f = (string)$x['seg'];
+            if ($f === '' || strpbrk($f[0], '_@.#') !== false || $f === 'Projects' || dept_of_folder($f) !== null
+                || in_array(strtolower($f), $names, true) || in_array(strtolower($f), $keep, true)) continue;
+            $t['wait']['n'] += (int)$x['n']; $t['wait']['b'] += (int)$x['b'];
+        }
     }
     $out = ['for' => $for, 'at' => time(), 'root' => $root, 'in' => $in, 'total' => $t, 'folders' => $folders];
     meta_set($key, json_encode($out));

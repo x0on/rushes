@@ -1055,6 +1055,36 @@ now live on each editor's computer and are kept as copies, so it is off unless
   copy of the old folder's name (typos included). The old link stays, so the
   tidy-up still knows where that department's footage came from.
 
+- **folders left as they are**, one per line: a folder at the top of the archive
+  (or of the shelf) that is never filed, a photo library say. Its files are in
+  Search; Tidy up never offers it, and the drive page does not count it as waiting.
+
+**Whole drives copied onto the shelf.** A named shelf can hold whole drives
+copied onto it (`VIDEOS/VIDEO from QNAP`, `VIDEOS/VIDEO from the old server`).
+Its own top folders that are not a department wait to be filed, like folders
+outside the shelf, and the archive's drive page counts them as waiting. Their
+folders are filed under the department without the drive's name:
+`VIDEOS/VIDEO from QNAP/001 VIDEO/PARKS/Kite Fest` → `VIDEOS/PARKS/2019/Kite Fest`.
+Two drives with the same folder fill one folder, file by file; a file whose name
+is already there is left where it was, and said so.
+
+**The year.** Between the department and the folder, Tidy up puts the year, from
+evidence only (`tidy.php folder_year()`):
+
+1. a year in the folder's own path, the deepest one (`STOC 2025`,
+   `20260205BikeLanes`); a folder that *is* a year (`2025`) gets none added;
+2. otherwise its clips' dates: for each clip the oldest believable date it
+   carries, the camera's own (read with its preview) or the file's modified date
+   (every copy keeps it; Finder's "created" is the day of the copy and is never
+   used). Before 2005 or in the future is a clock never set. The folder's year is
+   the one at least 4 in 5 of its dated clips agree on; up to 200 clips are read
+   per folder, and each clip's date is kept (`filedates`), so it is read once.
+3. clips that disagree, or none dated: no year. The folder goes straight under
+   its department, whole, rather than into a wrong year.
+
+Each row says its year and why ("clips: 2019 × 38"), and every row can still be
+left where it is.
+
 Building the list:
 
 - Paste a list of names, and Rushes suggests a folder for each by close

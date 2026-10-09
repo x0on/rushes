@@ -3,6 +3,15 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.34 — October 2026
+
+Tidy up for an archive that is a big shared drive: whole drives copied onto the shelf, a year for every folder that has evidence of one, and folders left alone. Tidy up still shows everything first, moves only what you pick, writes every move down, and can put it all back.
+
+- **Whole drives on the shelf are filed from there.** With the shelf named (VIDEOS, say), its own folders that are not a department ("VIDEO from QNAP", "VIDEO from the old server") wait to be filed. Their folders go under the department without the drive's name, and two drives with the same folder fill one folder, file by file; nothing is ever put over a file.
+- **Department, then year, then the folder, whole.** The year comes from a year in the folder's path, or else from its clips' own dates: the oldest believable date each clip carries (the camera's, or its modified date; never the "created" date a copy resets). When the clips disagree, there is no year: the folder goes straight under its department rather than into a wrong one. Each row says its year and why.
+- **Folders left as they are** (Setup → Archive structure): a photo library, say. In Search, never offered for filing, not counted as waiting.
+- The archive's card and page count what waits inside the shelf too.
+
 ## 0.12.33 — October 2026
 
 The first step of Rushes organised around drives. Nothing here copies, moves or deletes anything new.

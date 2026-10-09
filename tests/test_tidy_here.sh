@@ -22,6 +22,7 @@ f "Old server/Misc stuff/deeper/PARKS/y.mov"
 f "POLICE/2020/already on the shelf.mov"
 f "_duplicates/z.mov"
 f "top.mov"
+touch -t 201806150000 "$A/Old server/Misc stuff/x.mov"           # its year, from the clip's date
 (cd "$A" && find "$A" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done) > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
 (cd "$R" && "$PHP" -S 127.0.0.1:18660 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
@@ -45,7 +46,7 @@ id=$(echo "$Q" | python3 -c 'import json,sys; print(json.load(sys.stdin)["queued
 plan=$(cat "$W/tidy-$id.tsv")
 [ "$(printf '%s\n' "$plan" | grep -c '^file	')" = 3 ] && ok "the plan names exactly the files of the picked rows" || no "plan: $plan"
 printf '%s\n' "$plan" | grep -q "^file	$A/Old server/Library/PARKS/2019/Kite/A001.MXF	$A/Parks/2019/Kite/A001.MXF$" \
-  && printf '%s\n' "$plan" | grep -q "^file	$M/x.mov	$A/POLICE/Old server/Misc stuff/x.mov$" \
+  && printf '%s\n' "$plan" | grep -q "^file	$M/x.mov	$A/POLICE/2018/Old server/Misc stuff/x.mov$" \
   && ! printf '%s\n' "$plan" | grep -q "deeper" \
-  && ok "each goes under its department's folder; a row's subfolders that are rows of their own stay out" || no "plan lines: $plan"
+  && ok "each goes under its department's folder (and the year its clips agree on, none under a year folder already); a row's subfolders that are rows of their own stay out" || no "plan lines: $plan"
 grep -q "^tidy	$id$" "$W/ingest-queue.tsv" && ok "the tidy-up is queued for the helper" || no "queue"
