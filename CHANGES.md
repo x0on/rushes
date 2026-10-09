@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.35 — October 2026
+
+- **Overview said "The archive is not answering" when it was.** One drive or file name that is not valid UTF-8 (written by an old Windows machine, say) made the whole status answer empty, and the Mac app's switches went grey. Such a name is now shown with a replacement character instead, and everything else carries on. The drive pages, Reorganize, Activity and Duplicates answer the same way.
+
 ## 0.12.34 — October 2026
 
 Tidy up for an archive that is a big shared drive: whole drives copied onto the shelf, a year for every folder that has evidence of one, and folders left alone. Tidy up still shows everything first, moves only what you pick, writes every move down, and can put it all back.

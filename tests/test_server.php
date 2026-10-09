@@ -133,8 +133,13 @@ $r = $copies(['copies' => "$root/archive/b4k.mov\toldserver\t1\n$root/archive/a.
 $sum = json_decode(file_get_contents("$root/app/copies-summary.json"), true);
 check($r['counted'] === 2 && $r['not_in_search'] === 1 && $sum['twice'][0] === 1 && $sum['lost'][0] === 1 && $sum['places']['oldserver'] === ['there' => 1, 'looked' => 2],
       'copies: a file whose original is still there is kept twice; one whose original went is only in the archive');
-check(str_contains(json_encode((function () use ($root) { ob_start(); include "$root/app/db/state.php"; return ob_get_clean(); })()), 'now exist only in the archive'),
-      'Overview warns when files lose their second copy');
+// A drive (or file) name that is not valid UTF-8, from an old Windows server say, must not empty the
+// whole status answer: json_encode() returns false on it, and Overview said only "not answering".
+file_put_contents(web_dir() . '/helper-volumes.tsv', "at\t" . time() . "\nvol\t/Volumes/Old\xff Drive\tOld\xff Drive\t1000\t500\t0\t0\t0\t0\n");
+$st = (function () use ($root) { ob_start(); include "$root/app/db/state.php"; return ob_get_clean(); })();
+@unlink(web_dir() . '/helper-volumes.tsv');
+check(is_array(json_decode($st, true)), 'the status answer survives a name that is not valid UTF-8');
+check(str_contains($st, 'now exist only in the archive'), 'Overview warns when files lose their second copy');
 // Relinking a Premiere project: every tidy-up (and undo) played forward, matched by the part inside the archive.
 @mkdir("$root/archive/_rushes/origin", 0777, true);
 $H = "$root/archive";      // the helper sees the archive at the same place in this fixture

@@ -26,7 +26,7 @@ header('Content-Type: application/json');
 if (!may_act((string)($_POST['pass'] ?? ''))) { http_response_code(403); echo '{"error":"sign in first"}'; exit; }
 @ini_set('memory_limit', '512M');           // ponytail: every record in memory; split by source if it outgrows this
 
-function out(array $a) { echo json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); exit; }
+function out(array $a) { echo json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
 function bail(int $code, string $why) { http_response_code($code); out(['error' => $why]); }
 
 function origin_dir(): string { return archive_dir() . '/_rushes/origin'; }

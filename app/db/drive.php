@@ -75,7 +75,7 @@ function drive_levels(string $root, string $in = '', bool $fresh = false): array
         }
     }
     $out = ['for' => $for, 'at' => time(), 'root' => $root, 'in' => $in, 'total' => $t, 'folders' => $folders];
-    meta_set($key, json_encode($out));
+    meta_set($key, json_encode($out, JSON_INVALID_UTF8_SUBSTITUTE));
     return $out;
 }
 
@@ -88,4 +88,4 @@ $root = rtrim((string)($_GET['path'] ?? ''), '/'); $in = trim(str_replace('\\', 
 if (!in_array($root, array_map(fn($r) => rtrim($r, '/'), catalogue_roots()), true) || str_contains("/$in/", '/../')) {
     http_response_code(400); echo json_encode(['error' => 'That drive is not in Search.']); exit;
 }
-echo json_encode(drive_levels($root, $in, isset($_GET['fresh'])), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+echo json_encode(drive_levels($root, $in, isset($_GET['fresh'])), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);

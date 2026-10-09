@@ -25,7 +25,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/activity.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
-function grp_said(int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); exit; }
+function grp_said(int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
 if (!signed_in()) grp_said(403, ['error' => 'sign in first']);
 
 // The archive's plan, or one drive's (kept where it is: drive=<its place in Setup>)

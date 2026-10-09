@@ -51,7 +51,7 @@ if (!is_array($tot) || ($tot['for'] ?? '') !== $for) {
         $x = $files ? db()->querySingle("SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM files WHERE substr(path, 1, $L) = '" . SQLite3::escapeString($pre) . "'", true) : null;
         $tot['roots'][rtrim($r, '/')] = [(int)($x['n'] ?? 0), (int)($x['b'] ?? 0)];
     }
-    meta_set('totals', json_encode($tot));
+    meta_set('totals', json_encode($tot, JSON_INVALID_UTF8_SUBSTITUTE));
 }
 $bytes = $tot['bytes'];
 
@@ -520,6 +520,9 @@ foreach ($hv['vols'] as $dv) {
 usort($drives_in, fn($a, $b) => [$a['kind'] !== 'archive', $a['name']] <=> [$b['kind'] !== 'archive', $b['name']]);
 usort($drives_other, fn($a, $b) => [$a['kind'] === 'card', $a['name']] <=> [$b['kind'] === 'card', $b['name']]);
 
+// JSON_INVALID_UTF8_SUBSTITUTE: one file or drive name that is not valid UTF-8 (a name from an old
+// Windows server, say) must not empty the whole answer: json_encode() returns false then, and the page
+// said only "not answering"
 echo json_encode([
     'drives_in' => $drives_in, 'drives_other' => $drives_other, 'helper_seen' => (int)($hv['at'] ?? 0),
     'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
@@ -624,4 +627,4 @@ echo json_encode([
     })(),
     'scripts'  => scripts_waiting(),
     'now'      => $now,
-], JSON_UNESCAPED_SLASHES);
+], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);

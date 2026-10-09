@@ -119,7 +119,7 @@ function activity_watchers(): array {
 
 if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     header('Content-Type: application/json'); header('Cache-Control: no-store');
-    $say = function (int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); exit; };
+    $say = function (int $code, array $a) { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; };
     if (($_POST['action'] ?? '') === 'hello') {
         // A browser given a name: said once, so Activity shows who started using Rushes where
         $name = activity_clean((string)($_POST['name'] ?? ''), 40);
