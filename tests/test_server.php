@@ -326,4 +326,11 @@ check(drive_levels($arch, 'Levels test')['at'] === $L['at'] && drive_levels("$ar
       "a drive's levels are kept for a while, and a folder's name is never a prefix of another's");
 check(archive_folder_is('ARCHIVE') === 'waiting' && archive_folder_is('_rushes') === 'own' && archive_folder_is('PROXIES') === 'own',
       'the archive: what copies brought in waits to be filed; Rushes\' own folders are not footage');
+// the archive itself as the shelf (Setup: "VIDEOS itself"): a whole drive copied to the top waits to be filed
+$sf = web_dir() . '/db/../settings.json'; $was = file_get_contents($sf); $sx = json_decode($was, true);
+$sx['organise']['shelves'] = '/'; $sx['organise']['departments'] = [['name' => 'Parks', 'folder' => '']];
+file_put_contents($sf, json_encode($sx)); settings(true);
+check(archive_folder_is('VIDEO from an old server') === 'waiting' && archive_folder_is('Parks') === 'filed' && archive_folder_is('_rushes') === 'own',
+      'the archive itself as the shelf: a whole drive copied to the top waits; a department\'s folder is filed');
+file_put_contents($sf, $was); settings(true);
 echo "Server tests complete. Fixture: $root\n";

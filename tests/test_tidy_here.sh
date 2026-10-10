@@ -46,7 +46,7 @@ id=$(echo "$Q" | python3 -c 'import json,sys; print(json.load(sys.stdin)["queued
 plan=$(cat "$W/tidy-$id.tsv")
 [ "$(printf '%s\n' "$plan" | grep -c '^file	')" = 3 ] && ok "the plan names exactly the files of the picked rows" || no "plan: $plan"
 printf '%s\n' "$plan" | grep -q "^file	$A/Old server/Library/PARKS/2019/Kite/A001.MXF	$A/Parks/2019/Kite/A001.MXF$" \
-  && printf '%s\n' "$plan" | grep -q "^file	$M/x.mov	$A/POLICE/2018/Old server/Misc stuff/x.mov$" \
+  && printf '%s\n' "$plan" | grep -q "^file	$M/x.mov	$A/POLICE/2018/Misc stuff/x.mov$" \
   && ! printf '%s\n' "$plan" | grep -q "deeper" \
   && ok "each goes under its department's folder (and the year its clips agree on, none under a year folder already); a row's subfolders that are rows of their own stay out" || no "plan lines: $plan"
 grep -q "^tidy	$id$" "$W/ingest-queue.tsv" && ok "the tidy-up is queued for the helper" || no "queue"

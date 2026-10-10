@@ -24,7 +24,11 @@ function archive_folder_is(string $top): string {
     if (in_array(strtolower($top), array_map('strtolower', kept_folders()), true)) return 'kept';   // in Search, never filed
     if ($top === 'ARCHIVE') return 'waiting';                 // where copies land before a tidy-up
     if (!shelf_chosen()) return '';                            // no structure yet: nothing is "waiting"
-    return shelf_is_top() || $top === shelf_name() ? 'filed' : 'waiting';
+    if (!shelf_is_top()) return $top === shelf_name() ? 'filed' : 'waiting';
+    // the archive itself is the shelf: a department's folder is filed; any other folder at the top (a whole
+    // drive copied in, "VIDEO from QNAP") waits, as tidy.php here_files() offers it
+    return $top === 'Projects' || dept_of_folder($top) !== null || in_array(strtolower($top), array_map(fn($d) => strtolower($d['name']), departments()), true)
+        ? 'filed' : 'waiting';
 }
 
 function drive_levels(string $root, string $in = '', bool $fresh = false): array {

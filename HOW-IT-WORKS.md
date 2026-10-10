@@ -1066,7 +1066,10 @@ outside the shelf, and the archive's drive page counts them as waiting. Their
 folders are filed under the department without the drive's name:
 `VIDEOS/VIDEO from QNAP/001 VIDEO/PARKS/Kite Fest` → `VIDEOS/PARKS/2019/Kite Fest`.
 Two drives with the same folder fill one folder, file by file; a file whose name
-is already there is left where it was, and said so.
+is already there is left where it was, and said so. The same goes when the
+archive itself is the shelf (the archive is the `VIDEOS` folder, say): a folder
+at its top that is not a department is a drive copied in, waits, and its
+folders are filed without its name.
 
 **The year.** Between the department and the folder, Tidy up puts the year, from
 evidence only (`tidy.php folder_year()`):

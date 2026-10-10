@@ -229,7 +229,9 @@ function here_groups(): array {
     here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind, $root) use (&$g, &$clips) {
         if (!isset($g[$key])) $g[$key] = ['key' => $key, 'root' => $root, 'base' => $base, 'dept' => $dept,
             'via' => $via, 'n' => 0, 'bytes' => 0, 'busy' => false, 'eg' => '', 'here' => true,
-            'flat' => shelf_name() !== '' && $root === rtrim(archive_dir(), '/') . '/' . shelf_name()];
+            // its folder goes under the department without the drive's name: a drive copied onto a named shelf,
+            // or onto the archive's top when the archive itself is the shelf ("VIDEO from QNAP/Kite Fest")
+            'flat' => $root === rtrim(archive_dir(), '/') . (shelf_is_top() ? '' : '/' . shelf_name())];
         $g[$key]['n']++; $g[$key]['bytes'] += $bytes;
         if ($g[$key]['eg'] === '') $g[$key]['eg'] = substr($path, strlen($key));
         if ($kind === 'video') $clips[$key][] = $path;

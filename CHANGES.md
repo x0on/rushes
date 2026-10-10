@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.38 — October 2026
+
+- **The archive itself as the shelf** (Setup: "VIDEOS itself: departments straight at the top"): a folder at the top that is not a department ("VIDEO from QNAP") is a whole drive copied in. Reorganize files its folders under the department without the drive's name, as it does on a named shelf, and the archive's card counts it as waiting (it said every file was waiting, or none).
+
 ## 0.12.37 — October 2026
 
 Rushes organised around drives: each drive is asked what it is, and the archive is changed in one place.
