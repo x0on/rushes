@@ -514,6 +514,24 @@ function refile_plan(array $ops, ?callable $say = null): array {
     }
     return [$lines, $n, $b, $per, $eg];
 }
+// Show in Finder: a folder of the archive opened in a Finder window on the Mac Rushes runs on — only for someone
+// using Rushes on that same Mac (the page is opened from it), only a folder inside the archive, only opened
+// (nothing in it is touched). where: 'archive' (below the archive: File in) or 'shelf' (below the shelf: Tidy up).
+function finder_ok(): bool {
+    return on_mac() && PHP_OS_FAMILY === 'Darwin' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
+}
+if (($_POST['finder'] ?? '') !== '') {
+    if (!finder_ok()) bail(400, 'Show in Finder works on the Mac Rushes runs on, opened from it.');
+    $rel = trim(str_replace('\\', '/', (string)$_POST['finder']), '/');
+    $base = rtrim(($_POST['where'] ?? '') === 'shelf' ? shelf_dir() : archive_dir(), '/');
+    $real = realpath("$base/$rel"); $arch = realpath(archive_dir());
+    if ($rel === '' || str_contains("/$rel/", '/../') || !$real || !$arch || !str_starts_with($real . '/', $arch . '/') || !is_dir($real))
+        bail(400, 'That folder is not in the archive any more.');
+    exec('open ' . escapeshellarg($real) . ' 2>&1', $o, $code);
+    if ($code) bail(500, 'Finder did not open it: ' . implode(' ', $o));
+    out(['ok' => true, 'said' => 'Opened in Finder: ' . basename($real)]);
+}
+
 if (isset($_REQUEST['shelftree'])) {
     $rel = trim((string)$_REQUEST['shelftree'], '/');
     if ($rel !== '' && !shelf_rel_ok($rel)) bail(400, 'That is not a folder in the structure.');

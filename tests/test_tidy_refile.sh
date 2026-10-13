@@ -54,3 +54,5 @@ has "PUBLIC AFFAIRS/DRONE A/City Hall/c.mov" "PUBLIC AFFAIRS/DRONE/City Hall/c.m
 has "PUBLIC AFFAIRS/009 DRONE/City Hall/e.mov" "PUBLIC AFFAIRS/DRONE/City Hall/e.mov"
 [ "$(printf '%s\n' "$plan" | wc -l | tr -d ' ')" = 4 ] && ok "moved to another department, two folders merged into one; each file as a refile line for the helper" || no "plan: $plan"
 grep -q "^tidy	$id$" "$W/ingest-queue.tsv" && ok "queued as any tidy-up: recorded, and Put back undoes it" || no "queue"
+case "$(curl -s -d pass=rushes --data-urlencode "finder=PUBLIC AFFAIRS/2019" -d where=shelf "$U/db/tidy.php")" in
+  *"works on the Mac Rushes runs on"*) ok "Show in Finder only on the Mac Rushes runs on (not a server)" ;; *) no "finder elsewhere" ;; esac

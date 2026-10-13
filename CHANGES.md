@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.49 — October 2026
+
+- **Show in Finder.** On the Mac Rushes runs on, a placed folder in File in, and any folder in Tidy up, opens in a Finder window: look at its clips (space bar plays them), then decide. Nothing in it is touched. From another computer the button stays **Show it**, which opens the left side down to the folder.
+
 ## 0.12.48 — October 2026
 
 - **Tidy up: changes inside the structure, without Finder.** Reorganize has a second tab, **Tidy up**: your structure as a folder tree. On any folder, **Move to…** another folder (as a folder inside it, or merged into it), **Rename**, or make a **New folder**. Every change is planned first and shown (struck through, with where it goes, and in a list), and nothing moves until **Apply**: the same review, the same one-file-at-a-time move, recorded for Put back and for relinking Premiere projects. A department's own folder is not moved here, and nothing goes inside itself.

@@ -13,6 +13,8 @@ require_sign_in();
 $ONE = shelf_word(); $one = strtolower($ONE);
 $e = fn($x) => htmlspecialchars((string)$x);
 // the shelf as people read it: never the placeholder for "not chosen yet"
+// Show in Finder: offered only on the Mac Rushes runs on, opened from it (db/tidy.php finder_ok())
+$FINDER = on_mac() && PHP_OS_FAMILY === 'Darwin' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
 $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (settings()['archive']['label'] ?? 'the archive') : shelf_name());
 ?><!doctype html>
 <html lang="en">
@@ -387,6 +389,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
       var num = function (n) { return Number(n).toLocaleString(); };
       var ICON = function (cls) { return '<svg class="fi ' + (cls || '') + '" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 5.1v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>'; };
+      var FINDER = <?= $FINDER ? 'true' : 'false' ?>;
       var KEY = 'rushes-tidy-plan', kids = {}, open = {}, ops = {}, made = [], form = null, token = '';
       try { var k = JSON.parse(localStorage.getItem(KEY) || '{}'); ops = k.ops || {}; made = k.made || []; } catch (e) {}
       var save = function () { try { localStorage.setItem(KEY, JSON.stringify({ops: ops, made: made})); } catch (e) {} };
@@ -408,7 +411,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           + '<span class="nm">' + (dept ? '<b>' + esc(f.name) + '</b>' : esc(f.name)) + '</span>'
           + '<small>' + (f.n ? num(f.n) + ' files &middot; ' + size(f.b) : 'empty') + '</small>'
           + '<span class="acts">' + (to ? '<span class="will">&rarr; ' + esc(shown(to)) + '</span><button type="button" class="x" data-undo="' + esc(f.rel) + '" title="Do not change it">&times;</button>'
-            : (dept ? '' : '<button type="button" class="mv" data-move="' + esc(f.rel) + '">Move to&hellip;</button><button type="button" class="mv" data-rename="' + esc(f.rel) + '">Rename</button>')
+            : (FINDER && f.n ? '<button type="button" class="mv" data-finder="' + esc(f.rel) + '">Show in Finder</button>' : '')
+              + (dept ? '' : '<button type="button" class="mv" data-move="' + esc(f.rel) + '">Move to&hellip;</button><button type="button" class="mv" data-rename="' + esc(f.rel) + '">Rename</button>')
               + '<button type="button" class="mv" data-new="' + esc(f.rel) + '">New folder</button>') + '</span></div>'
           + (form && form.rel === f.rel ? formHtml() : '')
           + (o ? '<div class="kids">' + newKids.map(function (m) { return '<div class="nd new">' + ICON() + '<span class="nm">' + esc(last(m)) + '</span><small>new folder &middot; made when something moves into it</small>'
@@ -465,6 +469,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       $('tuView').addEventListener('click', function (ev) {
         var t = ev.target, x;
         if ((x = t.closest('[data-open]'))) return openFolder(x.dataset.open);
+        if ((x = t.closest('[data-finder]'))) return window.finder(x, x.dataset.finder, 'shelf');
         if ((x = t.closest('[data-move]'))) { form = {kind: 'move', rel: x.dataset.move}; return draw(); }
         if ((x = t.closest('[data-rename]'))) { form = {kind: 'rename', rel: x.dataset.rename}; return draw(); }
         if ((x = t.closest('[data-new]'))) { form = {kind: 'new', rel: x.dataset.new}; return draw(); }
@@ -530,7 +535,17 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           + (p.length ? '' : '') + '</span>';
       };
       var ICON = function (cls) { return '<svg class="fi ' + (cls || '') + '" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 5.1v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>'; };
-      var dopen = {}, peek = '';                  // departments folded or open on the right (open while they hold something)
+      var dopen = {}, peek = '';
+      var FINDER = <?= $FINDER ? 'true' : 'false' ?>;
+      // opens the folder in Finder, on this Mac; says so on the button for a moment
+      window.finder = function (b, rel, where) {
+        var was = b.textContent; b.textContent = 'Opening…';
+        var f = new FormData(); f.append('finder', rel); f.append('where', where);
+        fetch('/db/tidy.php', {method: 'POST', body: f}).then(function (r) { return r.json(); }).then(function (d) {
+          b.textContent = d.error ? 'Did not open: ' + d.error : 'Opened in Finder ✓';
+        }).catch(function () { b.textContent = 'Did not open'; }).then(function () { setTimeout(function () { b.textContent = was; }, 3000); });
+      };
+      var finder = window.finder;                  // departments folded or open on the right (open while they hold something)
       var SMALL = 20;                  // fewer files than this: listed under "small ones", not in the way
       var sopen = {}, ssmall = {};
       // placed: the folder itself or one above it is on the right (then it is not on the left any more)
@@ -639,7 +654,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
                   // kept as a folder, under a name you can change: two folders given the same name become one (DRONE)
                   + (p.named ? '' : '<small><label style="cursor:pointer"><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep it as a folder</label>'
                     + (p.keep ? ' named <input type="text" class="nmin" data-name="' + esc(r) + '" value="' + esc(nm) + '" aria-label="The folder\'s name">' : '') + '</small>')
-                  + '</span><span class="acts"><button type="button" class="lnk2" data-show="' + esc(r) + '">Show it</button>'
+                  + '</span><span class="acts"><button type="button" class="lnk2" data-show="' + esc(r) + '">' + (FINDER ? 'Show in Finder' : 'Show it') + '</button>'
                   + '<button type="button" class="btn quiet sm" data-off="' + esc(r) + '" title="It goes back to the left and does not move">Take out</button></span></div>';
               }).join('') + '</div>' : '')
             + '</div>';
@@ -699,7 +714,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         if ((x = t.closest('[data-dopen]'))) { var dd = x.dataset.dopen; dopen[dd] = !(dopen[dd] !== undefined ? dopen[dd] : true); return draw(); }
         if ((x = t.closest('[data-sg]'))) { sopen[x.dataset.sg] = !sopen[x.dataset.sg]; return draw(); }
         if ((x = t.closest('[data-small]'))) { ssmall[x.dataset.small] = 1; return draw(); }
-        if ((x = t.closest('[data-show]'))) return reveal(x.dataset.show);
+        if ((x = t.closest('[data-show]'))) return FINDER ? finder(x, x.dataset.show, 'archive') : reveal(x.dataset.show);
         if ((x = t.closest('[data-yesall]'))) {
           var k = x.dataset.yesall, d = k.slice(0, k.indexOf('|')), nm = k.slice(k.indexOf('|') + 1).toLowerCase();
           sugg.forEach(function (m) { if (m.dept === d && last(m.rel).toLowerCase() === nm && !plan[m.rel] && !no[m.rel] && !placed(m.rel)) plan[m.rel] = {dept: d, keep: false, n: m.n, b: m.b, by: 'you'}; });
