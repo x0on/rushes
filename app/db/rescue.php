@@ -116,7 +116,14 @@ $maybe = count(array_filter($rows, fn($r) => $r['good'] !== '' && !$r['sure']));
 $rows = array_map(fn($r) => $r + ['rel' => str_starts_with($r['path'], "$A/") ? substr($r['path'], strlen($A) + 1) : $r['path'],
                                   'where' => $where($r['good']),
                                   'show' => str_starts_with($r['good'], 'ssh:') ? explode(':', $r['good'], 3)[2] : $r['good']], array_slice($rows, 0, 5000));
-$servers = array_map(fn($x) => $x + ['state' => json_decode((string)@file_get_contents("$W/ssh-" . ssh_key($x) . '.json'), true) ?: null], ssh_servers());
+// what each server is at: its own note, or asked and waiting its turn behind another job (never a silent "not yet")
+$queued = array_map(fn($j) => (string)@file_get_contents($j), glob("$W/queue/*ssh-list.job") ?: []);
+$servers = array_map(function ($x) use ($W, $queued, $st) {
+    $state = json_decode((string)@file_get_contents("$W/ssh-" . ssh_key($x) . '.json'), true) ?: null;
+    $asked = (bool)array_filter($queued, fn($q) => str_contains($q, "NAME={$x['name']}\n"));
+    if ($asked) $state = ['state' => 'asked', 'busy' => $st !== '' && $st !== 'idle' ? trim(str_replace('running:', '', $st)) : ''];
+    return $x + ['state' => $state];
+}, ssh_servers());
 out(['servers' => $servers, 'looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked' => $asked,
      'running' => str_contains($st, 'rescue-') ? (str_contains($st, 'apply') ? 'rescuing' : 'looking') : '',
      'total' => count($found()), 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,

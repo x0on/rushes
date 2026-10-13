@@ -966,7 +966,13 @@ class Runner:
         elif action == "rescue-scan":
             self.rescue_scan()
         elif action == "ssh-list":
-            self.ssh_list(re.sub(r"[\x00-\x1f]", "", f.get("NAME", ""))[:60])
+            name = re.sub(r"[\x00-\x1f]", "", f.get("NAME", ""))[:60]
+            try:
+                self.ssh_list(name)
+            except Exception as e:             # said on the page, not only in the log
+                sv = next((x for x in self.ssh_servers() if x["name"] == name), None)
+                if sv: self.write(f"ssh-{sv['key']}.json", json.dumps({"state": "failed", "why": f"stopped: {e}", "at": int(time.time())}))
+                raise
         elif action == "rescue-apply":
             self.rescue_apply(who)
         elif action in ("cacheclean", "cache-undo"):
@@ -1089,13 +1095,13 @@ class Runner:
         os.makedirs(self.p("ssh"), exist_ok=True)
         out = self.p(os.path.join("ssh", sv["key"] + ".tsv"))
         # ls -ln, not stat: every NAS has it with the same columns (busybox, GNU, BSD), size fifth, the name after the time
-        cmd = f"find {shlex.quote(sv['path'])} {SSH_SKIP} -type f -exec ls -ln {{}} +"
+        cmd = f"find {shlex.quote(sv['path'].rstrip('/') + '/')} {SSH_SKIP} -type f -exec ls -ln {{}} +"
         n, t0 = 0, time.time()
         with open(out + ".new", "w") as f:
             p = subprocess.Popen(["ssh", *SSH_OPTS, "--", sv["host"], cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="surrogateescape")
             for l in p.stdout:
                 f8 = l.rstrip("\n").split(None, 8)
-                size, path = (f8[4], f8[8]) if len(f8) == 9 else ("", "")
+                size, path = (f8[4], f8[8].replace("//", "/")) if len(f8) == 9 else ("", "")
                 if size.isdigit() and path.startswith(sv["path"]):
                     f.write(f"{size}\t{path}\n"); n += 1
                     if n % 5000 == 0:

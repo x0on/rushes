@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.8 — October 2026
+
+- **A server over SSH says what it is doing.** Asked, it says "asked: it starts within a minute" (and after what, if another job runs first); a listing that stops for any reason says why, on the page; "No route to host" says what to check (macOS's Local Network permission for Rushes, or the cable).
+- **A folder that is a shortcut works** (a QNAP's /share/VIDEO points to /share/CACHEDEV1_DATA/VIDEO): it is followed, as Terminal does.
+
 ## 0.13.7 — October 2026
 
 - **Rescue looks on a server over SSH too** (Rescue → Also look on a server over SSH), for a NAS Finder cannot open but SSH can. Give it a name, the address as you type it after `ssh`, and its folder (such as `/share/VIDEO`). Rushes uses this Mac's own SSH login, the one Terminal uses: it never asks for or keeps a password. It lists the server's files once (names and sizes only, light on its disks), and **Look for broken files** then looks there for good copies too, reading only the first bytes of the candidates, with the same "sure" rules. **Rescue** copies only what you tick from it, one file at a time, and swaps it in only when the fingerprint taken on the server and the one taken here agree. Nothing on the server is ever changed.

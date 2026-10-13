@@ -89,7 +89,10 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
         (st.state === 'listed' ? '✓ ' + (st.n || 0).toLocaleString() + ' files listed ' + esc(when(st.at)) + ': Look for broken files looks there too'
          : st.state === 'listing' ? '<span class="spin"></span> listing… ' + (st.n || 0).toLocaleString() + ' files so far'
          : st.state === 'testing' ? '<span class="spin"></span> connecting…'
-         : st.state === 'failed' ? 'Could not: ' + esc(st.why || '') + (/denied|password|key/i.test(st.why || '') ? ' — this Mac’s SSH login did not let Rushes in without a password' : '')
+         : st.state === 'asked' ? '<span class="spin"></span> asked: it starts within a minute' + (st.busy ? ', after what is running now (' + esc(st.busy) + ')' : '')
+         : st.state === 'failed' ? 'Could not: ' + esc(st.why || '') + (/denied|password|key/i.test(st.why || '') ? ' — this Mac’s SSH login did not let Rushes in without a password'
+             : /no route to host/i.test(st.why || '') ? ' — if Terminal reaches it, macOS is keeping Rushes off the local network: System Settings → Privacy & Security → Local Network → turn on Rushes, then List again'
+             : /timed out|refused/i.test(st.why || '') ? ' — the server did not answer: is its cable connected, and does Terminal reach it?' : '')
          : 'not listed yet') + '</small></span>' +
         '<button class="btn quiet" type="button" data-sl="' + esc(x.name) + '">List again</button><button class="lnk" type="button" data-sf="' + esc(x.name) + '">Remove</button></div>';
     }).join('') || '<p class="note">None yet.</p>';
@@ -97,7 +100,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       post({ action: 'ssh-list', name: b.dataset.sl }).then(load).catch(function (e) { $('rSaid').textContent = e.message; }); }; });
     $('rSshList').querySelectorAll('[data-sf]').forEach(function (b) { b.onclick = function () {
       post({ action: 'ssh-forget', name: b.dataset.sf }).then(load).catch(function (e) { $('rSaid').textContent = e.message; }); }; });
-    if (sv.some(function (x) { return x.state && /testing|listing/.test(x.state.state); })) $('rSsh').open = true;
+    if (sv.some(function (x) { return x.state && /testing|listing|asked|failed/.test(x.state.state); })) $('rSsh').open = true;
   }
   $('sAdd').onclick = function () {
     $('sAdd').disabled = true; $('sAdd').textContent = 'Asking…';
@@ -161,6 +164,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   }
   function load() { return fetch('/db/rescue.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(draw)
     .catch(function (e) { $('rOut').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; }); }
-  load(); setInterval(function () { if (last && (last.running || last.asked || (last.servers || []).some(function (x) { return !x.state || /testing|listing/.test(x.state.state); }))) load(); }, 5000);
+  load(); setInterval(function () { if (last && (last.running || last.asked || (last.servers || []).some(function (x) { return !x.state || /testing|listing|asked/.test(x.state.state); }))) load(); }, 5000);
 })();
 </script>
