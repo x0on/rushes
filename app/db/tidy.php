@@ -447,6 +447,79 @@ function drag_plan(array $drops, ?callable $say = null): array {
     return [$lines, $n, $b, $per, $eg];
 }
 
+// ── Tidy up: inside the structure (Reorganize → Tidy up) ─────────────────────────────────────────
+// The shelf as a tree (its departments' folders, then whatever is in them), and a plan of folder moves inside it:
+// each change is one folder and the folder it becomes ({src, dst}, both below the shelf): moved into another
+// folder (dst = there/its name), merged into one (dst = that folder), or renamed (dst = beside it/new name).
+// Planned on the page, worked out here once with the review, moved by the helper one file at a time ("refile").
+function shelf_rel_ok(string $rel): bool {
+    $p = explode('/', $rel);
+    return $rel !== '' && !in_array('..', $p, true) && !in_array('', $p, true) && strpbrk($p[0][0] ?? '_', '_@.#') === false
+        && !in_array($p[0], ['ARCHIVE', 'PROXIES', 'Projects'], true);
+}
+// One level of the structure: at the top, the departments' folders (A to Z, by department); inside, every folder.
+function shelf_tree(string $rel): array {
+    require_once __DIR__ . '/drive.php';
+    $A = rtrim(archive_dir(), '/'); $sp = ltrim(substr(shelf_dir(), strlen($A)), '/');
+    $in = trim($sp . '/' . $rel, '/');
+    $have = array_column(drive_levels($A, $in, true)['folders'], null, 'name');
+    $out = [];
+    if ($rel === '') {
+        foreach (departments() as $d) {
+            $f = dept_folder($d['name']); $x = $have[$f] ?? null;
+            $out[] = ['name' => $f, 'rel' => $f, 'dept' => $d['name'], 'n' => (int)($x['n'] ?? 0), 'b' => (int)($x['b'] ?? 0)];
+        }
+        return $out;
+    }
+    foreach ($have as $f) if ($f['name'] !== '') $out[] = ['name' => $f['name'], 'rel' => "$rel/{$f['name']}", 'n' => $f['n'], 'b' => $f['b']];
+    if (isset($have[''])) $out[] = ['name' => '', 'rel' => '', 'n' => $have['']['n'], 'b' => $have['']['b']];
+    return $out;
+}
+// -> [lines, files, bytes, per change {n, b}, examples], as drag_plan()
+function refile_plan(array $ops, ?callable $say = null): array {
+    require_once __DIR__ . '/schema.php';
+    $say ??= fn() => null;
+    $A = rtrim(archive_dir(), '/'); $H = rtrim(helper_archive(), '/\\'); $S = rtrim(shelf_dir(), '/');
+    $sh = shelf_as_helper(); $L = strlen($S) + 1; $db = db();
+    $folders = array_map(fn($d) => dept_folder($d['name']), departments());
+    $ok = [];
+    foreach ($ops as $o) {
+        $src = trim(str_replace('\\', '/', (string)($o['src'] ?? '')), '/');
+        $dst = trim(preg_replace('#/+#', '/', preg_replace('/[\x00-\x1f\\\\:*?"<>|]+/', ' ', str_replace('\\', '/', (string)($o['dst'] ?? '')))), '/ ');
+        $dst = implode('/', array_map('trim', explode('/', $dst)));
+        if (!shelf_rel_ok($src) || !shelf_rel_ok($dst) || $src === $dst || str_starts_with("$dst/", "$src/")) continue;   // never into itself
+        if (!str_contains($src, '/')) continue;                                       // a department's own folder stays: Setup
+        if (!in_array(explode('/', $dst)[0], $folders, true)) continue;               // only into a department's folder
+        $ok[$src] = $dst;
+    }
+    uksort($ok, fn($a, $b) => strlen($b) <=> strlen($a));                            // deepest first
+    $lines = []; $per = []; $eg = []; $n = 0; $b = 0; $seen = [];
+    $q = $db->prepare('SELECT path, bytes FROM files WHERE path >= ? AND path < ?');
+    $i = 0;
+    foreach ($ok as $src => $dst) {
+        $say('Listing the files in each folder', ++$i, count($ok));
+        $pre = "$S/$src/"; $q->bindValue(1, $pre); $q->bindValue(2, substr($pre, 0, -1) . '0');
+        $r = $q->execute();
+        while ($x = $r->fetchArray(SQLITE3_ASSOC)) {
+            $path = $x['path'];
+            if (isset($seen[$path]) || str_contains($path, "\t") || str_contains($path, "\n")) continue;   // a deeper change took it
+            $seen[$path] = true;
+            $to = "$sh/$dst/" . substr($path, strlen($pre));
+            $lines[] = "refile\t$H/" . substr($path, strlen($A) + 1) . "\t$to";
+            $per[$src] ??= ['n' => 0, 'b' => 0]; $per[$src]['n']++; $per[$src]['b'] += (int)$x['bytes'];
+            $n++; $b += (int)$x['bytes'];
+            if (count($eg) < 8 && (!$eg || end($eg)[2] !== $src)) $eg[] = [substr($path, $L), "$dst/" . substr($path, strlen($pre)), $src];
+        }
+        $q->reset();
+    }
+    return [$lines, $n, $b, $per, $eg];
+}
+if (isset($_REQUEST['shelftree'])) {
+    $rel = trim((string)$_REQUEST['shelftree'], '/');
+    if ($rel !== '' && !shelf_rel_ok($rel)) bail(400, 'That is not a folder in the structure.');
+    out(['folders' => shelf_tree($rel)]);
+}
+
 if (isset($_REQUEST['runs'])) {                             // the drag view's light read: no proposal worked out
     $waiting = []; $gone = tidies_finished();
     foreach (@file(web_dir() . '/ingest-queue.tsv') ?: [] as $l)
@@ -482,17 +555,18 @@ if (($_POST['drag'] ?? '') === '1') {
         $m = json_decode((string)@file_get_contents("$draft.json"), true) ?: []; @unlink("$draft.json");
         out(['queued' => $id, 'files' => (int)($m['files'] ?? 0), 'bytes' => (int)($m['bytes'] ?? 0)]);
     }
-    $drops = json_decode((string)($_POST['drops'] ?? ''), true);
-    if (!is_array($drops) || !$drops) bail(400, 'Nothing is placed yet.');
+    $re = ($_POST['refile'] ?? '') === '1';
+    $drops = json_decode((string)($_POST[$re ? 'ops' : 'drops'] ?? ''), true);
+    if (!is_array($drops) || !$drops) bail(400, $re ? 'No change is planned yet.' : 'Nothing is placed yet.');
     foreach (glob(web_dir() . '/tidy-draft-*') ?: [] as $old) if (filemtime($old) < time() - 86400) @unlink($old);   // reviews left a day ago
     $last = 0.0;
     $say = function (string $what, int $i, int $of) use ($said, &$last) {
         if (microtime(true) - $last < 0.5 && $i) return; $last = microtime(true);
         @file_put_contents("$said.new", json_encode(['said' => $what, 'i' => $i, 'of' => $of])); @rename("$said.new", $said);
     };
-    [$lines, $n, $b, $per, $eg] = drag_plan($drops, $say);
+    [$lines, $n, $b, $per, $eg] = $re ? refile_plan($drops, $say) : drag_plan($drops, $say);
     $say('Writing the plan', 1, 1);
-    if (!$lines) { @unlink($said); bail(400, 'Nothing to move: those folders are empty, or filed already.'); }
+    if (!$lines) { @unlink($said); bail(400, $re ? 'Nothing to move: those folders are empty.' : 'Nothing to move: those folders are empty, or filed already.'); }
     if (@file_put_contents("$draft.new", implode("\n", $lines) . "\n") === false || !@rename("$draft.new", $draft))
         bail(500, 'Could not write the plan — is the web folder writable?');
     @file_put_contents("$draft.json", json_encode(['files' => $n, 'bytes' => $b]));

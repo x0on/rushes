@@ -1555,16 +1555,23 @@ def tidy(plan_id):
     root = NAS_MOUNT.rstrip("/\\")
     for l in body.splitlines():
         f = l.split("\t")
-        if len(f) == 3 and f[0] in ("map", "file") and f[1] and f[2]:
+        if len(f) == 3 and f[0] in ("map", "file", "refile") and f[1] and f[2]:
             to = f[2].rstrip("/\\")
             # The one boundary that matters: nothing is moved anywhere but the shelf.
             if not to.startswith(shelf + os.sep) or ".." in to.split(os.sep):
                 print(f"  ! refused a line of the plan: {to} is not on the shelf ({shelf})"); continue
             if f[0] == "map":
                 maps.append((f[1].rstrip("/\\"), to)); continue
+            frm = f[1]
+            if f[0] == "refile":
+                # "refile": Tidy up, inside the structure: a file already on the shelf, to another place on it.
+                # Never from Rushes' own folders (_rushes, PROXIES, the bin) at the shelf's top.
+                below = frm[len(shelf) + 1:].split(os.sep) if frm.startswith(shelf + os.sep) else []
+                if len(below) < 2 or below[0][:1] in "_@.#" or below[0] in ("ARCHIVE", "PROXIES") or ".." in below:
+                    print(f"  ! refused a line of the plan: {frm} is not a file in the structure"); continue
+                files.append((frm, to)); continue
             # "file": one file already in the archive, outside the shelf, and where it goes
             # (HOW-IT-WORKS.md → Reorganize). Never from Rushes' own folders or the shelf.
-            frm = f[1]
             top = frm[len(root) + 1:].split(os.sep)[0] if frm.startswith(root + os.sep) else ""
             if (not top or top[0] in "_@.#" or top in ("ARCHIVE", "PROXIES") or ".." in frm.split(os.sep)
                     or (shelf != root and (frm == shelf or frm.startswith(shelf + os.sep)))):

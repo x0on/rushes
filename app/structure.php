@@ -117,6 +117,14 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .tr input.nmin { display: inline-block; font: inherit; font-size: 12px; height: auto; min-height: 0; padding: 2px 6px; margin: 0 0 0 4px; width: 200px; max-width: 100%; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 5px }
   .tag2 { font-size: 10.5px; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); margin-left: 6px; font-weight: 400 }
   .sublab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 8px 10px 2px }
+  .tuf { margin: 4px 12px 8px 46px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
+  .tuf input[type=text] { font: inherit; font-size: 12.5px; padding: 4px 8px; height: auto; min-height: 0; width: 320px; max-width: 100%; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 5px }
+  .tuf label { white-space: nowrap; color: var(--muted) }
+  .nd.chg .nm { color: var(--muted); text-decoration: line-through } .nd .will { font-size: 11.5px; color: var(--accent-text) }
+  .nd.new .nm { font-style: italic }
+  .tul { border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; background: var(--bg) }
+  .tul .row2 { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 12.5px } .tul .row2:first-of-type { border-top: 0 }
+  .tul .row2 span { flex: 1; word-break: break-word }
   .eg { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.6; word-break: break-word }
   h3.part { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px }
 </style>
@@ -143,7 +151,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
          here moves as it is. Either way everything below the <?= $e($one) ?> keeps the layout it had.
          Nothing is copied, renamed or deleted, every move is recorded so Premiere projects can be
          relinked, a tidy-up can be put back, and folders left empty are removed.</p>
-      <div class="views" role="tablist"><button type="button" data-view="drag">Drag and drop</button><button type="button" data-view="list">List</button></div>
+      <div class="views" role="tablist"><button type="button" data-view="drag">File in</button><button type="button" data-view="tidy">Tidy up</button><button type="button" data-view="list">File in, as a list</button></div>
       <div id="tWait" class="banner warn" hidden><div class="txt"></div></div>
 
       <!-- ══ Drag and drop: folders from the left onto a <?= $e($one) ?> on the right. Nothing moves until Move. ══ -->
@@ -163,6 +171,24 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           <div class="btns" style="margin-top:10px">
             <button class="btn" type="button" id="dvYes">Yes, move them</button>
             <button class="btn quiet" type="button" id="dvNo">Not yet</button>
+          </div></div></div>
+      </div>
+
+      <!-- ══ Tidy up: inside the structure. Changes are planned here; nothing moves until Apply. ══ -->
+      <div id="tuView" hidden>
+        <div class="pane" id="tuP"><header><b>Your structure &middot; <?= $e($shelf) ?></b><small>Move a folder into another, merge two into one, rename one, or make a new folder: every change is planned first and shows here; nothing moves until <b>Apply</b>. Each move is recorded, so Premiere projects can be relinked and Put back undoes it.</small><small id="tuCount" style="color:var(--fg);margin-top:4px"></small></header>
+          <div id="tuTree"><p class="note" style="margin:10px 12px">Looking &hellip;</p></div></div>
+        <datalist id="tuDest"></datalist>
+        <div id="tuList" style="margin-top:12px"></div>
+        <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="tuAsk" disabled>No changes planned</button>
+          <span class="note" id="tuSum">Nothing moves until you press it, and it shows what it will do first.</span></div>
+        <div id="tuSure" class="banner warn" hidden><div class="txt">
+          <b id="tuSureWhat"></b> <span id="tuSureMore"></span>
+          <div class="eg" id="tuEg"></div>
+          The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.
+          <div class="btns" style="margin-top:10px">
+            <button class="btn" type="button" id="tuYes">Yes, move them</button>
+            <button class="btn quiet" type="button" id="tuNo">Not yet</button>
           </div></div></div>
       </div>
 
@@ -349,6 +375,137 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         post(f, function () { b.textContent = 'Queued ✓'; });
       };
       window.tidyList = load;          // the list works out every row's year: read only when it is shown
+    })();
+    </script>
+    <script>
+    (function () {
+      // ══ Tidy up (db/tidy.php ?shelftree, refile=1): changes inside the structure, planned here first ══
+      // ops: {folder: what it becomes} (both below the shelf), kept in this browser until moved. A folder moved
+      // into another becomes there/its name; merged, it becomes that folder; renamed, beside it/the new name.
+      var $ = function (id) { return document.getElementById(id); };
+      var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
+      var num = function (n) { return Number(n).toLocaleString(); };
+      var ICON = function (cls) { return '<svg class="fi ' + (cls || '') + '" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 5.1v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>'; };
+      var KEY = 'rushes-tidy-plan', kids = {}, open = {}, ops = {}, made = [], form = null, token = '';
+      try { var k = JSON.parse(localStorage.getItem(KEY) || '{}'); ops = k.ops || {}; made = k.made || []; } catch (e) {}
+      var save = function () { try { localStorage.setItem(KEY, JSON.stringify({ops: ops, made: made})); } catch (e) {} };
+      var last = function (r) { return r.split('/').pop(); };
+      var parent = function (r) { return r.indexOf('/') < 0 ? '' : r.slice(0, r.lastIndexOf('/')); };
+      var shown = function (r) { return r.split('/').join(' / '); };
+      var ask = function (what) { var f = new FormData(); Object.keys(what).forEach(function (k) { f.append(k, what[k]); });
+        return fetch('/db/tidy.php', {method: 'POST', body: f}).then(function (r) { return r.json(); }).then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
+      var info = function (rel) { var k = kids[parent(rel)]; return (k && k.filter(function (x) { return x.rel === rel; })[0]) || null; };
+      // under a folder already changed: shown, but it goes with it
+      var within = function (rel) { for (var r = parent(rel); r; r = parent(r)) if (ops[r]) return r; return ''; };
+
+      function node(f, depth) {
+        if (f.name === '') return '<div class="nd loose">' + num(f.n) + ' file' + (f.n > 1 ? 's' : '') + ' loose in this folder</div>';
+        var o = open[f.rel], k = kids[f.rel], to = ops[f.rel], dept = !!f.dept;
+        var newKids = made.filter(function (m) { return parent(m) === f.rel && !(k || []).some(function (x) { return x.rel === m; }); });
+        return '<div class="nd' + (to ? ' chg' : '') + '" data-rel="' + esc(f.rel) + '">'
+          + '<button type="button" class="tw" data-open="' + esc(f.rel) + '">' + (o ? '▾' : '▸') + '</button>' + ICON(dept ? 'd' : '')
+          + '<span class="nm">' + (dept ? '<b>' + esc(f.name) + '</b>' : esc(f.name)) + '</span>'
+          + '<small>' + (f.n ? num(f.n) + ' files &middot; ' + size(f.b) : 'empty') + '</small>'
+          + '<span class="acts">' + (to ? '<span class="will">&rarr; ' + esc(shown(to)) + '</span><button type="button" class="x" data-undo="' + esc(f.rel) + '" title="Do not change it">&times;</button>'
+            : (dept ? '' : '<button type="button" class="mv" data-move="' + esc(f.rel) + '">Move to&hellip;</button><button type="button" class="mv" data-rename="' + esc(f.rel) + '">Rename</button>')
+              + '<button type="button" class="mv" data-new="' + esc(f.rel) + '">New folder</button>') + '</span></div>'
+          + (form && form.rel === f.rel ? formHtml() : '')
+          + (o ? '<div class="kids">' + newKids.map(function (m) { return '<div class="nd new">' + ICON() + '<span class="nm">' + esc(last(m)) + '</span><small>new folder &middot; made when something moves into it</small>'
+                + '<span class="acts"><button type="button" class="x" data-unmake="' + esc(m) + '" title="Do not make it">&times;</button></span></div>'; }).join('')
+              + (k ? k.map(function (c) { return node(c, depth + 1); }).join('') : '<div class="nd loose">opening &hellip;</div>') + '</div>' : '');
+      }
+      function formHtml() {
+        if (form.kind === 'rename') return '<div class="tuf">Rename to <input type="text" id="tuIn" value="' + esc(last(form.rel)) + '">'
+          + '<button type="button" class="btn quiet sm" data-ok="1">OK</button><button type="button" class="lnk2" data-cancel="1">Cancel</button></div>';
+        if (form.kind === 'new') return '<div class="tuf">New folder in ' + esc(shown(form.rel)) + ': <input type="text" id="tuIn" placeholder="its name, e.g. DRONE">'
+          + '<button type="button" class="btn quiet sm" data-ok="1">Make it</button><button type="button" class="lnk2" data-cancel="1">Cancel</button>'
+          + '<small class="note" style="flex-basis:100%">Made on the drive when something moves into it.</small></div>';
+        return '<div class="tuf">Move <b>' + esc(last(form.rel)) + '</b> to <input type="text" id="tuIn" list="tuDest" placeholder="a folder, e.g. PUBLIC AFFAIRS/DRONE">'
+          + '<label><input type="radio" name="tuHow" value="in" checked> as a folder inside it</label>'
+          + '<label><input type="radio" name="tuHow" value="merge"> merge: what is inside goes into it</label>'
+          + '<button type="button" class="btn quiet sm" data-ok="1">OK</button><button type="button" class="lnk2" data-cancel="1">Cancel</button>'
+          + '<small class="note" style="flex-basis:100%">Type to pick a folder; a path that is not there yet becomes a new folder. Two folders merged into one fill it file by file, never over a file.</small></div>';
+      }
+
+      function draw() {
+        var keep = []; var e = $('tuP'); for (; e; e = e.parentElement) if (e.scrollTop) keep.push([e, e.scrollTop]);
+        $('tuTree').innerHTML = kids[''] ? kids[''].map(function (f) { return node(f, 0); }).join('') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
+        // every folder known so far, and the new ones, to pick as where a folder goes
+        var all = {}; Object.keys(kids).forEach(function (k) { (kids[k] || []).forEach(function (f) { if (f.rel) all[f.rel] = 1; }); }); made.forEach(function (m) { all[m] = 1; });
+        $('tuDest').innerHTML = Object.keys(all).sort().map(function (r) { return '<option value="' + esc(r) + '">'; }).join('');
+        var n = Object.keys(ops).length;
+        $('tuList').innerHTML = n ? '<div class="tul"><div class="sublab" style="padding:4px 0">Planned changes &middot; nothing has moved yet</div>' + Object.keys(ops).sort().map(function (r) {
+            return '<div class="row2"><span>' + esc(shown(r)) + ' <b>&rarr;</b> ' + esc(shown(ops[r])) + '</span><button type="button" class="x" data-undo="' + esc(r) + '" title="Do not change it">&times;</button></div>'; }).join('') + '</div>' : '';
+        $('tuAsk').disabled = !n; $('tuAsk').textContent = n ? 'Apply ' + n + ' change' + (n > 1 ? 's' : '') + '…' : 'No changes planned';
+        $('tuCount').textContent = n ? n + ' change' + (n > 1 ? 's' : '') + ' planned' : '';
+        $('tuSure').hidden = true;
+        keep.forEach(function (x) { x[0].scrollTop = x[1]; });
+        var inp = $('tuIn'); if (inp) { inp.focus(); inp.select && form.kind === 'rename' && inp.select(); }
+      }
+      function openFolder(rel) {
+        open[rel] = !open[rel]; draw();
+        if (!open[rel] || kids[rel]) return;
+        ask({shelftree: rel}).then(function (d) { kids[rel] = d.folders; draw(); }).catch(function (e) { open[rel] = false; draw(); });
+      }
+      function ok() {
+        var v = ($('tuIn').value || '').replace(/\\/g, '/').replace(/[:*?"<>|]+/g, ' ').split('/').map(function (x) { return x.trim(); }).filter(Boolean).join('/');
+        if (!v) return;
+        if (form.kind === 'rename') { if (v.indexOf('/') < 0 && v !== last(form.rel)) ops[form.rel] = (parent(form.rel) ? parent(form.rel) + '/' : '') + v; }
+        else if (form.kind === 'new') { var m = form.rel + '/' + v.replace(/\//g, ' '); if (made.indexOf(m) < 0) made.push(m); open[form.rel] = true; }
+        else {
+          var how = (document.querySelector('[name=tuHow]:checked') || {}).value, top = v.split('/')[0];
+          if (!(kids[''] || []).some(function (d) { return d.rel === top; })) { $('tuSum').textContent = 'It has to go inside a department’s folder: start with one of them.'; return; }
+          var to = how === 'merge' ? v : v + '/' + last(form.rel);
+          if (to === form.rel || (to + '/').indexOf(form.rel + '/') === 0) { $('tuSum').textContent = 'A folder cannot go inside itself.'; return; }
+          ops[form.rel] = to; if (made.indexOf(v) < 0 && !info(v)) made.push(v);
+        }
+        form = null; save(); draw();
+      }
+      $('tuView').addEventListener('click', function (ev) {
+        var t = ev.target, x;
+        if ((x = t.closest('[data-open]'))) return openFolder(x.dataset.open);
+        if ((x = t.closest('[data-move]'))) { form = {kind: 'move', rel: x.dataset.move}; return draw(); }
+        if ((x = t.closest('[data-rename]'))) { form = {kind: 'rename', rel: x.dataset.rename}; return draw(); }
+        if ((x = t.closest('[data-new]'))) { form = {kind: 'new', rel: x.dataset.new}; return draw(); }
+        if ((x = t.closest('[data-ok]'))) return ok();
+        if ((x = t.closest('[data-cancel]'))) { form = null; return draw(); }
+        if ((x = t.closest('[data-undo]'))) { delete ops[x.dataset.undo]; save(); return draw(); }
+        if ((x = t.closest('[data-unmake]'))) { made = made.filter(function (m) { return m !== x.dataset.unmake; }); save(); return draw(); }
+      });
+      $('tuView').addEventListener('keydown', function (ev) { if (ev.target.id === 'tuIn' && ev.key === 'Enter') { ev.preventDefault(); ok(); } if (ev.key === 'Escape' && form) { form = null; draw(); } });
+
+      // Apply: worked out once, saying how far (as File in), then Yes queues exactly that plan
+      $('tuAsk').onclick = function () {
+        var b = this, t0 = Date.now(); token = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+        b.disabled = true; b.textContent = 'Working out where each file goes…';
+        var poll = setInterval(function () {
+          ask({dragsaid: token}).then(function (p) { if (!p.done) $('tuSum').textContent = p.said + (p.of ? ': ' + p.i + ' of ' + p.of + ' folders' : '') + ' · ' + Math.round((Date.now() - t0) / 1000) + ' s'; }).catch(function () {});
+        }, 1000);
+        ask({drag: 1, refile: 1, token: token, ops: JSON.stringify(Object.keys(ops).map(function (r) { return {src: r, dst: ops[r]}; }))}).then(function (d) {
+          clearInterval(poll); draw();
+          $('tuSureWhat').textContent = 'Move ' + num(d.files) + ' files (' + size(d.bytes) + ')?';
+          $('tuSureMore').textContent = Object.keys(d.per).length + ' folders. For example:';
+          $('tuEg').innerHTML = d.eg.map(function (e) { return esc(e[0]) + '<br>&nbsp;&nbsp;&rarr; ' + esc(e[1]); }).join('<br>');
+          $('tuSure').hidden = false; $('tuYes').focus();
+          $('tuSum').textContent = 'Worked out in ' + Math.round((Date.now() - t0) / 1000) + ' s. Nothing has moved yet.';
+        }).catch(function (e) { clearInterval(poll); draw(); $('tuSum').textContent = 'Nothing was worked out: ' + e.message; });
+      };
+      $('tuNo').onclick = function () { $('tuSure').hidden = true; };
+      $('tuYes').onclick = function () {
+        var b = this; b.disabled = true; b.textContent = 'Queuing…';
+        ask({drag: 1, go: 1, token: token}).then(function (d) {
+          b.disabled = false; b.textContent = 'Yes, move them';
+          ops = {}; made = []; save(); kids = {}; open = {};
+          $('tWait').className = 'banner ok'; $('tWait').hidden = false;
+          $('tWait').querySelector('.txt').innerHTML = '<b>Queued ✓</b> ' + num(d.files) + ' files (' + size(d.bytes) + '). The helper moves them one at a time, never over another file &mdash; the top bar shows how far it is, and Done so far below shows the result.';
+          $('tuSum').textContent = ''; window.tuLoad();
+        }).catch(function (e) { b.disabled = false; b.textContent = 'Yes, move them'; $('tuSureMore').textContent = 'Nothing was queued: ' + e.message; });
+      };
+      window.tuLoad = function () {
+        ask({shelftree: ''}).then(function (d) { kids[''] = d.folders; draw(); })
+          .catch(function (e) { $('tuTree').innerHTML = '<div class="banner bad" style="margin:10px"><div class="txt">' + esc(e.message) + '</div></div>'; });
+      };
     })();
     </script>
     <script>
@@ -556,6 +713,12 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           x.replaceWith(sel); sel.focus();
         }
       });
+      $('dragView').addEventListener('input', function (ev) {       // the name box: kept as you type, said in its row
+        var nr = ev.target.dataset && ev.target.dataset.name; if (!nr || !plan[nr]) return;
+        var v = ev.target.value.replace(/[\/\\:*?"<>|]+/g, ' ').trim(); plan[nr].name = v && v !== last(nr) ? v : ''; save();
+        var p = plan[nr], to = ev.target.closest('.tr').querySelectorAll('.nm > small')[1];
+        if (to) to.innerHTML = (p.n ? num(p.n) + ' files &middot; ' + size(p.b) + ' &middot; ' : '') + '&rarr; ' + esc(p.dept) + ' / ' + esc(p.name || last(nr)) + ' / year / each folder in it';
+      });
       $('dragView').addEventListener('change', function (ev) {
         var r = ev.target.dataset && ev.target.dataset.keep;
         if (r && plan[r]) { plan[r].keep = ev.target.checked; save(); soft('', [plan[r].dept]); return; }
@@ -659,13 +822,14 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       }
 
       // the two views: Drag and drop first; the list (every row worked out at once) when asked for
-      var listRead = false;
+      var listRead = false, tuRead = false;
       function show(v) {
         try { localStorage.setItem('rushes-reorg-view', v); } catch (e) {}
         document.querySelectorAll('.views button').forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
-        $('dragView').hidden = v !== 'drag'; $('listView').hidden = v !== 'list';
-        window.tidyRefresh = v === 'drag' ? load : window.tidyList;
+        $('dragView').hidden = v !== 'drag'; $('listView').hidden = v !== 'list'; $('tuView').hidden = v !== 'tidy';
+        window.tidyRefresh = v === 'drag' ? load : v === 'tidy' ? window.tuLoad : window.tidyList;
         if (v === 'list' && !listRead) { listRead = true; window.tidyList(); }
+        if (v === 'tidy' && !tuRead) { tuRead = true; window.tuLoad(); }
       }
       document.querySelectorAll('.views button').forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
       var v = 'drag'; try { v = localStorage.getItem('rushes-reorg-view') || 'drag'; } catch (e) {}

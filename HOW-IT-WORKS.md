@@ -1071,7 +1071,7 @@ archive itself is the shelf (the archive is the `VIDEOS` folder, say): a folder
 at its top that is not a department is a drive copied in, waits, and its
 folders are filed without its name.
 
-**Drag and drop** (Reorganize's first view; **List** is the other). Two panes:
+**File in** (Reorganize's first tab, by drag and drop or Move to…; **File in, as a list** is the older view). Two panes:
 on the left, **Where it is now**: what is in the archive and not on the shelf, as
 folders that open like Finder's (`tidy.php ?tree=`, one level at a time from
 the catalogue, never the drive). On the right, **Where it will go**: the
@@ -1124,6 +1124,21 @@ folders, and one example per folder, and asks again.
 **In the code:** `db/tidy.php` (`drag_tree()`, `drag_matches()`,
 `dept_guess()`, `drag_plan()`), `structure.php`; tests:
 `tests/test_tidy_drag.sh`.
+
+**Tidy up** (Reorganize's second tab): changes *inside* the structure, so
+nothing in the archive is ever moved in Finder, where no move is recorded. The
+structure as a tree (`tidy.php ?shelftree=`: each department's folder, A to
+Z, then whatever is in it); on any folder below a department's own folder:
+**Move to…** another folder (as a folder inside it, or **merge**: what is
+inside goes into it, file by file, never over a file), **Rename**, and **New
+folder** on any folder (made on the drive when something moves into it). Each
+change is planned and shown first (struck through, with where it goes, and in
+a list of planned changes, kept in this browser); **Apply** works it out once
+with the same review as File in, and the helper moves each file as a `refile`
+line: only a file already in the structure, only to a place in it, never from
+Rushes' own folders. A department's own folder is never moved here (Setup
+names them), and a folder never goes inside itself. Recorded, put back and
+relinked as any tidy-up (`refile_plan()`, `tests/test_tidy_refile.sh`).
 
 **The year.** Between the department and the folder, Tidy up puts the year, from
 evidence only (`tidy.php folder_year()`):

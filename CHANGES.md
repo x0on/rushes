@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.48 — October 2026
+
+- **Tidy up: changes inside the structure, without Finder.** Reorganize has a second tab, **Tidy up**: your structure as a folder tree. On any folder, **Move to…** another folder (as a folder inside it, or merged into it), **Rename**, or make a **New folder**. Every change is planned first and shown (struck through, with where it goes, and in a list), and nothing moves until **Apply**: the same review, the same one-file-at-a-time move, recorded for Put back and for relinking Premiere projects. A department's own folder is not moved here, and nothing goes inside itself.
+- Reorganize's tabs are now **File in** (what you have been doing), **Tidy up**, and **File in, as a list**.
+- The name box of a folder kept as a folder is saved as you type, and its row says where it goes at once (before, only after Enter).
+
 ## 0.12.47 — October 2026
 
 - **Name the folder it goes in as.** A folder kept as a folder (DRONE, COUNCIL EVENTS) now has its name in a box you can change. Give two folders the same name and they become one: DRONE and 009 DRONE FOOTAGE both named **DRONE** land in one `Public Affairs Department / DRONE`.
