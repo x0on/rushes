@@ -1074,25 +1074,39 @@ class Runner:
                 try: cands += [x[0] for x in db.execute("SELECT path FROM files WHERE name = ? AND path != ? AND bytes > 0 LIMIT 40", (os.path.basename(p), p))]
                 except sqlite3.Error: pass
             parts = p.split("/")
-            def score(c):                      # its own source first, then the most of the same folders, then the biggest
+            def score(c):                      # how many of its folders, up from the file, have the same names
                 q = c.split("/"); k = 0
                 while k < min(len(q), len(parts)) - 1 and q[-2 - k] == parts[-2 - k]: k += 1
-                return (c == came, k)
-            good, gsize, other = "", 0, 0
-            for c in sorted(dict.fromkeys(cands), key=score, reverse=True):
+                return k
+            ok = []
+            for c in dict.fromkeys(cands):
                 if c.startswith(hold) or c == p:
                     continue
                 try: cs = os.path.getsize(c)
                 except OSError: continue       # not there now (a drive unplugged)
-                if broken(c, cs) is None and cs > 0:
-                    if not good: good, gsize = c, cs
-                    else: other += 1
-            rows.append("\t".join(map(str, (p, size, why, came, good, gsize, other))))
+                if cs > 0 and broken(c, cs) is None:
+                    ok.append((c, cs, score(c)))
+            # Sure only with evidence beyond a name: cameras number clips the same on every card (Clip0004,
+            # DJI_0004, C0153), so a file of the same name may be another shoot. Sure: where it was copied from;
+            # or the only one in a folder of the same name; or a name no camera gives (not letters + a counter)
+            # whose copies are all the same size. Anything else is offered as "same name only", never ticked for you.
+            ok.sort(key=lambda x: (x[0] == came, x[2], x[1]), reverse=True)
+            good, gsize, other, sure = "", 0, max(0, len(ok) - 1), 0
+            if ok:
+                good, gsize, k = ok[0]
+                counter = re.fullmatch(r"[A-Za-z_]{0,8}\d{2,}", os.path.splitext(os.path.basename(p))[0]) is not None
+                if good == came:
+                    sure = 1
+                elif k >= 1 and sum(1 for x in ok if x[2] == k and x[1] != gsize) == 0:
+                    sure = 1
+                elif not counter and len({x[1] for x in ok}) == 1:
+                    sure = 1
+            rows.append("\t".join(map(str, (p, size, why, came, good, gsize, other, sure))))
         if db: db.close()
         self.write("rescue-found.tsv", "".join(r + "\n" for r in rows))
         self.write("rescue-looked.txt", f"{int(time.time())}\t{seen}\n")
-        n = sum(1 for r in rows if r.split("\t")[4])
-        self.activity("check", f"Rescue looked at {seen:,} files: {len(rows):,} broken, {n:,} with a good copy found")
+        n = sum(1 for r in rows if r.split("\t")[7] == "1")
+        self.activity("check", f"Rescue looked at {seen:,} files: {len(rows):,} broken, {n:,} with a good copy found for sure")
 
     def rescue_apply(self, who):
         """The ticked broken files (rescue-pick.tsv: broken, good — written by db/rescue.php from what the scan

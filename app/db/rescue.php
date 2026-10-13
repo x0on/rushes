@@ -25,7 +25,8 @@ $found = function () use ($W): array {
     foreach (@file("$W/rescue-found.tsv") ?: [] as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if (count($f) >= 7) $rows[$f[0]] = ['path' => $f[0], 'size' => (int)$f[1], 'why' => $f[2], 'came' => $f[3],
-                                            'good' => $f[4], 'gsize' => (int)$f[5], 'other' => (int)$f[6]];
+                                            'good' => $f[4], 'gsize' => (int)$f[5], 'other' => (int)$f[6],
+                                            'sure' => ($f[7] ?? '0') === '1'];      // sure: more than a name says it is the same file
     }
     return $rows;
 };
@@ -74,10 +75,11 @@ $where = function (string $p) use ($A): string {
     return $d ? (string)$d['name'] : dirname($p);
 };
 $rows = array_values($found());
-$withGood = count(array_filter($rows, fn($r) => $r['good'] !== ''));
+$withGood = count(array_filter($rows, fn($r) => $r['sure']));
+$maybe = count(array_filter($rows, fn($r) => $r['good'] !== '' && !$r['sure']));
 $rows = array_map(fn($r) => $r + ['rel' => str_starts_with($r['path'], "$A/") ? substr($r['path'], strlen($A) + 1) : $r['path'],
                                   'where' => $where($r['good'])], array_slice($rows, 0, 5000));
 out(['looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked' => $asked,
      'running' => str_contains($st, 'rescue-') ? (str_contains($st, 'apply') ? 'rescuing' : 'looking') : '',
-     'total' => count($found()), 'with_good' => $withGood, 'rows' => $rows,
+     'total' => count($found()), 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,
      'done' => array_map(fn($l) => array_slice(explode("\t", rtrim($l, "\n")), 0, 4), array_slice(array_reverse($done), 0, 50))]);

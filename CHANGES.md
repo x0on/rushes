@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.6 — October 2026
+
+- **Rescue only calls a copy good when more than its name says so.** Cameras number their clips the same on every card (Clip0004, DJI_0004, C0153), so a file of the same name elsewhere may be another shoot: 0.13.5 offered *2020/AUGUST/Clip0004.MXF* as the good copy of *2021/CASA LINDA/Clip0004.MXF*. Now a copy is **sure** only when it is where the file was copied from, or the one in a folder of the same name, or a name no camera gives with every copy the same size. Anything else is shown as **same name only** with a warning, and is never ticked for you; **Tick all sure ones** ticks only the sure. Look again after updating: the list from before does not know which are sure.
+- **Rescue's buttons are above the list too**, not only at its end.
+
 ## 0.13.5 — October 2026
 
 - **Rescue** (Manage → Rescue): broken copies in the archive found, and good ones brought back. **Look for broken files** reads the first bytes of every clip and sidecar in the archive: an empty clip, one too small to be a clip, or one with another file's data inside (a 1 KB "MP4", an XML holding a video, as a damaged disk or a broken copy leaves them) is broken. For each it says where it came from (the copy records), grouped by source, and the good copy Rushes can see: its source, or a file of the same name elsewhere in Search, on the archive or a drive, that is not broken itself; or that there is none anywhere. Looking changes nothing. **Rescue** replaces only what you tick: the good copy is copied in and read back byte for byte, the broken one goes to Recently Removed, and every swap is written down.

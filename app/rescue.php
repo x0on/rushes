@@ -23,7 +23,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .rrow { display: grid; grid-template-columns: 22px 1fr 1fr; gap: 10px; padding: 7px 12px; border-top: 1px solid var(--line-soft); font-size: 12.5px; align-items: start }
   .rrow:first-of-type { border-top: 0 }
   .rrow .p { word-break: break-all } .rrow small { display: block; color: var(--muted) } .rrow .bad { color: var(--bad) }
-  .rrow .none { color: var(--muted); font-style: italic }
+  .rrow .none { color: var(--muted); font-style: italic } .rrow small.warn, .rsum .warn { color: var(--warn) }
   .rdone { font-size: 12px; color: var(--muted); margin-top: 18px } .rdone div { word-break: break-all; padding: 2px 0 }
 </style>
 
@@ -39,10 +39,14 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       <button class="btn" type="button" id="rLook">Look for broken files</button>
       <span class="note" id="rSaid"></span>
     </div>
+    <div class="rbar rAct" hidden>
+      <button class="btn rGo" type="button" disabled>Rescue the ticked</button>
+      <button class="btn quiet rAll" type="button">Tick all sure ones</button>
+    </div>
     <div id="rOut"><p class="note">Looking at what was found…</p></div>
-    <div class="rbar" id="rAct" hidden>
-      <button class="btn" type="button" id="rGo" disabled>Rescue the ticked</button>
-      <button class="btn quiet" type="button" id="rAll">Tick all with a good copy</button>
+    <div class="rbar rAct" hidden>
+      <button class="btn rGo" type="button" disabled>Rescue the ticked</button>
+      <button class="btn quiet rAll" type="button">Tick all sure ones</button>
     </div>
     <div class="rdone" id="rDone"></div>
   </div>
@@ -70,44 +74,51 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       : d.running === 'rescuing' ? '<span class="spin"></span> Rescuing: each good copy is copied in and read back… the top bar says how far.'
       : d.asked ? '<span class="spin"></span> Asked: it starts within a minute.'
       : d.looked ? 'Last looked ' + esc(when(d.looked)) + ' · ' + d.looked_n.toLocaleString() + ' files' : 'Not looked yet.';
-    if (!d.looked) { $('rOut').innerHTML = '<p class="note">Press Look for broken files: Rushes reads the first bytes of every clip and sidecar in the archive. Nothing is changed.</p>'; $('rAct').hidden = true; return; }
-    if (!d.total) { $('rOut').innerHTML = '<div class="banner ok"><div class="txt"><b>No broken files found ✓</b>Every clip and sidecar looked at is what it says it is.</div></div>'; $('rAct').hidden = true; return; }
+    if (!d.looked) { $('rOut').innerHTML = '<p class="note">Press Look for broken files: Rushes reads the first bytes of every clip and sidecar in the archive. Nothing is changed.</p>'; acts(true); return; }
+    if (!d.total) { $('rOut').innerHTML = '<div class="banner ok"><div class="txt"><b>No broken files found ✓</b>Every clip and sidecar looked at is what it says it is.</div></div>'; acts(true); return; }
     var g = {};
     d.rows.forEach(function (r) { (g[from(r.came)] = g[from(r.came)] || []).push(r); });
-    $('rOut').innerHTML = '<p class="rsum"><b>' + d.total.toLocaleString() + ' broken file' + (d.total === 1 ? '' : 's') + '</b> · ' + d.with_good.toLocaleString() + ' with a good copy found' +
-        (d.total - d.with_good ? ' · <span class="bad">' + (d.total - d.with_good).toLocaleString() + ' with none anywhere Rushes can see</span>' : '') + '</p>' +
+    var none = d.total - d.with_good - d.maybe;
+    $('rOut').innerHTML = '<p class="rsum"><b>' + d.total.toLocaleString() + ' broken file' + (d.total === 1 ? '' : 's') + '</b> · ' + d.with_good.toLocaleString() + ' with a good copy, for sure' +
+        (d.maybe ? ' · <span class="warn">' + d.maybe.toLocaleString() + ' with a file of the same name only (may be another shoot: check before ticking)</span>' : '') +
+        (none ? ' · <span class="bad">' + none.toLocaleString() + ' with none anywhere Rushes can see</span>' : '') + '</p>' +
       (d.rows.length < d.total ? '<p class="note">The first ' + d.rows.length.toLocaleString() + ' are shown; rescue them and look again for the rest.</p>' : '') +
       Object.keys(g).sort().map(function (k) {
         return '<div class="rgrp"><header><b>' + esc(k) + '</b><span class="note">' + g[k].length.toLocaleString() + ' broken</span></header>' +
           g[k].map(function (r) {
             return '<label class="rrow"><input type="checkbox" data-p="' + esc(r.path) + '"' + (r.good ? '' : ' disabled') + (ticked[r.path] ? ' checked' : '') + '>' +
               '<span class="p">' + esc(r.rel) + '<small class="bad">' + esc(r.why) + '</small></span>' +
-              (r.good ? '<span class="p">' + esc(r.good) + '<small>a good copy · ' + size(r.gsize) + ' · on ' + esc(r.where) + (r.other ? ' · and ' + r.other + ' more' : '') + '</small></span>'
+              (r.good && r.sure ? '<span class="p">' + esc(r.good) + '<small>a good copy · ' + size(r.gsize) + ' · on ' + esc(r.where) + '</small></span>'
+               : r.good ? '<span class="p">' + esc(r.good) + '<small class="warn">same name only · ' + size(r.gsize) + ' · on ' + esc(r.where) + (r.other ? ' · ' + (r.other + 1) + ' files have this name' : '') +
+                  ': cameras name clips the same on every card, so this may be another shoot. Tick it only if you know it is the same.</small></span>'
                       : '<span class="none">No good copy anywhere Rushes can see. Plug in a drive that may have it and add it to Rushes, then look again.</span>') + '</label>';
           }).join('') + '</div>';
       }).join('');
-    $('rAct').hidden = false;
+    acts(false);
     $('rOut').querySelectorAll('input[data-p]').forEach(function (c) { c.onchange = function () { if (c.checked) ticked[c.dataset.p] = 1; else delete ticked[c.dataset.p]; count(); }; });
     count();
     $('rDone').innerHTML = d.done.length ? '<b>Rescued lately</b>' + d.done.map(function (x) { return '<div>✓ ' + esc(x[0]) + ' <span>from ' + esc(x[1]) + '</span></div>'; }).join('') : '';
   }
+  var acts = function (hide) { document.querySelectorAll('.rAct').forEach(function (x) { x.hidden = hide; }); };
   function count() {
     var n = Object.keys(ticked).length;
-    $('rGo').disabled = !n || !!(last && (last.running || last.asked));
-    $('rGo').textContent = n ? 'Rescue ' + n.toLocaleString() + ' file' + (n === 1 ? '' : 's') : 'Rescue the ticked';
+    document.querySelectorAll('.rGo').forEach(function (b) {
+      b.disabled = !n || !!(last && (last.running || last.asked));
+      b.textContent = n ? 'Rescue ' + n.toLocaleString() + ' file' + (n === 1 ? '' : 's') : 'Rescue the ticked'; });
   }
-  $('rAll').onclick = function () { (last ? last.rows : []).forEach(function (r) { if (r.good) ticked[r.path] = 1; }); draw(last); };
+  document.querySelectorAll('.rAll').forEach(function (b) { b.onclick = function () { (last ? last.rows : []).forEach(function (r) { if (r.sure) ticked[r.path] = 1; }); draw(last); }; });
   $('rLook').onclick = function () {
     $('rLook').disabled = true; $('rSaid').innerHTML = '<span class="spin"></span> Asking…';
     post({ action: 'scan' }).then(load).catch(function (e) { $('rSaid').textContent = 'Did not happen: ' + e.message; $('rLook').disabled = false; });
   };
-  $('rGo').onclick = function () {
+  document.querySelectorAll('.rGo').forEach(function (b) { b.onclick = go; });
+  function go() {
     var ps = Object.keys(ticked); if (!ps.length) return;
-    $('rGo').disabled = true; $('rSaid').innerHTML = '<span class="spin"></span> Asking…';
+    document.querySelectorAll('.rGo').forEach(function (b) { b.disabled = true; }); $('rSaid').innerHTML = '<span class="spin"></span> Asking…';
     post({ action: 'rescue', paths: JSON.stringify(ps) }).then(function (d) {
       ticked = {}; $('rSaid').innerHTML = 'Asked ✓ ' + d.n.toLocaleString() + ' file' + (d.n === 1 ? '' : 's') + ' to rescue: it starts within a minute, and the broken ones go to Recently Removed.'; load();
     }).catch(function (e) { $('rSaid').textContent = 'Did not happen: ' + e.message; count(); });
-  };
+  }
   function load() { return fetch('/db/rescue.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(draw)
     .catch(function (e) { $('rOut').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; }); }
   load(); setInterval(function () { if (last && (last.running || last.asked)) load(); }, 5000);

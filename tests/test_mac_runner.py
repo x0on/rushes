@@ -307,6 +307,7 @@ class Rescue(unittest.TestCase):
         self.assertEqual(set(rows), {empty, swapped, os.path.join(self.a, "VIDEOS/Card/C0156.MP4")}, "only the broken ones")
         self.assertTrue(rows[empty][2].startswith("empty") and rows[empty][4] == os.path.join(src, "C0153.MP4"), "its good copy: where it came from")
         self.assertEqual(rows[os.path.join(self.a, "VIDEOS/Card/C0156.MP4")][4], "", "no good copy anywhere: said, nothing invented")
+        self.assertEqual(rows[empty][7], "1", "its own source: sure")
         open(os.path.join(self.web, "rescue-pick.tsv"), "w").write(f"{empty}\t{src}/C0153.MP4\n{swapped}\t{src}/C0155M01.XML\n")
         self.r.job("rescue-apply", {"WHO": "Ana"})
         self.assertEqual(open(empty, "rb").read(), mp4, "the good one in its place")
@@ -315,6 +316,30 @@ class Rescue(unittest.TestCase):
         self.assertIn(empty + "\t", open(os.path.join(self.web, "removed-moves.tsv")).read())
         self.assertEqual(open(fine, "rb").read(), mp4, "a good file is never touched")
         self.assertNotIn(empty, open(os.path.join(self.web, "rescue-found.tsv")).read(), "rescued: off the list")
+
+
+class RescueByName(unittest.TestCase):
+    """A file of the same name is a good copy for sure only with more than the name: cameras number clips the same
+    on every card. Read from Search (rushes.sqlite) as Rushes keeps it."""
+    setUp, tearDown, put = MacJobs.setUp, MacJobs.tearDown, MacJobs.put
+
+    def test_a_counter_name_from_another_card_is_never_sure(self):
+        import sqlite3
+        mp4 = b"\x00\x00\x00\x18ftypmp42" + os.urandom(100000)
+        bad = self.put("VIDEOS/2021/CASA LINDA/Clip0004.MXF", b"")
+        other = self.put("VIDEOS/2020/AUGUST/Clip/Clip0004.MXF", b"\x06\x0e\x2b\x34" + os.urandom(90000))
+        same = self.put("OLD/2021/CASA LINDA/Clip0005.MXF", b"\x06\x0e\x2b\x34" + os.urandom(90000))
+        bad5 = self.put("VIDEOS/2021/CASA LINDA/Clip0005.MXF", b"")
+        named = self.put("OLD/AMAZON/Doral Park.mov", mp4); bad_named = self.put("VIDEOS/AMAZON2/Doral Park.mov", b"")
+        db = sqlite3.connect(os.path.join(self.web, "rushes.sqlite"))
+        db.execute("CREATE TABLE files (path TEXT, name TEXT, bytes INTEGER)")
+        for p in (other, same, named): db.execute("INSERT INTO files VALUES (?, ?, ?)", (p, os.path.basename(p), os.path.getsize(p)))
+        db.commit(); db.close()
+        self.r.job("rescue-scan", {})
+        rows = {l.split("\t")[0]: l.rstrip("\n").split("\t") for l in open(os.path.join(self.web, "rescue-found.tsv"))}
+        self.assertEqual((rows[bad][4], rows[bad][7]), (other, "0"), "Clip0004 from another card: offered as same name only")
+        self.assertEqual((rows[bad5][4], rows[bad5][7]), (same, "1"), "the same name in a folder of the same name: sure")
+        self.assertEqual((rows[bad_named][4], rows[bad_named][7]), (named, "1"), "a name no camera gives, one size everywhere: sure")
 
 
 class Drives(MacJobs):

@@ -11,7 +11,7 @@ mkdir -p "$W" "$A/VIDEOS/Card"
 cp -r "$HERE/app/." "$W/"
 printf '{"name":"Rushes","archive":{"local":"%s","web":"%s"},"helper":{"mode":"built_in"}}\n' "$A" "$W" > "$W/settings.json"
 printf '' > "$A/VIDEOS/Card/C1.MP4"
-printf '%s\t0\tempty: zero bytes\t/Volumes/Old/Card/C1.MP4\t/Volumes/Old/Card/C1.MP4\t200000\t0\n%s\t70000\tnot a clip\t\t\t0\t0\n' "$A/VIDEOS/Card/C1.MP4" "$A/VIDEOS/Card/C2.MP4" > "$W/rescue-found.tsv"
+printf '%s\t0\tempty: zero bytes\t/Volumes/Old/Card/C1.MP4\t/Volumes/Old/Card/C1.MP4\t200000\t0\t1\n%s\t70000\tnot a clip\t\t\t0\t0\t0\n' "$A/VIDEOS/Card/C1.MP4" "$A/VIDEOS/Card/C2.MP4" > "$W/rescue-found.tsv"
 printf '%s\t5\n' "$(date +%s)" > "$W/rescue-looked.txt"
 (cd "$R" && "$PHP" -S 127.0.0.1:18666 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18666

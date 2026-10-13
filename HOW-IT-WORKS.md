@@ -842,7 +842,10 @@ looked at. For each broken file:
   groups them by source, so one damaged source or one broken transfer shows at once;
 - **a good copy**: its source first, then a file of the same name elsewhere in Search (the archive or a
   drive kept where it is), the one in the most similar folders; only one that is there now and not broken
-  itself; or "none anywhere Rushes can see".
+  itself; or "none anywhere Rushes can see". It is **sure** only with more than the name, because cameras
+  number clips the same on every card: where the file was copied from; or the only one (or all one size) in a
+  folder of the same name; or a name that is not letters and a counter, with every copy the same size. Any
+  other is shown as **same name only**, with a warning, and never ticked for you.
 
 Nothing is changed by looking (`rescue-found.tsv`).
 
