@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.42 — October 2026
+
+- **Being under a department is the yes.** Rushes places every folder that matches a department, so there are no "Yes, here" buttons any more: you **Take out** what does not belong (it goes back to the left, and stays there). Names that are only similar are marked **guess: check it**, and each department's heading says how many there are to check.
+- **No "keep its name" on a department's own folder** (BUILDING DEPARTMENT into Building Department): its name always goes, so nothing is doubled. A folder you drop that is not a department's keeps its name as a folder, with a switch to change it. Each row says where it will go.
+- **Show it** works for placed folders too: it opens the left side down to it.
+
 ## 0.12.41 — October 2026
 
 - **Reorganize reads as two folder trees.** On the right, each department is a heading with a folder icon, and what goes into it sits indented under it, with a guide line down the side: placed folders first, then **Suggested** (dimmed, with a question mark). Empty departments are one quiet line; a department folds and opens. The left side is the same tree, each level indented under its folder.

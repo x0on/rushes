@@ -150,7 +150,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         <div class="dv">
           <div class="pane" id="dvL"><header><b>Where it is now</b><small>Folders in the archive that are not organized yet. Open one to see what is inside; drag any folder to the right. Once placed, it leaves this side.</small><small id="dvLeft" style="color:var(--fg);margin-top:4px"></small></header>
             <div id="dvTree"><p class="note" style="margin:10px 12px">Looking &hellip;</p></div></div>
-          <div class="pane" id="dvR"><header><b>Where it will go &middot; <?= $e($shelf) ?></b><small>The new structure, before anything moves. Drop a folder on a <?= $e($one) ?>; drag it back to the left, or press &times;, to take it off.</small></header>
+          <div class="pane" id="dvR"><header><b>Where it will go &middot; <?= $e($shelf) ?></b><small>The new structure, before anything moves. Whatever is under a <?= $e($one) ?> moves there when you press Move: Rushes put in what matches, marked <i>guess</i> where the name is only similar. <b>Take out</b> what does not belong; drop more from the left.</small></header>
             <div id="dvDepts"></div></div>
         </div>
         <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="dvAsk" disabled>Nothing placed yet</button>
@@ -372,7 +372,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           + (p.length ? '' : '') + '</span>';
       };
       var ICON = function (cls) { return '<svg class="fi ' + (cls || '') + '" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 5.1v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>'; };
-      var dopen = {};                  // departments folded or open on the right (open while they hold something)
+      var dopen = {}, peek = '';                  // departments folded or open on the right (open while they hold something)
       var SMALL = 20;                  // fewer files than this: listed under "small ones", not in the way
       var sopen = {}, ssmall = {};
       // placed: the folder itself or one above it is on the right (then it is not on the left any more)
@@ -390,17 +390,19 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       function place(rel, dept, info, by) {
         // a folder whose own name says a department gives up its name (PARKS → Parks & Recreation); any other keeps it
         var named = info && info.dept;
-        plan[rel] = {dept: dept, keep: !named, n: (info && info.n) || 0, b: (info && info.b) || 0, by: by || 'you'};
+        plan[rel] = {dept: dept, keep: !named, named: !!named, n: (info && info.n) || 0, b: (info && info.b) || 0, by: by || 'you'};
         delete no[rel]; save(); draw();
       }
-      function unplace(rel) { if (plan[rel] && plan[rel].by === 'rushes') no[rel] = 1; delete plan[rel]; save(); draw(); }
+      function unplace(rel) { no[rel] = 1; delete plan[rel]; save(); draw(); }   // taken out: Rushes does not put it back
 
       function node(f) {
         if (f.name === '') return '<div class="nd loose">' + num(f.n) + ' loose file' + (f.n > 1 ? 's' : '') + ' &middot; they stay where they are</div>';
-        if (placed(f.rel)) return '';
+        var onWay = peek && (peek === f.rel || peek.indexOf(f.rel + '/') === 0);   // Show it: on the way to a placed folder
+        if (placed(f.rel) && !onWay) return '';
         var u = under(f.rel), left = f.n - u[0];
-        if (left <= 0) return '';                       // everything in it has a place already
+        if (left <= 0 && !onWay) return '';             // everything in it has a place already
         var o = open[f.rel], k = kids[f.rel];
+        if (peek === f.rel && plan[f.rel]) return '<div class="nd flash" data-rel="' + esc(f.rel) + '">' + ICON() + '<span class="nm">' + esc(f.name) + '</span><small>' + num(f.n) + ' files &middot; placed: moves to ' + esc(plan[f.rel].dept) + '</small></div>';
         return '<div class="nd" draggable="true" data-rel="' + esc(f.rel) + '">'
           + '<button type="button" class="tw" data-open="' + esc(f.rel) + '" aria-label="Open">' + (o ? '▾' : '▸') + '</button>' + ICON()
           + '<span class="nm">' + esc(f.name) + '</span><small>' + (u[0] ? num(left) + ' of ' + num(f.n) + ' files left &middot; ' + size(Math.max(0, f.b - u[1])) : num(f.n) + ' files &middot; ' + size(f.b)) + '</small>'
@@ -427,6 +429,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       }
       // Show it: open the left side down to that folder, and point at it
       function reveal(rel) {
+        peek = rel; clearTimeout(reveal.t); reveal.t = setTimeout(function () { peek = ''; draw(); }, 8000);
         var p = rel.split('/'), chain = [];
         for (var i = 1; i < p.length; i++) chain.push(p.slice(0, i).join('/'));
         var step = function () {
@@ -453,40 +456,23 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         var all = (kids[''] || []).reduce(function (s, f) { return s + (f.name ? f.n : 0); }, 0);
         $('dvLeft').textContent = all ? (all - n > 0 ? num(all - n) + ' of ' + num(all) + ' files still to place' : 'Everything has a place ✓') + (n ? ' · ' + num(n) + ' placed' : '') : '';
         $('dvDepts').innerHTML = depts.map(function (d) {
-          var here = Object.keys(plan).filter(function (r) { return plan[r].dept === d; }).sort();
-          var maybe = sugg.filter(function (m) { return m.dept === d && !m.sure && !plan[m.rel] && !no[m.rel] && !placed(m.rel); });
-          var hn = 0; here.forEach(function (r) { if (!placed(parent(r))) hn += plan[r].n; });
-          var has = here.length || maybe.length, o = dopen[d] !== undefined ? dopen[d] : has;
-          // the department: a heading, with what goes into it indented below, as a folder tree
+          // what is under a department is what moves there: Rushes places what matches, you take out what does not belong
+          var here = Object.keys(plan).filter(function (r) { return plan[r].dept === d; })
+            .sort(function (a, b) { return (plan[b].guess ? 1 : 0) - (plan[a].guess ? 1 : 0) || plan[b].b - plan[a].b; });
+          var hn = 0, gs = 0; here.forEach(function (r) { if (!placed(parent(r))) hn += plan[r].n; if (plan[r].guess) gs++; });
+          var has = here.length, o = dopen[d] !== undefined ? dopen[d] : has;
           return '<div class="db' + (has ? '' : ' empty') + '" data-dept="' + esc(d) + '"><div class="dh">'
             + (has ? '<button type="button" class="tw" data-dopen="' + esc(d) + '">' + (o ? '▾' : '▸') + '</button>' : '<span style="width:20px"></span>') + ICON('d') + esc(d)
-            + '<small>' + (here.length ? here.length + ' placed &middot; ' + num(hn) + ' files' : '') + (maybe.length ? (here.length ? ' &middot; ' : '') + maybe.length + ' suggested' : '') + (has ? '' : 'drop folders here') + '</small></div>'
-            + (o && has ? '<div class="kids">'
-              + here.map(function (r) {
-                var p = plan[r];
+            + '<small>' + (has ? here.length + ' folder' + (here.length > 1 ? 's' : '') + ' &middot; ' + num(hn) + ' files' + (gs ? ' &middot; <span style="color:var(--warn)">' + gs + ' to check</span>' : '') : 'drop folders here') + '</small></div>'
+            + (o && has ? '<div class="kids">' + here.map(function (r) {
+                var p = plan[r], what = p.keep ? esc(d) + ' / year / ' + esc(last(r)) + ' / &hellip;' : esc(d) + ' / year / what is inside it';
                 return '<div class="tr pl" draggable="true" data-rel="' + esc(r) + '">' + ICON() + '<span class="nm"><b>' + esc(last(r)) + '</b>'
-                  + (p.by === 'rushes' ? '<span class="tag2">same name</span>' : '')
+                  + (p.guess ? '<span class="tag2" style="color:var(--warn);border-color:var(--warn)">guess: check it</span>' : p.by === 'rushes' ? '<span class="tag2">same name</span>' : '')
                   + '<small>' + crumbs(r) + '</small>'
-                  + '<small>' + (p.n ? num(p.n) + ' files &middot; ' + size(p.b) + ' &middot; ' : '') + (p.keep ? 'goes in as ' + esc(d) + ' / year / ' + esc(last(r)) : 'its name goes; what is in it goes in, each folder by its year') + '</small></span>'
-                  + '<span class="acts"><label style="font-size:11.5px;color:var(--muted);white-space:nowrap"><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep its name</label>'
-                  + '<button type="button" class="x" data-off="' + esc(r) + '" title="Take it off">&times;</button></span></div>';
-              }).join('')
-              + (maybe.length ? '<div class="sublab">Suggested &middot; nothing moves until you say yes</div>' : '')
-              + groups(maybe).map(function (g) {
-                var k = d + '|' + g.name, one = g.items.length === 1, go = sopen[k], big = g.items.filter(function (m) { return m.n >= SMALL; }),
-                    small = g.items.length - big.length, shown = ssmall[k] || !big.length ? g.items : big;
-                var line = function (m) {
-                  return '<div class="tr sug">' + ICON('q') + '<span class="nm"><b>' + esc(last(m.rel)) + '</b><small>' + crumbs(m.rel) + '</small><small>' + num(m.n) + ' files &middot; ' + size(m.b) + '</small></span>'
-                    + '<span class="acts"><button type="button" class="btn quiet sm" data-yes="' + esc(m.rel) + '">Yes, here</button>'
-                    + '<button type="button" class="lnk2" data-show="' + esc(m.rel) + '">Show it</button>'
-                    + '<button type="button" class="x" data-nah="' + esc(m.rel) + '" title="Not this one">&times;</button></span></div>';
-                };
-                if (one) return line(g.items[0]);
-                return '<div class="tr sug"><button type="button" class="tw" data-sg="' + esc(k) + '">' + (go ? '▾' : '▸') + '</button>' + ICON('q')
-                  + '<span class="nm"><b>' + esc(g.name) + '</b><small>' + g.items.length + ' places &middot; ' + num(g.n) + ' files &middot; ' + size(g.b) + '</small></span>'
-                  + '<button type="button" class="btn quiet sm" data-yesall="' + esc(k) + '">Yes, all ' + g.items.length + '</button></div>'
-                  + (go ? '<div class="kids">' + shown.map(line).join('')
-                    + (small && big.length && !ssmall[k] ? '<div class="tr"><button type="button" class="lnk2" data-small="' + esc(k) + '">and ' + small + ' small one' + (small > 1 ? 's' : '') + ' (fewer than ' + SMALL + ' files)</button></div>' : '') + '</div>' : '');
+                  + '<small>' + (p.n ? num(p.n) + ' files &middot; ' + size(p.b) + ' &middot; ' : '') + '&rarr; ' + what + '</small>'
+                  + (p.named ? '' : '<small><label style="cursor:pointer"><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep ' + esc(last(r)) + ' as a folder</label></small>')
+                  + '</span><span class="acts"><button type="button" class="lnk2" data-show="' + esc(r) + '">Show it</button>'
+                  + '<button type="button" class="btn quiet sm" data-off="' + esc(r) + '" title="It goes back to the left and does not move">Take out</button></span></div>';
               }).join('') + '</div>' : '')
             + '</div>';
         }).join('');
@@ -596,7 +582,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           depts = d.depts; sugg = d.matches;
           // only a folder with exactly a department's name is placed by Rushes; the rest wait for a yes. Not while
           // a tidy-up waits for the helper: what it moves is still listed here until it is done
-          if (!busy) sugg.forEach(function (m) { if (m.sure && !plan[m.rel] && !no[m.rel]) plan[m.rel] = {dept: m.dept, keep: false, n: m.n, b: m.b, by: 'rushes'}; });
+          if (!busy) sugg.forEach(function (m) { if (!plan[m.rel] && !no[m.rel] && !placed(m.rel)) plan[m.rel] = {dept: m.dept, keep: false, named: true, n: m.n, b: m.b, by: 'rushes', guess: !m.sure}; });
           Object.keys(plan).forEach(function (r) { if (depts.indexOf(plan[r].dept) < 0) delete plan[r]; });   // a department taken out of Setup
           save(); draw();
         }).catch(function (e) { $('dvDepts').innerHTML = '<div class="banner bad" style="margin:10px"><div class="txt">' + esc(e.message) + '</div></div>'; });

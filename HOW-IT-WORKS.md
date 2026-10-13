@@ -1080,31 +1080,28 @@ departments, A to Z. A folder dragged onto a department (or given one with
 Nothing moves until **Move**, which first says how many files, how many year
 folders, and one example per folder, and asks again.
 
-- **What Rushes places by itself:** only a folder with exactly a department's
-  name (or its folder's). A folder whose name only looks like one
-  (`POLICE DEPARTMNET`, `PARKS`) is a suggestion: on the left as `→ Police
-  Department?`, on the right under the department, dashed, with **Yes, here**
-  and ×. Found however deep, the first such folder in each path
-  (`tidy.php ?matches=1`, `dept_guess()`): the department's own name or folder
-  is sure; otherwise the most similar department, half its words at least, and
-  only when one department is clearly the most similar. Not while a tidy-up
-  waits for the helper.
+- **What is under a department moves there.** Rushes places every folder whose
+  name matches a department, however deep (`tidy.php ?matches=1`,
+  `dept_guess()`): the department's own name or folder is marked **same name**;
+  a name that is only similar (`PARKS`, `Bulding Web`) is marked **guess: check
+  it**, and the department's heading counts them ("2 to check"). Only a folder
+  with video in it is placed. **Take out** sends a folder back to the left, and
+  Rushes does not place it again; **Show it** opens the left side down to it.
+  Nothing is placed while a tidy-up waits for the helper.
 - **Where it goes:** a folder whose own name is a department gives up its name,
   and what is in it goes in, each folder in it by its own year
   (`PARKS/Kite Fest` → `Parks & Recreation/2019/Kite Fest`; a year folder stays
   the year). Any other folder keeps its name, under its year
   (`COUNCIL EVENTS/Gala` → `Elected Officials/2023/COUNCIL EVENTS/Gala`).
-  **keep its name** switches between the two for each folder. The year is the
-  same rule as below.
+  A folder you dropped whose name is not a department's has **keep it as a
+  folder** (on by default); one with a department's name never offers it. The
+  year is the same rule as below.
 - **The deepest folder placed wins:** a folder dragged elsewhere out of one
   already placed goes where it was dragged. Only files that wait to be filed
   are ever in the plan (`here_files()`): a folder already on the shelf, a way
   out, or a department taken out of Setup counts for nothing.
-- **Suggestions** show each folder's whole path, the drive it came on first and
-  the folder that would move last, in bold; **Show it** opens the left side down
-  to it. Suggestions with the same folder name are one line (**Yes, all**);
-  folders with no video are never suggested, and ones with fewer than 20 files
-  wait behind "and N small ones".
+- Each folder shows its whole path, the drive it came on first and the folder
+  that moves last, in bold, and where it will go.
 - **The left side shrinks as you go:** a placed folder leaves it, each folder
   above counts only what is still to place, and the top says how many files
   are still to place.
