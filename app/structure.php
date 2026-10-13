@@ -142,7 +142,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .finfo { width: 280px; padding: 12px 14px; font-size: 12.5px }
   .fi-n { font-weight: 650; font-size: 13.5px; word-break: break-word; margin-bottom: 8px }
   .fi-k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-top: 8px }
-  .fi-v { word-break: break-word } .fi-v.bad { color: var(--bad); font-weight: 600 } .fi-v small { color: var(--muted) }
+  .fi-e summary { cursor: pointer; color: var(--accent-text); font-size: 12px; margin-top: 4px } .fi-e div { font-size: 11.5px; color: var(--muted); word-break: break-all; padding: 1px 0 }
+  .fi-v { word-break: break-word } .fi-v.warn { color: var(--warn) } .fi-v.bad { color: var(--bad); font-weight: 600 } .fi-v small { color: var(--muted) }
   .fpath { padding: 4px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .fmenu { position: fixed; z-index: 50; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; min-width: 170px }
   .fmenu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer }
@@ -496,14 +497,20 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var clock = function (s) { s = Math.round(+s || 0); return Math.floor(s / 3600) ? Math.floor(s / 3600) + ':' + ('0' + Math.floor(s % 3600 / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2) : Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); };
       function info(cols, p) {
         var c = document.createElement('div'); c.className = 'fcol finfo'; cols.appendChild(c);
-        c.innerHTML = '<div class="fi-n">' + esc(name(p)) + '</div><p class="note">Reading…</p>';
+        c.innerHTML = '<div class="fi-n">' + esc(name(p)) + '</div><p class="note"><span class="spin"></span> Counting on the drive…</p>';
         get('info=' + encodeURIComponent(p)).then(function (d) {
           var kv = function (k, v, cls) { return v == null || v === '' ? '' : '<div class="fi-k">' + k + '</div><div class="fi-v' + (cls ? ' ' + cls : '') + '">' + v + '</div>'; };
           var m = d.media || {};
           c.innerHTML = '<div class="fi-n">' + esc(name(p)) + '</div>' + (d.dir
-            ? kv('Files', d.files.toLocaleString() + ' · ' + size(d.bytes)) +
-              (d.zero ? kv('Empty files', d.zero.toLocaleString() + ' with zero bytes', 'bad') : '') +
-              kv('Shot', d.shot ? (d.shot[0] === d.shot[1] ? day(d.shot[0]) : day(d.shot[0]) + ' – ' + day(d.shot[1])) + ' <small>(' + d.shot[2] + ' of ' + d.videos + ' clips carry a camera date)</small>' : d.videos ? 'no camera date read yet' : 'no clips') +
+            ? (!d.files && !d.dirs && d.full ? kv('Files', 'Empty folder: nothing inside')
+                : kv('Files', (d.full ? '' : 'at least ') + d.files.toLocaleString() + ' file' + (d.files === 1 ? '' : 's') + (d.files ? ' · ' + (d.full ? '' : 'at least ') + size(d.bytes) : '') +
+                     (d.dirs ? ' <small>in ' + d.dirs.toLocaleString() + ' folder' + (d.dirs === 1 ? '' : 's') + '</small>' : ''))) +
+              (d.full && d.files > d.known ? kv('Search', (d.files - d.known).toLocaleString() + ' of these are not in Search yet <small>(moved here in Finder, or new): Setup → Jobs and tools → Rebuild the file list</small>', 'warn') : '') +
+              (d.zero ? kv('Empty files', (d.zero_clips ? '<span class="bad">' + d.zero_clips.toLocaleString() + ' clip' + (d.zero_clips === 1 ? '' : 's') + ' with zero bytes</span> <small>(broken: a copy that never got its data)</small>' : '') +
+                  (d.zero - d.zero_clips ? (d.zero_clips ? '<br>' : '') + (d.zero - d.zero_clips).toLocaleString() + ' other file' + (d.zero - d.zero_clips === 1 ? '' : 's') + ' with zero bytes <small>(often a card’s or a program’s markers: harmless)</small>' : '') +
+                  '<details class="fi-e"><summary>Show where</summary>' + d.empty.map(function (e) { return '<div>' + esc(e) + '</div>'; }).join('') +
+                  (d.zero > d.empty.length ? '<div class="note">and ' + (d.zero - d.empty.length).toLocaleString() + ' more</div>' : '') + '</details>') : '') +
+              kv('Shot', d.shot ? (d.shot[0] === d.shot[1] ? day(d.shot[0]) : day(d.shot[0]) + ' – ' + day(d.shot[1])) + ' <small>(' + d.shot[2] + ' clips carry a camera date)</small>' : d.videos ? 'no camera date read yet' : 'no clips') +
               kv('Its year', d.year ? '<b>' + esc(d.year) + '</b> <small>' + esc(d.year_why) + '</small>' : '<small>' + esc(d.year_why) + '</small>')
             : kv('Size', size(d.size), d.size === 0 ? 'bad' : '') +
               kv('Shot on', d.shot ? esc(d.shot) + ' <small>(the camera’s date, inside the file)</small>' : '<small>no camera date in it' + (d.year ? '; its oldest date says ' + esc(d.year) : '') + '</small>') +

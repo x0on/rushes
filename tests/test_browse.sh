@@ -93,4 +93,14 @@ mkdir "$A/VIDEOS/Parks/nothing-here"; J=$(python3 -c 'import json,sys; print(jso
 B -d op=remove --data-urlencode "items=$J" > /dev/null; [ ! -e "$A/VIDEOS/Parks/nothing-here" ] && [ ! -e "$A/_Recently Removed/VIDEOS/Parks/nothing-here" ] && ok "an empty folder is simply removed" || no "rmdir"
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/_rushes")
 case "$(B -d op=remove --data-urlencode "items=$J")" in *error*) ok "Rushes' own folders are never removed" ;; *) no "remove own" ;; esac
+mkdir -p "$A/VIDEOS/Moved in Finder/2024"; printf abc > "$A/VIDEOS/Moved in Finder/2024/z.mov"
+G "info=$A/VIDEOS/Moved in Finder" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["files"] == 1 and d["dirs"] == 1 and d["known"] == 0 and d["full"], d' \
+  && ok "a folder Search has not seen is counted on the drive: never called empty when it is not, and Search being behind is said" || no "info on disk"
+mkdir -p "$A/VIDEOS/Really empty"; G "info=$A/VIDEOS/Really empty" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["files"] == 0 and d["dirs"] == 0 and d["full"], d' && ok "a folder with nothing in it is empty" || no "empty"
+J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Moved in Finder")
+B -d op=remove --data-urlencode "items=$J" > /dev/null
+grep -qF "$A/_Recently Removed/VIDEOS/Moved in Finder/2024/z.mov" "$W/removed-moves.tsv" && ok "removed files Search had not seen are recorded too, so Delete All can take them" || no "record from disk"
+mkdir -p "$A/VIDEOS/Card/CLIPS"; : > "$A/VIDEOS/Card/CLIPS/A001.MXF"; : > "$A/VIDEOS/Card/CLIPS/marker.ind"
+G "info=$A/VIDEOS/Card" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["zero"] == 2 and d["zero_clips"] == 1 and d["empty"][0] == "CLIPS/A001.MXF", d' \
+  && ok "empty clips (broken) are told from other empty files (markers), clips first, with where" || no "zero kinds"
 

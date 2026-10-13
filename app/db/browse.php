@@ -26,6 +26,8 @@ function bail(int $code, string $why) { http_response_code($code); out(['error' 
 if (!may_act((string)($_REQUEST['pass'] ?? ''))) bail(403, 'sign in first');
 
 const UNDO_KEEP = 50;
+const INFO_MAX = 50000;                  // a folder's info counts this many files on the drive at most…
+const INFO_SECS = 8;                     // …or for this long, then says "at least"
 const HOLD = '_Recently Removed';       // runner.py's: on the archive, emptied only by Delete All
 $A = rtrim(archive_dir(), '/');
 // Rushes' own at the archive's top (and the system's): never shown here, never moved, never moved into, never a
@@ -113,19 +115,34 @@ if (isset($_GET['info'])) {
              'media' => array_intersect_key($m, array_flip(['duration', 'width', 'height', 'fps', 'codec', 'camera', 'timecode', 'reel'])),
              'year' => clip_year($p)]);
     }
-    // a folder: counted from Search (instant, even for a big one); its clips' dates from what the camera
-    // wrote, or the file's own date (clip_year, read once and kept), at most YEAR_SAMPLE clips
-    $q = $db->prepare("SELECT f.path, f.bytes, f.kind, m.recorded FROM files f LEFT JOIN media m ON m.file_id = f.id WHERE f.path >= ? AND f.path < ?");
+    // a folder: counted on the drive itself, as it is now (Search may not have seen a folder moved in Finder,
+    // and a folder that looks empty to it is not); at most INFO_MAX entries or INFO_SECS, then "at least".
+    // Its clips' dates: what the camera wrote (Search), or the file's own date (clip_year), at most YEAR_SAMPLE.
+    $n = 0; $b = 0; $zero = 0; $dirs = 0; $clips = []; $full = true; $t0 = microtime(true); $empty = []; $zeroClips = 0;
+    try {
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($p, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+        foreach ($it as $f) {
+            if ($f->getFilename()[0] === '.') continue;
+            if ($f->isDir()) { $dirs++; continue; }
+            $n++; $sz = (int)$f->getSize(); $b += $sz;
+            $isClip = (bool)preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $f->getFilename());
+            if ($isClip) $clips[] = $f->getPathname();
+            // an empty clip is a broken one (a copy that never got its data); other empty files are often a card's or
+            // a program's markers: both are said, the clips first, with where they are
+            if ($sz === 0) { $zero++; if ($isClip) $zeroClips++;
+                if (count($empty) < 300) $empty[] = [substr($f->getPathname(), strlen($p) + 1), $isClip]; }
+            if ($n >= INFO_MAX || microtime(true) - $t0 > INFO_SECS) { $full = false; break; }
+        }
+    } catch (UnexpectedValueException $e) { $full = false; }
+    $q = $db->prepare("SELECT COUNT(*), MIN(substr(m.recorded, 1, 10)), MAX(substr(m.recorded, 1, 10)), COUNT(m.recorded)
+                       FROM files f LEFT JOIN media m ON m.file_id = f.id WHERE f.path >= ? AND f.path < ?");
     $q->bindValue(1, "$p/"); $q->bindValue(2, "$p" . '0');
-    $r = $q->execute(); $n = 0; $b = 0; $zero = 0; $clips = []; $shot = [];
-    while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) {
-        $n++; $b += (int)$x['bytes']; if ((int)$x['bytes'] === 0) $zero++;
-        if ($x['kind'] === 'video') { $clips[] = $x['path']; if ($x['recorded']) $shot[] = substr((string)$x['recorded'], 0, 10); }
-    }
-    sort($shot);
+    [$known, $first, $last, $dated] = $q->execute()->fetchArray(SQLITE3_NUM);
     $w = place($p); [$year, $why] = folder_year($p, $w['root'], $clips);
-    out(['path' => $p, 'dir' => true, 'files' => $n, 'bytes' => $b, 'zero' => $zero, 'videos' => count($clips),
-         'shot' => $shot ? [$shot[0], end($shot), count($shot)] : null, 'year' => $year, 'year_why' => $why,
+    out(['path' => $p, 'dir' => true, 'files' => $n, 'bytes' => $b, 'zero' => $zero, 'zero_clips' => $zeroClips,
+         'empty' => array_values(array_map(fn($e) => $e[0], array_merge(array_filter($empty, fn($e) => $e[1]), array_filter($empty, fn($e) => !$e[1])))), 'dirs' => $dirs, 'full' => $full,
+         'videos' => count($clips), 'known' => (int)$known,
+         'shot' => $dated ? [$first, $last, (int)$dated] : null, 'year' => $year, 'year_why' => $why,
          'modified' => @filemtime($p), 'created' => $born($p)]);
 }
 
@@ -176,7 +193,12 @@ function files_under(string $from, string $to): array {
         $q->reset();
         if ($out) return $out;
     }
-    return [];
+    // Search has none of them (a folder moved here in Finder since it last looked): read on the drive, so the
+    // record still says where each file went
+    $out = [];
+    if (is_dir($to)) foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($to, FilesystemIterator::SKIP_DOTS)) as $f)
+        if ($f->isFile()) $out[] = [$from . substr($f->getPathname(), strlen($to)), $f->getPathname(), (int)$f->getSize()];
+    return $out;
 }
 // Whether a thing may go to a place: both in the archive, neither Rushes' own, never into itself.
 function may_move(string $from, string $to): void {
@@ -346,7 +368,12 @@ try {
                 $pairs = files_under($it, $it); $n += max(1, count($pairs)); $b += array_sum(array_column($pairs, 2));
                 if (!@rename($it, $held)) throw new RuntimeException('The drive did not let ' . basename($it) . ' be moved to Recently Removed.');
                 $undo[] = ['op' => 'remove', 'from' => $it, 'to' => $held, 'at' => time()]; $saveUndo();
-                $moved = array_map(fn($x) => [$x[0], $held . substr($x[0], strlen($it)), $x[2]], is_file($held) ? [[$it, $held, (int)@filesize($held)]] : $pairs);
+                // every file that went, read on the drive (Search may not know a folder moved here in Finder):
+                // Delete All deletes only what has a line here
+                $moved = [];
+                if (is_file($held)) $moved[] = [$it, $held, (int)@filesize($held)];
+                else foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($held, FilesystemIterator::SKIP_DOTS)) as $f)
+                    if ($f->isFile()) $moved[] = [$it . substr($f->getPathname(), strlen($held)), $f->getPathname(), (int)$f->getSize()];
                 // Delete All deletes what has a record of being put there (runner.py empty())
                 @file_put_contents(web_dir() . '/removed-moves.tsv', implode('', array_map(fn($x) => "$x[0]\t$x[1]\n", $moved)), FILE_APPEND);
                 @file_put_contents(web_dir() . '/removed-at.txt', time() . "\n");

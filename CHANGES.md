@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.5 — October 2026
+
+- **A folder's properties are counted on the drive itself.** They were counted from Search, which had not seen folders moved in Finder since it last looked: a folder full of footage said "0 files". Now Tidy up's info column counts what is really there (for a very big folder, "at least" what it counted in a few seconds), and says when Search is behind ("1,240 of these are not in Search yet"), with where to fix it.
+- **Empty folder** says so, instead of "0 · Zero bytes".
+- **Empty files, told apart:** clips with zero bytes (broken: a copy that never got its data) are counted apart from other empty files (often a card's or a program's markers, harmless), and **Show where** lists them, clips first.
+- Moving or removing a folder Search has not seen still writes down every file in it (read on the drive), so relinking and Delete All know them.
+
 ## 0.13.4 — October 2026
 
 - **A page never runs an older Rushes.** After an update, a page that was already open could still be the old one and ask for things the new Rushes no longer does ("unknown op" in Tidy up). Now every page notices within seconds that Rushes was updated and reloads itself; if something is being done on it at that moment, the top bar says "Rushes was updated · Reload" instead.
