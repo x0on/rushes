@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.41 — October 2026
+
+- **Reorganize reads as two folder trees.** On the right, each department is a heading with a folder icon, and what goes into it sits indented under it, with a guide line down the side: placed folders first, then **Suggested** (dimmed, with a question mark). Empty departments are one quiet line; a department folds and opens. The left side is the same tree, each level indented under its folder.
+- **Clearer names for the two sides:** **Where it is now** (what is not organized yet) and **Where it will go** (the new structure, before anything moves).
+
 ## 0.12.40 — October 2026
 
 - **Every suggestion shows its whole path**, the way Finder would: the drive it came on, then each folder, the one that would move in bold (`old server › Departments › **Building**`). **Show it** opens the left side down to that folder and points at it.

@@ -1072,9 +1072,9 @@ at its top that is not a department is a drive copied in, waits, and its
 folders are filed without its name.
 
 **Drag and drop** (Reorganize's first view; **List** is the other). Two panes:
-on the left, **To be filed**: what is in the archive and not on the shelf, as
+on the left, **Where it is now**: what is in the archive and not on the shelf, as
 folders that open like Finder's (`tidy.php ?tree=`, one level at a time from
-the catalogue, never the drive). On the right, **How you want it**: the
+the catalogue, never the drive). On the right, **Where it will go**: the
 departments, A to Z. A folder dragged onto a department (or given one with
 **Move to…**) leaves the left side; dragged back, or with ×, it returns.
 Nothing moves until **Move**, which first says how many files, how many year

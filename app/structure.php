@@ -76,7 +76,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .views { display: flex; gap: 6px; margin: 4px 0 14px }
   .views button { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer }
   .views button.on { border-color: var(--accent); background: var(--sel-bg); color: var(--sel-fg) }
-  .dv { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; align-items: start }
+  .dv { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.35fr); gap: 14px; align-items: start }
   @media (max-width: 900px) { .dv { grid-template-columns: 1fr } }
   .pane { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 200px; max-height: 72vh; overflow: auto }
   .pane > header { position: sticky; top: 0; background: var(--bg); padding: 10px 12px 8px; border-bottom: 1px solid var(--line-soft); z-index: 1 }
@@ -93,16 +93,29 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .db .dz { font-size: 12px; color: var(--faint); margin-top: 2px }
   .pl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; padding: 6px 8px; border-radius: 7px; background: var(--raised); font-size: 12.5px; cursor: grab }
   .pl .nm { flex: 1; min-width: 140px; word-break: break-word } .pl small { color: var(--muted); font-size: 11.5px; display: block }
-  .pl.sug { background: none; border: 1px dashed var(--line); cursor: default }
   .pl label { font-size: 11.5px; color: var(--muted); white-space: nowrap; cursor: pointer }
   .pl .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px }
-  .crumb { display: block; font-size: 12.5px; overflow-wrap: break-word; line-height: 1.5 } .crumb b { color: var(--fg) } .crumb .sep { color: var(--faint); margin: 0 4px }
+  .crumb { display: block; font-size: 12px; overflow-wrap: anywhere; word-break: normal; line-height: 1.5 } .crumb b { color: var(--fg) } .crumb .sep { color: var(--faint); margin: 0 4px }
   .drv { font-size: 11px; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; color: var(--muted); white-space: nowrap }
-  .sgrp { margin-top: 6px; border: 1px dashed var(--line); border-radius: 7px; padding: 6px 8px }
-  .sgh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px } .sgh .nm { flex: 1; min-width: 140px } .sgh small { color: var(--muted) }
-  .sgrp .pl.sug { border: 0; border-top: 1px solid var(--line-soft); border-radius: 0; margin-top: 4px; padding: 6px 0 0 }
   .lnk2 { background: none; border: 0; color: var(--accent-text); cursor: pointer; font-size: 12px; text-decoration: underline; padding: 0 }
   .nd.flash { outline: 2px solid var(--accent); outline-offset: -2px }
+  /* both sides as folder trees: each level indented under its parent, with a guide line down the side */
+  .kids { margin-left: 17px; border-left: 1px solid var(--line); }
+  .fi { width: 15px; height: 15px; flex: none; color: var(--muted) } .fi.d { color: var(--accent-text) } .fi.q { opacity: .55 }
+  .nd { border-top: 0 }
+  .dh { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--line-soft); font-size: 14px; font-weight: 650; cursor: default }
+  .dh small { margin-left: auto; font-weight: 400; color: var(--muted); font-size: 12px; white-space: nowrap }
+  .db { border-top: 0; padding: 0 } .db.over > .dh { background: var(--sel-bg) } .db.empty .dh { font-weight: 500; color: var(--muted); font-size: 13px; padding-top: 6px; padding-bottom: 6px }
+  .db > .kids { margin: 0 12px 8px 22px }
+  .tr { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px 6px 10px; font-size: 13px; position: relative }
+  .tr::before { content: ''; position: absolute; left: 0; top: 15px; width: 8px; border-top: 1px solid var(--line) }
+  .tr .nm { flex: 1 1 0; min-width: 0 } .tr > .tw { margin-top: 1px }
+  .acts { display: flex; gap: 8px; align-items: center; flex: none; flex-wrap: nowrap }
+  .nd .nm { flex: 1 1 140px; min-width: 0 } .nd .acts { margin-left: auto } .tr .nm > b { font-weight: 600 } .tr small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px }
+  .tr.pl { cursor: grab; background: none; margin: 0; border-radius: 0 }
+  .tr.sug .nm > b { font-weight: 500; color: var(--muted) } .tr.sug .nm > b::after { content: ' ?' }
+  .tag2 { font-size: 10.5px; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); margin-left: 6px; font-weight: 400 }
+  .sublab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 8px 10px 2px }
   .eg { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.6; word-break: break-word }
   h3.part { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px }
 </style>
@@ -135,9 +148,9 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       <!-- ══ Drag and drop: folders from the left onto a <?= $e($one) ?> on the right. Nothing moves until Move. ══ -->
       <div id="dragView" hidden>
         <div class="dv">
-          <div class="pane" id="dvL"><header><b>To be filed</b><small>What is in the archive and not on the shelf yet. Open a folder to see its folders; drag any of them to the right. Once placed, it leaves this side.</small><small id="dvLeft" style="color:var(--fg);margin-top:4px"></small></header>
+          <div class="pane" id="dvL"><header><b>Where it is now</b><small>Folders in the archive that are not organized yet. Open one to see what is inside; drag any folder to the right. Once placed, it leaves this side.</small><small id="dvLeft" style="color:var(--fg);margin-top:4px"></small></header>
             <div id="dvTree"><p class="note" style="margin:10px 12px">Looking &hellip;</p></div></div>
-          <div class="pane" id="dvR"><header><b>How you want it &middot; <?= $e($shelf) ?></b><small>Drop a folder on a <?= $e($one) ?>. Drag it back to the left, or press &times;, to take it off.</small></header>
+          <div class="pane" id="dvR"><header><b>Where it will go &middot; <?= $e($shelf) ?></b><small>The new structure, before anything moves. Drop a folder on a <?= $e($one) ?>; drag it back to the left, or press &times;, to take it off.</small></header>
             <div id="dvDepts"></div></div>
         </div>
         <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="dvAsk" disabled>Nothing placed yet</button>
@@ -358,6 +371,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           return '<span class="sep">›</span>' + (i === p.length - 1 ? '<b>' + esc(x) + '</b>' : esc(x)); }).join('')
           + (p.length ? '' : '') + '</span>';
       };
+      var ICON = function (cls) { return '<svg class="fi ' + (cls || '') + '" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 5.1v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>'; };
+      var dopen = {};                  // departments folded or open on the right (open while they hold something)
       var SMALL = 20;                  // fewer files than this: listed under "small ones", not in the way
       var sopen = {}, ssmall = {};
       // placed: the folder itself or one above it is on the right (then it is not on the left any more)
@@ -380,18 +395,18 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       }
       function unplace(rel) { if (plan[rel] && plan[rel].by === 'rushes') no[rel] = 1; delete plan[rel]; save(); draw(); }
 
-      function node(f, depth) {
-        if (f.name === '') return '<div class="nd loose" style="padding-left:' + (10 + depth * 16) + 'px">' + num(f.n) + ' loose file' + (f.n > 1 ? 's' : '') + ' &middot; they stay where they are</div>';
+      function node(f) {
+        if (f.name === '') return '<div class="nd loose">' + num(f.n) + ' loose file' + (f.n > 1 ? 's' : '') + ' &middot; they stay where they are</div>';
         if (placed(f.rel)) return '';
         var u = under(f.rel), left = f.n - u[0];
         if (left <= 0) return '';                       // everything in it has a place already
         var o = open[f.rel], k = kids[f.rel];
-        return '<div class="nd" draggable="true" data-rel="' + esc(f.rel) + '" style="padding-left:' + (10 + depth * 16) + 'px">'
-          + '<button type="button" class="tw" data-open="' + esc(f.rel) + '" aria-label="Open">' + (o ? '▾' : '▸') + '</button>'
+        return '<div class="nd" draggable="true" data-rel="' + esc(f.rel) + '">'
+          + '<button type="button" class="tw" data-open="' + esc(f.rel) + '" aria-label="Open">' + (o ? '▾' : '▸') + '</button>' + ICON()
           + '<span class="nm">' + esc(f.name) + '</span><small>' + (u[0] ? num(left) + ' of ' + num(f.n) + ' files left &middot; ' + size(Math.max(0, f.b - u[1])) : num(f.n) + ' files &middot; ' + size(f.b)) + '</small>'
-          + (f.dept && !no[f.rel] ? '<button type="button" class="sg" data-put="' + esc(f.rel) + '" data-dept="' + esc(f.dept) + '" title="Place it there">&rarr; ' + esc(f.dept) + (f.sure ? '' : '?') + '</button>' : '')
-          + '<button type="button" class="mv" data-to="' + esc(f.rel) + '">Move to&hellip;</button></div>'
-          + (o ? (k ? k.map(function (c) { return node(c, depth + 1); }).join('') || '' : '<div class="nd loose" style="padding-left:' + (26 + depth * 16) + 'px">opening &hellip;</div>') : '');
+          + '<span class="acts">' + (f.dept && !no[f.rel] ? '<button type="button" class="sg" data-put="' + esc(f.rel) + '" data-dept="' + esc(f.dept) + '" title="Place it there">&rarr; ' + esc(f.dept) + (f.sure ? '' : '?') + '</button>' : '')
+          + '<button type="button" class="mv" data-to="' + esc(f.rel) + '">Move to&hellip;</button></span></div>'
+          + (o ? '<div class="kids">' + (k ? k.map(node).join('') : '<div class="nd loose">opening &hellip;</div>') + '</div>' : '');
       }
       function info(rel) {             // what is known of a folder: from the tree or from the suggestions
         var k = kids[parent(rel)]; var f = k && k.filter(function (x) { return x.rel === rel; })[0];
@@ -431,7 +446,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       }
 
       function draw() {
-        $('dvTree').innerHTML = kids[''] ? (kids[''].map(function (f) { return node(f, 0); }).join('')
+        $('dvTree').innerHTML = kids[''] ? (kids[''].map(node).join('')
           || '<p class="note" style="margin:10px 12px">Nothing waits to be filed.</p>') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
         var n = 0, b = 0, c = Object.keys(plan).length;
         top().forEach(function (r) { n += plan[r].n; b += plan[r].b; });
@@ -440,34 +455,40 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         $('dvDepts').innerHTML = depts.map(function (d) {
           var here = Object.keys(plan).filter(function (r) { return plan[r].dept === d; }).sort();
           var maybe = sugg.filter(function (m) { return m.dept === d && !m.sure && !plan[m.rel] && !no[m.rel] && !placed(m.rel); });
-          return '<div class="db" data-dept="' + esc(d) + '"><b>' + esc(d) + '</b>'
-            + (!here.length && !maybe.length ? '<div class="dz">drop folders here</div>' : '')
-            + here.map(function (r) {
-              var p = plan[r];
-              return '<div class="pl" draggable="true" data-rel="' + esc(r) + '"><span class="nm">' + crumbs(r)
-                + '<small>' + (p.n ? num(p.n) + ' files &middot; ' + size(p.b) : '') + (p.by === 'rushes' ? ' &middot; placed by Rushes: the same name' : '')
-                + ' &middot; ' + (p.keep ? 'goes in as ' + esc(d) + ' / year / ' + esc(last(r)) : 'its name goes; what is in it goes into ' + esc(d) + ', each folder by its year') + '</small></span>'
-                + '<label><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep its name</label>'
-                + '<button type="button" class="x" data-off="' + esc(r) + '" title="Take it off">&times;</button></div>';
-            }).join('')
-            // suggestions, one group per folder name: "Building — 5 places", opened to see each one's whole path
-            + groups(maybe).map(function (g) {
-              var k = d + '|' + g.name, o = sopen[k] || g.items.length === 1, big = g.items.filter(function (m) { return m.n >= SMALL; }),
-                  small = g.items.length - big.length, shown = ssmall[k] || !big.length ? g.items : big;
-              return '<div class="sgrp"><div class="sgh">'
-                + (g.items.length > 1 ? '<button type="button" class="tw" data-sg="' + esc(k) + '">' + (o ? '▾' : '▸') + '</button>' : '')
-                + '<span class="nm">' + (g.items.length > 1 ? '<b>' + esc(g.name) + '</b> <small>&middot; ' + g.items.length + ' places &middot; ' + num(g.n) + ' files &middot; ' + size(g.b) + '</small><br>' : '')
-                + '<small>looks like <b>' + esc(d) + '</b>. Nothing moves until you say yes.</small></span>'
-                + (g.items.length > 1 ? '<button type="button" class="btn quiet sm" data-yesall="' + esc(k) + '">Yes, all ' + g.items.length + '</button>' : '')
-                + '</div>'
-                + (o ? shown.map(function (m) {
-                  return '<div class="pl sug"><span class="nm">' + crumbs(m.rel) + '<small>' + num(m.n) + ' files &middot; ' + size(m.b) + '</small></span>'
-                    + '<button type="button" class="btn quiet sm" data-yes="' + esc(m.rel) + '">Yes, here</button>'
+          var hn = 0; here.forEach(function (r) { if (!placed(parent(r))) hn += plan[r].n; });
+          var has = here.length || maybe.length, o = dopen[d] !== undefined ? dopen[d] : has;
+          // the department: a heading, with what goes into it indented below, as a folder tree
+          return '<div class="db' + (has ? '' : ' empty') + '" data-dept="' + esc(d) + '"><div class="dh">'
+            + (has ? '<button type="button" class="tw" data-dopen="' + esc(d) + '">' + (o ? '▾' : '▸') + '</button>' : '<span style="width:20px"></span>') + ICON('d') + esc(d)
+            + '<small>' + (here.length ? here.length + ' placed &middot; ' + num(hn) + ' files' : '') + (maybe.length ? (here.length ? ' &middot; ' : '') + maybe.length + ' suggested' : '') + (has ? '' : 'drop folders here') + '</small></div>'
+            + (o && has ? '<div class="kids">'
+              + here.map(function (r) {
+                var p = plan[r];
+                return '<div class="tr pl" draggable="true" data-rel="' + esc(r) + '">' + ICON() + '<span class="nm"><b>' + esc(last(r)) + '</b>'
+                  + (p.by === 'rushes' ? '<span class="tag2">same name</span>' : '')
+                  + '<small>' + crumbs(r) + '</small>'
+                  + '<small>' + (p.n ? num(p.n) + ' files &middot; ' + size(p.b) + ' &middot; ' : '') + (p.keep ? 'goes in as ' + esc(d) + ' / year / ' + esc(last(r)) : 'its name goes; what is in it goes in, each folder by its year') + '</small></span>'
+                  + '<span class="acts"><label style="font-size:11.5px;color:var(--muted);white-space:nowrap"><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep its name</label>'
+                  + '<button type="button" class="x" data-off="' + esc(r) + '" title="Take it off">&times;</button></span></div>';
+              }).join('')
+              + (maybe.length ? '<div class="sublab">Suggested &middot; nothing moves until you say yes</div>' : '')
+              + groups(maybe).map(function (g) {
+                var k = d + '|' + g.name, one = g.items.length === 1, go = sopen[k], big = g.items.filter(function (m) { return m.n >= SMALL; }),
+                    small = g.items.length - big.length, shown = ssmall[k] || !big.length ? g.items : big;
+                var line = function (m) {
+                  return '<div class="tr sug">' + ICON('q') + '<span class="nm"><b>' + esc(last(m.rel)) + '</b><small>' + crumbs(m.rel) + '</small><small>' + num(m.n) + ' files &middot; ' + size(m.b) + '</small></span>'
+                    + '<span class="acts"><button type="button" class="btn quiet sm" data-yes="' + esc(m.rel) + '">Yes, here</button>'
                     + '<button type="button" class="lnk2" data-show="' + esc(m.rel) + '">Show it</button>'
-                    + '<button type="button" class="x" data-nah="' + esc(m.rel) + '" title="Not this one">&times;</button></div>';
-                }).join('') + (small && big.length && !ssmall[k] ? '<button type="button" class="lnk2" data-small="' + esc(k) + '">and ' + small + ' small one' + (small > 1 ? 's' : '') + ' (fewer than ' + SMALL + ' files)</button>' : '') : '')
-                + '</div>';
-            }).join('') + '</div>';
+                    + '<button type="button" class="x" data-nah="' + esc(m.rel) + '" title="Not this one">&times;</button></span></div>';
+                };
+                if (one) return line(g.items[0]);
+                return '<div class="tr sug"><button type="button" class="tw" data-sg="' + esc(k) + '">' + (go ? '▾' : '▸') + '</button>' + ICON('q')
+                  + '<span class="nm"><b>' + esc(g.name) + '</b><small>' + g.items.length + ' places &middot; ' + num(g.n) + ' files &middot; ' + size(g.b) + '</small></span>'
+                  + '<button type="button" class="btn quiet sm" data-yesall="' + esc(k) + '">Yes, all ' + g.items.length + '</button></div>'
+                  + (go ? '<div class="kids">' + shown.map(line).join('')
+                    + (small && big.length && !ssmall[k] ? '<div class="tr"><button type="button" class="lnk2" data-small="' + esc(k) + '">and ' + small + ' small one' + (small > 1 ? 's' : '') + ' (fewer than ' + SMALL + ' files)</button></div>' : '') + '</div>' : '');
+              }).join('') + '</div>' : '')
+            + '</div>';
         }).join('');
         $('dvAsk').disabled = !c;
         $('dvAsk').textContent = c ? 'Move ' + (n ? num(n) + ' files (' + size(b) + ') from ' : '') + c + ' folder' + (c > 1 ? 's' : '') + '…' : 'Nothing placed yet';
@@ -488,6 +509,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         if ((x = t.closest('[data-put]'))) return place(x.dataset.put, x.dataset.dept, info(x.dataset.put));
         if ((x = t.closest('[data-yes]'))) { var m = sugg.filter(function (s) { return s.rel === x.dataset.yes; })[0]; return place(m.rel, m.dept, m); }
         if ((x = t.closest('[data-nah]'))) { no[x.dataset.nah] = 1; save(); return draw(); }
+        if ((x = t.closest('[data-dopen]'))) { var dd = x.dataset.dopen; dopen[dd] = !(dopen[dd] !== undefined ? dopen[dd] : true); return draw(); }
         if ((x = t.closest('[data-sg]'))) { sopen[x.dataset.sg] = !sopen[x.dataset.sg]; return draw(); }
         if ((x = t.closest('[data-small]'))) { ssmall[x.dataset.small] = 1; return draw(); }
         if ((x = t.closest('[data-show]'))) return reveal(x.dataset.show);
