@@ -827,6 +827,31 @@ model.
 - `db/analyze.php` (the buttons);
 - `db/prepare.php`: `media_import()`, `media_probe()`, `prepare_advance()`.
 
+### Rescue
+
+Broken copies in the archive, found, and good ones brought back (`rescue.php`, `db/rescue.php`,
+`runner.py rescue_scan / rescue_apply`, `tests/test_rescue.sh`, `test_mac_runner.py Rescue`).
+
+**Look for broken files** (a job for the runner; the top bar says how far): every clip (`mxf mov mp4 avi mts
+m2ts m4v braw r3d`) and XML sidecar in the archive, read on the drive, the first 16 bytes only (`runner.py
+broken()`). Broken: empty; a clip under 64 KB; or not starting the way its kind must (an MP4 or MOV with
+`ftyp`, `moov`, `mdat`…; an MXF with its key `06 0E 2B 34`; an AVI with `RIFF`; an MTS with `0x47`; an XML
+with `<`), as a damaged disk or a broken copy leaves them. Rushes' own folders and Recently Removed are not
+looked at. For each broken file:
+- **where it came from**, from the copy records (`_rushes/origin`, followed through every move): the page
+  groups them by source, so one damaged source or one broken transfer shows at once;
+- **a good copy**: its source first, then a file of the same name elsewhere in Search (the archive or a
+  drive kept where it is), the one in the most similar folders; only one that is there now and not broken
+  itself; or "none anywhere Rushes can see".
+
+Nothing is changed by looking (`rescue-found.tsv`).
+
+**Rescue** the ticked ones (only those the scan found, with the good copy it found; never a path sent by the
+page): the good copy is copied in beside the broken one under a temporary name and read back byte for byte;
+the broken one goes to Recently Removed (`removed-moves.tsv`, so Delete All may take it); the good one takes
+its name, never over another file. Written down in `_rushes/origin` (`<time> archive rescued.tsv`, a
+"copied" line, so the file's origin is its good source); Search takes its new size.
+
 ### Describing footage
 
 The helper describes footage with two models that run on its own computer:

@@ -5,6 +5,8 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
 ## 0.13.5 — October 2026
 
+- **Rescue** (Manage → Rescue): broken copies in the archive found, and good ones brought back. **Look for broken files** reads the first bytes of every clip and sidecar in the archive: an empty clip, one too small to be a clip, or one with another file's data inside (a 1 KB "MP4", an XML holding a video, as a damaged disk or a broken copy leaves them) is broken. For each it says where it came from (the copy records), grouped by source, and the good copy Rushes can see: its source, or a file of the same name elsewhere in Search, on the archive or a drive, that is not broken itself; or that there is none anywhere. Looking changes nothing. **Rescue** replaces only what you tick: the good copy is copied in and read back byte for byte, the broken one goes to Recently Removed, and every swap is written down.
+
 - **A folder's properties are counted on the drive itself.** They were counted from Search, which had not seen folders moved in Finder since it last looked: a folder full of footage said "0 files". Now Tidy up's info column counts what is really there (for a very big folder, "at least" what it counted in a few seconds), and says when Search is behind ("1,240 of these are not in Search yet"), with where to fix it.
 - **Empty folder** says so, instead of "0 · Zero bytes".
 - **Empty files, told apart:** clips with zero bytes (broken: a copy that never got its data) are counted apart from other empty files (often a card's or a program's markers, harmless), and **Show where** lists them, clips first.

@@ -26,7 +26,7 @@ it touching the archive until Try again — the same breaker as runner.sh.
 Proxies are made here too (proxies(), as proxy.sh does on a NAS, with the
 same records), on the Mac's media engine, in software when it cannot.
 """
-import hashlib, json, os, platform, re, shutil, subprocess, threading, time, urllib.request
+import hashlib, json, os, platform, re, shutil, sqlite3, subprocess, threading, time, urllib.request
 import transfer_state as ts          # the careful file operations (beside this file, in the app and in _rushes)
 
 HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.sh are beside this file
@@ -39,6 +39,34 @@ TRIM = ("helper.log", "proxy.log", "proxy-built.tsv", "proxy-built.tsv.err", "pr
 # 0.12.4: that folder is renamed by itself (migrate_holding), and the records of what moved follow.
 HOLD, OLD_HOLD = "_Recently Removed", "_duplicates"
 VIDEO_EXT = (".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d")     # the same list as proxy.sh
+
+
+def broken(path, size):
+    """Rescue: why a file in the archive is broken, or None. Only clips and their XML sidecars are judged:
+    empty; too small to be a clip; or not starting the way its kind must (an MP4 or MOV with "ftyp", "moov"…
+    in its first bytes, an MXF with its key, an XML with "<"): a 1 KB "MP4", or an XML holding a video's
+    bytes, as a damaged disk leaves them. Only the first 16 bytes are read."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in VIDEO_EXT + (".xml", ".m2ts"):
+        return None
+    if size == 0:
+        return "empty: zero bytes"
+    if ext != ".xml" and size < 65536:
+        return f"too small to be a clip ({size:,} bytes)"
+    try:
+        with open(path, "rb") as f:
+            h = f.read(16)
+    except OSError as e:
+        return f"cannot be read ({e.strerror or e})"
+    ok = {".mp4": lambda: h[4:8] in (b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"),
+          ".mxf": lambda: h[:4] == b"\x06\x0e\x2b\x34",
+          ".avi": lambda: h[:4] == b"RIFF",
+          ".mts": lambda: h[:1] == b"\x47" or h[4:5] == b"\x47",
+          ".xml": lambda: h.lstrip(b"\xef\xbb\xbf \t\r\n")[:1] == b"<"}
+    ok[".mov"] = ok[".m4v"] = ok[".mp4"]; ok[".m2ts"] = ok[".mts"]
+    if ext in ok and not ok[ext]():
+        return "what is inside is not " + ("XML" if ext == ".xml" else f"a {ext[1:].upper()} clip") + " (another file's data, or damaged)"
+    return None
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
@@ -842,7 +870,7 @@ class Runner:
     def job(self, action, f):
         a = self.arch()
         who = re.sub(r"[\x00-\x1f]", " ", f.get("WHO", ""))[:40]
-        moving = action in ("plan", "apply", "undo", "verify", "scan", "find", "empty", "cacheclean", "cache-undo", "holding")
+        moving = action in ("plan", "apply", "undo", "verify", "scan", "find", "empty", "cacheclean", "cache-undo", "holding", "rescue-scan", "rescue-apply")
         if moving and (a is None or not self.may_v()):
             self.log("  the archive is not there, copying is paused, or it stopped after not answering — nothing was done")
             return
@@ -906,6 +934,10 @@ class Runner:
                 self.refresh()
         elif action == "scan":
             self.scan()
+        elif action == "rescue-scan":
+            self.rescue_scan()
+        elif action == "rescue-apply":
+            self.rescue_apply(who)
         elif action in ("cacheclean", "cache-undo"):
             n = (self.cache_clean if action == "cacheclean" else self.cache_undo)()
             self.activity("changed", f"Removed {n:,} cache files into Recently Removed (nothing deleted; editing software rebuilds them)"
@@ -979,6 +1011,152 @@ class Runner:
             self.log(f"Recently Removed{' on ' + top if sfx else ''}: {kb / 1e6:,.1f} GB")
 
     # ── duplicates: the scan ─────────────────────────────────────────────────
+    # ── Rescue: broken copies found, good ones brought back (HOW-IT-WORKS.md → Rescue) ──
+    def origins(self, a):
+        """Where each file in the archive first came from, from the copy records (_rushes/origin), as the
+        helper keeps them: copied/traced lines, carried along by every "moved" line. -> {path now: source}"""
+        at = {}
+        d = os.path.join(a, "_rushes", "origin")
+        for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            if not f.endswith(".tsv"):
+                continue
+            try:
+                for l in open(os.path.join(d, f), encoding="utf-8", errors="surrogateescape"):
+                    x = l.rstrip("\n").split("\t")
+                    if len(x) < 3 or not x[1] or not x[2]:
+                        continue
+                    if x[0] == "moved":
+                        if x[1] in at: at[x[2]] = at.pop(x[1])
+                    elif x[0] in ("copied", "traced"):
+                        at[x[2]] = x[1]
+            except OSError:
+                pass
+        return at
+
+    def rescue_scan(self):
+        """Every clip and sidecar in the archive looked at (rescue-found.tsv): the broken ones, where each came
+        from, and the best good copy Rushes can see (its source, or a file of the same name elsewhere in Search,
+        on the archive or a drive, that is not broken itself). Nothing is changed."""
+        a = self.arch()
+        seen, found, t0 = 0, [], time.time()
+        top_skip = {"PROXIES", HOLD, OLD_HOLD, "_rushes"}
+        for d, dirs, files in os.walk(a):
+            dirs[:] = [x for x in dirs if x not in SKIP and not x.startswith(".") and not (d == a and x in top_skip)]
+            for n in files:
+                if n.startswith("."):
+                    continue
+                p = os.path.join(d, n); seen += 1
+                if seen % 5000 == 0:
+                    self.log(f"listing: looking for broken files · {seen:,} files so far")
+                    self.make_way()
+                    if not self.may_v():
+                        self.log("  stopped: the archive stopped answering, or copying is paused — look again later"); return
+                try: size = os.lstat(p).st_size
+                except OSError: continue
+                why = broken(p, size)
+                if why:
+                    found.append((p, size, why))
+        self.log(f"  {seen:,} files looked at in {int(time.time() - t0)} s: {len(found):,} broken")
+        src = self.origins(a) if found else {}
+        db = None
+        try:
+            dbp = (self.settings().get("archive") or {}).get("database") or self.p("rushes.sqlite")
+            db = sqlite3.connect(f"file:{dbp}?mode=ro", uri=True, timeout=30)
+        except (sqlite3.Error, OSError):
+            pass
+        rows, hold = [], os.path.join(a, HOLD) + "/"
+        for i, (p, size, why) in enumerate(found, 1):
+            if i % 50 == 0:
+                self.log(f"progress: {i} of {len(found)} ({100 * i // len(found)}%)")
+            came = src.get(p, "")
+            cands = [came] if came else []
+            if db:
+                try: cands += [x[0] for x in db.execute("SELECT path FROM files WHERE name = ? AND path != ? AND bytes > 0 LIMIT 40", (os.path.basename(p), p))]
+                except sqlite3.Error: pass
+            parts = p.split("/")
+            def score(c):                      # its own source first, then the most of the same folders, then the biggest
+                q = c.split("/"); k = 0
+                while k < min(len(q), len(parts)) - 1 and q[-2 - k] == parts[-2 - k]: k += 1
+                return (c == came, k)
+            good, gsize, other = "", 0, 0
+            for c in sorted(dict.fromkeys(cands), key=score, reverse=True):
+                if c.startswith(hold) or c == p:
+                    continue
+                try: cs = os.path.getsize(c)
+                except OSError: continue       # not there now (a drive unplugged)
+                if broken(c, cs) is None and cs > 0:
+                    if not good: good, gsize = c, cs
+                    else: other += 1
+            rows.append("\t".join(map(str, (p, size, why, came, good, gsize, other))))
+        if db: db.close()
+        self.write("rescue-found.tsv", "".join(r + "\n" for r in rows))
+        self.write("rescue-looked.txt", f"{int(time.time())}\t{seen}\n")
+        n = sum(1 for r in rows if r.split("\t")[4])
+        self.activity("check", f"Rescue looked at {seen:,} files: {len(rows):,} broken, {n:,} with a good copy found")
+
+    def rescue_apply(self, who):
+        """The ticked broken files (rescue-pick.tsv: broken, good — written by db/rescue.php from what the scan
+        found), each replaced by its good copy: the good one copied in beside it under a temporary name and read
+        back byte for byte; the broken one moved to Recently Removed (Delete All may take it: removed-moves.tsv);
+        then the good one takes its name, never over another file. Written down in _rushes/origin."""
+        a = self.arch()
+        try: picks = [l.rstrip("\n").split("\t") for l in open(self.p("rescue-pick.tsv")) if "\t" in l]
+        except OSError: picks = []
+        done, failed = [], 0
+        rec = os.path.join(a, "_rushes", "origin"); os.makedirs(rec, exist_ok=True)
+        rec = os.path.join(rec, time.strftime("%Y%m%d-%H%M%S") + " archive rescued.tsv")
+        for i, (bad, good) in enumerate(picks, 1):
+            self.log(f"progress: {i} of {len(picks)} ({100 * i // len(picks)}%)")
+            self.make_way()
+            if not self.may_v():
+                self.log("  stopped: the archive stopped answering, or copying is paused — the rest stay as they were"); break
+            tmp = None
+            try:
+                if not ts.inside(bad, a) or ts.inside(bad, os.path.join(a, HOLD)):
+                    raise OSError("not a file of the archive")
+                if broken(bad, os.path.getsize(bad)) is None:
+                    raise OSError("it is not broken any more")
+                gs = os.path.getsize(good)
+                if broken(good, gs) is not None:
+                    raise OSError("the good copy is not good any more")
+                out, tmp = ts.new_part(bad)
+                with out, open(good, "rb") as g:
+                    while True:
+                        b = g.read(ts.CHUNK)
+                        if not b: break
+                        out.write(b)
+                if ts.same_bytes(tmp, good) is not True:
+                    raise OSError("the copy did not match the good one byte for byte")
+                held = os.path.join(a, HOLD, os.path.relpath(bad, a))
+                if os.path.lexists(held): held += time.strftime(" (%Y-%m-%d %H%M%S)")
+                os.makedirs(os.path.dirname(held), exist_ok=True)
+                bsize = os.path.getsize(bad)
+                ts.rename_new(bad, held)
+                try:
+                    ts.rename_new(tmp, bad); tmp = None
+                except OSError:
+                    ts.rename_new(held, bad)       # the broken one back where it was: the place is never left empty
+                    raise
+                with open(self.p("removed-moves.tsv"), "a") as f: f.write(f"{bad}\t{held}\n")
+                with open(rec, "a") as f: f.write(f"copied\t{good}\t{bad}\t{gs}\trescued; the broken one ({bsize:,} bytes) is in {HOLD}\n")
+                with open(self.p("rescue-done.tsv"), "a") as f: f.write(f"{bad}\t{good}\t{gs}\t{int(time.time())}\n")
+                done.append(bad)
+                self.log(f"  rescued {os.path.relpath(bad, a)} from {good}")
+            except OSError as e:
+                failed += 1
+                self.log(f"  not rescued {bad}: {e.strerror or e}")
+                if tmp:
+                    try: os.remove(tmp)
+                    except OSError: pass
+        if done:
+            self.removed_at("", time.time())
+        try: os.remove(self.p("rescue-pick.tsv"))
+        except OSError: pass
+        left = [l for l in open(self.p("rescue-found.tsv"))] if os.path.exists(self.p("rescue-found.tsv")) else []
+        self.write("rescue-found.tsv", "".join(l for l in left if l.split("\t")[0] not in set(done)))
+        self.activity("changed", f"Rescued {len(done):,} broken files from their good copies; the broken ones are in Recently Removed"
+                      + (f"; {failed} could not be" if failed else ""), who)
+
     def scan(self):
         """Which files are the same, by every byte: files of one size (from the
         file list, so no walk), then their first and last 64 KB, then all of

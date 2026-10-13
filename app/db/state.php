@@ -88,7 +88,7 @@ $running_said = $running === null ? null : ([
     'cacheclean' => 'Moving cache files aside', 'cache-undo' => 'Putting cache files back',
     'proxy-plan' => 'Counting videos without proxies', 'proxy-build' => 'Making proxies', 'proxy-remake' => 'Making proxies again',
     'proxy-stop' => 'Stopping proxies', 'proxy-test' => 'Testing proxy quality', 'gpu-test' => 'Testing the video chip',
-    'organize-undo' => 'Undoing the old layout', 'reset-breaker' => 'Trying the archive again',
+    'organize-undo' => 'Undoing the old layout', 'rescue-scan' => 'Looking for broken files', 'rescue-apply' => 'Rescuing broken files', 'reset-breaker' => 'Trying the archive again',
 ][$running] ?? ucfirst(str_replace('-', ' ', $running)));
 
 $mac = [];

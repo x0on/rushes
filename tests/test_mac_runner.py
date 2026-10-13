@@ -285,6 +285,38 @@ class MacJobs(unittest.TestCase):
         self.assertIn("nothing was done", self.log())
 
 
+class Rescue(unittest.TestCase):
+    """Rescue: broken copies in the archive found (empty, too small, another file's data inside) and, ticked,
+    replaced by their good copy, read back byte for byte; the broken one goes to Recently Removed."""
+    setUp, tearDown, put = MacJobs.setUp, MacJobs.tearDown, MacJobs.put
+
+    def test_broken_files_are_found_and_rescued_from_their_source(self):
+        mp4 = b"\x00\x00\x00\x18ftypmp42" + os.urandom(200000)
+        src = os.path.join(self.t, "OldServer", "Card"); os.makedirs(src)
+        for n, b in (("C0153.MP4", mp4), ("C0155M01.XML", b"<?xml version='1.0'?><x/>"), ("C0163.MP4", mp4[::-1][:100] + mp4)):
+            open(os.path.join(src, n), "wb").write(b)
+        empty = self.put("VIDEOS/Card/C0153.MP4", b"")
+        swapped = self.put("VIDEOS/Card/C0155M01.XML", mp4)                 # a video's bytes in a sidecar
+        fine = self.put("VIDEOS/Card/C0154.MP4", mp4)
+        self.put("VIDEOS/Card/C0156.MP4", b"\x00" * 70000)                  # not a clip inside, no copy anywhere
+        os.makedirs(os.path.join(self.a, "_rushes", "origin"))
+        open(os.path.join(self.a, "_rushes", "origin", "1 old copied.tsv"), "w").write(
+            "".join(f"copied\t{src}/{n}\t{self.a}/VIDEOS/Card/{n}\t1\n" for n in ("C0153.MP4", "C0155M01.XML")))
+        self.r.job("rescue-scan", {})
+        rows = {l.split("\t")[0]: l.rstrip("\n").split("\t") for l in open(os.path.join(self.web, "rescue-found.tsv"))}
+        self.assertEqual(set(rows), {empty, swapped, os.path.join(self.a, "VIDEOS/Card/C0156.MP4")}, "only the broken ones")
+        self.assertTrue(rows[empty][2].startswith("empty") and rows[empty][4] == os.path.join(src, "C0153.MP4"), "its good copy: where it came from")
+        self.assertEqual(rows[os.path.join(self.a, "VIDEOS/Card/C0156.MP4")][4], "", "no good copy anywhere: said, nothing invented")
+        open(os.path.join(self.web, "rescue-pick.tsv"), "w").write(f"{empty}\t{src}/C0153.MP4\n{swapped}\t{src}/C0155M01.XML\n")
+        self.r.job("rescue-apply", {"WHO": "Ana"})
+        self.assertEqual(open(empty, "rb").read(), mp4, "the good one in its place")
+        self.assertTrue(open(swapped, "rb").read().startswith(b"<?xml"))
+        self.assertEqual(os.path.getsize(os.path.join(self.a, "_Recently Removed", "VIDEOS/Card/C0153.MP4")), 0, "the broken one kept in Recently Removed")
+        self.assertIn(empty + "\t", open(os.path.join(self.web, "removed-moves.tsv")).read())
+        self.assertEqual(open(fine, "rb").read(), mp4, "a good file is never touched")
+        self.assertNotIn(empty, open(os.path.join(self.web, "rescue-found.tsv")).read(), "rescued: off the list")
+
+
 class Drives(MacJobs):
     """Drives that come and go: known by their ID, listed where they are, their
     last list kept while away, found again under another name, duplicates only

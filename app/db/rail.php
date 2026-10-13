@@ -21,6 +21,7 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
     <?= $railItem('structure',  'Reorganize', 'reorganize', '/structure.php#filein',   false) ?>
     <?= $railItem('tidyup',     'Tidy up',    'projects',  '/structure.php#tidy',     false) ?>
     <?= $railItem('duplicates', 'Duplicates', 'library',   '/db/admin.php#duplicates', true) ?>
+    <?= $railItem('rescue',     'Rescue',     'rescue',  '/rescue.php',              false) ?>
     <?= $railItem('cache',      'Cache',      'cache',     '/db/admin.php#cache',      true, ' <span class="count" id="nCache"></span>') ?>
 
     <h2>Footage</h2>
@@ -55,7 +56,7 @@ window.railFoot = function (s) {
   m.className = s.disk.pct >= 90 ? 'full' : s.disk.pct >= 80 ? 'hot' : '';
 };
 </script>
-<?php if ($RAIL === 'structure' || $RAIL === 'setup'): ?>
+<?php if ($RAIL === 'structure' || $RAIL === 'setup' || $RAIL === 'rescue'): ?>
 <script>
 // the admin page draws it with everything else; the other pages ask for it once
 fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (s) {
