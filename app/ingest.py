@@ -3246,6 +3246,22 @@ def describe_lane(every=20):
             time.sleep(60)
 
 
+def preview_args(path):
+    """Where this folder's previews are, for analyze.py: the archive's under PROXIES; a drive kept where
+    it is has its own on the archive, _rushes/previews/<its ID>, beside a note of where the drive was (.from)."""
+    root = NAS_MOUNT.rstrip("/")
+    if not path.startswith(root + "/") and path != root:
+        base = os.path.join(root, "_rushes", "previews")
+        try: names = os.listdir(base)
+        except OSError: names = []
+        for n in names:
+            try: was = open(os.path.join(base, n, ".from")).read().strip()
+            except OSError: continue
+            if was and (path == was or path.startswith(was + "/")):
+                return ["--archive", was, "--proxies", os.path.join(base, n)]
+    return ["--archive", NAS_MOUNT, "--proxies", os.path.join(NAS_MOUNT, "PROXIES")]
+
+
 def describe_folder(path, asked=""):
     py, model, whisper = analysis_tools()
     name = os.path.basename(path.rstrip("/")) or path
@@ -3257,7 +3273,7 @@ def describe_folder(path, asked=""):
     cmd = [py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), path,
            "--store", os.path.join(NAS_MOUNT, "_rushes", "analysis"), "--url", NAS_URL,
            "--model", model, "--whisper", whisper,
-           "--archive", NAS_MOUNT, "--proxies", os.path.join(NAS_MOUNT, "PROXIES")]
+           *preview_args(path)]
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i"] + cmd
     status(phase="analysing", source=path, label=name, step="loading the model")

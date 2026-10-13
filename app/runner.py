@@ -332,9 +332,9 @@ class Runner:
         self.write("load.txt", f"{int(time.time())}\t{load}\t{int(time.time() - t0)}\n")
         # Folders being prepared (Manage → Describe): Rushes writes the next one needing
         # proxies into proxy-next.txt (prepare.php); started here when none are being made.
-        try: nxt = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", open(self.p("proxy-next.txt")).readline().strip())[:200]
+        try: nxt = self.prep_folder(open(self.p("proxy-next.txt")).readline())
         except OSError: nxt = ""
-        if nxt and ".." not in nxt and self.may_v() and not self.proxy_running():
+        if nxt and self.may_v() and not self.proxy_running():
             try: os.remove(self.p("proxy-next.txt"))
             except OSError: pass
             self.say(f"making proxies for {nxt}")
@@ -559,6 +559,36 @@ class Runner:
         self.last_err = (err.strip().splitlines() or ["ffmpeg stopped"])[-1][:200]
         return False, tries[-1][0]
 
+    def prep_folder(self, raw):
+        """A folder to make previews for, as Rushes asked: a folder of the archive (its path inside it), or a
+        folder on a drive kept where it is (its full path, only on such a drive, found by drives()). "" if neither."""
+        raw = raw.strip()
+        if raw.startswith("/"):
+            raw = raw.rstrip("/")
+            if ".." in raw.split("/") or any(c in raw for c in "\t\n\r"):
+                return ""
+            return raw if self.kept_drive(raw) else ""
+        q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", raw).strip("/")[:200]
+        return "" if ".." in q.split("/") else q
+
+    def kept_drive(self, path):
+        """The drive kept where it is that holds this path, plugged in now, or None."""
+        for d in self.drives():
+            r = d["path"].rstrip("/")
+            if d["connected"] and (path == r or path.startswith(r + "/")):
+                return d
+        return None
+
+    def preview_root(self, a, d):
+        """Where a drive's previews live: on the archive, in Rushes' records, under the drive's own ID
+        (_rushes/previews/<ID>/<same path as on the drive>.mp4). Nothing is written on the drive itself.
+        A note of where the drive was beside them (.from), so the helper finds them when it describes."""
+        pr = os.path.join(a, "_rushes", "previews", drive_key(d))
+        os.makedirs(pr, exist_ok=True)
+        with open(os.path.join(pr, ".from"), "w") as f:
+            f.write(d["path"].rstrip("/") + "\n")
+        return pr
+
     def proxies(self, only, build):
         """Plan (what is missing) or build the proxies of one folder (or the whole archive)."""
         a = self.arch()
@@ -569,20 +599,25 @@ class Runner:
         if not ff:
             self.proxy_state(state="no-ffmpeg"); self.plog("no ffmpeg on this Mac, and it could not be downloaded (proxy.log says why)")
             return
-        root = os.path.join(a, only) if only else a
+        drive = self.kept_drive(only) if only.startswith("/") else None
+        if only.startswith("/") and not drive:
+            self.proxy_state(state="no-folder", only=only); self.plog(f"{only}: not on a drive kept where it is, plugged in now"); return
+        root = only if drive else os.path.join(a, only) if only else a
         one = os.path.isfile(root) and root.lower().endswith(VIDEO_EXT)      # Search's "Make its proxy now": that video alone
         if not one and not os.path.isdir(root):
             self.proxy_state(state="no-folder", only=only); return
-        proot = os.path.join(a, "PROXIES")
+        # the archive's previews mirror it under PROXIES; a kept drive's, on the archive under its ID
+        top = drive["path"].rstrip("/") if drive else a
+        proot = self.preview_root(a, drive) if drive else os.path.join(a, "PROXIES")
         plan, have, videos = [], 0, 0
         for d, dirs, files in ([(os.path.dirname(root), [], [os.path.basename(root)])] if one else os.walk(root)):
             dirs[:] = sorted(x for x in dirs if x not in SKIP and not x.startswith(".")
-                             and not (d == a and x in ("PROXIES", HOLD, OLD_HOLD, "_rushes")))
+                             and not (d == top and x in ("PROXIES", HOLD, OLD_HOLD, "_rushes")))
             for n in sorted(files):
                 if n.startswith(".") or not n.lower().endswith(VIDEO_EXT):
                     continue
                 src = os.path.join(d, n); videos += 1
-                out = os.path.join(proot, os.path.splitext(os.path.relpath(src, a))[0] + ".mp4")
+                out = os.path.join(proot, os.path.splitext(os.path.relpath(src, top))[0] + ".mp4")
                 if os.path.exists(out): have += 1
                 else: plan.append((src, out))
         try: asis = {l.split("\t")[0] for l in open(self.p("proxy-made.tsv")) if l.rstrip("\n").endswith("\t1")}
@@ -621,7 +656,7 @@ class Runner:
             except OSError:
                 failed += 1; continue
             self.proxy_state(state="building", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
-                             file=os.path.relpath(src, a), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
+                             file=os.path.relpath(src, top), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
             report = self.probe(ff, src)
             if self.light(report, src):              # no proxy: the original plays as it is
                 with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\t1\n")
@@ -884,9 +919,9 @@ class Runner:
         elif action == "organize-undo":
             self.log("  the old date-based layout was never used on this computer: nothing to put back")
         elif action in ("proxy-plan", "proxy-build", "proxy-remake", "proxy-stop"):
-            q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", f.get("QUERY", "")).strip("/")[:200]
-            if ".." in q:
-                self.log("  refused a folder with .. in it"); return
+            q = self.prep_folder(f.get("QUERY", ""))
+            if not q and f.get("QUERY", "").strip("/ "):
+                self.log("  refused: not a folder of the archive, nor of a drive kept where it is and plugged in"); return
             if action == "proxy-plan":
                 self.proxies(q, build=False)
             elif action == "proxy-stop":
@@ -900,8 +935,10 @@ class Runner:
                 self.log("  proxies are already being made (detail in proxy.log)")
             else:
                 # Remake: that folder's proxies thrown away first (derived files, only inside PROXIES)
-                d = os.path.join(a or "", "PROXIES", q)
-                if action == "proxy-remake" and q and a and os.path.isdir(d) and os.path.realpath(d).startswith(os.path.realpath(os.path.join(a, "PROXIES")) + "/"):
+                kd = self.kept_drive(q) if q.startswith("/") else None
+                base = os.path.join(a or "", "_rushes", "previews", drive_key(kd)) if kd else os.path.join(a or "", "PROXIES")
+                d = os.path.join(base, os.path.relpath(q, kd["path"].rstrip("/"))) if kd else os.path.join(base, q)
+                if action == "proxy-remake" and q and a and os.path.isdir(d) and os.path.realpath(d).startswith(os.path.realpath(base) + "/"):
                     shutil.rmtree(d, ignore_errors=True)
                     self.log(f"  threw away the proxies of {q} — making them again with the setting in use")
                 self.proxy_start(q)

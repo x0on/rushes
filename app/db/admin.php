@@ -1409,6 +1409,10 @@ function openDrive(x) {
 async function loadDrive(fresh) {
   if (!drv) return;
   const arch = drv.kind === 'archive', n = function (v) { return (+v || 0).toLocaleString(); };
+  // a drive kept where it is: its previews are made too, kept on the archive (Make previews and descriptions)
+  const kept = !arch && drv.roles && drv.roles.indexOf('In Search') >= 0;
+  const prepOk = arch || (kept && !!(window.lastState && window.lastState.can_preview_drives));
+  const prepAt = function (inside) { return arch ? inside : drv.root + (inside ? '/' + inside : ''); };
   $('dvHead').textContent = drv.name; $('title').textContent = drv.name;
   $('dvSub').textContent = DRV_KIND[drv.kind] + (drv.total ? ' · ' + tb(drv.free) + ' free of ' + tb(drv.total) : '') +
     (drv.roles && drv.roles.length ? ' · ' + drv.roles.join(' · ') : '');
@@ -1426,14 +1430,15 @@ async function loadDrive(fresh) {
       '<p>' + say + '</p>' + (btn || '') + '</div>';
   };
   const where = top ? drv.name : drv.in;
-  const keptHere = arch ? '' : ' Previews for a drive kept where it is come in a next version: Rushes will first ask where to keep them, and show how much room and time they take.';
+  const keptHere = !kept ? '' : prepOk ? ' Its previews are kept on the archive, so they play even when this drive is unplugged; nothing is written on the drive.'
+    : ' Previews of a drive kept where it is are made by the Rushes app on a Mac.';
   $('dvLevels').innerHTML =
     lv('Searchable by name', drv.now && !T.n ? 'Listing…' : n(T.n) + ' files', drv.now ? 50 : T.n ? 100 : 0,
       drv.now ? esc(drv.now) + '. Files show up in Search as they are listed.' : tb(T.b) + ' · found in Search by their names and folders.' +
         (arch ? '' : ' Listed again every night, while it is plugged in.')) +
     lv('Playable', T.v ? pct(T.p, T.v) + '%' : 'No videos', pct(T.p, T.v),
       T.v ? n(T.p) + ' of ' + n(T.v) + ' videos play in Search: a light preview of each was made, or it plays as it is.' + keptHere : 'Nothing here to make previews of.',
-      arch && !top && (T.v > T.p || T.v > T.d) ? '<button class="btn quiet" data-dv="prep" data-f="' + esc(drv.in) + '">Make previews and descriptions</button>'
+      prepOk && (!top || !arch) && (T.v > T.p || T.v > T.d) ? '<button class="btn quiet" data-dv="prep" data-f="' + esc(prepAt(drv.in)) + '">Make previews and descriptions</button>'
         : arch && T.v > T.p ? '<p>Pick folders below: each goes on the list, previews first, then descriptions.</p>' : '') +
     lv('Described', T.v ? pct(T.d, T.v) + '%' : 'No videos', pct(T.d, T.v),
       T.v ? n(T.d) + ' of ' + n(T.v) + ' videos described by the AI: every shot in words, and everything said, so Search finds what is in them. It needs the previews first.' : 'Nothing here to describe.');
@@ -1456,7 +1461,7 @@ async function loadDrive(fresh) {
       return '<tr' + (f.is === 'waiting' ? ' class="wait"' : '') + '><td><a href="#" data-in="' + esc(path) + '">' + esc(f.name) + '</a>' +
           (f.is === 'waiting' ? ' <small>waiting to be filed</small>' : '') + '</td>' +
         '<td class="n">' + n(f.n) + '</td><td class="n">' + tb(f.b) + '</td><td class="n">' + bar(f.p) + '</td><td class="n">' + bar(f.d) + '</td>' +
-        '<td class="n">' + (arch && f.v && (f.p < f.v || f.d < f.v) ? '<button class="lnk" data-dv="prep" data-f="' + esc(path) + '">Make previews and descriptions</button>' : '') + '</td></tr>';
+        '<td class="n">' + (prepOk && f.v && (f.p < f.v || f.d < f.v) ? '<button class="lnk" data-dv="prep" data-f="' + esc(prepAt(path)) + '">Make previews and descriptions</button>' : '') + '</td></tr>';
     }).join('') + '</tbody></table>' +
     (loose ? '<p class="note" style="margin:8px 0 0">And ' + n(loose.n) + ' files loose in ' + esc(where) + '.</p>' : ''));
 
@@ -1466,7 +1471,7 @@ async function loadDrive(fresh) {
     '<button class="btn quiet" data-dv="dup">Find duplicates on this drive</button>' +
     (arch ? '<button class="btn quiet" data-dv="cache">Clear editing cache</button>' : '') +
     '<button class="btn quiet" data-dv="copy">' + (arch ? 'Back up the archive…' : 'Copy this drive…') + '</button>' +
-    (arch ? '<button class="btn quiet" data-dv="describe">Previews and descriptions, in order</button>' : '') +
+    (prepOk ? '<button class="btn quiet" data-dv="describe">Previews and descriptions, in order</button>' : '') +
     (isSrc && !arch ? '<button class="btn quiet" data-dv="unsource">Remove from Rushes</button>' : '');
 
   document.querySelectorAll('#pane-drive [data-in]').forEach(function (a) {
@@ -2218,6 +2223,7 @@ function drawPrepare(rows, a) {
       : p.step === 'stopped' ? '<span class="bad">stopped' + (p.why ? ': ' + esc(p.why) : '') + '</span> · ' + n(p.ok) + ' made · Try again carries on' + fails
       : p.step === 'no-room' ? '<span class="bad">not enough room on the archive: about ' + gb(p.need) + ' needed, ' + gb(p.free) + ' free</span> · free some space, then Try again'
       : p.step === 'no-ffmpeg' ? '<span class="bad">this machine cannot make video yet (no ffmpeg)</span>'
+      : p.step === 'unplugged' ? '<span class="dim">its drive is not plugged in: it starts when it is</span>'
       : '<span class="dim">waiting its turn</span>';
   };
   const ds = function (d) {

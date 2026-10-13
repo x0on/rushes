@@ -307,6 +307,26 @@ class Drives(MacJobs):
         self.r.minute(); self.r.busy["jobs"].join(); self.r.busy["upkeep"].join(60)
         return {d["name"]: d for d in json.load(open(os.path.join(self.web, "drives.json")))}
 
+    def test_previews_of_a_kept_drive_live_on_the_archive(self):
+        """Its previews are made on the archive, under the drive's own ID, never on the drive."""
+        import subprocess, time
+        os.makedirs(self.a); os.makedirs(os.path.join(self.vol, "Films 1")); self.minute()
+        clip = self.drive("Gala/A001.mov", b"")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=1280x720:d=1", "-c:v", "mpeg4", clip], check=True)
+        old = time.time() - 3 * 3600; os.utime(clip, (old, old))
+        folder = os.path.join(self.vol, "Films 1", "Gala")
+        with unittest.mock.patch.object(self.r, "ffmpeg", return_value=shutil.which("ffmpeg")):
+            self.r.job("proxy-build", {"QUERY": folder}); self.r.busy["proxies"].join(60)
+        home = os.path.join(self.a, "_rushes", "previews", "UUID-ONE")
+        self.assertTrue(os.path.getsize(os.path.join(home, "Gala", "A001.mp4")) > 0, "on the archive, under the drive's ID")
+        self.assertEqual(open(os.path.join(home, ".from")).read().strip(), os.path.join(self.vol, "Films 1"))
+        self.assertEqual(sorted(os.listdir(folder)), ["A001.mov"], "nothing written on the drive")
+        self.assertIn(clip + "\t", open(os.path.join(self.web, "proxy-made.tsv")).read())
+        # only a kept drive's folder: anywhere else is refused, and nothing is made
+        self.assertEqual(self.r.prep_folder("/etc"), "")
+        self.assertEqual(self.r.prep_folder(folder + "/../.."), "")
+        self.assertEqual(self.r.prep_folder(folder + "/"), folder)
+
     def test_each_drive_says_how_it_is_kept(self):
         # asked per drive (Overview): its own answer wins over Setup 01's
         os.makedirs(os.path.join(self.vol, "Films 1")); os.makedirs(os.path.join(self.vol, "Other"))

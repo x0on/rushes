@@ -205,6 +205,8 @@ require __DIR__ . '/config.php';
   .ib.in { background: var(--ok); border-color: var(--ok); color: #fff }
   .ib[hidden] { display: none }
   .vb { padding: 0 14px 14px }
+  .pv-tag { display: inline-block; margin: 0 0 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+            background: var(--warn-bg); color: var(--warn) }
   .pv { position: relative; aspect-ratio: 16 / 9; background: #000; cursor: pointer; overflow: hidden }
   .pv img, .pv video { width: 100%; height: 100%; object-fit: contain; display: block }
   .pv .go { position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border-radius: 50%; background: rgba(0,0,0,.55);
@@ -944,7 +946,8 @@ function render(where) {
   const found = {}; it.found.forEach(function (x) { found[(+x).toFixed(2)] = 1; });
   const player = sound
     ? '<audio controls preload="none" src="' + asIs(r.path) + '" style="width:100%"></audio><p class="pv-note">Plays the file itself (the original stays where it is).</p>'
-    : '<div class="pv" data-pv>' + pic + (!st.playing && canPlay ? '<span class="go">▶</span>' : '') + '</div>' +
+    : (r.away ? '<p class="pv-tag" title="The preview is kept on the archive; the full-quality original stays on its drive">Preview · the original is on ' + esc(r.drive) + ', not plugged in</p>' : '') +
+      '<div class="pv" data-pv>' + pic + (!st.playing && canPlay ? '<span class="go">▶</span>' : '') + '</div>' +
       (canPlay ? '<p class="pv-note" data-pvn>' + (st.playing ? 'Loading its proxy from the archive…' : 'Click to play' + (t ? ' from ' + tcode(t) : '') + '.') + '</p>'
        : noProxy ? '<p class="pv-note" data-pvn>' + (st.making ? '<span class="spin"></span> Making its proxy on this Mac… it plays here as soon as it is ready.'
                    : 'No proxy yet, so it cannot play here. ' + (RUSHES.mac && pullable(r.path) ? '<button class="plain" data-do="proxy" style="padding:0;color:var(--accent-text);font-weight:600">Make its proxy now</button>'

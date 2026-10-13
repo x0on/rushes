@@ -738,6 +738,18 @@ class OneLogTests(unittest.TestCase):
         self.assertTrue(lines[1].endswith("helper · a") and lines[2] == "" and lines[3].endswith("helper · b"), lines)
 
 
+class DrivePreviewArgsTests(unittest.TestCase):
+    """Describing a kept drive's folder reads its previews from the archive (_rushes/previews/<ID>)."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_the_drive_folder_finds_its_previews_by_where_the_drive_was(self):
+        m = self.mod; m.NAS_MOUNT = str(self.archive)
+        home = self.archive / '_rushes' / 'previews' / 'UUID-1'; home.mkdir(parents=True)
+        (home / '.from').write_text('/Volumes/Films\n')
+        self.assertEqual(m.preview_args('/Volumes/Films/Gala'), ['--archive', '/Volumes/Films', '--proxies', str(home)])
+        self.assertEqual(m.preview_args(str(self.archive / 'Parks')), ['--archive', str(self.archive), '--proxies', str(self.archive / 'PROXIES')])
+
+
 class TidyInsideTests(unittest.TestCase):
     """Tidy up inside the structure ("refile"): a file already on the shelf moves to another place on it,
     recorded and put back; never from Rushes' own folders, never off the shelf, and "file" lines (from

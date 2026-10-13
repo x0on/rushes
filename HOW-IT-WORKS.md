@@ -778,7 +778,9 @@ A proxy is a small H.264 copy of a video, with AAC sound. It is used for
 describing and, later, for playing in search. Proxies are made on the archive
 machine, for `mxf`, `mov`, `mp4`, `avi`, `mts`, `m4v`, `braw` and `r3d` files.
 They are saved in `PROXIES/` with the same paths as the originals, and owned by
-the same user as their original.
+the same user as their original. A drive kept where it is has its own on the archive too, under
+`_rushes/previews/<its ID>/` (Drives → Previews of a drive kept where it is); `config.php preview_of()`
+says where any original's proxy is.
 
 - **Settings** (Manage → Describe → Proxy settings): 720p or 1080p, at 4 or 6
   Mbit/s on the video chip, or made in software (higher quality, slower).
@@ -1455,8 +1457,15 @@ A percentage is rounded down: 100% means every video.
   **Remove from Rushes** (a drive kept where it is);
 - its own **Recently Removed**, with Delete All asked twice as everywhere.
 
-Previews for a drive kept where it is are not made yet: they need a place to be
-kept, which Rushes will ask for per drive, with the room and time they take.
+**Previews of a drive kept where it is** are made too, from its page (**Make previews and
+descriptions**, on the drive or any folder of it), and kept **on the archive**, the main drive:
+`_rushes/previews/<the drive's ID>/<same path as on the drive>.mp4`. Nothing is ever written on the
+drive itself. So they play in Search even when the drive is unplugged, with a badge over the player:
+"Preview · the original is on <drive>, not plugged in". The drive is known by its volume's own ID, so
+two drives with the same name never share previews. A folder of it waits on the Describe list until
+the drive is plugged in. Made by the Rushes app on a Mac, where Rushes and its helper run together
+(`can_preview_drives`); the helper describes from them as from the archive's (a `.from` note beside
+them says where the drive was).
 
 **Cards** say what is true right now, in plain words, with a button when there
 is something to do:

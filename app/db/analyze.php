@@ -14,6 +14,12 @@ function out(array $a) { echo json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNES
 function bail(int $code, string $why) { http_response_code($code); out(['error' => $why]); }
 
 $Q = web_dir() . '/ingest-queue.tsv';
+// A folder on a drive kept where it is: its full path, on such a drive, nothing odd in it. '' if not.
+function drive_folder(string $raw): string {
+    $p = rtrim(str_replace('\\', '/', $raw), '/');
+    if (!str_starts_with($p, '/') || str_contains("$p/", '/../') || preg_match('/[\t\n\r]/', $p)) return '';
+    return kept_drive_of($p) ? $p : '';
+}
 $root = rtrim(archive_dir(), '/');
 $helperRoot = rtrim(helper_archive(), '/');
 
@@ -24,8 +30,8 @@ $helperRoot = rtrim(helper_archive(), '/');
 // GET ?plan=<folder>  what it holds and how much is left to make (instant)
 if (isset($_GET['plan'])) {
     require_once __DIR__ . '/prepare.php';
-    $rel = trim(str_replace('\\', '/', (string)$_GET['plan']), '/');
-    if ($rel === '' || str_contains($rel, '..') || !is_dir("$root/$rel")) out(['error' => "There is no folder “{$rel}” in the archive."]);
+    $rel = drive_folder((string)$_GET['plan']) ?: trim(str_replace('\\', '/', (string)$_GET['plan']), '/');
+    if ($rel === '' || str_contains($rel, '..') || !is_dir(prep_abs($rel))) out(['error' => "There is no folder “{$rel}” in the archive."]);
     out(['folder' => $rel] + prepare_plan($rel, true));
 }
 // A clip picked in Finder: its name and size are all a browser tells (nothing
@@ -70,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (file_put_contents(web_dir() . '/proxy-setting.txt', "$h $b\n") === false) bail(500, 'could not save it');
         out(['ok' => 'proxy-setting', 'height' => $h, 'mbits' => $b]);
     }
-    $rel = trim(str_replace('\\', '/', (string)($_POST['path'] ?? '')), '/');
+    $rel = drive_folder((string)($_POST['path'] ?? '')) ?: trim(str_replace('\\', '/', (string)($_POST['path'] ?? '')), '/');
     // Prepare: proxies first, then descriptions; the order is kept by prepare_advance.
     // Order and "try again": the list keeps each folder's place and when it was asked.
     // Start now: the proxies for this folder, through the runner's own job queue.
@@ -112,12 +118,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         out(['ok' => $_POST['action'], 'folder' => $rel]);
     }
     if (($_POST['action'] ?? '') === 'prepare' || ($_POST['action'] ?? '') === 'forget') {
-        if ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[\p{L}\p{N} _./&(),+-]+$#u', $rel))
+        $drive = str_starts_with($rel, '/');
+        if ($drive && !can_preview_drives())
+            bail(400, 'Previews of a drive kept where it is are made by the Rushes app on a Mac, with its own helper.');
+        if (!$drive && ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[\p{L}\p{N} _./&(),+-]+$#u', $rel)))
             bail(400, 'Pick a folder inside the archive (letters, numbers, spaces and . _ - & ( ) , + only).');
         $list = prepare_list();
         if ($_POST['action'] === 'forget') { unset($list[$rel]); }
         else {
-            if (!is_dir("$root/$rel")) bail(400, "There is no folder “{$rel}” in the archive.");
+            if (!is_dir(prep_abs($rel))) bail(400, $drive ? "“{$rel}” is not there now: is the drive plugged in?" : "There is no folder “{$rel}” in the archive.");
             unset($list[$rel]); $list[$rel] = time();      // asked again: to the end, and runs again
         }
         if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?');

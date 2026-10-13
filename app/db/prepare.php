@@ -84,16 +84,16 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     $cache = json_decode((string)@file_get_contents($f), true) ?: [];
     if (isset($cache[$rel]) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600))) return $cache[$rel];
     require_once __DIR__ . '/schema.php';
-    $root = rtrim(archive_dir(), '/'); $px = "$root/PROXIES";
+    $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it
     $st = db()->prepare('SELECT path, bytes, m.asis FROM files LEFT JOIN media m ON m.file_id = files.id WHERE path >= ? AND path < ?');
-    $st->bindValue(1, "$root/$rel/"); $st->bindValue(2, "$root/$rel" . '0');     // '0' sorts right after '/'
+    $st->bindValue(1, "$dir/"); $st->bindValue(2, "$dir" . '0');     // '0' sorts right after '/'
     $r = $st->execute();
     $p = ['videos' => 0, 'have' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => []];
     while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) {
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
         $p['videos']++; $p['bytes'] += (int)$x[1];
-        if ($x[2] === '1' || ($look && is_file(preg_replace('/\.[^.\/]*$/', '.mp4', $px . substr($x[0], strlen($root)))))) $p['have']++;   // light enough to play as it is, or its proxy
+        if ($x[2] === '1' || ($look && is_file((string)preview_of($x[0])))) $p['have']++;   // light enough to play as it is, or its proxy
         else $p['to_read'] += (int)$x[1];
     }
     if (!$look) return $p;
@@ -117,14 +117,13 @@ function proxy_rate(): float {
 // Files in a folder whose proxy could not be made, and why (ffmpeg's words),
 // leaving out any made since.
 function proxy_failures(string $rel): array {
-    $root = rtrim(archive_dir(), '/'); $out = [];
+    $dir = prep_abs($rel); $out = [];
     foreach (@file(web_dir() . '/proxy-failed.tsv') ?: [] as $l) {
         [$src, $at, $why] = array_pad(explode("\t", rtrim($l, "\n"), 3), 3, '');
-        if (!str_starts_with($src, "$root/$rel/")) continue;
-        $out[$src] = ['file' => substr($src, strlen("$root/$rel/")), 'at' => (int)$at, 'why' => $why];
+        if (!str_starts_with($src, "$dir/")) continue;
+        $out[$src] = ['file' => substr($src, strlen("$dir/")), 'at' => (int)$at, 'why' => $why, 'src' => $src];
     }
-    return array_values(array_filter($out, fn($f) =>
-        !is_file(preg_replace('/\.[^.\/]*$/', '.mp4', "$root/PROXIES/$rel/" . $f['file']))));
+    return array_values(array_filter($out, fn($f) => !is_file((string)preview_of($f['src']))));
 }
 
 // rel folder => when it was (last) asked for
@@ -234,6 +233,8 @@ function prepare_table(bool $look = false): array {
             $px = ['step' => 'no-room', 'need' => (int)$now['need'], 'free' => (int)$now['free']];
         elseif (!empty($now['running']) && ($now['only'] ?? '') === $rel && ($now['state'] ?? '') === 'building')
             $px = ['step' => 'making', 'done' => (int)$now['done'], 'total' => (int)$now['total'], 'ok' => (int)$now['ok']];
+        elseif (str_starts_with($rel, '/') && !(kept_drive_of($rel)['connected'] ?? false))
+            $px = ['step' => 'unplugged'];                         // a kept drive: its previews are made while it is plugged in
         elseif (($now['state'] ?? '') === 'no-ffmpeg')
             $px = ['step' => 'no-ffmpeg'];
         elseif ($mine && $run['state'] === 'stopped')
@@ -244,7 +245,7 @@ function prepare_table(bool $look = false): array {
         else
             $px = ['step' => 'waiting'];
 
-        $path = "$h/$rel";
+        $path = str_starts_with($rel, '/') ? $rel : "$h/$rel";     // a kept drive's folder is where it is
         $d = $desc[$path] ?? null;
         if ($dnow && ($dnow['source'] ?? '') === $path)
             $ds = ['step' => 'describing', 'n' => (int)($dnow['n'] ?? 0), 'of' => (int)($dnow['of'] ?? 0),
@@ -279,7 +280,7 @@ function prepare_advance(): array {
         $p = $r['proxies']['step'];
         if (in_array($p, ['waiting', 'again'], true) && !$building && $next === '') $next = $r['folder'];
         if (in_array($p, ['done', 'again'], true) && $r['describe']['step'] === 'next' && $h !== '') {
-            $line = "analyze\t$h/{$r['folder']}\t{$r['asked']}";
+            $line = "analyze\t" . (str_starts_with($r['folder'], '/') ? $r['folder'] : "$h/{$r['folder']}") . "\t{$r['asked']}";
             if (!in_array($line, $lines, true)) { $lines[] = $line; $queued[] = $r['folder']; }
         }
     }

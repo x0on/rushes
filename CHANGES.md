@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.53 — October 2026
+
+- **Previews for a drive kept where it is.** Its page now has **Make previews and descriptions**, for the whole drive or any folder, as the archive's has. The previews are kept **on the archive** (in Rushes' records, under the drive's own ID), never written on the drive. They play in Search even when the drive is unplugged, with a badge: "Preview · the original is on …, not plugged in". Then the helper describes them, as it does the archive's. A folder waits on the Describe list while its drive is unplugged. (The Rushes app on a Mac; a server setup comes later.)
+
 ## 0.12.52 — October 2026
 
 - **One log.** Rushes' jobs and the helper's work (copies, tidy-ups, describing) now write into one technical log, in the order they happened; the helper's lines say `helper ·`. Manage → Activity and the Rushes app show the same log. (A helper on another computer keeps its own.)

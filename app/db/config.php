@@ -115,6 +115,24 @@ function catalogue_roots(): array {
 function drive_key(array $d): string {
     return preg_replace('/[^A-Za-z0-9-]/', '_', (string)(($d['id'] ?? '') ?: sha1((string)$d['source'])));
 }
+// The drive kept where it is that holds a path (drives_seen, with 'root'), or null.
+function kept_drive_of(string $p): ?array {
+    $d = drive_of(rtrim($p, '/') . '/');                    // the drive's own top counts too
+    return $d ? $d + ['root' => rtrim((string)$d['path'], '/')] : null;
+}
+// Where an original's preview (proxy) is: the archive's under PROXIES, with the same path; a drive kept
+// where it is has its own on the archive too, in Rushes' records under the drive's ID, so they play while
+// the drive is unplugged and nothing is ever written on it (runner.py → preview_root). null: neither.
+function preview_of(string $orig): ?string {
+    $root = rtrim(archive_dir(), '/'); $noext = fn(string $x) => preg_replace('/\.[^.\/]*$/', '', $x) . '.mp4';
+    if (str_starts_with($orig, "$root/")) return "$root/PROXIES/" . $noext(substr($orig, strlen($root) + 1));
+    if ($d = kept_drive_of($orig)) return "$root/_rushes/previews/" . drive_key($d) . '/' . $noext(substr($orig, strlen($d['root']) + 1));
+    return null;
+}
+// A folder on the Describe list: a folder of the archive (its path inside it), or of a kept drive (its full path).
+function prep_abs(string $rel): string { return str_starts_with($rel, '/') ? $rel : rtrim(archive_dir(), '/') . "/$rel"; }
+// A kept drive's previews are made where Rushes and its helper run together: the Mac app.
+function can_preview_drives(): bool { return on_mac() && helper_mode() !== 'external'; }
 // One of those drives by its place in Setup (the duplicates jobs name it so), or null.
 function drive_by_source(string $src): ?array {
     foreach (drives_seen() as $d) if ($d['source'] === $src) return $d;

@@ -526,7 +526,7 @@ usort($drives_other, fn($a, $b) => [$a['kind'] === 'card', $a['name']] <=> [$b['
 echo json_encode([
     'drives_in' => $drives_in, 'drives_other' => $drives_other, 'helper_seen' => (int)($hv['at'] ?? 0),
     'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
-    'can_make_archive' => helper_mode() !== 'external', 'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()),
+    'can_make_archive' => helper_mode() !== 'external', 'can_preview_drives' => can_preview_drives(), 'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()),
     'repeats'  => $repeats,
     'backup'   => backup_said(),
     'transfer' => $transfer,

@@ -3,7 +3,8 @@
 //
 //   ?p=<the file's path in the archive>
 //
-// Only a file the catalogue knows, and only its proxy (PROXIES/<same path>.mp4),
+// Only a file the catalogue knows, and only its proxy (config.php preview_of: PROXIES/<same path>.mp4,
+// or _rushes/previews/<drive ID>/… for a drive kept where it is),
 // or the file itself when it is light enough to play as it is (no proxy made:
 // media.asis, runner.py's light()), or a sound or a picture a browser shows as it
 // is (MP3, WAV, M4A … JPG, PNG …): nothing else on the archive can be asked for here. Sent in pieces as the
@@ -38,14 +39,17 @@ $st->bindValue(1, $path);
 $row = $st->execute()->fetchArray(SQLITE3_ASSOC);
 if (!$row) nope(404, 'No proxy for this file yet.');
 
-if (!str_starts_with($row['path'], "$root/")) nope(404, 'Not in the archive.');
-$rel = substr($row['path'], strlen($root) + 1);
-$proxy = "$root/PROXIES/" . preg_replace('/\.[^.\/]*$/', '', $rel) . '.mp4';
+// the archive's own under PROXIES; a kept drive's on the archive too (_rushes/previews), so it plays unplugged
+$proxy = preview_of($row['path']);
+if ($proxy === null) nope(404, 'Not in the archive, nor on a drive in Search.');
+$drive = !str_starts_with($row['path'], "$root/");
+$home = realpath($drive ? "$root/_rushes/previews" : "$root/PROXIES");
 $real = realpath($proxy);
-if ($real === false && $row['asis'] === '1') {                 // the original plays as it is
+if ($real === false && $row['asis'] === '1') {                 // the original plays as it is (its drive plugged in)
     $real = realpath($row['path']);
-    if ($real === false || !str_starts_with($real, realpath($root) . '/') || !is_file($real)) nope(404, 'The file is not on the archive.');
-} elseif ($real === false || !str_starts_with($real, realpath("$root/PROXIES") . '/') || !is_file($real)) nope(404, 'The proxy is not on the archive.');
+    $top = $drive ? realpath(kept_drive_of($row['path'])['root']) : realpath($root);
+    if ($real === false || !$top || !str_starts_with($real, $top . '/') || !is_file($real)) nope(404, 'The file is not there (is its drive plugged in?).');
+} elseif ($real === false || !$home || !str_starts_with($real, $home . '/') || !is_file($real)) nope(404, 'The proxy is not on the archive.');
 
 send:
 $size = filesize($real);
