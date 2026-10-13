@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.2 — October 2026
+
+- **Properties, in Tidy up.** Pick a file or a folder and its details show in a last column, dates first. A clip shows **Shot on**, the date the camera wrote inside it, which survives every copy (Finder's Created is usually just the day it was copied); then Modified and Created, its size, length, picture, codec, camera and timecode. A folder shows how many files and how much, how many are empty, its clips' dates from oldest to newest, and the year Rushes would file it under, with why.
+- **Move to Recently Removed**, as Finder's Trash: right-click, ⌘⌫ or Delete. It says first how many files and how much, and how many exist nowhere else Rushes can see. Undo brings them back; the space comes back only with Delete All. An empty folder is simply removed.
+- **Zero bytes says so**, in red, instead of a size rounded up.
+- **Tidy up in the side bar**, under Reorganize. File in, Tidy up and File in as a list are tabs, each with an ⓘ instead of a long paragraph; **Add a window** instead of Another window.
+
 ## 0.13.1 — October 2026
 
 - **Tidy up works like Finder.** Finder's column view, in two windows side by side (add more with **Another window**), each on the archive or a drive in Search. Click to open folders, ⌘-click and ⇧-click to select several, and drag onto a folder to move them there, at once. Right-click for Rename, New folder and Show in Finder; Space plays a clip that has a preview.

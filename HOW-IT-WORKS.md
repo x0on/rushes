@@ -1148,6 +1148,21 @@ nothing is copied and a folder of any size moves in a moment. And unlike Finder:
   where it is** can be looked at, and nothing on it changes (bringing it in is Copying's);
 - **nothing changes here while a tidy-up** of the helper's is moving files;
 - each change is a line in Activity.
+- **an info column**: pick one file or folder and its properties show in a last column, dates first.
+  A file: its size (**Zero bytes** in red), **Shot on** (the date the camera wrote inside it, which
+  survives copies; Finder's Created is usually the day of the copy), then Modified and Created, length,
+  picture, codec, camera, timecode. A folder: how many files and how much (and how many are empty), its
+  clips' camera dates, oldest to newest, and the year Rushes would file it under, with why
+  (`years.php folder_year()`, shared with File in);
+- **Move to Recently Removed** (right-click, ⌘⌫ or Delete), as Finder's Trash: asked first, in the page,
+  with how many files, how much, and how many **exist nowhere else** Rushes can see (no file of the same
+  name and size elsewhere; empty files never count). Into `_Recently Removed` on the archive, its folders
+  kept; in Search still, marked "in Recently Removed"; Undo brings it back; space comes back only with
+  **Delete All**, which deletes what has a record of being put there (`removed-moves.tsv`, as
+  `cache-moves.tsv`). An empty folder is simply removed (Undo makes it again).
+
+Tidy up has its own place in the side bar (`/structure.php#tidy`); the three ways of working on the
+structure are tabs, each explained by its ⓘ.
 
 The older planned way (`tidy.php ?shelftree`, `refile=1`: changes planned, then the helper moves each
 file as a `refile` line) is still there for the helper, `tests/test_tidy_refile.sh`.

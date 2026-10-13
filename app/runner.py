@@ -734,7 +734,7 @@ class Runner:
         if not os.path.isdir(old) or os.path.islink(old) or os.path.exists(new):
             return
         ts.rename_new(old, new)
-        for log in [n for n in os.listdir(self.web) if n.startswith("dedupe-moves") or n == "cache-moves.tsv"]:
+        for log in [n for n in os.listdir(self.web) if n.startswith("dedupe-moves") or n in ("cache-moves.tsv", "removed-moves.tsv")]:
             try:
                 with open(self.p(log), encoding="utf-8", errors="surrogateescape") as f:
                     t = f.read()
@@ -766,12 +766,12 @@ class Runner:
         Only what is inside that folder; asked for by a person (Manage, with Sure?), never by itself.
         A duplicate goes only when every byte of it is still the same as the copy that stays:
         if that copy changed or broke since the scan, the one here may be the last good one, and
-        it stays. Cache files go (editing software makes them again). A file with no record of
-        where it came from stays. Recover forgets only the files that were deleted."""
+        it stays. Cache files go (editing software makes them again), and what a person removed in
+        Reorganize → Tidy up (removed-moves.tsv). A file with no record of where it came from stays. Recover forgets only the files that were deleted."""
         h = self.hold(top)
         if not os.path.isdir(h) or os.path.islink(h):
             self.log("  Recently Removed is empty: nothing to delete"); return
-        logs = [x for x in os.listdir(self.web) if x.startswith("dedupe-moves") or x == "cache-moves.tsv"]
+        logs = [x for x in os.listdir(self.web) if x.startswith("dedupe-moves") or x in ("cache-moves.tsv", "removed-moves.tsv")]
         keeper, cache = {}, set()                    # held file -> the copy that stays; held cache files
         for log in logs:
             try:
@@ -780,7 +780,7 @@ class Runner:
                         x = line.rstrip("\n").split("\t")
                         if len(x) < 2 or not x[1].startswith(h + "/"):
                             continue
-                        if log == "cache-moves.tsv":
+                        if log in ("cache-moves.tsv", "removed-moves.tsv"):   # cache, and what a person removed in Tidy up
                             cache.add(x[1])
                         elif len(x) > 2 and x[2]:
                             keeper[x[1]] = x[2]

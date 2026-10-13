@@ -26,6 +26,7 @@ function bail(int $code, string $why) { http_response_code($code); out(['error' 
 if (!may_act((string)($_REQUEST['pass'] ?? ''))) bail(403, 'sign in first');
 
 const UNDO_KEEP = 50;
+const HOLD = '_Recently Removed';       // runner.py's: on the archive, emptied only by Delete All
 $A = rtrim(archive_dir(), '/');
 // Rushes' own at the archive's top (and the system's): never shown here, never moved, never moved into, never a
 // name given at the top. Any case: the Mac's drives do not tell PROXIES from proxies.
@@ -88,7 +89,44 @@ if (isset($_GET['dir'])) {
     out(['dir' => $dir, 'root' => $w['root'], 'archive' => $w['archive'], 'items' => $list, 'more' => $more]);
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') bail(400, 'ask for ?roots or ?dir=');
+// Its properties, dates first: for a file what the camera wrote inside it (the date that survives copies),
+// then modified and created as Finder shows them; for a folder its clips' dates and the year it would go under.
+if (isset($_GET['info'])) {
+    require_once __DIR__ . '/years.php';
+    $p = rtrim((string)$_GET['info'], '/');
+    if (!place($p) || !file_exists($p)) bail(404, 'That is not there now.');
+    $born = function (string $p) {                       // created: the Mac keeps it; elsewhere it is not known
+        if (PHP_OS_FAMILY !== 'Darwin') return null;
+        $t = trim((string)@shell_exec('stat -f %B ' . escapeshellarg($p) . ' 2>/dev/null'));
+        return ctype_digit($t) && (int)$t > 0 ? (int)$t : null;
+    };
+    $db = db();
+    if (is_file($p)) {
+        $q = $db->prepare('SELECT f.kind, m.recorded, m.duration, m.width, m.height, m.fps, m.codec, m.camera, m.timecode, m.reel, m.proxy_at, m.asis
+                           FROM files f LEFT JOIN media m ON m.file_id = f.id WHERE f.path = ?');
+        $q->bindValue(1, $p); $m = $q->execute()->fetchArray(SQLITE3_ASSOC) ?: [];
+        out(['path' => $p, 'dir' => false, 'size' => @filesize($p), 'modified' => @filemtime($p), 'created' => $born($p),
+             'shot' => $m['recorded'] ?? null, 'plays' => !empty($m['proxy_at']) || ($m['asis'] ?? '') === '1',
+             'media' => array_intersect_key($m, array_flip(['duration', 'width', 'height', 'fps', 'codec', 'camera', 'timecode', 'reel'])),
+             'year' => clip_year($p)]);
+    }
+    // a folder: counted from Search (instant, even for a big one); its clips' dates from what the camera
+    // wrote, or the file's own date (clip_year, read once and kept), at most YEAR_SAMPLE clips
+    $q = $db->prepare("SELECT f.path, f.bytes, f.kind, m.recorded FROM files f LEFT JOIN media m ON m.file_id = f.id WHERE f.path >= ? AND f.path < ?");
+    $q->bindValue(1, "$p/"); $q->bindValue(2, "$p" . '0');
+    $r = $q->execute(); $n = 0; $b = 0; $zero = 0; $clips = []; $shot = [];
+    while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) {
+        $n++; $b += (int)$x['bytes']; if ((int)$x['bytes'] === 0) $zero++;
+        if ($x['kind'] === 'video') { $clips[] = $x['path']; if ($x['recorded']) $shot[] = substr((string)$x['recorded'], 0, 10); }
+    }
+    sort($shot);
+    $w = place($p); [$year, $why] = folder_year($p, $w['root'], $clips);
+    out(['path' => $p, 'dir' => true, 'files' => $n, 'bytes' => $b, 'zero' => $zero, 'videos' => count($clips),
+         'shot' => $shot ? [$shot[0], end($shot), count($shot)] : null, 'year' => $year, 'year_why' => $why,
+         'modified' => @filemtime($p), 'created' => $born($p)]);
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') bail(400, 'ask for ?roots, ?dir= or ?info=');
 
 // ── changing ───────────────────────────────────────────────────────────────
 // Never beside a tidy-up the helper is doing: two things moving the same folders end where neither meant.
@@ -153,10 +191,13 @@ function move_preview(string $from, string $to, bool $dir): void {
 }
 // One thing to a new place, as Finder does it: a rename, never over anything. Written down and put on the
 // undo list the moment it happened; then its previews; then Search follows.
-function move_one(string $from, string $to, string $note = '', bool $remember = true): int {
+function move_one(string $from, string $to, string $note = '', bool $remember = true, bool $fromHold = false): int {
     global $undo, $saveUndo;
     if ($from === $to) return 0;
-    may_move($from, $to);
+    if ($fromHold) {                                   // Undo of a removal: out of Recently Removed, back where it was
+        if (!str_starts_with($from, rtrim(archive_dir(), '/') . '/' . HOLD . '/') || !in_archive($from)) throw new RuntimeException('Not in Recently Removed.');
+        may_move(dirname($to) . '/x', $to);            // the place it goes back to is checked as any
+    } else may_move($from, $to);
     if (!file_exists($from)) throw new RuntimeException(basename($from) . ' is not there any more.');
     $caseOnly = dirname($from) === dirname($to) && strtolower(basename($from)) === strtolower(basename($to));
     if (file_exists($to) && !$caseOnly) throw new RuntimeException('There is already something called “' . basename($to) . '” there.');
@@ -248,6 +289,12 @@ try {
         $u = end($undo);
         if (!$u) bail(400, 'Nothing to undo here.');
         if ($u['op'] === 'mkdir') { if (!@rmdir($u['dir'])) bail(409, 'The new folder ' . basename($u['dir']) . ' has something in it now, so it stays.'); $said = 'Removed the new folder ' . basename($u['dir']); }
+        elseif ($u['op'] === 'rmdir') { if (!@mkdir($u['dir'])) bail(409, 'Could not make ' . basename($u['dir']) . ' again.'); $said = basename($u['dir']) . ' is back (it was empty)'; }
+        elseif ($u['op'] === 'remove') {
+            try { move_one($u['to'], $u['from'], 'recovered', false, true); }
+            catch (RuntimeException $e) { bail(409, 'Could not undo: ' . $e->getMessage() . ' It stays on the list.'); }
+            $said = basename($u['from']) . ' is back from Recently Removed';
+        }
         elseif ($u['op'] === 'merge') {
             $back = []; $stay = 0;
             foreach (array_reverse($u['pairs']) as [$a, $b]) {
@@ -265,6 +312,53 @@ try {
         array_pop($undo); $saveUndo();
         activity_add('changed', "Undone in Tidy up: $said");
         out(['ok' => 'undo', 'said' => $said, 'left' => count($undo)]);
+    }
+    // Removing, as Finder's Trash: into Recently Removed on the archive, its folders kept, so it can come back
+    // (Undo here); space comes back only with Delete All, asked twice. "check" first: how much, and how much of
+    // it has no other copy Rushes knows of (a file of the same name and size elsewhere); empty files never count.
+    if ($op === 'check-remove' || $op === 'remove') {
+        $items = array_slice(json_decode((string)($_POST['items'] ?? '[]'), true) ?: [], 0, 500);
+        $db = db(); $n = 0; $b = 0; $alone = 0; $eg = [];
+        $other = $db->prepare('SELECT 1 FROM files WHERE name = ? AND bytes = ? AND (path < ? OR path >= ?) LIMIT 1');
+        foreach ($items as $i => $it) {
+            $it = rtrim((string)$it, '/'); $items[$i] = $it;
+            if (!in_archive($it) || own_name(top_of($it))) bail(400, basename($it) . ' cannot be removed here: only things in the archive, never Rushes’ own folders.');
+            $rows = is_file($it) ? [[$it, (int)@filesize($it)]] : array_map(fn($x) => [$x[0], $x[2]], files_under($it, $it));
+            foreach ($rows as [$path, $bytes]) {
+                $n++; $b += $bytes;
+                if ($bytes > 0 && $op === 'check-remove') {
+                    $other->bindValue(1, basename($path)); $other->bindValue(2, $bytes); $other->bindValue(3, "$it/"); $other->bindValue(4, "$it" . '0');
+                    if (is_file($it)) { $other->bindValue(3, $it); $other->bindValue(4, $it . "\0"); }
+                    if (!$other->execute()->fetchArray()) { $alone++; if (count($eg) < 5) $eg[] = basename($path); }
+                    $other->reset();
+                }
+            }
+        }
+        if ($op === 'check-remove') out(['files' => $n, 'bytes' => $b, 'alone' => $alone, 'eg' => $eg]);
+        $done = [];
+        foreach ($items as $it) {
+            try {
+                if (is_dir($it) && !(new FilesystemIterator($it))->valid()) {          // an empty folder: nothing to keep
+                    if (!@rmdir($it)) throw new RuntimeException('The drive did not let ' . basename($it) . ' be removed.');
+                    $undo[] = ['op' => 'rmdir', 'dir' => $it, 'at' => time()]; $saveUndo(); $done[] = basename($it); continue;
+                }
+                $held = rtrim(archive_dir(), '/') . '/' . HOLD . '/' . substr($it, strlen(rtrim(archive_dir(), '/')) + 1);
+                if (file_exists($held)) $held .= ' (' . date('Y-m-d His') . ')';      // removed before: both kept
+                @mkdir(dirname($held), 0777, true);
+                $pairs = files_under($it, $it);
+                if (!@rename($it, $held)) throw new RuntimeException('The drive did not let ' . basename($it) . ' be moved to Recently Removed.');
+                $undo[] = ['op' => 'remove', 'from' => $it, 'to' => $held, 'at' => time()]; $saveUndo();
+                $moved = array_map(fn($x) => [$x[0], $held . substr($x[0], strlen($it)), $x[2]], is_file($held) ? [[$it, $held, (int)@filesize($held)]] : $pairs);
+                // Delete All deletes what has a record of being put there (runner.py empty())
+                @file_put_contents(web_dir() . '/removed-moves.tsv', implode('', array_map(fn($x) => "$x[0]\t$x[1]\n", $moved)), FILE_APPEND);
+                @file_put_contents(web_dir() . '/removed-at.txt', time() . "\n");
+                rec($moved, 'removed');
+                follow_moves(array_map(fn($x) => [$x[0], $x[1]], $moved));       // in Search still, marked "in Recently Removed"
+                $done[] = basename($it);
+            } catch (RuntimeException $e) { $notes[] = $e->getMessage(); }
+        }
+        if ($done) activity_add('changed', 'Moved to Recently Removed: ' . implode(', ', $done) . ' (Tidy up)');
+        out(['ok' => 'remove', 'removed' => $done, 'files' => $n, 'bytes' => $b, 'notes' => $notes]);
     }
     if ($op === 'reveal') {
         $item = rtrim((string)($_POST['item'] ?? ''), '/');

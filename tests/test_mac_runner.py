@@ -151,6 +151,14 @@ class MacJobs(unittest.TestCase):
         said = open(os.path.join(self.web, "activity.tsv")).read()
         self.assertIn("\tAna\tRemoved 2 cache files into Recently Removed", said)
 
+    def test_delete_all_deletes_what_a_person_removed_in_tidy_up(self):
+        """Tidy up's Move to Recently Removed writes removed-moves.tsv; Delete All deletes those, and keeps a file with no record."""
+        held = self.put("_Recently Removed/VIDEOS/Parks/x.mov", b"x"); stray = self.put("_Recently Removed/stray.mov", b"y")
+        open(os.path.join(self.web, "removed-moves.tsv"), "w").write(os.path.join(self.a, "VIDEOS/Parks/x.mov") + "\t" + held + "\n")
+        self.r.job("empty", {"WHO": "Ana"})
+        self.assertFalse(os.path.exists(held), "removed by a person, deleted by Delete All")
+        self.assertTrue(os.path.exists(stray), "no record of where it came from: it stays")
+
     def test_the_old_holding_folder_becomes_recently_removed_and_recover_still_works(self):
         big = os.urandom(5000)
         kept = self.put("Parks/A.mov", big); old = self.put("_duplicates/Cards/A.mov", big)

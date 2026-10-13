@@ -75,9 +75,12 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .intro .parts > div { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--bg) }
   .intro .parts p { margin: 6px 0 0 }
   /* the drag view: what waits on the left, the departments on the right */
-  .views { display: flex; gap: 6px; margin: 4px 0 14px }
-  .views button { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer }
-  .views button.on { border-color: var(--accent); background: var(--sel-bg); color: var(--sel-fg) }
+  .views { display: flex; gap: 2px; margin: 0 0 16px; border-bottom: 1px solid var(--line) }
+  .views button { border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); padding: 9px 14px 8px;
+                  font: inherit; font-size: 13.5px; font-weight: 550; cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+  .views button:hover { color: var(--fg) }
+  .views button.on { color: var(--fg); border-bottom-color: var(--accent) }
+  .views .infotip { position: relative; font-weight: 400 }
   .dv { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.35fr); gap: 14px; align-items: start }
   @media (max-width: 900px) { .dv { grid-template-columns: 1fr } }
   .pane { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 200px; max-height: 72vh; overflow: auto }
@@ -135,6 +138,11 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .fr.open { background: var(--line-soft) } .fr.sel { background: var(--accent); color: var(--accent-fg) } .fr.sel small, .fr.sel .ic, .fr.sel .gt { color: var(--accent-fg) }
   .fr.over { outline: 2px solid var(--accent); outline-offset: -2px }
   .fr.empty { color: var(--faint) } .fr .pl { font-size: 10px; color: var(--accent-text) } .fr.sel .pl { color: var(--accent-fg) }
+  .fr small.zero { color: var(--bad); font-weight: 600 } .fr.sel small.zero { color: var(--accent-fg) }
+  .finfo { width: 280px; padding: 12px 14px; font-size: 12.5px }
+  .fi-n { font-weight: 650; font-size: 13.5px; word-break: break-word; margin-bottom: 8px }
+  .fi-k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-top: 8px }
+  .fi-v { word-break: break-word } .fi-v.bad { color: var(--bad); font-weight: 600 } .fi-v small { color: var(--muted) }
   .fpath { padding: 4px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .fmenu { position: fixed; z-index: 50; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; min-width: 170px }
   .fmenu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer }
@@ -165,14 +173,13 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
     <?php endif; ?>
     <!-- ══ the tidy-up ══ -->
     <div class="grp" id="tidy">
-      <h2>Tidy-up</h2>
-      <p>Moves what the copies brought into ARCHIVE onto the shelf, and the folders that were already
-         in the archive outside it (an old server's layout, a drive's own folders). For a copy, where
-         each file goes is read from where it <i>came from</i>, not where the copy put it; a folder already
-         here moves as it is. Either way everything below the <?= $e($one) ?> keeps the layout it had.
-         Nothing is copied, renamed or deleted, every move is recorded so Premiere projects can be
-         relinked, a tidy-up can be put back, and folders left empty are removed.</p>
-      <div class="views" role="tablist"><button type="button" data-view="drag">File in</button><button type="button" data-view="tidy">Tidy up</button><button type="button" data-view="list">File in, as a list</button></div>
+      <?php $tipR = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialchars($t, ENT_QUOTES) . '">i</span>'; ?>
+      <!-- three ways to work on the same structure: tabs, each showing its own part of the page -->
+      <div class="views" role="tablist">
+        <button type="button" role="tab" data-view="drag">File in <?= $tipR('Folders that are not organized yet, filed into a ' . strtolower($one) . ': Rushes suggests where each goes, you check, and Move files them all, under their year. For a copy, where each file goes is read from where it came from. Nothing moves until you press Move; every move is recorded so Premiere projects can be relinked, and a tidy-up can be put back.') ?></button>
+        <button type="button" role="tab" data-view="tidy">Tidy up <?= $tipR('The archive as Finder shows it: drag to move, right-click to rename, make a folder or move to Recently Removed. Each change happens at once, is recorded, and Undo puts it back. Nothing is copied: a move inside the archive is a rename on the drive.') ?></button>
+        <button type="button" role="tab" data-view="list">File in, as a list <?= $tipR('The same as File in, worked out for every folder at once, as a list to tick.') ?></button>
+      </div>
       <div id="tWait" class="banner warn" hidden><div class="txt"></div></div>
 
       <!-- ══ Drag and drop: folders from the left onto a <?= $e($one) ?> on the right. Nothing moves until Move. ══ -->
@@ -203,12 +210,11 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       <div id="tuView" hidden>
         <div class="fbar">
           <button class="btn quiet" type="button" id="fUndo" disabled>Undo</button>
-          <button class="btn quiet" type="button" id="fAdd">Another window</button>
-          <span class="note" id="fSaid">Drag folders and clips onto a folder, as in Finder. Right-click for Rename, New folder, Show in Finder. Space plays a clip that has a preview.</span>
+          <button class="btn quiet" type="button" id="fAdd">Add a window</button>
+          <span class="note" id="fSaid">Drag onto a folder to move, as in Finder. Right-click for more; ⌘⌫ moves to Recently Removed; Space plays a clip with a preview.</span>
         </div>
         <div id="fAsk" class="banner warn" hidden><div class="txt"></div></div>
         <div class="fwins" id="fWins"></div>
-        <p class="note" style="margin-top:8px">A move inside the archive is a rename on the drive: nothing is copied, Search follows at once, and every file’s move is written down, so Premiere projects can be relinked; Undo puts the last changes back. Drives kept where they are can be looked at here; nothing on them changes.</p>
       </div>
 
       <div id="listView" hidden>
@@ -403,7 +409,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       // Each window remembers where it was (this browser only).
       var $ = function (id) { return document.getElementById(id); };
       var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
-      var size = function (b) { return b == null ? '' : b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB'; };
+      var size = function (b) { return b == null ? '' : b === 0 ? 'Zero bytes' : b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB'; };
       var KEY = 'rushes-finder', roots = [], finder = false, wins = [], cache = {}, menu = null, busy = false;
       var VIDEO = /\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i;
       var get = function (q) { return fetch('/db/browse.php?' + q + '&t=' + Date.now()).then(function (r) { return r.json(); })
@@ -443,6 +449,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             c.innerHTML = '<div class="fr empty"><span class="n" style="white-space:normal">' + esc(e.message) + '</span></div>'; });
           dropOn(c, function () { return dir; });
         });
+        // one thing picked: its properties in a last column, dates first (as Finder's preview column)
+        var one = w.picked(); if (one.length === 1) info(cols, one[0]);
         setTimeout(function () { cols.scrollLeft = cols.scrollWidth; }, 0);
       };
       Win.prototype.col = function (c, d, k) {
@@ -452,7 +460,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           return '<div class="fr' + (it.dir ? ' d' : '') + (w.selCol === k && w.sel[p] ? ' sel' : p === next ? ' open' : '') + '" draggable="' + d.archive + '" data-p="' + esc(p) + '" data-i="' + n + '">' +
             '<span class="ic">' + (it.dir ? '▸' : VIDEO.test(it.name) ? '▶' : '·') + '</span><span class="n" title="' + esc(it.name) + '">' + esc(it.name) + '</span>' +
             (it.plays ? '<span class="pl" title="has a preview: Space plays it">●</span>' : '') +
-            (it.dir ? '<span class="gt">›</span>' : '<small>' + size(it.size) + '</small>') + '</div>';
+            (it.dir ? '<span class="gt">›</span>' : '<small' + (it.size === 0 ? ' class="zero"' : '') + '>' + size(it.size) + '</small>') + '</div>';
         }).join('') + (d.more ? '<div class="fr empty"><span class="n">and ' + d.more.toLocaleString() + ' more</span></div>' : '');
         c.querySelectorAll('.fr[data-p]').forEach(function (r) {
           var p = r.dataset.p, it = d.items[+r.dataset.i];
@@ -483,6 +491,30 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         w.selCol = k; current = w; save(); w.draw();
       };
       var current = null;
+      var when = function (t) { return t ? new Date(t * 1000).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'; };
+      var day = function (d) { var x = new Date(d + 'T12:00:00'); return isNaN(x) ? d : x.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }); };
+      var clock = function (s) { s = Math.round(+s || 0); return Math.floor(s / 3600) ? Math.floor(s / 3600) + ':' + ('0' + Math.floor(s % 3600 / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2) : Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); };
+      function info(cols, p) {
+        var c = document.createElement('div'); c.className = 'fcol finfo'; cols.appendChild(c);
+        c.innerHTML = '<div class="fi-n">' + esc(name(p)) + '</div><p class="note">Reading…</p>';
+        get('info=' + encodeURIComponent(p)).then(function (d) {
+          var kv = function (k, v, cls) { return v == null || v === '' ? '' : '<div class="fi-k">' + k + '</div><div class="fi-v' + (cls ? ' ' + cls : '') + '">' + v + '</div>'; };
+          var m = d.media || {};
+          c.innerHTML = '<div class="fi-n">' + esc(name(p)) + '</div>' + (d.dir
+            ? kv('Files', d.files.toLocaleString() + ' · ' + size(d.bytes)) +
+              (d.zero ? kv('Empty files', d.zero.toLocaleString() + ' with zero bytes', 'bad') : '') +
+              kv('Shot', d.shot ? (d.shot[0] === d.shot[1] ? day(d.shot[0]) : day(d.shot[0]) + ' – ' + day(d.shot[1])) + ' <small>(' + d.shot[2] + ' of ' + d.videos + ' clips carry a camera date)</small>' : d.videos ? 'no camera date read yet' : 'no clips') +
+              kv('Its year', d.year ? '<b>' + esc(d.year) + '</b> <small>' + esc(d.year_why) + '</small>' : '<small>' + esc(d.year_why) + '</small>')
+            : kv('Size', size(d.size), d.size === 0 ? 'bad' : '') +
+              kv('Shot on', d.shot ? esc(d.shot) + ' <small>(the camera’s date, inside the file)</small>' : '<small>no camera date in it' + (d.year ? '; its oldest date says ' + esc(d.year) : '') + '</small>') +
+              kv('Length', m.duration ? clock(m.duration) : '') + kv('Picture', m.width ? m.width + ' × ' + m.height + (m.fps ? ' · ' + (+m.fps).toFixed(2).replace(/\.?0+$/, '') + ' fps' : '') : '') +
+              kv('Codec', m.codec ? esc(String(m.codec).toUpperCase()) : '') + kv('Camera', m.camera ? esc(m.camera) : '') +
+              kv('Timecode', m.timecode ? esc(m.timecode) + (m.reel ? ' · reel ' + esc(m.reel) : '') : '')) +
+            kv('Modified', when(d.modified)) + kv('Created', d.created ? when(d.created) + ' <small>(often the day it was copied here)</small>' : '') +
+            (!d.dir && d.plays ? '<p style="margin-top:10px"><button class="btn quiet" type="button">▶ Play its preview</button></p>' : '');
+          var b = c.querySelector('button'); if (b) b.onclick = function () { play(p, { plays: true }); };
+        }).catch(function (e) { c.innerHTML = '<p class="note bad">' + esc(e.message) + '</p>'; });
+      }
       // what is selected in a window: the rows marked in the column they were picked in
       Win.prototype.picked = function () { return Object.keys(this.sel); };
 
@@ -525,8 +557,9 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           said(parts.join('<br>') || 'Nothing to move: already there.');
           if (d.taken.length) {
             var dirs = d.taken.filter(function (t) { return t.dir; }), files = d.taken.filter(function (t) { return !t.dir; });
-            $('fAsk').querySelector('.txt').innerHTML = (dirs.length ? '<b>' + esc(dirs.map(function (t) { return t.name; }).join(', ')) + '</b> ' + (dirs.length === 1 ? 'is' : 'are') + ' already in ' + esc(name(to)) +
-                '. Merge, so each becomes one folder? Every file joins it; a file whose name is already there stays where it is. <button class="btn" type="button" id="fMerge">Merge</button> <button class="btn quiet" type="button" id="fNoMerge">Stop</button>' : '') +
+            $('fAsk').className = 'banner warn';
+            $('fAsk').querySelector('.txt').innerHTML = (dirs.length ? '<b>' + esc(dirs.map(function (t) { return t.name; }).join(', ')) + ' ' + (dirs.length === 1 ? 'is' : 'are') + ' already in ' + esc(name(to)) +
+                '.</b> Merge, so each becomes one folder? Every file joins it; a file whose name is already there stays where it is. <button class="btn" type="button" id="fMerge">Merge</button> <button class="btn quiet" type="button" id="fNoMerge">Stop</button>' : '') +
               (files.length ? '<p style="margin:6px 0 0">Not moved: ' + esc(files.map(function (t) { return t.name; }).join(', ')) + ' (a file of that name is already in ' + esc(name(to)) + '; rename one first).</p>' : '');
             $('fAsk').hidden = false;
             var m = $('fMerge'); if (m) m.onclick = function () { move(dirs.map(function (t) { return items.filter(function (p) { return name(p) === t.name; })[0]; }), to, true); };
@@ -534,6 +567,33 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           }
           refresh();
         }).catch(function (e) { busy = false; said('Did not move: ' + esc(e.message), true); refresh(); });
+      }
+      // Removing: asked first, in the page, with how much and how much has no other copy; then into Recently Removed
+      function removeAsk(items) {
+        if (busy || !items.length) return;
+        said('<span class="spin"></span> Looking at what would be removed…');
+        post({ op: 'check-remove', items: JSON.stringify(items) }).then(function (c) {
+          said('');
+          var what = items.length === 1 ? esc(name(items[0])) : items.length + ' items';
+          $('fAsk').className = 'banner ' + (c.alone ? 'bad' : 'warn');
+          $('fAsk').querySelector('.txt').innerHTML = '<b>Move ' + what + ' to Recently Removed?</b>' + c.files.toLocaleString() + ' file' + (c.files === 1 ? '' : 's') + ' · ' + size(c.bytes) + '. ' +
+             (c.alone ? '<strong>' + c.alone.toLocaleString() + (c.alone === 1 ? ' of them exists' : ' of them exist') + ' nowhere else Rushes can see</strong> (' + esc(c.eg.join(', ')) + (c.alone > c.eg.length ? '…' : '') + '). '
+                     : c.bytes ? 'Each has another copy elsewhere in Search. ' : '') +
+            'They stay in Recently Removed until Delete All, and Undo brings them back. <button class="btn" type="button" id="fRmYes">Move to Recently Removed</button> <button class="btn quiet" type="button" id="fRmNo">Cancel</button>';
+          $('fAsk').hidden = false;
+          $('fRmNo').onclick = function () { $('fAsk').hidden = true; };
+          $('fRmYes').onclick = function () {
+            $('fAsk').hidden = true; busy = true; said('<span class="spin"></span> Moving to Recently Removed…');
+            post({ op: 'remove', items: JSON.stringify(items) }).then(function (d) {
+              busy = false;
+              wins.forEach(function (w) { items.forEach(function (p) {
+                var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
+              said((d.removed.length ? 'Moved to Recently Removed ✓ ' + esc(d.removed.join(', ')) + '. Undo brings it back; Delete All (Duplicates → Recently Removed) gives the space back.' : '') +
+                d.notes.map(function (n) { return '<br><span class="bad">' + esc(n) + '</span>'; }).join(''));
+              refresh();
+            }).catch(function (e) { busy = false; said('Not removed: ' + esc(e.message), true); });
+          };
+        }).catch(function (e) { said(esc(e.message), true); });
       }
       $('fUndo').onclick = function () {
         if (busy) return;                                  // never beside a move still going on
@@ -563,6 +623,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
               .catch(function (x) { said('Not made: ' + esc(x.message), true); });
           }]);
         }
+        if (d.archive) items.push(['Move to Recently Removed', function () { removeAsk(w.picked().length ? w.picked() : [p]); }]);
         if (!it.dir && it.plays) items.push(['Play its preview', function () { play(p, it); }]);
         if (finder) items.push(['Show in Finder', function () {
           post({ op: 'reveal', item: p }).then(function () { said('Opened ✓ ' + esc(name(p)) + ' in a Finder window.'); }).catch(function (x) { said(esc(x.message), true); }); }]);
@@ -586,6 +647,11 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       document.addEventListener('keydown', function (e) {
         var o = document.querySelector('.fplay');
         if (o && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); o.remove(); return; }
+        if (!$('tuView').hidden && current && (e.key === 'Backspace' && e.metaKey || e.key === 'Delete') && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) {
+          var root = rootOf(current.open[0]);
+          if (root && root.archive && current.picked().length) { e.preventDefault(); removeAsk(current.picked()); }
+          return;
+        }
         if ($('tuView').hidden || e.key !== ' ' || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') || !current) return;
         var ps = current.picked(); if (ps.length !== 1) return;
         var p = ps[0], d = cache[p.slice(0, p.lastIndexOf('/'))]; if (!d) return;
@@ -933,6 +999,10 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var listRead = false, tuRead = false;
       function show(v) {
         try { localStorage.setItem('rushes-reorg-view', v); } catch (e) {}
+        if (history.replaceState) history.replaceState(null, '', { tidy: '#tidy', drag: '#filein', list: '#list' }[v]);
+        // the side bar has Reorganize and Tidy up, both this page: the one showing is the one marked
+        document.querySelectorAll('.rail a.nav[href^="/structure.php"]').forEach(function (a) {
+          if ((a.getAttribute('href') === '/structure.php#tidy') === (v === 'tidy')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
         document.querySelectorAll('.views button').forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
         $('dragView').hidden = v !== 'drag'; $('listView').hidden = v !== 'list'; $('tuView').hidden = v !== 'tidy';
         window.tidyRefresh = v === 'drag' ? load : v === 'tidy' ? window.tuLoad : window.tidyList;
@@ -940,7 +1010,10 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         if (v === 'tidy' && !tuRead) { tuRead = true; window.tuLoad(); }
       }
       document.querySelectorAll('.views button').forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
+      // the tab: from the address (the side bar's Tidy up opens #tidy), else the last one used here
       var v = 'drag'; try { v = localStorage.getItem('rushes-reorg-view') || 'drag'; } catch (e) {}
+      var h = { '#tidy': 'tidy', '#filein': 'drag', '#list': 'list' }[location.hash]; if (h) v = h;
+      window.addEventListener('hashchange', function () { var x = { '#tidy': 'tidy', '#filein': 'drag', '#list': 'list' }[location.hash]; if (x) show(x); });
       show(v); load();
     })();
     </script>

@@ -152,7 +152,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   <h2>Manage</h2>
   <?= $m('Overview', '/db/admin.php#overview', 'overview') ?>
   <h2>Transfer</h2>
-  <?= $m('Copying', '/db/admin.php#transfers', 'transfers') ?><?= $m('Reorganize', '/structure.php') ?>
+  <?= $m('Copying', '/db/admin.php#transfers', 'transfers') ?><?= $m('Reorganize', '/structure.php#filein') ?><?= $m('Tidy up', '/structure.php#tidy') ?>
   <?= $m('Duplicates', '/db/admin.php#duplicates', 'duplicates') ?><?= $m('Cache', '/db/admin.php#cache', 'cache') ?>
   <h2>Footage</h2>
   <?= $m('Describe', '/db/admin.php#describe', 'describe') ?><?= $m("Editors' projects", '/db/admin.php#projects', 'projects') ?>
