@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.45 — October 2026
+
+- **Move to… no longer jumps or flashes.** Placing a folder now changes only what changed: its row leaves the left side, the folders above it count again, and only its department is drawn again. Nothing else is redrawn.
+- **Your place is kept for real.** 0.12.44 kept the window's scroll, but Manage scrolls inside its own column, so the page still jumped to the top; now every part that scrolls stays where it was.
+
 ## 0.12.44 — October 2026
 
 - **Reorganize keeps your place.** Placing a folder redraws both sides in place: the page and each side stay scrolled where they were, instead of jumping as if the page had reloaded.

@@ -390,8 +390,9 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       function place(rel, dept, info, by) {
         // a folder whose own name says a department gives up its name (PARKS → Parks & Recreation); any other keeps it
         var named = info && info.dept;
+        var was = plan[rel] && plan[rel].dept;
         plan[rel] = {dept: dept, keep: !named, named: !!named, n: (info && info.n) || 0, b: (info && info.b) || 0, by: by || 'you'};
-        delete no[rel]; save(); draw();
+        delete no[rel]; save(); soft(rel, was && was !== dept ? [was, dept] : [dept]);
       }
       function unplace(rel) { no[rel] = 1; delete plan[rel]; save(); draw(); }   // taken out: Rushes does not put it back
 
@@ -448,19 +449,20 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         step();
       }
 
-      function draw() {
-        // redrawn in place: the page and both sides stay where they were scrolled (it must not feel like a reload)
-        var keep = [window.scrollY, $('dvL').scrollTop, $('dvR').scrollTop];
-        try { paint(); } finally { $('dvL').scrollTop = keep[1]; $('dvR').scrollTop = keep[2]; window.scrollTo(0, keep[0]); }
+      // Every box that scrolls, from both sides up to the page (Manage's own column scrolls, not the window):
+      // where each was, put back after a redraw, so nothing jumps
+      function scrolled() {
+        var out = [];
+        [$('dvL'), $('dvR')].forEach(function (e) { for (; e; e = e.parentElement) if (e.scrollTop) out.push([e, e.scrollTop]); });
+        out.push([document.scrollingElement, document.scrollingElement.scrollTop]);
+        return function () { out.forEach(function (x) { x[0].scrollTop = x[1]; }); };
       }
-      function paint() {
-        $('dvTree').innerHTML = kids[''] ? (kids[''].map(node).join('')
-          || '<p class="note" style="margin:10px 12px">Nothing waits to be filed.</p>') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
-        var n = 0, b = 0, c = Object.keys(plan).length;
-        top().forEach(function (r) { n += plan[r].n; b += plan[r].b; });
-        var all = (kids[''] || []).reduce(function (s, f) { return s + (f.name ? f.n : 0); }, 0);
-        $('dvLeft').textContent = all ? (all - n > 0 ? num(all - n) + ' of ' + num(all) + ' files still to place' : 'Everything has a place ✓') + (n ? ' · ' + num(n) + ' placed' : '') : '';
-        $('dvDepts').innerHTML = depts.map(function (d) {
+      function draw() {
+        var back = scrolled();
+        try { paint(); } finally { back(); }
+      }
+      // one department's block on the right
+      function deptHtml(d) {
           // what is under a department is what moves there: Rushes places what matches, you take out what does not belong
           var here = Object.keys(plan).filter(function (r) { return plan[r].dept === d; })
             .sort(function (a, b) { return (plan[b].guess ? 1 : 0) - (plan[a].guess ? 1 : 0) || plan[b].b - plan[a].b; });
@@ -480,10 +482,43 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
                   + '<button type="button" class="btn quiet sm" data-off="' + esc(r) + '" title="It goes back to the left and does not move">Take out</button></span></div>';
               }).join('') + '</div>' : '')
             + '</div>';
-        }).join('');
+      }
+      // the counts at the top of the left side and on Move
+      function counts() {
+        var n = 0, b = 0, c = Object.keys(plan).length;
+        top().forEach(function (r) { n += plan[r].n; b += plan[r].b; });
+        var all = (kids[''] || []).reduce(function (s, f) { return s + (f.name ? f.n : 0); }, 0);
+        $('dvLeft').textContent = all ? (all - n > 0 ? num(all - n) + ' of ' + num(all) + ' files still to place' : 'Everything has a place ✓') + (n ? ' · ' + num(n) + ' placed' : '') : '';
         $('dvAsk').disabled = !c;
         $('dvAsk').textContent = c ? 'Move ' + (n ? num(n) + ' files (' + size(b) + ') from ' : '') + c + ' folder' + (c > 1 ? 's' : '') + '…' : 'Nothing placed yet';
         $('dvSure').hidden = true;
+      }
+      function paint() {
+        $('dvTree').innerHTML = kids[''] ? (kids[''].map(node).join('')
+          || '<p class="note" style="margin:10px 12px">Nothing waits to be filed.</p>') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
+        $('dvDepts').innerHTML = depts.map(deptHtml).join('');
+        counts();
+      }
+      // A folder placed with Move to… (or dropped): only what changed is touched, so nothing jumps or flashes. The
+      // folder's row leaves the left side, the folders above it count again, and only its department is drawn again.
+      function soft(rel, depts2) {
+        var back = scrolled();
+        var row = document.querySelector('#dvTree [data-rel="' + CSS.escape(rel) + '"]');
+        if (row) { var nx = row.nextElementSibling; if (nx && nx.classList.contains('kids')) nx.remove(); row.remove(); }
+        for (var a = parent(rel); a; a = parent(a)) {
+          var el = document.querySelector('#dvTree [data-rel="' + CSS.escape(a) + '"]'), f = info(a);
+          if (!el || !f) continue;
+          var u = under(a), left = f.n - u[0];
+          if (left <= 0) { var k = el.nextElementSibling; if (k && k.classList.contains('kids')) k.remove(); el.remove(); continue; }
+          var sm = el.querySelector(':scope > small');
+          if (sm) sm.innerHTML = num(left) + ' of ' + num(f.n) + ' files left &middot; ' + size(Math.max(0, f.b - u[1]));
+        }
+        depts2.forEach(function (d) {
+          var old = document.querySelector('#dvDepts .db[data-dept="' + CSS.escape(d) + '"]');
+          if (!old) return;
+          var t = document.createElement('div'); t.innerHTML = deptHtml(d); old.replaceWith(t.firstElementChild);
+        });
+        counts(); back();
       }
 
       function openFolder(rel) {
@@ -519,7 +554,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       });
       $('dragView').addEventListener('change', function (ev) {
         var r = ev.target.dataset && ev.target.dataset.keep;
-        if (r && plan[r]) { plan[r].keep = ev.target.checked; save(); draw(); }
+        if (r && plan[r]) { plan[r].keep = ev.target.checked; save(); soft('', [plan[r].dept]); }
       });
       // dragging: from the left onto a department, between departments, or back to the left
       $('dragView').addEventListener('dragstart', function (ev) {
