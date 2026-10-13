@@ -3,7 +3,9 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.53 — October 2026
+## 0.13.0 — October 2026
+
+Rushes around its drives: one log, what is running shown first, and previews for any drive, kept on the archive. (0.12.52 and 0.12.53 were built and never released; they are this.)
 
 - **Previews for a drive kept where it is.** Its page now has **Make previews and descriptions**, for the whole drive or any folder, as the archive's has. The previews are kept **on the archive** (in Rushes' records, under the drive's own ID), never written on the drive. They play in Search even when the drive is unplugged, with a badge: "Preview · the original is on …, not plugged in". Then the helper describes them, as it does the archive's. A folder waits on the Describe list while its drive is unplugged. (The Rushes app on a Mac; a server setup comes later.)
 
