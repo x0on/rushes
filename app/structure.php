@@ -211,7 +211,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         <div class="fbar">
           <button class="btn quiet" type="button" id="fUndo" disabled>Undo</button>
           <button class="btn quiet" type="button" id="fAdd">Add a window</button>
-          <span class="note" id="fSaid">Drag onto a folder to move, as in Finder. Right-click for more; ⌘⌫ moves to Recently Removed; Space plays a clip with a preview.</span>
+          <span class="note" id="fSaid">Drag onto a folder to move, as in Finder. Right-click for more; ⌘⌫ moves to Recently Removed (pick it in a window’s list to drag things back); Space plays a clip with a preview.</span>
         </div>
         <div id="fAsk" class="banner warn" hidden><div class="txt"></div></div>
         <div class="fwins" id="fWins"></div>
@@ -434,8 +434,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           $('fWins').appendChild(el);
         }
         el.innerHTML = '<header><select>' + roots.map(function (r) {
-            return '<option value="' + esc(r.path) + '"' + (r === root ? ' selected' : '') + (r.here ? '' : ' disabled') + '>' + esc(r.name) + (r.archive ? ' · the archive' : r.here ? ' · looked at only' : ' · not plugged in') + '</option>'; }).join('') +
-          '</select>' + (root && !root.archive ? '<span class="ro">Nothing on this drive changes here.</span>' : '') +
+            return '<option value="' + esc(r.path) + '"' + (r === root ? ' selected' : '') + (r.here ? '' : ' disabled') + '>' + esc(r.name) + (r.hold ? '' : r.archive ? ' · the archive' : r.here ? ' · looked at only' : ' · not plugged in') + '</option>'; }).join('') +
+          '</select>' + (root && root.hold ? '<span class="ro">Drag back out to recover.</span>' : root && !root.archive ? '<span class="ro">Nothing on this drive changes here.</span>' : '') +
           (wins.length > 1 ? '<button class="lnk x" type="button">Close</button>' : '') + '</header>' +
           '<div class="fcols"></div><div class="fpath"></div>';
         el.querySelector('select').onchange = function () { w.open = [this.value]; w.sel = {}; save(); w.draw(); };
@@ -539,6 +539,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       // ── the changes, each at once ──
       function move(items, to, merge) {
         if (busy) return;
+        var tr = rootOf(to); if (tr && tr.hold) { removeNow(items); return; }       // dropped on Recently Removed: as onto the Trash
         items = items.filter(function (p) { return p !== to && to.indexOf(p + '/') !== 0; });
         if (!items.length) return;
         busy = true; $('fAsk').hidden = true;
@@ -549,7 +550,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           wins.forEach(function (w) { items.forEach(function (p) {
             var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
           var parts = [];
-          if (d.moved.length) parts.push('Moved ✓ ' + esc(d.moved.length === 1 ? d.moved[0] : d.moved.length + ' items') + ' into <b>' + esc(name(to)) + '</b>' +
+          if (d.moved.length && (rootOf(items[0]) || {}).hold) parts.push('Recovered ✓ ' + esc(d.moved.join(', ')) + ' is back in <b>' + esc(name(to)) + '</b>');
+          else if (d.moved.length) parts.push('Moved ✓ ' + esc(d.moved.length === 1 ? d.moved[0] : d.moved.length + ' items') + ' into <b>' + esc(name(to)) + '</b>' +
             (d.files ? ' · ' + d.files.toLocaleString() + ' file' + (d.files === 1 ? '' : 's') + ' followed in Search' : ''));
           d.merged.forEach(function (m) { parts.push('Merged ✓ ' + esc(m.name) + ': ' + m.n.toLocaleString() + ' files joined it' +
             (m.kept_n ? ' · <span class="bad">' + m.kept_n + ' stayed where they were (a file of the same name is already there): ' + esc(m.kept.slice(0, 5).join(', ')) + (m.kept_n > 5 ? '…' : '') + '</span>' : '')); });
@@ -568,32 +570,20 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           refresh();
         }).catch(function (e) { busy = false; said('Did not move: ' + esc(e.message), true); refresh(); });
       }
-      // Removing: asked first, in the page, with how much and how much has no other copy; then into Recently Removed
-      function removeAsk(items) {
+      // Removing, as Finder's Trash: at once, into Recently Removed. Undo brings it back, and so does dragging it
+      // out of Recently Removed (a place in each window's list) onto a folder
+      function removeNow(items) {
         if (busy || !items.length) return;
-        said('<span class="spin"></span> Looking at what would be removed…');
-        post({ op: 'check-remove', items: JSON.stringify(items) }).then(function (c) {
-          said('');
-          var what = items.length === 1 ? esc(name(items[0])) : items.length + ' items';
-          $('fAsk').className = 'banner ' + (c.alone ? 'bad' : 'warn');
-          $('fAsk').querySelector('.txt').innerHTML = '<b>Move ' + what + ' to Recently Removed?</b>' + c.files.toLocaleString() + ' file' + (c.files === 1 ? '' : 's') + ' · ' + size(c.bytes) + '. ' +
-             (c.alone ? '<strong>' + c.alone.toLocaleString() + (c.alone === 1 ? ' of them exists' : ' of them exist') + ' nowhere else Rushes can see</strong> (' + esc(c.eg.join(', ')) + (c.alone > c.eg.length ? '…' : '') + '). '
-                     : c.bytes ? 'Each has another copy elsewhere in Search. ' : '') +
-            'They stay in Recently Removed until Delete All, and Undo brings them back. <button class="btn" type="button" id="fRmYes">Move to Recently Removed</button> <button class="btn quiet" type="button" id="fRmNo">Cancel</button>';
-          $('fAsk').hidden = false;
-          $('fRmNo').onclick = function () { $('fAsk').hidden = true; };
-          $('fRmYes').onclick = function () {
-            $('fAsk').hidden = true; busy = true; said('<span class="spin"></span> Moving to Recently Removed…');
-            post({ op: 'remove', items: JSON.stringify(items) }).then(function (d) {
-              busy = false;
-              wins.forEach(function (w) { items.forEach(function (p) {
-                var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
-              said((d.removed.length ? 'Moved to Recently Removed ✓ ' + esc(d.removed.join(', ')) + '. Undo brings it back; Delete All (Duplicates → Recently Removed) gives the space back.' : '') +
-                d.notes.map(function (n) { return '<br><span class="bad">' + esc(n) + '</span>'; }).join(''));
-              refresh();
-            }).catch(function (e) { busy = false; said('Not removed: ' + esc(e.message), true); });
-          };
-        }).catch(function (e) { said(esc(e.message), true); });
+        busy = true; $('fAsk').hidden = true; said('<span class="spin"></span> Moving to Recently Removed…');
+        post({ op: 'remove', items: JSON.stringify(items) }).then(function (d) {
+          busy = false;
+          wins.forEach(function (w) { items.forEach(function (p) {
+            var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
+          said((d.removed.length ? 'Moved to Recently Removed ✓ ' + esc(d.removed.join(', ')) + ' · ' + d.files.toLocaleString() + ' file' + (d.files === 1 ? '' : 's') + (d.bytes ? ' · ' + size(d.bytes) : '') +
+              '. Undo, or drag it back out of Recently Removed; Delete All there gives the space back.' : '') +
+            d.notes.map(function (n) { return '<br><span class="bad">' + esc(n) + '</span>'; }).join(''));
+          refresh();
+        }).catch(function (e) { busy = false; said('Not removed: ' + esc(e.message), true); });
       }
       $('fUndo').onclick = function () {
         if (busy) return;                                  // never beside a move still going on
@@ -607,7 +597,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       function openMenu(e, w, p, it, d) {
         closeMenu();
         var dir = it.dir ? p : d.dir, items = [];
-        if (d.archive) {
+        var inHold = (rootOf(p) || {}).hold;
+        if (d.archive && !inHold) {
           items.push(['Rename…', function () {
             var n = prompt('A new name for ' + name(p), name(p)); if (!n || n === name(p)) return;
             said('<span class="spin"></span> Renaming…');
@@ -623,7 +614,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
               .catch(function (x) { said('Not made: ' + esc(x.message), true); });
           }]);
         }
-        if (d.archive) items.push(['Move to Recently Removed', function () { removeAsk(w.picked().length ? w.picked() : [p]); }]);
+        if (d.archive && !inHold) items.push(['Move to Recently Removed', function () { removeNow(w.picked().length ? w.picked() : [p]); }]);
         if (!it.dir && it.plays) items.push(['Play its preview', function () { play(p, it); }]);
         if (finder) items.push(['Show in Finder', function () {
           post({ op: 'reveal', item: p }).then(function () { said('Opened ✓ ' + esc(name(p)) + ' in a Finder window.'); }).catch(function (x) { said(esc(x.message), true); }); }]);
@@ -649,7 +640,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         if (o && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); o.remove(); return; }
         if (!$('tuView').hidden && current && (e.key === 'Backspace' && e.metaKey || e.key === 'Delete') && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) {
           var root = rootOf(current.open[0]);
-          if (root && root.archive && current.picked().length) { e.preventDefault(); removeAsk(current.picked()); }
+          if (root && root.archive && !root.hold && current.picked().length) { e.preventDefault(); removeNow(current.picked()); }
           return;
         }
         if ($('tuView').hidden || e.key !== ' ' || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') || !current) return;

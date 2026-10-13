@@ -60,13 +60,16 @@ function good_name(string $n): bool {
 
 // ── looking ────────────────────────────────────────────────────────────────
 if (isset($_GET['roots'])) {
-    $r = [['path' => $A, 'name' => settings()['archive']['label'] ?? basename($A), 'archive' => true, 'here' => is_dir($A)]];
+    $r = [['path' => $A, 'name' => settings()['archive']['label'] ?? basename($A), 'archive' => true, 'here' => is_dir($A)],
+          // what was removed, as it was: dragged out of here onto a folder, it is back
+          ['path' => "$A/" . HOLD, 'name' => 'Recently Removed', 'archive' => true, 'hold' => true, 'here' => true]];
     foreach (drives_seen() as $d) $r[] = ['path' => rtrim($d['path'], '/'), 'name' => (string)$d['name'], 'archive' => false, 'here' => !empty($d['connected'])];
     out(['roots' => $r, 'finder' => on_mac() && PHP_OS_FAMILY === 'Darwin' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)]);
 }
 if (isset($_GET['dir'])) {
     $dir = rtrim((string)$_GET['dir'], '/');
     $w = place($dir);
+    if ($dir === "$A/" . HOLD && !is_dir($dir)) out(['dir' => $dir, 'root' => $A, 'archive' => true, 'items' => [], 'more' => 0]);   // nothing removed yet
     if (!$w || !is_dir($dir)) bail(404, 'That folder is not there now' . ($w && !$w['archive'] ? ' (is the drive plugged in?)' : '') . '.');
     $names = @scandir($dir);
     if ($names === false) bail(500, 'Could not read that folder.');
@@ -194,7 +197,7 @@ function move_preview(string $from, string $to, bool $dir): void {
 function move_one(string $from, string $to, string $note = '', bool $remember = true, bool $fromHold = false): int {
     global $undo, $saveUndo;
     if ($from === $to) return 0;
-    if ($fromHold) {                                   // Undo of a removal: out of Recently Removed, back where it was
+    if ($fromHold) {                                   // out of Recently Removed (dragged, or a removal undone)
         if (!str_starts_with($from, rtrim(archive_dir(), '/') . '/' . HOLD . '/') || !in_archive($from)) throw new RuntimeException('Not in Recently Removed.');
         may_move(dirname($to) . '/x', $to);            // the place it goes back to is checked as any
     } else may_move($from, $to);
@@ -205,7 +208,7 @@ function move_one(string $from, string $to, string $note = '', bool $remember = 
         $tmp = dirname($to) . '/.rushes-rename-' . bin2hex(random_bytes(4));
         if (!@rename($from, $tmp) || !@rename($tmp, $to)) { @rename($tmp, $from); throw new RuntimeException('The drive did not let ' . basename($from) . ' be renamed.'); }
     } elseif (!@rename($from, $to)) throw new RuntimeException('The drive did not let ' . basename($from) . ' move (is it read-only for you?).');
-    if ($remember) { $undo[] = ['op' => 'move', 'from' => $from, 'to' => $to, 'at' => time()]; $saveUndo(); }
+    if ($remember) { $undo[] = ['op' => $fromHold ? 'unremove' : 'move', 'from' => $from, 'to' => $to, 'at' => time()]; $saveUndo(); }
     $pairs = files_under($from, $to);
     rec($pairs, $note);
     move_preview($from, $to, is_dir($to));
@@ -260,7 +263,8 @@ try {
                     } else $taken[] = ['name' => basename($from), 'dir' => is_dir($from) && is_dir($dest)];
                     continue;
                 }
-                $files += move_one($from, $dest); $done[] = basename($from);
+                $files += move_one($from, $dest, str_starts_with($from, "$A/" . HOLD . '/') ? 'recovered' : '', true, str_starts_with($from, "$A/" . HOLD . '/'));
+                $done[] = basename($from);
             } catch (RuntimeException $e) { $notes[] = $e->getMessage(); }            // the next one is still tried
         }
         if ($done || $merged) activity_add('changed', 'Moved ' . implode(', ', array_merge($done, array_column($merged, 'name'))) . ' into ' . basename($to) . ' (Tidy up)');
@@ -295,6 +299,13 @@ try {
             catch (RuntimeException $e) { bail(409, 'Could not undo: ' . $e->getMessage() . ' It stays on the list.'); }
             $said = basename($u['from']) . ' is back from Recently Removed';
         }
+        elseif ($u['op'] === 'unremove') {
+            if (!file_exists($u['to']) || file_exists($u['from'])) bail(409, 'Could not undo: ' . basename($u['to']) . ' moved or changed since. It stays on the list.');
+            @mkdir(dirname($u['from']), 0777, true);
+            if (!@rename($u['to'], $u['from'])) bail(409, 'Could not undo: the drive did not let it move.');
+            $pairs = files_under($u['to'], $u['from']); rec($pairs, 'removed again'); follow_moves(array_map(fn($x) => [$x[0], $x[1]], $pairs));
+            $said = basename($u['to']) . ' is back in Recently Removed';
+        }
         elseif ($u['op'] === 'merge') {
             $back = []; $stay = 0;
             foreach (array_reverse($u['pairs']) as [$a, $b]) {
@@ -313,28 +324,15 @@ try {
         activity_add('changed', "Undone in Tidy up: $said");
         out(['ok' => 'undo', 'said' => $said, 'left' => count($undo)]);
     }
-    // Removing, as Finder's Trash: into Recently Removed on the archive, its folders kept, so it can come back
-    // (Undo here); space comes back only with Delete All, asked twice. "check" first: how much, and how much of
-    // it has no other copy Rushes knows of (a file of the same name and size elsewhere); empty files never count.
-    if ($op === 'check-remove' || $op === 'remove') {
+    // Removing, as Finder's Trash: at once, into Recently Removed on the archive, its folders kept. It comes back
+    // with Undo, or dragged out of Recently Removed (a place in every window); space comes back only with Delete All.
+    if ($op === 'remove') {
         $items = array_slice(json_decode((string)($_POST['items'] ?? '[]'), true) ?: [], 0, 500);
-        $db = db(); $n = 0; $b = 0; $alone = 0; $eg = [];
-        $other = $db->prepare('SELECT 1 FROM files WHERE name = ? AND bytes = ? AND (path < ? OR path >= ?) LIMIT 1');
+        $n = 0; $b = 0;
         foreach ($items as $i => $it) {
             $it = rtrim((string)$it, '/'); $items[$i] = $it;
             if (!in_archive($it) || own_name(top_of($it))) bail(400, basename($it) . ' cannot be removed here: only things in the archive, never Rushes’ own folders.');
-            $rows = is_file($it) ? [[$it, (int)@filesize($it)]] : array_map(fn($x) => [$x[0], $x[2]], files_under($it, $it));
-            foreach ($rows as [$path, $bytes]) {
-                $n++; $b += $bytes;
-                if ($bytes > 0 && $op === 'check-remove') {
-                    $other->bindValue(1, basename($path)); $other->bindValue(2, $bytes); $other->bindValue(3, "$it/"); $other->bindValue(4, "$it" . '0');
-                    if (is_file($it)) { $other->bindValue(3, $it); $other->bindValue(4, $it . "\0"); }
-                    if (!$other->execute()->fetchArray()) { $alone++; if (count($eg) < 5) $eg[] = basename($path); }
-                    $other->reset();
-                }
-            }
         }
-        if ($op === 'check-remove') out(['files' => $n, 'bytes' => $b, 'alone' => $alone, 'eg' => $eg]);
         $done = [];
         foreach ($items as $it) {
             try {
@@ -345,7 +343,7 @@ try {
                 $held = rtrim(archive_dir(), '/') . '/' . HOLD . '/' . substr($it, strlen(rtrim(archive_dir(), '/')) + 1);
                 if (file_exists($held)) $held .= ' (' . date('Y-m-d His') . ')';      // removed before: both kept
                 @mkdir(dirname($held), 0777, true);
-                $pairs = files_under($it, $it);
+                $pairs = files_under($it, $it); $n += max(1, count($pairs)); $b += array_sum(array_column($pairs, 2));
                 if (!@rename($it, $held)) throw new RuntimeException('The drive did not let ' . basename($it) . ' be moved to Recently Removed.');
                 $undo[] = ['op' => 'remove', 'from' => $it, 'to' => $held, 'at' => time()]; $saveUndo();
                 $moved = array_map(fn($x) => [$x[0], $held . substr($x[0], strlen($it)), $x[2]], is_file($held) ? [[$it, $held, (int)@filesize($held)]] : $pairs);

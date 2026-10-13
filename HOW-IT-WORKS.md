@@ -1154,12 +1154,13 @@ nothing is copied and a folder of any size moves in a moment. And unlike Finder:
   picture, codec, camera, timecode. A folder: how many files and how much (and how many are empty), its
   clips' camera dates, oldest to newest, and the year Rushes would file it under, with why
   (`years.php folder_year()`, shared with File in);
-- **Move to Recently Removed** (right-click, ⌘⌫ or Delete), as Finder's Trash: asked first, in the page,
-  with how many files, how much, and how many **exist nowhere else** Rushes can see (no file of the same
-  name and size elsewhere; empty files never count). Into `_Recently Removed` on the archive, its folders
-  kept; in Search still, marked "in Recently Removed"; Undo brings it back; space comes back only with
-  **Delete All**, which deletes what has a record of being put there (`removed-moves.tsv`, as
-  `cache-moves.tsv`). An empty folder is simply removed (Undo makes it again).
+- **Move to Recently Removed** (right-click, ⌘⌫, Delete, or a drop onto a Recently Removed window), as
+  Finder's Trash: at once, no question, because nothing is gone. Into `_Recently Removed` on the archive,
+  its folders kept; in Search still, marked "in Recently Removed". It comes back with **Undo**, or by
+  picking **Recently Removed** in a window's list and dragging it out onto a folder of the archive (and
+  Undo of that puts it back in). Space comes back only with **Delete All**, asked twice, which deletes
+  what has a record of being put there (`removed-moves.tsv`, as `cache-moves.tsv`). An empty folder is
+  simply removed (Undo makes it again).
 
 Tidy up has its own place in the side bar (`/structure.php#tidy`); the three ways of working on the
 structure are tabs, each explained by its ⓘ.

@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.3 — October 2026
+
+- **Removing is one step, as in Finder.** Right-click → Move to Recently Removed, ⌘⌫ or Delete moves it there at once, no question: nothing is gone until Delete All.
+- **Recently Removed is a place in Tidy up.** Pick it in a window's list to see what was removed, as it was; drag anything back onto a folder of the archive to recover it. Dropping onto a Recently Removed window removes, as dragging to the Trash. Undo works both ways.
+
 ## 0.13.2 — October 2026
 
 - **Properties, in Tidy up.** Pick a file or a folder and its details show in a last column, dates first. A clip shows **Shot on**, the date the camera wrote inside it, which survives every copy (Finder's Created is usually just the day it was copied); then Modified and Created, its size, length, picture, codec, camera and timecode. A folder shows how many files and how much, how many are empty, its clips' dates from oldest to newest, and the year Rushes would file it under, with why.

@@ -78,13 +78,19 @@ G "info=$A/VIDEOS/Parks/2025" | python3 -c 'import json,sys; d=json.load(sys.std
 G "info=$A/VIDEOS/Parks/shelter/d.mov" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert not d["dir"] and d["size"] == len("Public Works/2025/Shelter/d.mov") and d["modified"], d' && ok "a file's: size and dates" || no "info file"
 : > "$A/VIDEOS/Parks/empty.mov"; G "dir=$A/VIDEOS/Parks" | grep -q '"name":"empty.mov","dir":false,"size":0' && ok "an empty file says so (zero bytes)" || no "zero"
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Parks/shelter")
-B -d op=check-remove --data-urlencode "items=$J" | grep -q '"files":1,.*"alone":1' && ok "before removing: how much, and how much exists nowhere else" || no "check-remove"
 X=$(B -d op=remove --data-urlencode "items=$J")
 [ -f "$A/_Recently Removed/VIDEOS/Parks/shelter/d.mov" ] && [ ! -e "$A/VIDEOS/Parks/shelter" ] && grep -qF "$A/_Recently Removed/VIDEOS/Parks/shelter/d.mov" "$W/removed-moves.tsv" \
   && ok "removed into Recently Removed, its folders kept, with the record Delete All needs" || no "remove: $X"
 B -d op=undo > /dev/null; [ -f "$A/VIDEOS/Parks/shelter/d.mov" ] && ok "Undo brings it back" || no "undo remove"
+G roots=1 | grep -q '"name":"Recently Removed","archive":true,"hold":true' && ok "Recently Removed is a place to look at, in any window" || no "hold root"
+B -d op=remove --data-urlencode "items=$J" > /dev/null
+H=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/_Recently Removed/VIDEOS/Parks/shelter")
+X=$(B -d op=move --data-urlencode "items=$H" --data-urlencode "to=$A/VIDEOS/Public Works")
+[ -f "$A/VIDEOS/Public Works/shelter/d.mov" ] && [ ! -e "$A/_Recently Removed/VIDEOS/Parks/shelter" ] && ok "dragged out of Recently Removed onto a folder: it is back" || no "recover: $X"
+curl -s -G --data-urlencode "q=d.mov" "$U/db/search.php" | grep -q "Public Works/shelter/d.mov" && ok "and Search has it there" || no "recover search"
+B -d op=undo > /dev/null; [ -f "$A/_Recently Removed/VIDEOS/Parks/shelter/d.mov" ] && ok "Undo of that puts it back in Recently Removed" || no "undo recover"
 mkdir "$A/VIDEOS/Parks/nothing-here"; J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Parks/nothing-here")
 B -d op=remove --data-urlencode "items=$J" > /dev/null; [ ! -e "$A/VIDEOS/Parks/nothing-here" ] && [ ! -e "$A/_Recently Removed/VIDEOS/Parks/nothing-here" ] && ok "an empty folder is simply removed" || no "rmdir"
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/_rushes")
-case "$(B -d op=check-remove --data-urlencode "items=$J")" in *error*) ok "Rushes' own folders are never removed" ;; *) no "remove own" ;; esac
+case "$(B -d op=remove --data-urlencode "items=$J")" in *error*) ok "Rushes' own folders are never removed" ;; *) no "remove own" ;; esac
 
