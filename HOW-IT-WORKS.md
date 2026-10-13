@@ -834,12 +834,14 @@ Broken copies in the archive, found, and good ones brought back (`rescue.php`, `
 
 **Look for broken files** (a job for the runner; the top bar says how far): every clip (`mxf mov mp4 avi mts
 m2ts m4v braw r3d`) and XML sidecar in the archive, read on the drive, the first 16 bytes only (`runner.py
-broken()`). Broken: empty; a clip under 64 KB; or not starting the way its kind must (an MP4 or MOV with
+broken()`). Broken: empty; not starting the way its kind must (an MP4 or MOV with
 `ftyp`, `moov`, `mdat`…; an MXF with its key `06 0E 2B 34`; an AVI with `RIFF`; an MTS with `0x47`; an XML
-with `<`), as a damaged disk or a broken copy leaves them. Rushes' own folders and Recently Removed are not
-looked at. For each broken file:
-- **where it came from**, from the copy records (`_rushes/origin`, followed through every move): the page
-  groups them by source, so one damaged source or one broken transfer shows at once;
+with `<`), as a damaged disk or a broken copy leaves them; or small (under 64 KB) when it does not start right,
+is under 4 KB, or is of a kind whose start is not checked. A small file that starts right is a real one (a
+49 KB sound effect). An `.mts` that is plain text is a TypeScript module, not a clip; `node_modules` folders
+(an app's code) are not looked in. Rushes' own folders and Recently Removed are not looked at. For each
+broken file:
+- **where it came from**, from the copy records (`_rushes/origin`, followed through every move);
 - **a good copy**: its source first, then a file of the same name elsewhere in Search (the archive or a
   drive kept where it is), the one in the most similar folders; only one that is there now and not broken
   itself; or "none anywhere Rushes can see". It is **sure** only with more than the name, because cameras
@@ -854,9 +856,19 @@ for a NAS Finder cannot open but SSH can. Only with this Mac's own SSH login (`s
 already has; never a password, which Rushes neither asks for nor keeps). `runner.py ssh_list`: one
 `find … -exec ls -ln` over SSH, names and sizes only, the NAS's own folders left out, into `web/ssh/<key>.tsv`.
 Its files are candidates in the scan like any (`ssh:<name>:<path>`), their first 16 bytes read over SSH in one
-connection (`ssh_heads`). Rescuing from it: `cat` over SSH into the temporary file, and the swap only when the
+connection (`ssh_heads`, with only `dd`, `wc` and `printf` there: a NAS's cut-down commands, BusyBox, may not
+take the options a Mac's `od` does). How many were read is kept (`rescue-ssh.json`) and said on the page and in
+Activity when it is not all of them: a server that could not be read is never a silent "no copy there". Rescuing from it: `cat` over SSH into the temporary file, and the swap only when the
 `md5sum` taken on the server equals the one taken here. Nothing on the server is written, moved or deleted.
 The address and folder are checked so neither ssh nor a shell can read them as anything else (`ssh_ok`).
+
+**The page** shows three groups, one open at a time: **Ready to rescue** (sure), **Check first** (same name
+only; no Tick all there) and **No copy found**. Each is a tree of folders, as in Reorganize: a chain of folders
+that each hold only one folder is one line, and a folder's box ticks everything under it. **Remove…** on a
+folder (or a right click) offers each folder on its line, and moves the whole folder, broken files or not,
+to Recently Removed; in No copy found, **Remove** moves the ticked files. Both are Tidy up's own Remove
+(`db/browse.php op=remove`: Undo there, or the Undo the page offers, brings it back; space comes back only with
+Delete All). What was removed leaves the list at once (`db/rescue.php` drops rows whose file is not there).
 
 **Rescue** the ticked ones (only those the scan found, with the good copy it found; never a path sent by the
 page): the good copy is copied in beside the broken one under a temporary name and read back byte for byte;

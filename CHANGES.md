@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.9 — October 2026
+
+- **Rescue is three groups of folders, not one long list.** Tiles at the top: **Ready to rescue**, **Check first** (a file of the same name only) and **No copy found**; one is open at a time. Inside, the files are in folders that fold, as in Reorganize; a chain of folders that each hold one folder is one line. A folder's box ticks everything in it. Each row is short (the name, *empty* / *damaged* / *too small*, where the good copy is); hover it for the whole path.
+- **Remove, from Rescue.** **Remove…** on a folder (or a right click) moves the whole folder to Recently Removed, choosing which folder on the line. In No copy found, **Remove** moves the ticked files. It is Tidy up's own Remove: Undo brings it back, and nothing is deleted until Delete All. What was removed leaves the list at once.
+- **The files on a server over SSH are read with the simplest commands** (`dd`, `wc`), which a NAS has: its copies were never offered before, because the NAS's `od` did not take the options a Mac's does, and nothing said so. Now how many were read is said, on the page and in Activity, whenever it is not all of them.
+- **Fewer false alarms:** a small file that starts the way its kind must is a real one (a 49 KB sound effect); an `.mts` that is plain text is code (TypeScript), not a clip; `node_modules` folders are not looked in.
+- The top bar says "Looking for broken files · the archive · 355,000 files so far", not the job's name twice.
+
 ## 0.13.8 — October 2026
 
 - **A server over SSH says what it is doing.** Asked, it says "asked: it starts within a minute" (and after what, if another job runs first); a listing that stops for any reason says why, on the page; "No route to host" says what to check (macOS's Local Network permission for Rushes, or the cable).

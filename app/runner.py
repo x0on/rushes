@@ -51,8 +51,6 @@ def broken(path, size, head=None):
         return None
     if size == 0:
         return "empty: zero bytes"
-    if ext != ".xml" and size < 65536:
-        return f"too small to be a clip ({size:,} bytes)"
     h = head
     if h is None:
         try:
@@ -60,14 +58,22 @@ def broken(path, size, head=None):
                 h = f.read(16)
         except OSError as e:
             return f"cannot be read ({e.strerror or e})"
+    if ext in (".mts", ".m2ts") and h and all(32 <= c < 127 or c in b"\t\r\n" for c in h):
+        return None                    # plain text: a TypeScript module (.d.mts), not a camera's clip
     ok = {".mp4": lambda: h[4:8] in (b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"),
           ".mxf": lambda: h[:4] == b"\x06\x0e\x2b\x34",
           ".avi": lambda: h[:4] == b"RIFF",
           ".mts": lambda: h[:1] == b"\x47" or h[4:5] == b"\x47",
           ".xml": lambda: h.lstrip(b"\xef\xbb\xbf \t\r\n")[:1] == b"<"}
     ok[".mov"] = ok[".m4v"] = ok[".mp4"]; ok[".m2ts"] = ok[".mts"]
+    small = ext != ".xml" and size < 65536
     if ext in ok and not ok[ext]():
-        return "what is inside is not " + ("XML" if ext == ".xml" else f"a {ext[1:].upper()} clip") + " (another file's data, or damaged)"
+        return f"too small to be a clip ({size:,} bytes)" if small else \
+            "what is inside is not " + ("XML" if ext == ".xml" else f"a {ext[1:].upper()} clip") + " (another file's data, or damaged)"
+    # a small file that starts as its kind must is a real one (a sound effect of 49 KB); below 4 KB, or of a kind
+    # whose start is not checked, small is still too small
+    if small and (size < 4096 or ext not in ok):
+        return f"too small to be a clip ({size:,} bytes)"
     return None
 
 
@@ -84,16 +90,22 @@ def ssh_ok(host, path):
 
 
 def ssh_heads(host, paths):
-    """The first 16 bytes of each file on the server, in one connection. -> {path: bytes or None}"""
-    import shlex
-    script = "while IFS= read -r f; do printf '%s\\t' \"$f\"; head -c 16 \"$f\" 2>/dev/null | od -An -tx1 | tr -d ' \\n'; echo; done"
-    r = subprocess.run(["ssh", *SSH_OPTS, "--", host, script], input="\n".join(paths) + "\n", capture_output=True, text=True, timeout=600)
-    out = {}
-    for l in r.stdout.splitlines():
-        p, _, hx = l.partition("\t")
-        try: out[p] = bytes.fromhex(hx) if hx else None
-        except ValueError: out[p] = None
-    return out
+    """The first 16 bytes of each file on the server, in one connection -> ({path: bytes or None}, what ssh said).
+    Only dd, wc and printf there: a NAS has a cut-down set of commands (BusyBox), whose od may not take the
+    options a Mac's does. Each file comes back as a line, its byte count and path, then those bytes as they are."""
+    script = ('while IFS= read -r f; do n=$(dd if="$f" bs=16 count=1 2>/dev/null | wc -c); '
+              'printf \'%s\\t%s\\n\' "$((n+0))" "$f"; dd if="$f" bs=16 count=1 2>/dev/null; done')
+    r = subprocess.run(["ssh", *SSH_OPTS, "--", host, script], capture_output=True, timeout=3600,
+                       input=("\n".join(paths) + "\n").encode("utf-8", "surrogateescape"))
+    out, b, i, asked = {}, r.stdout, 0, set(paths)
+    while i < len(b):
+        j = b.find(b"\n", i)
+        n, _, p = b[i:j if j >= 0 else len(b)].partition(b"\t")
+        p = p.decode("utf-8", "surrogateescape")
+        if j < 0 or not n.strip().isdigit() or p not in asked:
+            break                      # out of step: what is read so far stands, the rest counts as not read
+        n = int(n); out[p] = b[j + 1:j + 1 + n] or None; i = j + 1 + n
+    return out, r.stderr.decode("utf-8", "replace").strip()[-300:]
 
 
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
@@ -1126,13 +1138,14 @@ class Runner:
         seen, found, t0 = 0, [], time.time()
         top_skip = {"PROXIES", HOLD, OLD_HOLD, "_rushes"}
         for d, dirs, files in os.walk(a):
-            dirs[:] = [x for x in dirs if x not in SKIP and not x.startswith(".") and not (d == a and x in top_skip)]
+            # node_modules: an app's code (thousands of small files, some named .mts), never footage
+            dirs[:] = [x for x in dirs if x not in SKIP and x != "node_modules" and not x.startswith(".") and not (d == a and x in top_skip)]
             for n in files:
                 if n.startswith("."):
                     continue
                 p = os.path.join(d, n); seen += 1
                 if seen % 5000 == 0:
-                    self.log(f"listing: looking for broken files · {seen:,} files so far")
+                    self.log(f"listing: the archive · {seen:,} files so far")
                     self.make_way()
                     if not self.may_v():
                         self.log("  stopped: the archive stopped answering, or copying is paused — look again later"); return
@@ -1159,17 +1172,22 @@ class Runner:
                     remote.setdefault(os.path.basename(path), []).append((sv, path, int(size)))
             except (OSError, ValueError):
                 pass
-        heads = {}                             # the server's first bytes, read once for every candidate there
+        heads, sshread = {}, {}                # the server's first bytes, read once for every candidate there
         if remote:
             want = {}
             for p, _, _ in found:
                 for sv, path, size in remote.get(os.path.basename(p), [])[:40]:
                     if size > 0: want.setdefault(sv["host"], {}).setdefault(path, sv)
             for host, ps in want.items():
-                self.log(f"  reading the first bytes of {len(ps):,} files on {host}")
-                try: got = ssh_heads(host, list(ps))
+                name = next(iter(ps.values()))["name"]
+                self.log(f"  reading the first bytes of {len(ps):,} files on {name} ({host}), in one connection")
+                try: got, said = ssh_heads(host, list(ps))
                 except (OSError, subprocess.SubprocessError) as e:
-                    self.log(f"  {host}: could not read them ({e})"); got = {}
+                    got, said = {}, str(e)
+                n = sum(1 for v in got.values() if v)
+                self.log(f"  {name}: read {n:,} of {len(ps):,}" + (f" (ssh said: {said})" if said and n < len(ps) else ""))
+                # said out loud on Rescue's page: a server that could not be read is never a silent "no copy there"
+                sshread[name] = {"want": len(ps), "read": n, "why": said if n < len(ps) else ""}
                 for path, sv in ps.items(): heads[(sv["name"], path)] = got.get(path)
         for i, (p, size, why) in enumerate(found, 1):
             if i % 50 == 0:
@@ -1217,8 +1235,10 @@ class Runner:
         if db: db.close()
         self.write("rescue-found.tsv", "".join(r + "\n" for r in rows))
         self.write("rescue-looked.txt", f"{int(time.time())}\t{seen}\n")
+        self.write("rescue-ssh.json", json.dumps(sshread))
         n = sum(1 for r in rows if r.split("\t")[7] == "1")
-        self.activity("check", f"Rescue looked at {seen:,} files: {len(rows):,} broken, {n:,} with a good copy found for sure")
+        bad = [f"{k}: read {v['read']:,} of {v['want']:,} files there" for k, v in sshread.items() if v["read"] < v["want"]]
+        self.activity("check", f"Rescue looked at {seen:,} files: {len(rows):,} broken, {n:,} with a good copy found for sure" + "".join(" · " + x for x in bad))
 
     def rescue_apply(self, who):
         """The ticked broken files (rescue-pick.tsv: broken, good — written by db/rescue.php from what the scan

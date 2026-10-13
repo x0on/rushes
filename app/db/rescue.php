@@ -7,7 +7,8 @@
 // Rushes can see. The looking and the rescuing are the runner's (runner.py rescue_scan, rescue_apply);
 // this page only asks, and says what was found.
 //
-//   GET                         {looked, running, rows: [{path, rel, size, why, came, good, gsize, other}], …}
+//   GET                         {looked, running, rows: [{path, rel, size, why, came, good, gsize, other, sure}], ssh_read, …}
+//   (removing is Tidy up's: db/browse.php op=remove, into Recently Removed)
 //   POST action=scan            look again (a job for the runner)
 //   POST action=rescue paths=[] the ticked ones, each replaced by the good copy the scan found
 require_once __DIR__ . '/auth.php';
@@ -110,7 +111,10 @@ $where = function (string $p) use ($A): string {
     $d = kept_drive_of($p);
     return $d ? (string)$d['name'] : dirname($p);
 };
+// what was removed since (Remove here or in Tidy up) leaves the list at once; only with the archive there to say so
 $rows = array_values($found());
+if (is_dir($A)) $rows = array_values(array_filter($rows, fn($r) => file_exists($r['path'])));
+$total = count($rows);
 $withGood = count(array_filter($rows, fn($r) => $r['sure']));
 $maybe = count(array_filter($rows, fn($r) => $r['good'] !== '' && !$r['sure']));
 $rows = array_map(fn($r) => $r + ['rel' => str_starts_with($r['path'], "$A/") ? substr($r['path'], strlen($A) + 1) : $r['path'],
@@ -124,7 +128,9 @@ $servers = array_map(function ($x) use ($W, $queued, $st) {
     if ($asked) $state = ['state' => 'asked', 'busy' => $st !== '' && $st !== 'idle' ? trim(str_replace('running:', '', $st)) : ''];
     return $x + ['state' => $state];
 }, ssh_servers());
-out(['servers' => $servers, 'looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked' => $asked,
+out(['servers' => $servers, 'looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked' => $asked, 'archive' => $A,
+     // each server's first bytes, as the last look read them: {name: {want, read, why}}
+     'ssh_read' => json_decode((string)@file_get_contents("$W/rescue-ssh.json"), true) ?: (object)[],
      'running' => str_contains($st, 'rescue-') ? (str_contains($st, 'apply') ? 'rescuing' : 'looking') : '',
-     'total' => count($found()), 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,
+     'total' => $total, 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,
      'done' => array_map(fn($l) => array_slice(explode("\t", rtrim($l, "\n")), 0, 4), array_slice(array_reverse($done), 0, 50))]);

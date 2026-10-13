@@ -290,6 +290,31 @@ class Rescue(unittest.TestCase):
     replaced by their good copy, read back byte for byte; the broken one goes to Recently Removed."""
     setUp, tearDown, put = MacJobs.setUp, MacJobs.tearDown, MacJobs.put
 
+    def test_small_real_files_and_code_are_not_called_broken(self):
+        self.put("VIDEOS/FX/Thud.mp4", b"\x00\x00\x00\x18ftypmp42" + b"x" * 49000)        # a real 49 KB sound effect
+        self.put("VIDEOS/App/node_modules/jiti/index.d.mts", b"\x47" + b"x" * 100)          # in an app's code: never looked at
+        self.put("VIDEOS/App/src/types.d.mts", b"export type X = string;\n")               # TypeScript, not a clip
+        bad = self.put("VIDEOS/FX/overlay.mov", b"x" * 110)
+        self.r.job("rescue-scan", {})
+        rows = [l.split("\t")[0] for l in open(os.path.join(self.web, "rescue-found.tsv"))]
+        self.assertEqual(rows, [bad], "only the 110-byte .mov is broken")
+
+    def test_a_server_whose_files_could_not_be_read_is_said(self):
+        fake = os.path.join(self.t, "bin", "ssh")              # the server answers nothing (as a failing command would)
+        open(fake, "w").write('#!/bin/sh\necho "sh: od: unrecognized option" >&2\n')
+        os.chmod(fake, 0o755)
+        os.makedirs(os.path.join(self.web, "ssh"), exist_ok=True)
+        s = json.load(open(os.path.join(self.web, "settings.json")))
+        s["ssh_sources"] = [{"name": "QNAP", "host": "admin@nas.local", "path": "/share/VIDEO"}]
+        json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
+        key = [x["key"] for x in self.r.ssh_servers()][0]
+        open(os.path.join(self.web, "ssh", key + ".tsv"), "w").write("120000\t/share/VIDEO/Kite/Clip0007.MXF\n")
+        self.put("VIDEOS/Kite/Clip0007.MXF", b"")
+        self.r.job("rescue-scan", {})
+        said = json.load(open(os.path.join(self.web, "rescue-ssh.json")))
+        self.assertEqual((said["QNAP"]["want"], said["QNAP"]["read"]), (1, 0))
+        self.assertIn("od", said["QNAP"]["why"], "what ssh said is kept, for the page")
+
     def test_broken_files_are_found_and_rescued_from_their_source(self):
         mp4 = b"\x00\x00\x00\x18ftypmp42" + os.urandom(200000)
         src = os.path.join(self.t, "OldServer", "Card"); os.makedirs(src)
