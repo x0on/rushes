@@ -521,7 +521,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             (d.files ? ' · ' + d.files.toLocaleString() + ' file' + (d.files === 1 ? '' : 's') + ' followed in Search' : ''));
           d.merged.forEach(function (m) { parts.push('Merged ✓ ' + esc(m.name) + ': ' + m.n.toLocaleString() + ' files joined it' +
             (m.kept_n ? ' · <span class="bad">' + m.kept_n + ' stayed where they were (a file of the same name is already there): ' + esc(m.kept.slice(0, 5).join(', ')) + (m.kept_n > 5 ? '…' : '') + '</span>' : '')); });
-          d.notes.forEach(function (n) { parts.push(esc(n)); });
+          d.notes.forEach(function (n) { parts.push('<span class="bad">' + esc(n) + '</span>'); });
           said(parts.join('<br>') || 'Nothing to move: already there.');
           if (d.taken.length) {
             var dirs = d.taken.filter(function (t) { return t.dir; }), files = d.taken.filter(function (t) { return !t.dir; });
@@ -536,9 +536,10 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         }).catch(function (e) { busy = false; said('Did not move: ' + esc(e.message), true); refresh(); });
       }
       $('fUndo').onclick = function () {
-        said('<span class="spin"></span> Undoing the last change…');
-        post({ op: 'undo' }).then(function (d) { said('Undone ✓ ' + esc(d.said) + '.'); $('fUndo').disabled = !d.left; refresh(); })
-          .catch(function (e) { said(esc(e.message), true); });
+        if (busy) return;                                  // never beside a move still going on
+        busy = true; said('<span class="spin"></span> Undoing the last change…');
+        post({ op: 'undo' }).then(function (d) { busy = false; said('Undone ✓ ' + esc(d.said) + '.'); refresh(); $('fUndo').disabled = !d.left; })
+          .catch(function (e) { busy = false; said(esc(e.message), true); });
       };
       $('fAdd').onclick = function () { var w = new Win([wins.length ? wins[wins.length - 1].open[0] : roots[0].path]); wins.push(w); save(); wins.forEach(function (v) { v.draw(); }); };
 
@@ -552,7 +553,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             said('<span class="spin"></span> Renaming…');
             post({ op: 'rename', item: p, name: n }).then(function (x) {
               wins.forEach(function (v) { v.open = v.open.map(function (o) { return o === p || o.indexOf(p + '/') === 0 ? d.dir + '/' + n + o.slice(p.length) : o; }); v.sel = {}; });
-              save(); said('Renamed ✓ ' + esc(name(p)) + ' is now <b>' + esc(n) + '</b>' + (x.files ? ' · ' + x.files.toLocaleString() + ' files followed in Search' : '') + '.'); refresh();
+              save(); said('Renamed ✓ ' + esc(name(p)) + ' is now <b>' + esc(n) + '</b>' + (x.files ? ' · ' + x.files.toLocaleString() + ' files followed in Search' : '') + '.' +
+                (x.notes || []).map(function (t) { return '<br><span class="bad">' + esc(t) + '</span>'; }).join('')); refresh();
             }).catch(function (x) { said('Not renamed: ' + esc(x.message), true); });
           }]);
           items.push(['New folder in ' + name(dir) + '…', function () {

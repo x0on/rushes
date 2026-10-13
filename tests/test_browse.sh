@@ -52,6 +52,25 @@ J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$D/Old")
 X=$(B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks")
 [ -f "$D/Old/e.mov" ] && echo "$X" | grep -q "Copying" && ok "a drive kept where it is never changes: copying it in is Copying's" || no "kept: $X"
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/_rushes")
-case "$(B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS")" in *error*) ok "Rushes' own folders stay" ;; *) no "own" ;; esac
+X=$(B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS")
+[ -d "$A/_rushes/origin" ] && echo "$X" | grep -q "own folders stay" && ok "Rushes' own folders stay, and it says so" || no "own: $X"
 printf 'phase\ttidying\nts\t%s\n' "$(date +%s)" > "$W/ingest-status.tsv"
 case "$(B -d op=mkdir --data-urlencode "dir=$A/VIDEOS/Parks" -d "name=x")" in *"tidy-up is moving"*) ok "nothing changes here while a tidy-up moves files" ;; *) no "during tidy" ;; esac
+rm -f "$W/ingest-status.tsv"
+for bad in "$A/./_rushes" "$A//_rushes" "$A/_rushes/origin" "$A/proxies"; do
+  J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$bad")
+  B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS" > /dev/null
+done
+[ -d "$A/_rushes/origin" ] && [ ! -e "$A/VIDEOS/_rushes" ] && [ ! -e "$A/VIDEOS/origin" ] && ok "no other spelling of a path gets Rushes' own folders moved" || no "own spelled"
+J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Parks/2026")
+B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/PROXIES" > /dev/null; [ -d "$A/VIDEOS/Parks/2026" ] && ok "nothing goes into them either" || no "into own"
+case "$(B -d op=rename --data-urlencode "item=$A/VIDEOS" -d "name=_hidden")" in *error*) ok "nor does anything at the top get one of their names" ;; *) no "own name" ;; esac
+mkdir -p "$A/VIDEOS/Parks/Kite/sub/Kite"
+J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Parks/Kite")
+B -d op=move -d merge=1 --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks/Kite/sub" > /dev/null
+[ ! -e "$A/VIDEOS/Parks/Kite/sub/Kite/sub" ] && ok "a merge never goes inside itself" || no "merge into itself"
+J=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$A/VIDEOS/Parks/2025/Kite" "$A/VIDEOS/Public Works/nothing" "$A/VIDEOS/Parks/2025/Shelter")
+X=$(B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks")
+[ -d "$A/VIDEOS/Parks/Shelter" ] && echo "$X" | grep -q "not there any more" && ok "one that cannot move is said; the rest still move" || no "batch: $X"
+B -d op=rename --data-urlencode "item=$A/VIDEOS/Parks/Shelter" -d "name=shelter" > /dev/null
+ls "$A/VIDEOS/Parks" | grep -qx shelter && ok "a name changed only in its capitals, as on a Mac" || no "case rename"
