@@ -1585,6 +1585,7 @@ def tidy(plan_id):
     inside = lambda p, d: p == d or p.startswith(d + os.sep)
 
     print(f"reading every record to see what came from where …")
+    status(phase="tidying", source=plan_id, copied=0, of=len(files) + len(maps), note="getting ready: reading the records")
     work = []
     for arch, rows in replay().items():
         if not arch.startswith(area):
@@ -1594,10 +1595,10 @@ def tidy(plan_id):
             if inside(src, frm):
                 work.append((arch, to + src[len(frm):], src, int(rows[0][2] or 0))); break
     # Files already in the archive: exactly the ones the plan names (what the rows counted).
+    # Each file's size is read when it is moved, not all before the first: on a network share, 300,000 looks
+    # first took many minutes with nothing to show for them
     for frm, to in files:
-        try: size = os.lstat(frm).st_size
-        except OSError: size = 0                 # gone since: said as "not there any more" below
-        work.append((frm, to, frm, size))
+        work.append((frm, to, frm, None))
     lines = len(maps) + len(files)
     print(f"{len(work):,} files to move, by {lines} line{'s' if lines != 1 else ''} of the plan\n")
 
@@ -1610,6 +1611,9 @@ def tidy(plan_id):
     late_f = HOME / f"tidy-{plan_id}-late.txt"
     late = set(late_f.read_text().splitlines()) if late_f.exists() else set()
     for i, (old, new, src, size) in enumerate(work, 1):
+        if size is None:
+            try: size = os.lstat(old).st_size
+            except OSError: size = 0             # gone since: said as "not there any more" below
         # Pause, Try again pending, or a share that stops answering: stop at
         # this file, keep everything moved so far (recorded, search told), and
         # carry on from here when work resumes. Nothing is half-moved: a rename
@@ -1648,7 +1652,7 @@ def tidy(plan_id):
                 why_stopped = "the archive share did not answer"; break
             except OSError as e:
                 o.add("failed", old, new, size, str(e))
-        if i % 500 == 0:
+        if i % 500 == 0 or i == 1:
             print(f"  {i:,} of {len(work):,} — {len(moved):,} moved")
             status(phase="tidying", source=plan_id, copied=len(moved), of=len(work))
     mhl_follow(moved, o, f"tidy-up {plan_id}")

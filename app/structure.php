@@ -127,6 +127,10 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .tul { border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; background: var(--bg) }
   .tul .row2 { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 12.5px } .tul .row2:first-of-type { border-top: 0 }
   .tul .row2 span { flex: 1; word-break: break-word }
+  .review { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg) }
+  .review .rh { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent-text); font-weight: 650; margin-bottom: 4px }
+  .review > b { font-size: 15px }
+  .egs { margin-top: 8px } .egs summary { cursor: pointer; font-size: 12.5px; color: var(--muted) }
   .eg { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.6; word-break: break-word }
   h3.part { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px }
 </style>
@@ -166,14 +170,17 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         </div>
         <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="dvAsk" disabled>Nothing placed yet</button>
           <span class="note" id="dvSum">Nothing moves until you press it, and it shows what it will do first.</span></div>
-        <div id="dvSure" class="banner warn" hidden><div class="txt">
-          <b id="dvSureWhat"></b> <span id="dvSureMore"></span>
-          <div class="eg" id="dvEg"></div>
-          The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.
+        <!-- the review: a calm summary, not a warning; the examples folded, labelled for what they are -->
+        <div id="dvSure" class="review" hidden>
+          <div class="rh">Ready to move</div>
+          <b id="dvSureWhat"></b>
+          <p id="dvSureMore" class="note" style="margin:4px 0 0"></p>
+          <details class="egs"><summary>Examples: where one file from each of a few folders will go</summary><div class="eg" id="dvEg"></div></details>
+          <p class="note" style="margin:8px 0 0">The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.</p>
           <div class="btns" style="margin-top:10px">
             <button class="btn" type="button" id="dvYes">Yes, move them</button>
             <button class="btn quiet" type="button" id="dvNo">Not yet</button>
-          </div></div></div>
+          </div></div>
       </div>
 
       <!-- ══ Tidy up: inside the structure. Changes are planned here; nothing moves until Apply. ══ -->
@@ -184,14 +191,17 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         <div id="tuList" style="margin-top:12px"></div>
         <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="tuAsk" disabled>No changes planned</button>
           <span class="note" id="tuSum">Nothing moves until you press it, and it shows what it will do first.</span></div>
-        <div id="tuSure" class="banner warn" hidden><div class="txt">
-          <b id="tuSureWhat"></b> <span id="tuSureMore"></span>
-          <div class="eg" id="tuEg"></div>
-          The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.
+        <!-- the review: a calm summary, not a warning; the examples folded, labelled for what they are -->
+        <div id="tuSure" class="review" hidden>
+          <div class="rh">Ready to move</div>
+          <b id="tuSureWhat"></b>
+          <p id="tuSureMore" class="note" style="margin:4px 0 0"></p>
+          <details class="egs"><summary>Examples: where one file from each of a few folders will go</summary><div class="eg" id="tuEg"></div></details>
+          <p class="note" style="margin:8px 0 0">The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.</p>
           <div class="btns" style="margin-top:10px">
             <button class="btn" type="button" id="tuYes">Yes, move them</button>
             <button class="btn quiet" type="button" id="tuNo">Not yet</button>
-          </div></div></div>
+          </div></div>
       </div>
 
       <div id="listView" hidden>
@@ -489,8 +499,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         }, 1000);
         ask({drag: 1, refile: 1, token: token, ops: JSON.stringify(Object.keys(ops).map(function (r) { return {src: r, dst: ops[r]}; }))}).then(function (d) {
           clearInterval(poll); draw();
-          $('tuSureWhat').textContent = 'Move ' + num(d.files) + ' files (' + size(d.bytes) + ')?';
-          $('tuSureMore').textContent = Object.keys(d.per).length + ' folders. For example:';
+          $('tuSureWhat').textContent = num(d.files) + ' files (' + size(d.bytes) + ') from ' + Object.keys(d.per).length + ' folder' + (Object.keys(d.per).length > 1 ? 's' : '');
+          $('tuSureMore').textContent = 'Each goes where you planned; nothing else is touched.';
           $('tuEg').innerHTML = d.eg.map(function (e) { return esc(e[0]) + '<br>&nbsp;&nbsp;&rarr; ' + esc(e[1]); }).join('<br>');
           $('tuSure').hidden = false; $('tuYes').focus();
           $('tuSum').textContent = 'Worked out in ' + Math.round((Date.now() - t0) / 1000) + ' s. Nothing has moved yet.';
@@ -782,9 +792,9 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         }, 1000);
         ask({drag: 1, token: token, drops: drops()}).then(function (d) {
           clearInterval(poll);
-          $('dvSureWhat').textContent = 'Move ' + num(d.files) + ' files (' + size(d.bytes) + ') onto ' + <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?> + '?';
+          $('dvSureWhat').textContent = num(d.files) + ' files (' + size(d.bytes) + ') from ' + Object.keys(d.per).length + ' folders, into ' + <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>;
           var yrs = {}; Object.keys(d.per).forEach(function (r) { d.per[r].years.forEach(function (y) { yrs[y] = 1; }); });
-          $('dvSureMore').textContent = Object.keys(d.per).length + ' folders, into years ' + (Object.keys(yrs).sort().join(', ') || 'none') + ' where their clips agree on one. For example:';
+          $('dvSureMore').textContent = Object.keys(yrs).length ? 'Filed under the years ' + Object.keys(yrs).sort().join(', ') + ' where a folder’s name or its clips agree on one; the others go in without a year.' : 'No folder has a year its clips agree on: each goes in without one.';
           $('dvEg').innerHTML = d.eg.map(function (e) { return esc(e[0]) + '<br>&nbsp;&nbsp;&rarr; ' + esc(e[1]); }).join('<br>');
           draw(); $('dvSure').hidden = false; $('dvYes').focus();
           $('dvSum').textContent = 'Worked out in ' + Math.round((Date.now() - t0) / 1000) + ' s. Nothing has moved yet.';

@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.50 — October 2026
+
+- **A tidy-up shows progress from its first file.** The helper read the size of every file in the plan before moving the first one: on a network share, hundreds of thousands of looks, minutes with "0 / 0" and nothing else. Now each file's size is read as it is moved, the first line of progress comes at once, and the top bar says "getting ready" while the records are read.
+- **The review reads as a summary, not an error:** "Ready to move · 319,296 files (43.1 TB) from 175 folders, into VIDEOS", the years in one sentence, and the examples folded under "Examples: where one file from each of a few folders will go".
+
 ## 0.12.49 — October 2026
 
 - **Show in Finder.** On the Mac Rushes runs on, a placed folder in File in, and any folder in Tidy up, opens in a Finder window: look at its clips (space bar plays them), then decide. Nothing in it is touched. From another computer the button stays **Show it**, which opens the left side down to the folder.
