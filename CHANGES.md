@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.44 — October 2026
+
+- **Reorganize keeps your place.** Placing a folder redraws both sides in place: the page and each side stay scrolled where they were, instead of jumping as if the page had reloaded.
+- **A dragged folder is never opened as a link.** A folder dropped anywhere but a department or the left side does nothing; the browser no longer gets the chance to take it for something to open.
+
 ## 0.12.43 — October 2026
 
 - **Move… says what it is doing.** Working out where every file goes (reading each folder's clip dates for its year) can take minutes on a big archive: it now says so as it goes, "Reading clip dates to find each folder's year: 120 of 316 folders · 45 s", instead of a still button.

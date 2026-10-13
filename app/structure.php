@@ -449,6 +449,11 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       }
 
       function draw() {
+        // redrawn in place: the page and both sides stay where they were scrolled (it must not feel like a reload)
+        var keep = [window.scrollY, $('dvL').scrollTop, $('dvR').scrollTop];
+        try { paint(); } finally { $('dvL').scrollTop = keep[1]; $('dvR').scrollTop = keep[2]; window.scrollTo(0, keep[0]); }
+      }
+      function paint() {
         $('dvTree').innerHTML = kids[''] ? (kids[''].map(node).join('')
           || '<p class="note" style="margin:10px 12px">Nothing waits to be filed.</p>') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
         var n = 0, b = 0, c = Object.keys(plan).length;
@@ -519,11 +524,14 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       // dragging: from the left onto a department, between departments, or back to the left
       $('dragView').addEventListener('dragstart', function (ev) {
         var x = ev.target.closest('[data-rel]'); if (!x) return;
-        dragging = x.dataset.rel; ev.dataTransfer.setData('text/plain', dragging); ev.dataTransfer.effectAllowed = 'move';
+        dragging = x.dataset.rel; ev.dataTransfer.setData('application/x-rushes-folder', dragging); ev.dataTransfer.effectAllowed = 'move';
       });
       var target = function (ev) { return ev.target.closest('.db') || ev.target.closest('#dvL'); };
+      // a drop anywhere else on the page does nothing: the browser must never take a dragged folder as a link to open
+      window.addEventListener('dragover', function (ev) { if (dragging) ev.preventDefault(); });
+      window.addEventListener('drop', function (ev) { if (dragging || !ev.target.closest('#dragView .db, #dvL')) { ev.preventDefault(); } });
       $('dragView').addEventListener('dragover', function (ev) {
-        var t = target(ev); if (!t || !dragging) return;
+        var t = target(ev); if (!t || !dragging) { if (dragging) ev.dataTransfer.dropEffect = 'none'; return; }
         ev.preventDefault(); document.querySelectorAll('.over').forEach(function (o) { if (o !== t) o.classList.remove('over'); }); t.classList.add('over');
       });
       $('dragView').addEventListener('dragleave', function (ev) { var t = target(ev); if (t && !t.contains(ev.relatedTarget)) t.classList.remove('over'); });
