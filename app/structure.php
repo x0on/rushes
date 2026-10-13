@@ -72,6 +72,31 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .intro .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 12px }
   .intro .parts > div { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--bg) }
   .intro .parts p { margin: 6px 0 0 }
+  /* the drag view: what waits on the left, the departments on the right */
+  .views { display: flex; gap: 6px; margin: 4px 0 14px }
+  .views button { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer }
+  .views button.on { border-color: var(--accent); background: var(--sel-bg); color: var(--sel-fg) }
+  .dv { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; align-items: start }
+  @media (max-width: 900px) { .dv { grid-template-columns: 1fr } }
+  .pane { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 200px; max-height: 72vh; overflow: auto }
+  .pane > header { position: sticky; top: 0; background: var(--bg); padding: 10px 12px 8px; border-bottom: 1px solid var(--line-soft); z-index: 1 }
+  .pane > header b { font-size: 13px } .pane > header small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px }
+  .pane.over { border-color: var(--accent) }
+  .nd { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-top: 1px solid var(--line-soft); font-size: 13px; cursor: grab; flex-wrap: wrap }
+  .nd:hover { background: var(--raised) } .nd.loose { cursor: default; color: var(--faint) }
+  .nd .nm { flex: 1; min-width: 120px; word-break: break-word } .nd small { color: var(--muted); font-size: 11.5px; white-space: nowrap }
+  .nd .tw { flex: none } .nd select { font-size: 12px; max-width: 220px }
+  .sg { font-size: 11px; border: 1px dashed var(--accent); color: var(--accent-text); border-radius: 999px; padding: 1px 8px; background: none; cursor: pointer; white-space: nowrap }
+  .mv { font-size: 11.5px; background: none; border: 0; color: var(--muted); cursor: pointer; text-decoration: underline; padding: 0 }
+  .db { border-top: 1px solid var(--line-soft); padding: 8px 12px 10px }
+  .db.over { background: var(--sel-bg) } .db > b { font-size: 13px; display: block }
+  .db .dz { font-size: 12px; color: var(--faint); margin-top: 2px }
+  .pl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; padding: 6px 8px; border-radius: 7px; background: var(--raised); font-size: 12.5px; cursor: grab }
+  .pl .nm { flex: 1; min-width: 140px; word-break: break-word } .pl small { color: var(--muted); font-size: 11.5px; display: block }
+  .pl.sug { background: none; border: 1px dashed var(--line); cursor: default }
+  .pl label { font-size: 11.5px; color: var(--muted); white-space: nowrap; cursor: pointer }
+  .pl .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px }
+  .eg { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.6; word-break: break-word }
   h3.part { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px }
 </style>
 
@@ -97,7 +122,30 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
          here moves as it is. Either way everything below the <?= $e($one) ?> keeps the layout it had.
          Nothing is copied, renamed or deleted, every move is recorded so Premiere projects can be
          relinked, a tidy-up can be put back, and folders left empty are removed.</p>
+      <div class="views" role="tablist"><button type="button" data-view="drag">Drag and drop</button><button type="button" data-view="list">List</button></div>
       <div id="tWait" class="banner warn" hidden><div class="txt"></div></div>
+
+      <!-- ══ Drag and drop: folders from the left onto a <?= $e($one) ?> on the right. Nothing moves until Move. ══ -->
+      <div id="dragView" hidden>
+        <div class="dv">
+          <div class="pane" id="dvL"><header><b>To be filed</b><small>What is in the archive and not on the shelf yet. Open a folder to see its folders; drag any of them to the right.</small></header>
+            <div id="dvTree"><p class="note" style="margin:10px 12px">Looking &hellip;</p></div></div>
+          <div class="pane" id="dvR"><header><b>How you want it &middot; <?= $e($shelf) ?></b><small>Drop a folder on a <?= $e($one) ?>. Drag it back to the left, or press &times;, to take it off.</small></header>
+            <div id="dvDepts"></div></div>
+        </div>
+        <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="dvAsk" disabled>Nothing placed yet</button>
+          <span class="note" id="dvSum">Nothing moves until you press it, and it shows what it will do first.</span></div>
+        <div id="dvSure" class="banner warn" hidden><div class="txt">
+          <b id="dvSureWhat"></b> <span id="dvSureMore"></span>
+          <div class="eg" id="dvEg"></div>
+          The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.
+          <div class="btns" style="margin-top:10px">
+            <button class="btn" type="button" id="dvYes">Yes, move them</button>
+            <button class="btn quiet" type="button" id="dvNo">Not yet</button>
+          </div></div></div>
+      </div>
+
+      <div id="listView" hidden>
       <div id="tList"><p class="note" style="margin:0">Looking at what is outside the shelf &hellip;</p></div>
       <div id="tGo" class="btns" style="margin-top:14px" hidden>
         <button class="btn" type="button" id="tAsk"></button>
@@ -111,6 +159,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           <button class="btn" type="button" id="tYes">Yes, move them</button>
           <button class="btn quiet" type="button" id="tNo">Not yet</button>
         </div></div></div>
+      </div>
       <div id="tRuns"></div>
     </div>
 
@@ -247,7 +296,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       function post(body, done) {
         fetch('/db/tidy.php', {method: 'POST', body: body}).then(function (r) { return r.json(); }).then(function (d) {
           if (d.error) throw new Error(d.error);
-          done(d); load();
+          done(d); (window.tidyRefresh || load)();
         }).catch(function (e) {
           $('tWait').hidden = false; $('tWait').className = 'banner bad';
           $('tWait').querySelector('.txt').innerHTML = '<b>Nothing was queued.</b> ' + esc(e.message);
@@ -278,7 +327,198 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         b.disabled = true; b.textContent = 'Queuing…';
         post(f, function () { b.textContent = 'Queued ✓'; });
       };
-      load();
+      window.tidyList = load;          // the list works out every row's year: read only when it is shown
+    })();
+    </script>
+    <script>
+    (function () {
+      // ══ Drag and drop (db/tidy.php ?tree, ?matches, drag=1) ══
+      // plan: {folder: {dept, keep, n, b, by}} kept in this browser until moved (a reload does not lose it).
+      var $ = function (id) { return document.getElementById(id); };
+      var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
+      var num = function (n) { return Number(n).toLocaleString(); };
+      var ONE = <?= json_encode($one) ?>, KEY = 'rushes-drag-plan';
+      var plan = {}, no = {}, kids = {}, open = {}, depts = [], sugg = [], dragging = null;
+      try { var kept = JSON.parse(localStorage.getItem(KEY) || '{}'); plan = kept.plan || {}; no = kept.no || {}; } catch (e) {}
+      var save = function () { try { localStorage.setItem(KEY, JSON.stringify({plan: plan, no: no})); } catch (e) {} };
+      var last = function (rel) { return rel.split('/').pop(); };
+      var parent = function (rel) { return rel.indexOf('/') < 0 ? '' : rel.slice(0, rel.lastIndexOf('/')); };
+      // placed: the folder itself or one above it is on the right (then it is not on the left any more)
+      var placed = function (rel) { for (var r = rel; r; r = parent(r)) if (plan[r]) return true; return false; };
+      var post = function (body) {
+        return fetch('/db/tidy.php', {method: 'POST', body: body}).then(function (r) { return r.json(); })
+          .then(function (d) { if (d.error) throw new Error(d.error); return d; });
+      };
+      var ask = function (what) { var f = new FormData(); Object.keys(what).forEach(function (k) { f.append(k, what[k]); }); return post(f); };
+
+      function place(rel, dept, info, by) {
+        // a folder whose own name says a department gives up its name (PARKS → Parks & Recreation); any other keeps it
+        var named = info && info.dept;
+        plan[rel] = {dept: dept, keep: !named, n: (info && info.n) || 0, b: (info && info.b) || 0, by: by || 'you'};
+        delete no[rel]; save(); draw();
+      }
+      function unplace(rel) { if (plan[rel] && plan[rel].by === 'rushes') no[rel] = 1; delete plan[rel]; save(); draw(); }
+
+      function node(f, depth) {
+        if (f.name === '') return '<div class="nd loose" style="padding-left:' + (10 + depth * 16) + 'px">' + num(f.n) + ' loose file' + (f.n > 1 ? 's' : '') + ' &middot; they stay where they are</div>';
+        if (placed(f.rel)) return '';
+        var o = open[f.rel], k = kids[f.rel];
+        return '<div class="nd" draggable="true" data-rel="' + esc(f.rel) + '" style="padding-left:' + (10 + depth * 16) + 'px">'
+          + '<button type="button" class="tw" data-open="' + esc(f.rel) + '" aria-label="Open">' + (o ? '▾' : '▸') + '</button>'
+          + '<span class="nm">' + esc(f.name) + '</span><small>' + num(f.n) + ' files &middot; ' + size(f.b) + '</small>'
+          + (f.dept && !no[f.rel] ? '<button type="button" class="sg" data-put="' + esc(f.rel) + '" data-dept="' + esc(f.dept) + '" title="Place it there">&rarr; ' + esc(f.dept) + (f.sure ? '' : '?') + '</button>' : '')
+          + '<button type="button" class="mv" data-to="' + esc(f.rel) + '">Move to&hellip;</button></div>'
+          + (o ? (k ? k.map(function (c) { return node(c, depth + 1); }).join('') || '' : '<div class="nd loose" style="padding-left:' + (26 + depth * 16) + 'px">opening &hellip;</div>') : '');
+      }
+      function info(rel) {             // what is known of a folder: from the tree or from the suggestions
+        var k = kids[parent(rel)]; var f = k && k.filter(function (x) { return x.rel === rel; })[0];
+        if (f) return f;
+        var m = sugg.filter(function (x) { return x.rel === rel; })[0];
+        return m ? {n: m.n, b: m.b, dept: m.dept} : null;
+      }
+
+      function draw() {
+        $('dvTree').innerHTML = kids[''] ? (kids[''].map(function (f) { return node(f, 0); }).join('')
+          || '<p class="note" style="margin:10px 12px">Nothing waits to be filed.</p>') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
+        var n = 0, b = 0, c = 0;
+        $('dvDepts').innerHTML = depts.map(function (d) {
+          var here = Object.keys(plan).filter(function (r) { return plan[r].dept === d; }).sort();
+          var maybe = sugg.filter(function (m) { return m.dept === d && !m.sure && !plan[m.rel] && !no[m.rel] && !placed(m.rel); });
+          return '<div class="db" data-dept="' + esc(d) + '"><b>' + esc(d) + '</b>'
+            + (!here.length && !maybe.length ? '<div class="dz">drop folders here</div>' : '')
+            + here.map(function (r) {
+              var p = plan[r]; n += p.n; b += p.b; c++;
+              return '<div class="pl" draggable="true" data-rel="' + esc(r) + '"><span class="nm">' + esc(last(r))
+                + '<small>from ' + esc(parent(r).split('/').join(' / ') || 'the top') + (p.n ? ' &middot; ' + num(p.n) + ' files &middot; ' + size(p.b) : '')
+                + (p.by === 'rushes' ? ' &middot; placed by Rushes: the same name' : '') + '</small>'
+                + '<small>' + (p.keep ? '&rarr; ' + esc(d) + ' / year / ' + esc(last(r)) + ' / &hellip;' : '&rarr; what is in it goes into ' + esc(d) + ', each folder by its year') + '</small></span>'
+                + '<label><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep its name</label>'
+                + '<button type="button" class="x" data-off="' + esc(r) + '" title="Take it off">&times;</button></div>';
+            }).join('')
+            + maybe.map(function (m) {
+              return '<div class="pl sug"><span class="nm">' + esc(last(m.rel)) + '?<small>looks like ' + esc(d) + ' &middot; in ' + esc(parent(m.rel).split('/').join(' / ')) + ' &middot; ' + num(m.n) + ' files &middot; ' + size(m.b) + '</small></span>'
+                + '<button type="button" class="btn quiet sm" data-yes="' + esc(m.rel) + '">Yes, here</button>'
+                + '<button type="button" class="x" data-nah="' + esc(m.rel) + '" title="Not this one">&times;</button></div>';
+            }).join('') + '</div>';
+        }).join('');
+        $('dvAsk').disabled = !c;
+        $('dvAsk').textContent = c ? 'Move ' + (n ? num(n) + ' files (' + size(b) + ') from ' : '') + c + ' folder' + (c > 1 ? 's' : '') + '…' : 'Nothing placed yet';
+        $('dvSure').hidden = true;
+      }
+
+      function openFolder(rel) {
+        open[rel] = !open[rel]; draw();
+        if (!open[rel] || kids[rel]) return;
+        ask({tree: rel}).then(function (d) { kids[rel] = d.folders; draw(); })
+          .catch(function (e) { open[rel] = false; draw(); window.oops ? oops(e.message) : alert(e.message); });
+      }
+
+      // clicks: open a folder, take a suggestion, Move to…, keep its name, take off
+      $('dragView').addEventListener('click', function (ev) {
+        var t = ev.target, x;
+        if ((x = t.closest('[data-open]'))) return openFolder(x.dataset.open);
+        if ((x = t.closest('[data-put]'))) return place(x.dataset.put, x.dataset.dept, info(x.dataset.put));
+        if ((x = t.closest('[data-yes]'))) { var m = sugg.filter(function (s) { return s.rel === x.dataset.yes; })[0]; return place(m.rel, m.dept, m); }
+        if ((x = t.closest('[data-nah]'))) { no[x.dataset.nah] = 1; save(); return draw(); }
+        if ((x = t.closest('[data-off]'))) return unplace(x.dataset.off);
+        if ((x = t.closest('[data-to]'))) {
+          var sel = document.createElement('select');
+          sel.innerHTML = '<option value="">Move to…</option>' + depts.map(function (d) { return '<option>' + esc(d) + '</option>'; }).join('');
+          sel.onchange = function () { if (sel.value) place(x.dataset.to, sel.value, info(x.dataset.to)); };
+          x.replaceWith(sel); sel.focus();
+        }
+      });
+      $('dragView').addEventListener('change', function (ev) {
+        var r = ev.target.dataset && ev.target.dataset.keep;
+        if (r && plan[r]) { plan[r].keep = ev.target.checked; save(); draw(); }
+      });
+      // dragging: from the left onto a department, between departments, or back to the left
+      $('dragView').addEventListener('dragstart', function (ev) {
+        var x = ev.target.closest('[data-rel]'); if (!x) return;
+        dragging = x.dataset.rel; ev.dataTransfer.setData('text/plain', dragging); ev.dataTransfer.effectAllowed = 'move';
+      });
+      var target = function (ev) { return ev.target.closest('.db') || ev.target.closest('#dvL'); };
+      $('dragView').addEventListener('dragover', function (ev) {
+        var t = target(ev); if (!t || !dragging) return;
+        ev.preventDefault(); document.querySelectorAll('.over').forEach(function (o) { if (o !== t) o.classList.remove('over'); }); t.classList.add('over');
+      });
+      $('dragView').addEventListener('dragleave', function (ev) { var t = target(ev); if (t && !t.contains(ev.relatedTarget)) t.classList.remove('over'); });
+      $('dragView').addEventListener('drop', function (ev) {
+        var t = target(ev); if (!t || !dragging) return;
+        ev.preventDefault(); t.classList.remove('over');
+        var rel = dragging; dragging = null;
+        if (t.id === 'dvL') { if (plan[rel]) unplace(rel); return; }
+        if (plan[rel]) { plan[rel].dept = t.dataset.dept; plan[rel].by = 'you'; save(); draw(); }
+        else place(rel, t.dataset.dept, info(rel));
+      });
+      $('dragView').addEventListener('dragend', function () { dragging = null; document.querySelectorAll('.over').forEach(function (o) { o.classList.remove('over'); }); });
+
+      var drops = function () { var o = {}; Object.keys(plan).forEach(function (r) { o[r] = {dept: plan[r].dept, keep: plan[r].keep}; }); return JSON.stringify(o); };
+      $('dvAsk').onclick = function () {
+        var b = this; b.disabled = true; b.textContent = 'Working out where each file goes…';
+        ask({drag: 1, drops: drops()}).then(function (d) {
+          $('dvSureWhat').textContent = 'Move ' + num(d.files) + ' files (' + size(d.bytes) + ') onto ' + <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?> + '?';
+          var yrs = 0; Object.keys(d.per).forEach(function (r) { yrs += d.per[r].years.length; });
+          $('dvSureMore').textContent = Object.keys(d.per).length + ' folders, into ' + yrs + ' year folders where their clips agree on one. For example:';
+          $('dvEg').innerHTML = d.eg.map(function (e) { return esc(e[0]) + '<br>&nbsp;&nbsp;&rarr; ' + esc(e[1]); }).join('<br>');
+          $('dvSure').hidden = false; $('dvYes').focus(); draw(); $('dvSure').hidden = false;
+        }).catch(function (e) { draw(); $('tWait').hidden = false; $('tWait').className = 'banner bad'; $('tWait').querySelector('.txt').innerHTML = '<b>Nothing was worked out.</b> ' + esc(e.message); });
+      };
+      $('dvNo').onclick = function () { $('dvSure').hidden = true; };
+      $('dvYes').onclick = function () {
+        var b = this; b.disabled = true; b.textContent = 'Queuing…';
+        ask({drag: 1, go: 1, drops: drops()}).then(function (d) {
+          b.disabled = false; b.textContent = 'Yes, move them';
+          plan = {}; save(); kids = {}; open = {};
+          $('tWait').className = 'banner ok'; $('tWait').hidden = false;
+          $('tWait').querySelector('.txt').innerHTML = '<b>Queued ✓</b> ' + num(d.files) + ' files. The helper moves them next &mdash; watch the top bar. Once moved, they leave the left side.';
+          load();
+        }).catch(function (e) { b.disabled = false; b.textContent = 'Yes, move them'; $('dvSureMore').textContent = 'Nothing was queued: ' + e.message; });
+      };
+
+      function runs() {
+        return ask({runs: 1}).then(function (d) {
+          document.querySelectorAll('.tHelper').forEach(function (x) { x.textContent = d.helper; });
+          if (d.waiting.length && $('tWait').className.indexOf('ok') < 0) {
+            $('tWait').hidden = false; $('tWait').className = 'banner warn';
+            $('tWait').querySelector('.txt').innerHTML = '<b>A tidy-up is waiting for the helper.</b> It runs next, before any copy. Moving more now adds another one behind it.';
+          }
+          $('tRuns').innerHTML = d.runs.length ? '<p style="margin:18px 0 6px;color:var(--fg);font-size:13px"><b>Done so far</b></p>'
+            + d.runs.map(function (r) {
+              return '<div class="run"><span>' + esc(r.ago) + ' &mdash; ' + num(r.moved) + ' moved (' + size(r.bytes) + ')'
+                + (r.left ? ', ' + num(r.left) + ' left where they were' : '') + '<small>' + esc(r.record) + '</small></span>'
+                + (r.undone ? '<span class="note">put back</span>' : '<button class="btn quiet sm" type="button" data-undo="' + esc(r.record) + '">Put back</button>') + '</div>';
+            }).join('') : '';
+          return d.waiting.length > 0;
+        }).catch(function () { return false; });
+      }
+      function load() {
+        runs().then(function (busy) { return ask({matches: 1}).then(function (d) { return [busy, d]; }); }).then(function (x) {
+          var busy = x[0], d = x[1];
+          depts = d.depts; sugg = d.matches;
+          // only a folder with exactly a department's name is placed by Rushes; the rest wait for a yes. Not while
+          // a tidy-up waits for the helper: what it moves is still listed here until it is done
+          if (!busy) sugg.forEach(function (m) { if (m.sure && !plan[m.rel] && !no[m.rel]) plan[m.rel] = {dept: m.dept, keep: false, n: m.n, b: m.b, by: 'rushes'}; });
+          Object.keys(plan).forEach(function (r) { if (depts.indexOf(plan[r].dept) < 0) delete plan[r]; });   // a department taken out of Setup
+          save(); draw();
+        }).catch(function (e) { $('dvDepts').innerHTML = '<div class="banner bad" style="margin:10px"><div class="txt">' + esc(e.message) + '</div></div>'; });
+        ask({tree: ''}).then(function (d) { kids[''] = d.folders; draw(); })
+          .catch(function (e) { $('dvTree').innerHTML = '<div class="banner bad" style="margin:10px"><div class="txt"><b>Could not read the archive&rsquo;s folders.</b> ' + esc(e.message) + '</div></div>'; });
+      }
+
+      // the two views: Drag and drop first; the list (every row worked out at once) when asked for
+      var listRead = false;
+      function show(v) {
+        try { localStorage.setItem('rushes-reorg-view', v); } catch (e) {}
+        document.querySelectorAll('.views button').forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
+        $('dragView').hidden = v !== 'drag'; $('listView').hidden = v !== 'list';
+        window.tidyRefresh = v === 'drag' ? load : window.tidyList;
+        if (v === 'list' && !listRead) { listRead = true; window.tidyList(); }
+      }
+      document.querySelectorAll('.views button').forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
+      var v = 'drag'; try { v = localStorage.getItem('rushes-reorg-view') || 'drag'; } catch (e) {}
+      show(v); load();
     })();
     </script>
   </div>

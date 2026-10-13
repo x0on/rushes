@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.39 — October 2026
+
+- **Reorganize by drag and drop.** Two panes: on the left what waits to be filed, as folders that open like Finder's; on the right your departments. Drag any folder, however deep, onto a department (or use **Move to…**); drag it back, or press ×, to take it off. **Move** first shows how many files go, into how many year folders, with an example from each folder, and asks again. Nothing moves before that, every move is written down, and Put back puts it all back.
+- **Rushes suggests, you decide.** A folder named exactly as a department is placed for you. One that only looks like one (PARKS, POLICE DEPARTMNET) is a suggestion, found however deep, waiting for **Yes, here**.
+- **A department's old folder gives up its name:** what is in PARKS goes into Parks & Recreation, each folder by its year. Any other folder keeps its name under the year; **keep its name** switches between the two.
+- What you placed is kept in your browser until it is moved. **List** is still there, as the second view.
+
 ## 0.12.38 — October 2026
 
 - **The archive itself as the shelf** (Setup: "VIDEOS itself: departments straight at the top"): a folder at the top that is not a department ("VIDEO from QNAP") is a whole drive copied in. Reorganize files its folders under the department without the drive's name, as it does on a named shelf, and the archive's card counts it as waiting (it said every file was waiting, or none).

@@ -1071,6 +1071,45 @@ archive itself is the shelf (the archive is the `VIDEOS` folder, say): a folder
 at its top that is not a department is a drive copied in, waits, and its
 folders are filed without its name.
 
+**Drag and drop** (Reorganize's first view; **List** is the other). Two panes:
+on the left, **To be filed**: what is in the archive and not on the shelf, as
+folders that open like Finder's (`tidy.php ?tree=`, one level at a time from
+the catalogue, never the drive). On the right, **How you want it**: the
+departments, A to Z. A folder dragged onto a department (or given one with
+**Move to…**) leaves the left side; dragged back, or with ×, it returns.
+Nothing moves until **Move**, which first says how many files, how many year
+folders, and one example per folder, and asks again.
+
+- **What Rushes places by itself:** only a folder with exactly a department's
+  name (or its folder's). A folder whose name only looks like one
+  (`POLICE DEPARTMNET`, `PARKS`) is a suggestion: on the left as `→ Police
+  Department?`, on the right under the department, dashed, with **Yes, here**
+  and ×. Found however deep, the first such folder in each path
+  (`tidy.php ?matches=1`, `dept_guess()`): the department's own name or folder
+  is sure; otherwise the most similar department, half its words at least, and
+  only when one department is clearly the most similar. Not while a tidy-up
+  waits for the helper.
+- **Where it goes:** a folder whose own name is a department gives up its name,
+  and what is in it goes in, each folder in it by its own year
+  (`PARKS/Kite Fest` → `Parks & Recreation/2019/Kite Fest`; a year folder stays
+  the year). Any other folder keeps its name, under its year
+  (`COUNCIL EVENTS/Gala` → `Elected Officials/2023/COUNCIL EVENTS/Gala`).
+  **keep its name** switches between the two for each folder. The year is the
+  same rule as below.
+- **The deepest folder placed wins:** a folder dragged elsewhere out of one
+  already placed goes where it was dragged. Only files that wait to be filed
+  are ever in the plan (`here_files()`): a folder already on the shelf, a way
+  out, or a department taken out of Setup counts for nothing.
+- **What is placed is kept in this browser** until it is moved: a reload does not
+  lose it.
+- The plan is the same as any tidy-up's (`file` lines, `tidy-<id>.tsv`, queued
+  for the helper): moved one file at a time, never over another file, written
+  down, and put back with **Put back**.
+
+**In the code:** `db/tidy.php` (`drag_tree()`, `drag_matches()`,
+`dept_guess()`, `drag_plan()`), `structure.php`; tests:
+`tests/test_tidy_drag.sh`.
+
 **The year.** Between the department and the folder, Tidy up puts the year, from
 evidence only (`tidy.php folder_year()`):
 

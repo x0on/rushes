@@ -9,6 +9,9 @@
 //   GET                           the proposal, as JSON
 //   POST go=1 picks={<folder>: <department>}   approve: writes the plan, queues it
 //   POST undo=<record file>       queue putting one tidy-up back
+//   ?tree=<folder>  ?matches=1  ?runs=1               the drag view: one level of what waits, what looks like a
+//                                                     department, the tidy-ups done (Reorganize → Drag and drop)
+//   POST drag=1 drops={<folder>: {dept, keep}} [go=1] what that moves, looked at first; go=1 queues it
 //
 // Where a file goes is read from the ORIGIN record, never from where it sits
 // now: footage copied before the records existed was sorted by date and lost
@@ -301,6 +304,134 @@ function queue_add(string $line): void {
     $all = array_merge($first, [$line], $rest);
     if (@file_put_contents("$OUT.new", implode("\n", $all) . "\n") === false || !@rename("$OUT.new", $OUT))
         bail(500, 'Could not write the queue — is the web folder writable?');
+}
+
+// ── the drag view (Reorganize → Drag and drop): any folder, at any depth, onto a department ─────
+// The left side is the archive's folders that wait to be filed (here_files()'s, nothing else: a folder
+// already on the shelf is never offered and never moved); the right side the departments. Rushes
+// places nothing by itself but a folder with exactly a department's name; a name that only looks
+// like one is a suggestion that waits for a yes.
+
+// [department, sure] for a folder's name, or null. Sure: the department's own name or folder.
+// A suggestion: the most similar department, at least half its words, and only one such.
+function dept_guess(string $c): ?array {
+    static $memo = [];
+    if (array_key_exists($c, $memo)) return $memo[$c];
+    $best = []; $top = 0.5;
+    foreach (departments() as $d) {
+        $f = ($d['folder'] ?? '') ?: $d['name'];
+        if (strcasecmp($c, $d['name']) === 0 || strcasecmp($c, $f) === 0) return $memo[$c] = [$d['name'], true];
+        $sc = max(dept_match($d['name'], $c), dept_match($f, $c));
+        if ($sc > $top + 1e-9) { $top = $sc; $best = [$d['name']]; } elseif ($sc > 0 && abs($sc - $top) < 1e-9) $best[] = $d['name'];
+    }
+    return $memo[$c] = count($best) === 1 ? [$best[0], false] : null;     // two equally alike: not a guess worth making
+}
+
+// The folders that look like a department, wherever they are in what waits: the first such folder in each
+// path (Departments/Parks & Recreation, VIDEO from QNAP/001 VIDEO/POLICE DEPARTMNET), with what is in them.
+function drag_matches(): array {
+    $A = rtrim(archive_dir(), '/'); $L = strlen($A) + 1; $m = [];
+    here_files(function ($path, $bytes) use ($L, &$m) {
+        $parts = explode('/', substr($path, $L)); array_pop($parts);
+        foreach ($parts as $i => $c) {
+            if (!($g = dept_guess($c))) continue;
+            $rel = implode('/', array_slice($parts, 0, $i + 1));
+            $m[$rel] ??= ['rel' => $rel, 'dept' => $g[0], 'sure' => $g[1], 'n' => 0, 'b' => 0];
+            $m[$rel]['n']++; $m[$rel]['b'] += $bytes;
+            break;
+        }
+    });
+    ksort($m, SORT_NATURAL | SORT_FLAG_CASE);
+    return array_values($m);
+}
+
+// One level of the left side: the folders in <rel> that wait to be filed. At the top, only those
+// (a named shelf's own drives too); inside, every folder.
+function drag_tree(string $rel): array {
+    require_once __DIR__ . '/drive.php';
+    $A = rtrim(archive_dir(), '/'); $out = [];
+    $kids = function (string $in) use ($A) { return drive_levels($A, $in, true)['folders']; };
+    if ($rel === '') {
+        foreach ($kids('') as $f) if (($f['is'] ?? '') === 'waiting') $out[] = $f + ['rel' => $f['name']];
+        if (!shelf_is_top() && shelf_chosen()) {
+            $names = array_map('strtolower', array_merge(array_column(departments(), 'name'), kept_folders()));
+            foreach ($kids(shelf_name()) as $f)
+                if ($f['name'] !== '' && strpbrk($f['name'][0], '_@.#') === false && $f['name'] !== 'Projects'
+                    && dept_of_folder($f['name']) === null && !in_array(strtolower($f['name']), $names, true))
+                    $out[] = $f + ['rel' => shelf_name() . '/' . $f['name']];
+        }
+    } else {
+        foreach ($kids($rel) as $f) $out[] = $f + ['rel' => $f['name'] === '' ? '' : "$rel/{$f['name']}"];
+    }
+    foreach ($out as &$f) { $g = $f['name'] === '' ? null : dept_guess($f['name']); if ($g) [$f['dept'], $f['sure']] = $g; }
+    return $out;
+}
+
+// Where every file under the dropped folders goes. drops: {rel: {dept, keep}}; the deepest drop over a file
+// wins (a folder dragged out of one already placed). keep: the folder goes in under its own name, by its
+// year; otherwise its name is dropped (PARKS → Parks & Recreation) and what is in it goes in, each folder
+// in it by its own year. -> [lines, files, bytes, per drop {n, b, years}, examples]
+function drag_plan(array $drops): array {
+    $A = rtrim(archive_dir(), '/'); $H = rtrim(helper_archive(), '/\\'); $L = strlen($A) + 1; $shelf = shelf_as_helper();
+    $ok = [];
+    foreach ($drops as $rel => $d) {
+        $rel = trim(str_replace('\\', '/', (string)$rel), '/');
+        if ($rel === '' || str_contains("/$rel/", '/../') || !is_array($d) || dept_folder((string)($d['dept'] ?? '')) === null) continue;
+        $ok[$rel] = ['dept' => (string)$d['dept'], 'keep' => !empty($d['keep'])];
+    }
+    uksort($ok, fn($a, $b) => strlen($b) <=> strlen($a));          // deepest first
+    $files = []; $clips = [];
+    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind) use ($L, $ok, &$files, &$clips) {
+        if (str_contains($path, "\t") || str_contains($path, "\n")) return;
+        $rel = substr($path, $L);
+        foreach ($ok as $r => $d) {
+            if (!str_starts_with($rel, "$r/")) continue;
+            $in = substr($rel, strlen($r) + 1);                       // below the dropped folder
+            $unit = $d['keep'] ? $r : (str_contains($in, '/') ? "$r/" . strstr($in, '/', true) : '');   // what gets a year
+            $files[] = [$path, $bytes, $r, $in, $unit];
+            if ($unit !== '' && $kind === 'video') $clips[$unit][] = $path;
+            return;
+        }
+    });
+    $year = []; $per = []; $lines = []; $eg = []; $n = 0; $b = 0;
+    foreach ($files as [$path, $bytes, $r, $in, $unit]) {
+        $d = $ok[$r];
+        if ($unit !== '' && !array_key_exists($unit, $year)) $year[$unit] = folder_year("$A/$unit", $A, $clips[$unit] ?? [])[0];
+        $y = $unit !== '' ? $year[$unit] : null;
+        $to = $shelf . '/' . dept_folder($d['dept']) . ($y ? "/$y" : '') . ($d['keep'] ? '/' . basename($r) : '') . "/$in";
+        $lines[] = "file\t$H/" . substr($path, $L) . "\t$to";
+        $per[$r] ??= ['n' => 0, 'b' => 0, 'years' => []];
+        $per[$r]['n']++; $per[$r]['b'] += $bytes; if ($y) $per[$r]['years'][$y] = true;
+        $n++; $b += $bytes;
+        if (count($eg) < 8 && (!$eg || end($eg)[2] !== $r)) $eg[] = [substr($path, $L), substr($to, strlen($shelf) + 1), $r];   // one per drop: from, and to below the shelf
+    }
+    foreach ($per as &$p) $p['years'] = array_keys($p['years']);
+    return [$lines, $n, $b, $per, $eg];
+}
+
+if (isset($_REQUEST['runs'])) {                             // the drag view's light read: no proposal worked out
+    $waiting = []; $gone = tidies_finished();
+    foreach (@file(web_dir() . '/ingest-queue.tsv') ?: [] as $l)
+        if (preg_match('/^(un)?tidy\t(.+)$/', rtrim($l, "\n"), $m) && !isset($gone[$m[0]])) $waiting[] = $m[0];
+    out(['runs' => runs(), 'waiting' => $waiting, 'helper' => helper_name()]);
+}
+if (isset($_REQUEST['tree'])) out(['folders' => drag_tree(trim((string)$_REQUEST['tree'], '/'))]);
+if (isset($_REQUEST['matches'])) out(['matches' => drag_matches(), 'depts' => array_column(departments(), 'name'),
+                                  'shelf' => !shelf_chosen() ? '' : (shelf_is_top() ? (settings()['archive']['label'] ?? 'the archive') : shelf_name())]);
+if (($_POST['drag'] ?? '') === '1') {
+    if (helper_archive() === '') bail(400, 'Setup does not know where the helper finds the archive yet.');
+    if (!shelf_chosen()) bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Setup → Archive structure.');
+    $drops = json_decode((string)($_POST['drops'] ?? ''), true);
+    if (!is_array($drops) || !$drops) bail(400, 'Nothing is placed yet.');
+    [$lines, $n, $b, $per, $eg] = drag_plan($drops);
+    if (!$lines) bail(400, 'Nothing to move: those folders are empty, or filed already.');
+    if (($_POST['go'] ?? '') !== '1') out(['files' => $n, 'bytes' => $b, 'per' => $per, 'eg' => $eg]);   // looked at first
+    $id = date('Ymd-His');
+    $plan = web_dir() . "/tidy-$id.tsv";
+    if (@file_put_contents("$plan.new", implode("\n", $lines) . "\n") === false || !@rename("$plan.new", $plan))
+        bail(500, 'Could not write the plan — is the web folder writable?');
+    queue_add("tidy\t$id");
+    out(['queued' => $id, 'files' => $n, 'bytes' => $b]);
 }
 
 if (($_POST['go'] ?? '') === '1') {
