@@ -114,6 +114,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .nd .nm { flex: 1 1 140px; min-width: 0 } .nd .acts { margin-left: auto } .tr .nm > b { font-weight: 600 } .tr small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px }
   .tr.pl { cursor: grab; background: none; margin: 0; border-radius: 0 }
   .tr.sug .nm > b { font-weight: 500; color: var(--muted) } .tr.sug .nm > b::after { content: ' ?' }
+  .tr input.nmin { display: inline-block; font: inherit; font-size: 12px; height: auto; min-height: 0; padding: 2px 6px; margin: 0 0 0 4px; width: 200px; max-width: 100%; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 5px }
   .tag2 { font-size: 10.5px; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); margin-left: 6px; font-weight: 400 }
   .sublab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 8px 10px 2px }
   .eg { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.6; word-break: break-word }
@@ -389,7 +390,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
 
       function place(rel, dept, info, by) {
         // a folder whose own name says a department gives up its name (PARKS → Parks & Recreation); any other keeps it
-        var named = info && info.dept;
+        var named = info && info.dept && info.named !== false;     // only the department's own words: its name goes
         var was = plan[rel] && plan[rel].dept;
         plan[rel] = {dept: dept, keep: !named, named: !!named, n: (info && info.n) || 0, b: (info && info.b) || 0, by: by || 'you'};
         delete no[rel]; save(); soft(rel, was && was !== dept ? [was, dept] : [dept]);
@@ -415,7 +416,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         var k = kids[parent(rel)]; var f = k && k.filter(function (x) { return x.rel === rel; })[0];
         if (f) return f;
         var m = sugg.filter(function (x) { return x.rel === rel; })[0];
-        return m ? {n: m.n, b: m.b, dept: m.dept} : null;
+        return m ? {n: m.n, b: m.b, dept: m.dept, named: m.named} : null;
       }
 
       function groups(list) {
@@ -472,12 +473,15 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             + (has ? '<button type="button" class="tw" data-dopen="' + esc(d) + '">' + (o ? '▾' : '▸') + '</button>' : '<span style="width:20px"></span>') + ICON('d') + esc(d)
             + '<small>' + (has ? here.length + ' folder' + (here.length > 1 ? 's' : '') + ' &middot; ' + num(hn) + ' files' + (gs ? ' &middot; <span style="color:var(--warn)">' + gs + ' to check</span>' : '') : 'drop folders here') + '</small></div>'
             + (o && has ? '<div class="kids">' + here.map(function (r) {
-                var p = plan[r], what = p.keep ? esc(d) + ' / year / ' + esc(last(r)) + ' / &hellip;' : esc(d) + ' / year / what is inside it';
+                var p = plan[r], nm = p.name || last(r),
+                    what = p.keep ? esc(d) + ' / ' + esc(nm) + ' / year / each folder in it' : esc(d) + ' / year / what is inside it';
                 return '<div class="tr pl" draggable="true" data-rel="' + esc(r) + '">' + ICON() + '<span class="nm"><b>' + esc(last(r)) + '</b>'
                   + (p.guess ? '<span class="tag2" style="color:var(--warn);border-color:var(--warn)">guess: check it</span>' : p.by === 'rushes' ? '<span class="tag2">same name</span>' : '')
                   + '<small>' + crumbs(r) + '</small>'
                   + '<small>' + (p.n ? num(p.n) + ' files &middot; ' + size(p.b) + ' &middot; ' : '') + '&rarr; ' + what + '</small>'
-                  + (p.named ? '' : '<small><label style="cursor:pointer"><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep ' + esc(last(r)) + ' as a folder</label></small>')
+                  // kept as a folder, under a name you can change: two folders given the same name become one (DRONE)
+                  + (p.named ? '' : '<small><label style="cursor:pointer"><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep it as a folder</label>'
+                    + (p.keep ? ' named <input type="text" class="nmin" data-name="' + esc(r) + '" value="' + esc(nm) + '" aria-label="The folder\'s name">' : '') + '</small>')
                   + '</span><span class="acts"><button type="button" class="lnk2" data-show="' + esc(r) + '">Show it</button>'
                   + '<button type="button" class="btn quiet sm" data-off="' + esc(r) + '" title="It goes back to the left and does not move">Take out</button></span></div>';
               }).join('') + '</div>' : '')
@@ -554,10 +558,13 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       });
       $('dragView').addEventListener('change', function (ev) {
         var r = ev.target.dataset && ev.target.dataset.keep;
-        if (r && plan[r]) { plan[r].keep = ev.target.checked; save(); soft('', [plan[r].dept]); }
+        if (r && plan[r]) { plan[r].keep = ev.target.checked; save(); soft('', [plan[r].dept]); return; }
+        var nr = ev.target.dataset && ev.target.dataset.name;
+        if (nr && plan[nr]) { var v = ev.target.value.replace(/[\/\\:*?"<>|]+/g, ' ').trim(); plan[nr].name = v && v !== last(nr) ? v : ''; save(); soft('', [plan[nr].dept]); }
       });
       // dragging: from the left onto a department, between departments, or back to the left
       $('dragView').addEventListener('dragstart', function (ev) {
+        if (ev.target.closest && ev.target.closest('input')) { ev.preventDefault(); return; }   // typing a name is not dragging
         var x = ev.target.closest('[data-rel]'); if (!x) return;
         dragging = x.dataset.rel; ev.dataTransfer.setData('application/x-rushes-folder', dragging); ev.dataTransfer.effectAllowed = 'move';
       });
@@ -580,7 +587,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       });
       $('dragView').addEventListener('dragend', function () { dragging = null; document.querySelectorAll('.over').forEach(function (o) { o.classList.remove('over'); }); });
 
-      var drops = function () { var o = {}; Object.keys(plan).forEach(function (r) { o[r] = {dept: plan[r].dept, keep: plan[r].keep}; }); return JSON.stringify(o); };
+      var drops = function () { var o = {}; Object.keys(plan).forEach(function (r) { o[r] = {dept: plan[r].dept, keep: plan[r].keep, name: plan[r].name || ''}; }); return JSON.stringify(o); };
       // Move…: the plan is worked out once, on the archive, and said as it goes ("Reading clip dates: 120 of 316
       // folders"); Yes queues exactly that plan (db/tidy.php drag=1, ?dragsaid)
       var token = '';
@@ -643,7 +650,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           depts = d.depts; sugg = d.matches;
           // only a folder with exactly a department's name is placed by Rushes; the rest wait for a yes. Not while
           // a tidy-up waits for the helper: what it moves is still listed here until it is done
-          if (!busy) sugg.forEach(function (m) { if (!plan[m.rel] && !no[m.rel] && !placed(m.rel)) plan[m.rel] = {dept: m.dept, keep: false, named: true, n: m.n, b: m.b, by: 'rushes', guess: !m.sure}; });
+          if (!busy) sugg.forEach(function (m) { if (!plan[m.rel] && !no[m.rel] && !placed(m.rel)) plan[m.rel] = {dept: m.dept, keep: !m.named, named: !!m.named, n: m.n, b: m.b, by: 'rushes', guess: !m.sure}; });
           Object.keys(plan).forEach(function (r) { if (depts.indexOf(plan[r].dept) < 0) delete plan[r]; });   // a department taken out of Setup
           save(); draw();
         }).catch(function (e) { $('dvDepts').innerHTML = '<div class="banner bad" style="margin:10px"><div class="txt">' + esc(e.message) + '</div></div>'; });

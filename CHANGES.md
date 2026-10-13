@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.47 — October 2026
+
+- **Name the folder it goes in as.** A folder kept as a folder (DRONE, COUNCIL EVENTS) now has its name in a box you can change. Give two folders the same name and they become one: DRONE and 009 DRONE FOOTAGE both named **DRONE** land in one `Public Affairs Department / DRONE`.
+- **A collection keeps its years inside it.** A kept folder with folders in it files each of them by its own year, inside it: `Public Affairs Department / DRONE / 2016 / City Hall` and `… / DRONE / 2026 / City Hall`, so the same place over the years stays apart. A folder with only files in it is one shoot, under its year.
+- **A guessed folder keeps its name.** Only a folder whose name is nothing but the department's (PARKS, POLICE DEPARTMNET, Public Affairs, PLANIN & ZONNING) gives up its name. "Central Park" or "Bulding Web" no longer lose theirs: they go in as folders, under their year.
+- Files loose in a department's old folder go under that folder's year (a year in its path, or their dates), not straight into the department.
+
 ## 0.12.46 — October 2026
 
 - **Footage per drive, not one big number.** The Rushes window lists each drive Rushes looks after, with what it does with it (the archive, in Search), its files, its size and what is free, instead of "files in the archive" and a total that added up drives holding the same footage (an old server copied into the archive counted twice). Overview's **In Search** tile does the same: how many drives, and each one's files and size.

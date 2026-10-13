@@ -19,8 +19,11 @@ f "$Q/001 VIDEO/PARKS/loose.mov"
 f "$Q/001 VIDEO/POLICE DEPARTMNET/Sub/c.mov"
 f "$Q/COUNCIL EVENTS/Gala/d.mov"
 f "$Q/COUNCIL EVENTS/Gala/inner/e.mov"
+f "$Q/AERIALS/City Hall/f.mov"
+f "$Q/009 DRONE/City Hall/g.mov"
 f "POLICE/2020/filed.mov"
 touch -t 202106150000 "$A/$Q/001 VIDEO/PARKS/Spring Fest/b.mov"
+touch -t 201604150000 "$A/$Q/AERIALS/City Hall/f.mov"; touch -t 202604150000 "$A/$Q/009 DRONE/City Hall/g.mov"
 touch -t 202303150000 "$A/$Q/COUNCIL EVENTS/Gala/d.mov" "$A/$Q/COUNCIL EVENTS/Gala/inner/e.mov"
 find "$A" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
@@ -32,7 +35,7 @@ curl -s "$U/db/import.php?part=web&force=1" > /dev/null
 T=$(curl -s -d pass=rushes --data-urlencode "tree=" "$U/db/tidy.php")
 echo "$T" | python3 -c '
 import json, sys; d = json.load(sys.stdin)["folders"]
-assert [x["rel"] for x in d] == ["VIDEO from an old server"] and d[0]["n"] == 7, d
+assert [x["rel"] for x in d] == ["VIDEO from an old server"] and d[0]["n"] == 9, d
 ' && ok "the left side starts with what waits to be filed; a department's folder already filed is not there" || no "tree: $T"
 T=$(curl -s -d pass=rushes --data-urlencode "tree=$Q/001 VIDEO" "$U/db/tidy.php")
 echo "$T" | python3 -c '
@@ -48,12 +51,13 @@ assert d["001 VIDEO/PARKS"]["n"] == 4 and not d["001 VIDEO/PARKS"]["sure"], d
 ' && ok "folders that look like a department are found however deep, as suggestions; others are not guessed" || no "matches: $M"
 J=$(python3 -c 'import json,sys; q=sys.argv[1]; print(json.dumps({q+"/001 VIDEO/PARKS": {"dept": "Parks & Recreation"},
   q+"/001 VIDEO/PARKS/Spring Fest": {"dept": "Police Department", "keep": True},
-  q+"/COUNCIL EVENTS": {"dept": "Elected Officials", "keep": True}, "POLICE": {"dept": "Elected Officials"},
+  q+"/COUNCIL EVENTS": {"dept": "Elected Officials", "keep": True},
+  q+"/AERIALS": {"dept": "Elected Officials", "keep": True, "name": "DRONE"}, q+"/009 DRONE": {"dept": "Elected Officials", "keep": True, "name": " DRONE/ "}, "POLICE": {"dept": "Elected Officials"},
   q+"/../x": {"dept": "Parks & Recreation"}, q: {"dept": "Nobody"}}))' "$Q")
 D=$(curl -s -d pass=rushes -d drag=1 -d token=review0001 --data-urlencode "drops=$J" "$U/db/tidy.php")
 echo "$D" | python3 -c '
 import json, sys; d = json.load(sys.stdin)
-assert d["files"] == 6 and "queued" not in d, d
+assert d["files"] == 8 and "queued" not in d, d
 ' && ok "looked at first: how many files, nothing queued; a filed folder, a way out and an unknown department count for nothing" || no "dry: $D"
 S=$(curl -s -d pass=rushes -d dragsaid=review0001 "$U/db/tidy.php")
 echo "$S" | grep -q '"done":true' && [ -f "$W/tidy-draft-review0001.tsv" ] && ok "the review is worked out once, saying how far it is, and kept" || no "said: $S"
@@ -64,11 +68,13 @@ plan=$(cat "$W/tidy-$id.tsv")
 has() { printf '%s\n' "$plan" | grep -qxF "file	$A/$1	$A/$2" || no "missing: $1 → $2 in
 $plan"; }
 has "$Q/001 VIDEO/PARKS/2019/Kite/A001.MXF" "Parks & Recreation/2019/Kite/A001.MXF"
-has "$Q/001 VIDEO/PARKS/loose.mov" "Parks & Recreation/loose.mov"
+has "$Q/001 VIDEO/PARKS/loose.mov" "Parks & Recreation/$(date +%Y)/loose.mov"
 has "$Q/001 VIDEO/PARKS/Spring Fest/b.mov" "POLICE/2021/Spring Fest/b.mov"
-has "$Q/COUNCIL EVENTS/Gala/d.mov" "Elected Officials/2023/COUNCIL EVENTS/Gala/d.mov"
-has "$Q/COUNCIL EVENTS/Gala/inner/e.mov" "Elected Officials/2023/COUNCIL EVENTS/Gala/inner/e.mov"
-[ "$(printf '%s\n' "$plan" | wc -l | tr -d ' ')" = 6 ] && ! printf '%s\n' "$plan" | grep -q "filed.mov\|c.mov" \
-  && ok "a department's folder gives up its name, any other keeps it under its year; the deepest drop wins; the rest stays" || no "plan: $plan"
+has "$Q/COUNCIL EVENTS/Gala/d.mov" "Elected Officials/COUNCIL EVENTS/2023/Gala/d.mov"
+has "$Q/COUNCIL EVENTS/Gala/inner/e.mov" "Elected Officials/COUNCIL EVENTS/2023/Gala/inner/e.mov"
+has "$Q/AERIALS/City Hall/f.mov" "Elected Officials/DRONE/2016/City Hall/f.mov"
+has "$Q/009 DRONE/City Hall/g.mov" "Elected Officials/DRONE/2026/City Hall/g.mov"
+[ "$(printf '%s\n' "$plan" | wc -l | tr -d ' ')" = 8 ] && ! printf '%s\n' "$plan" | grep -q "filed.mov\|c.mov" \
+  && ok "a department's folder gives up its name; a kept folder of folders is a collection (each folder by its year inside it), a folder of files one shoot under its year; two given one name become one; the deepest drop wins; the rest stays" || no "plan: $plan"
 grep -q "^tidy	$id$" "$W/ingest-queue.tsv" && [ ! -f "$W/tidy-draft-review0001.tsv" ] && ok "Yes queues exactly the plan reviewed, as any tidy-up" || no "queue"
 case "$(curl -s -d pass=rushes -d drag=1 -d go=1 -d token=review0001 "$U/db/tidy.php")" in *"press Move"*) ok "a review is queued once" ;; *) no "twice" ;; esac

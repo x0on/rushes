@@ -1093,9 +1093,15 @@ folders, and one example per folder, and asks again.
   (`PARKS/Kite Fest` → `Parks & Recreation/2019/Kite Fest`; a year folder stays
   the year). Any other folder keeps its name, under its year
   (`COUNCIL EVENTS/Gala` → `Elected Officials/2023/COUNCIL EVENTS/Gala`).
-  A folder you dropped whose name is not a department's has **keep it as a
-  folder** (on by default); one with a department's name never offers it. The
-  year is the same rule as below.
+  A folder whose name is nothing but the department's words (PARKS, POLICE
+  DEPARTMNET, Public Affairs: `name_is_dept()`) gives up its name; any other
+  (Central Park, Bulding Web, DRONE) is **kept as a folder**, under its own name
+  or one you type: two folders given the same name become one (`DRONE`). A kept
+  folder with folders in it is a collection, each folder in it filed by its own
+  year inside it (`Public Affairs Department / DRONE / 2016 / City Hall`); one
+  with only files is one shoot, under its year (`… / 2021 / Gala`). Files loose
+  in a department's old folder go under that folder's year. The year is the
+  same rule as below.
 - **The deepest folder placed wins:** a folder dragged elsewhere out of one
   already placed goes where it was dragged. Only files that wait to be filed
   are ever in the plan (`here_files()`): a folder already on the shelf, a way

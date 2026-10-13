@@ -313,7 +313,20 @@ function queue_add(string $line): void {
 // places nothing by itself but a folder with exactly a department's name; a name that only looks
 // like one is a suggestion that waits for a yes.
 
-// [department, sure] for a folder's name, or null. Sure: the department's own name or folder.
+// Is the folder's name only the department's own words (PARKS, POLICE DEPARTMNET, Public Affairs), or more
+// (Central Park, Bulding Web)? Then it is the department's old folder, and its name goes; otherwise it keeps it.
+function name_is_dept(string $c, string $d): bool {
+    $have = dept_words($c); $want = dept_words($d);
+    if (!$have || !$want) return false;
+    foreach ($have as $h) {
+        $hit = false;
+        foreach ($want as $w) if ($w === $h || (strlen($w) > 4 && levenshtein($w, $h) <= (strlen($w) >= 7 ? 2 : 1))) { $hit = true; break; }   // PLANIN & ZONNING too
+        if (!$hit) return false;
+    }
+    return true;
+}
+// [department, sure, named] for a folder's name, or null. Sure: the department's own name or folder. Named: the
+// name is nothing but the department's (name_is_dept()), so it goes when the folder is filed.
 // A suggestion: the most similar department, at least half its words, and only one such.
 function dept_guess(string $c): ?array {
     static $memo = [];
@@ -321,11 +334,13 @@ function dept_guess(string $c): ?array {
     $best = []; $top = 0.5;
     foreach (departments() as $d) {
         $f = ($d['folder'] ?? '') ?: $d['name'];
-        if (strcasecmp($c, $d['name']) === 0 || strcasecmp($c, $f) === 0) return $memo[$c] = [$d['name'], true];
+        if (strcasecmp($c, $d['name']) === 0 || strcasecmp($c, $f) === 0) return $memo[$c] = [$d['name'], true, true];
         $sc = max(dept_match($d['name'], $c), dept_match($f, $c));
         if ($sc > $top + 1e-9) { $top = $sc; $best = [$d['name']]; } elseif ($sc > 0 && abs($sc - $top) < 1e-9) $best[] = $d['name'];
     }
-    return $memo[$c] = count($best) === 1 ? [$best[0], false] : null;     // two equally alike: not a guess worth making
+    if (count($best) !== 1) return $memo[$c] = null;                    // two equally alike: not a guess worth making
+    $d = array_values(array_filter(departments(), fn($x) => $x['name'] === $best[0]))[0];
+    return $memo[$c] = [$best[0], false, name_is_dept($c, $d['name']) || name_is_dept($c, ($d['folder'] ?? '') ?: $d['name'])];
 }
 
 // The folders that look like a department, wherever they are in what waits: the first such folder in each
@@ -337,7 +352,7 @@ function drag_matches(): array {
         foreach ($parts as $i => $c) {
             if (!($g = dept_guess($c))) continue;
             $rel = implode('/', array_slice($parts, 0, $i + 1));
-            $m[$rel] ??= ['rel' => $rel, 'dept' => $g[0], 'sure' => $g[1], 'n' => 0, 'b' => 0, 'v' => 0];
+            $m[$rel] ??= ['rel' => $rel, 'dept' => $g[0], 'sure' => $g[1], 'named' => $g[2], 'n' => 0, 'b' => 0, 'v' => 0];
             $m[$rel]['n']++; $m[$rel]['b'] += $bytes; if ($kind === 'video') $m[$rel]['v']++;
             break;
         }
@@ -365,7 +380,7 @@ function drag_tree(string $rel): array {
     } else {
         foreach ($kids($rel) as $f) $out[] = $f + ['rel' => $f['name'] === '' ? '' : "$rel/{$f['name']}"];
     }
-    foreach ($out as &$f) { $g = $f['name'] === '' ? null : dept_guess($f['name']); if ($g) [$f['dept'], $f['sure']] = $g; }
+    foreach ($out as &$f) { $g = $f['name'] === '' ? null : dept_guess($f['name']); if ($g) [$f['dept'], $f['sure'], $f['named']] = $g; }
     return $out;
 }
 
@@ -374,42 +389,56 @@ function drag_tree(string $rel): array {
 // year; otherwise its name is dropped (PARKS → Parks & Recreation) and what is in it goes in, each folder
 // in it by its own year. -> [lines, files, bytes, per drop {n, b, years}, examples]
 function drag_plan(array $drops, ?callable $say = null): array {
+    // keep: the folder goes in under a name of its own (its own, or one given: two drone folders named DRONE
+    // become one). With folders in it, it is a collection, and each folder in it is filed by its own year
+    // (Dept / DRONE / 2016 / City Hall); with only files, it is one shoot, under its year (Dept / 2021 / Gala).
+    // Not kept: its name goes (PARKS → Parks & Recreation), each folder in it by its year (Dept / 2019 / Kite).
     $say ??= fn() => null;
     $A = rtrim(archive_dir(), '/'); $H = rtrim(helper_archive(), '/\\'); $L = strlen($A) + 1; $shelf = shelf_as_helper();
     $ok = [];
     foreach ($drops as $rel => $d) {
         $rel = trim(str_replace('\\', '/', (string)$rel), '/');
         if ($rel === '' || str_contains("/$rel/", '/../') || !is_array($d) || dept_folder((string)($d['dept'] ?? '')) === null) continue;
-        $ok[$rel] = ['dept' => (string)$d['dept'], 'keep' => !empty($d['keep'])];
+        $name = trim(preg_replace('/[\x00-\x1f\/\\\\:*?"<>|]+/', ' ', (string)($d['name'] ?? '')));
+        $name = ltrim(mb_substr($name, 0, 80), '. ') ?: basename($rel);
+        $ok[$rel] = ['dept' => (string)$d['dept'], 'keep' => !empty($d['keep']), 'name' => $name];
     }
     uksort($ok, fn($a, $b) => strlen($b) <=> strlen($a));          // deepest first
-    $files = []; $clips = []; $seen = 0;
+    $files = []; $sub = []; $seen = 0;
     $say('Listing the files that wait', 0, 0);
-    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind) use ($L, $ok, &$files, &$clips, &$seen, $say) {
+    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind) use ($L, $ok, &$files, &$sub, &$seen, $say) {
         if (++$seen % 20000 === 0) $say('Listing the files that wait', $seen, 0);
         if (str_contains($path, "\t") || str_contains($path, "\n")) return;
         $rel = substr($path, $L);
         foreach ($ok as $r => $d) {
             if (!str_starts_with($rel, "$r/")) continue;
             $in = substr($rel, strlen($r) + 1);                       // below the dropped folder
-            $unit = $d['keep'] ? $r : (str_contains($in, '/') ? "$r/" . strstr($in, '/', true) : '');   // what gets a year
-            $files[] = [$path, $bytes, $r, $in, $unit];
-            if ($unit !== '' && $kind === 'video') $clips[$unit][] = $path;
+            if (str_contains($in, '/')) $sub[$r] = true;
+            $files[] = [$path, $bytes, $r, $in, $kind];
             return;
         }
     });
-    $year = []; $per = []; $lines = []; $eg = []; $n = 0; $b = 0;
-    $units = count(array_unique(array_filter(array_column($files, 4), 'strlen')));
-    foreach ($files as [$path, $bytes, $r, $in, $unit]) {
-        $d = $ok[$r];
-        if ($unit !== '' && !array_key_exists($unit, $year)) {
+    // what gets a year: each folder in it; files loose in it, by the folder's own year (a year in its path, as
+    // 2026/Building, or its loose clips' dates); in a collection, loose files get none (Dept / DRONE / x.mov)
+    $unit = function ($r, $in) use ($ok, $sub) {
+        if (str_contains($in, '/') && !($ok[$r]['keep'] && empty($sub[$r]))) return "$r/" . strstr($in, '/', true);
+        return $ok[$r]['keep'] && !empty($sub[$r]) ? '' : $r;
+    };
+    $clips = [];
+    foreach ($files as [$path, , $r, $in, $kind]) if ($kind === 'video' && ($u = $unit($r, $in)) !== '') $clips[$u][] = $path;
+    $year = []; $per = []; $lines = []; $eg = []; $n = 0; $b = 0; $units = count($clips);
+    foreach ($files as [$path, $bytes, $r, $in]) {
+        $d = $ok[$r]; $u = $unit($r, $in);
+        if ($u !== '' && !array_key_exists($u, $year)) {
             $say('Reading clip dates to find each folder\'s year', count($year), $units);
-            $year[$unit] = folder_year("$A/$unit", $A, $clips[$unit] ?? [])[0];
+            $year[$u] = folder_year("$A/$u", $A, $clips[$u] ?? [])[0];
         }
-        $y = $unit !== '' ? $year[$unit] : null;
-        $to = $shelf . '/' . dept_folder($d['dept']) . ($y ? "/$y" : '') . ($d['keep'] ? '/' . basename($r) : '') . "/$in";
+        $y = $u !== '' ? $year[$u] : null; $yy = $y ? "/$y" : '';
+        $dd = $shelf . '/' . dept_folder($d['dept']);
+        $to = !$d['keep'] ? "$dd$yy/$in"
+            : (empty($sub[$r]) ? "$dd$yy/{$d['name']}/$in" : "$dd/{$d['name']}$yy/$in");
         $lines[] = "file\t$H/" . substr($path, $L) . "\t$to";
-        $per[$r] ??= ['n' => 0, 'b' => 0, 'years' => []];
+        $per[$r] ??= ['n' => 0, 'b' => 0, 'years' => [], 'as' => !$d['keep'] ? 'merged' : (empty($sub[$r]) ? 'shoot' : 'collection')];
         $per[$r]['n']++; $per[$r]['b'] += $bytes; if ($y) $per[$r]['years'][$y] = true;
         $n++; $b += $bytes;
         if (count($eg) < 8 && (!$eg || end($eg)[2] !== $r)) $eg[] = [substr($path, $L), substr($to, strlen($shelf) + 1), $r];   // one per drop: from, and to below the shelf
