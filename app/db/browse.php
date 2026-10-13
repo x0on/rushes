@@ -369,4 +369,4 @@ try {
 } catch (RuntimeException $e) {
     bail(409, $e->getMessage());
 }
-bail(400, 'unknown op');
+bail(400, 'This page is from an older Rushes, so Rushes did not understand it. Reload the page (⌘R) and do it again.');

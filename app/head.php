@@ -97,6 +97,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   };
 </script>
 <script>
+  var PAGE_VERSION = <?= json_encode(rushes_version()) ?>;   // the Rushes this page came from
   // What is running, in words, and how far: "Listing the files · Studio Share · 48,210 files so far"
   window.nowSaid = function (d) {
     var p = d.progress, w = d.running_said || d.running || '';
@@ -274,6 +275,15 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
       .then(function (r) { return r.json(); })
       .then(function (s) {
         if (s.error) { $('hDot').className = 'dot off'; $('hWhat').textContent = 'needs setting up'; return; }
+        // Rushes was updated since this page was opened: the page is older than what answers it. Reloaded at once
+        // when nothing is being done on it; otherwise said, with the link (a page must never run an older Rushes).
+        if (s.version && s.version !== PAGE_VERSION) {
+          var typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
+          if (!window.rushesBusy && !typing) { location.reload(); return; }
+          $('hDot').className = 'dot busy';
+          $('hWhat').innerHTML = 'Rushes was updated to ' + s.version + ' · <a href="#" onclick="location.reload();return false">Reload</a>';
+          return;
+        }
         // What the helper is doing counts as running. Saying "nothing running"
         // while a transfer is moving is the one lie this must never tell.
         var h = helperNow(s.copy), c = s.copy, j = s.transfer;

@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.4 — October 2026
+
+- **A page never runs an older Rushes.** After an update, a page that was already open could still be the old one and ask for things the new Rushes no longer does ("unknown op" in Tidy up). Now every page notices within seconds that Rushes was updated and reloads itself; if something is being done on it at that moment, the top bar says "Rushes was updated · Reload" instead.
+
 ## 0.13.3 — October 2026
 
 - **Removing is one step, as in Finder.** Right-click → Move to Recently Removed, ⌘⌫ or Delete moves it there at once, no question: nothing is gone until Delete All.

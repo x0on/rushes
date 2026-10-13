@@ -410,7 +410,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var $ = function (id) { return document.getElementById(id); };
       var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
       var size = function (b) { return b == null ? '' : b === 0 ? 'Zero bytes' : b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB'; };
-      var KEY = 'rushes-finder', roots = [], finder = false, wins = [], cache = {}, menu = null, busy = false;
+      var KEY = 'rushes-finder', roots = [], finder = false, wins = [], cache = {}, menu = null, busy = window.rushesBusy = false;
       var VIDEO = /\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i;
       var get = function (q) { return fetch('/db/browse.php?' + q + '&t=' + Date.now()).then(function (r) { return r.json(); })
         .then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
@@ -542,10 +542,10 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         var tr = rootOf(to); if (tr && tr.hold) { removeNow(items); return; }       // dropped on Recently Removed: as onto the Trash
         items = items.filter(function (p) { return p !== to && to.indexOf(p + '/') !== 0; });
         if (!items.length) return;
-        busy = true; $('fAsk').hidden = true;
+        busy = window.rushesBusy = true; $('fAsk').hidden = true;
         said('<span class="spin"></span> Moving ' + (items.length === 1 ? esc(name(items[0])) : items.length + ' items') + ' into ' + esc(name(to)) + '…');
         post({ op: 'move', items: JSON.stringify(items), to: to, merge: merge ? '1' : '' }).then(function (d) {
-          busy = false;
+          busy = window.rushesBusy = false;
           // what moved leaves the windows' open paths
           wins.forEach(function (w) { items.forEach(function (p) {
             var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
@@ -568,28 +568,28 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             var n = $('fNoMerge'); if (n) n.onclick = function () { $('fAsk').hidden = true; };
           }
           refresh();
-        }).catch(function (e) { busy = false; said('Did not move: ' + esc(e.message), true); refresh(); });
+        }).catch(function (e) { busy = window.rushesBusy = false; said('Did not move: ' + esc(e.message), true); refresh(); });
       }
       // Removing, as Finder's Trash: at once, into Recently Removed. Undo brings it back, and so does dragging it
       // out of Recently Removed (a place in each window's list) onto a folder
       function removeNow(items) {
         if (busy || !items.length) return;
-        busy = true; $('fAsk').hidden = true; said('<span class="spin"></span> Moving to Recently Removed…');
+        busy = window.rushesBusy = true; $('fAsk').hidden = true; said('<span class="spin"></span> Moving to Recently Removed…');
         post({ op: 'remove', items: JSON.stringify(items) }).then(function (d) {
-          busy = false;
+          busy = window.rushesBusy = false;
           wins.forEach(function (w) { items.forEach(function (p) {
             var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
           said((d.removed.length ? 'Moved to Recently Removed ✓ ' + esc(d.removed.join(', ')) + ' · ' + d.files.toLocaleString() + ' file' + (d.files === 1 ? '' : 's') + (d.bytes ? ' · ' + size(d.bytes) : '') +
               '. Undo, or drag it back out of Recently Removed; Delete All there gives the space back.' : '') +
             d.notes.map(function (n) { return '<br><span class="bad">' + esc(n) + '</span>'; }).join(''));
           refresh();
-        }).catch(function (e) { busy = false; said('Not removed: ' + esc(e.message), true); });
+        }).catch(function (e) { busy = window.rushesBusy = false; said('Not removed: ' + esc(e.message), true); });
       }
       $('fUndo').onclick = function () {
         if (busy) return;                                  // never beside a move still going on
-        busy = true; said('<span class="spin"></span> Undoing the last change…');
-        post({ op: 'undo' }).then(function (d) { busy = false; said('Undone ✓ ' + esc(d.said) + '.'); refresh(); $('fUndo').disabled = !d.left; })
-          .catch(function (e) { busy = false; said(esc(e.message), true); });
+        busy = window.rushesBusy = true; said('<span class="spin"></span> Undoing the last change…');
+        post({ op: 'undo' }).then(function (d) { busy = window.rushesBusy = false; said('Undone ✓ ' + esc(d.said) + '.'); refresh(); $('fUndo').disabled = !d.left; })
+          .catch(function (e) { busy = window.rushesBusy = false; said(esc(e.message), true); });
       };
       $('fAdd').onclick = function () { var w = new Win([wins.length ? wins[wins.length - 1].open[0] : roots[0].path]); wins.push(w); save(); wins.forEach(function (v) { v.draw(); }); };
 

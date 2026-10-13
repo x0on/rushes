@@ -628,4 +628,5 @@ echo json_encode([
     })(),
     'scripts'  => scripts_waiting(),
     'now'      => $now,
+    'version'  => rushes_version(),          // a page from an older Rushes sees it changed, and reloads (head.php)
 ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
