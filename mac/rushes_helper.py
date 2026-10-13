@@ -762,6 +762,10 @@ class Window:
             r["now"] = st.get("copy") or {}
             a, d = st.get("archive") or {}, st.get("disk") or {}
             r["stats"] = {"files": a.get("files", 0), "bytes": a.get("bytes", 0), "free": d.get("free", 0)}
+            # each drive Rushes looks after, as Overview's cards say it: one row each, never one total of drives that overlap
+            r["drives"] = [{"name": x.get("name", ""), "roles": x.get("roles") or [], "kind": x.get("kind", ""),
+                            "files": x.get("files"), "bytes": x.get("bytes"), "free": x.get("free", 0), "total": x.get("total", 0)}
+                           for x in (st.get("drives_in") or [])]
             r["describing"] = ((st.get("helper") or {}).get("describe")) or {}
             r["rushes"] = True
         except Exception as e:
@@ -1111,6 +1115,8 @@ nav li.pg .pill{margin-left:auto;font-size:11px;background:var(--accent);color:v
 .sub{color:var(--muted);margin:-6px 0 18px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 14px}.stats div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
 .stats b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.stats small{color:var(--muted)}
+table.drv{width:100%;border-collapse:collapse}table.drv td{padding:8px 0;border-top:1px solid var(--line);vertical-align:top}table.drv tr:first-child td{border-top:0}
+table.drv td.n{text-align:right;white-space:nowrap;padding-left:14px;font-variant-numeric:tabular-nums}
 .feed{list-style:none;margin:0;padding:0}.feed li{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--line);margin:0;align-items:flex-start}
 .feed li:first-child{border-top:0;padding-top:0}.feed time{color:var(--muted);font-variant-numeric:tabular-nums;width:42px;flex:none}
 .feed .t{flex:1;min-width:0}.feed .day{color:var(--muted);font-size:12px;font-weight:600;padding:14px 0 2px;border:0}.feed .day:first-child{padding-top:0}
@@ -1438,8 +1444,14 @@ function home(s) {
   default:
     return head('Overview', 'How Rushes is doing, at a glance.') + said(s) + upd(s) +
       '<div class="box">' + state + '<div class="muted" style="margin-top:4px">' + where + '</div></div>' +
-      (st ? '<div class="stats"><div><b>' + Number(st.files || 0).toLocaleString() + '</b><small>files in the archive</small></div><div><b>' + size(st.bytes || 0) +
-        '</b><small>of footage</small></div><div><b>' + (st.free ? size(st.free) : '—') + '</b><small>free' + (L ? ' on ' + esc(base(L.archive)) : ' in the archive') + '</small></div></div>' : '') +
+      // one row per drive, with what Rushes does with it: drives that hold the same footage are never added up
+      (s.drives && s.drives.length ? '<div class="box"><div class="muted" style="margin-bottom:6px">Drives in Rushes</div><table class="drv">' +
+        s.drives.map(d => '<tr><td><b>' + esc(d.name) + '</b><small class="muted" style="display:block">' + esc((d.roles || []).join(' · ').toLowerCase() || 'in Rushes') + '</small></td>' +
+          '<td class="n">' + (d.files != null ? Number(d.files).toLocaleString() + ' files' : '<span class="muted">not listed yet</span>') + '</td>' +
+          '<td class="n">' + (d.bytes != null ? size(d.bytes) : '') + '</td>' +
+          '<td class="n muted">' + (d.total ? size(d.free) + ' free' : '') + '</td></tr>').join('') + '</table></div>'
+      : st ? '<div class="stats"><div><b>' + Number(st.files || 0).toLocaleString() + '</b><small>files in Search</small></div><div><b>' + size(st.bytes || 0) +
+        '</b><small>in Search</small></div><div><b>' + (st.free ? size(st.free) : '—') + '</b><small>free' + (L ? ' on ' + esc(base(L.archive)) : ' in the archive') + '</small></div></div>' : '') +
       '<div class="box"><div class="muted" style="margin-bottom:6px">Doing now</div>' + now + '</div>' +
       (unpaired ? '<div class="box"><div class="head"><div class="t"><b>Not paired with Rushes yet</b><small class="muted" style="display:block">Rushes gives this Mac no work until it is: Other devices has the place for the code.</small></div>' +
         '<button data-page="dev">Pair…</button></div></div>' : '') +

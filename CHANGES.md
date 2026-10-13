@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.46 — October 2026
+
+- **Footage per drive, not one big number.** The Rushes window lists each drive Rushes looks after, with what it does with it (the archive, in Search), its files, its size and what is free, instead of "files in the archive" and a total that added up drives holding the same footage (an old server copied into the archive counted twice). Overview's **In Search** tile does the same: how many drives, and each one's files and size.
+- **One way of counting a terabyte, everywhere: Finder's** (1 TB = 1,000,000,000,000 bytes). The window and the web pages counted it differently, so the same footage showed as 73.84 TB on one and 81.19 TB on the other.
+
 ## 0.12.45 — October 2026
 
 - **Move to… no longer jumps or flashes.** Placing a folder now changes only what changed: its row leaves the left side, the folders above it count again, and only its department is drawn again. Nothing else is redrawn.

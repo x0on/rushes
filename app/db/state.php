@@ -453,9 +453,9 @@ if (is_readable("$WEB/job.log")) {
 }
 
 function tb(int $b): string {
-    return $b >= 1099511627776 ? number_format($b / 1099511627776, 2) . ' TB'
-         : ($b >= 1073741824   ? number_format($b / 1073741824, 1) . ' GB'
-         : number_format($b / 1048576) . ' MB');
+    return $b >= 1e12 ? number_format($b / 1e12, 2) . ' TB'
+         : ($b >= 1e9   ? number_format($b / 1e9, 1) . ' GB'
+         : number_format($b / 1e6) . ' MB');
 }
 
 // What runs by itself (rule 5 of DEVELOPING.md): each repeating thing, how often, when it

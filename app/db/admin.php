@@ -633,9 +633,9 @@ const $   = function (i) { return document.getElementById(i); };
 const esc = function (s) { return (s || '').replace(/[&<>"]/g, function (c) {
   return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
 const tb  = function (b) {
-  return b >= 1099511627776 ? (b / 1099511627776).toFixed(2) + ' TB'
-       : b >= 1073741824    ? (b / 1073741824).toFixed(1) + ' GB'
-       : Math.round(b / 1048576) + ' MB';
+  return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB'
+       : b >= 1e9    ? (b / 1e9).toFixed(1) + ' GB'
+       : Math.round(b / 1e6) + ' MB';
 };
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
@@ -1639,10 +1639,13 @@ function drawTiles(d) {
   // the headline: what is in Search, and on how many drives; why it has not grown yet, while a drive is listed
   const ins = d.drives_in || [], listing = ins.filter(function (x) { return x.now; });
   const searched = ins.filter(function (x) { return x.kind === 'archive' || x.roles.indexOf('In Search') >= 0; }).length || 1;
+  // per drive, never one total: drives that hold the same footage (an old server copied into the archive) would count it twice
+  const sd = ins.filter(function (x) { return x.kind === 'archive' || x.roles.indexOf('In Search') >= 0; });
   t.push('<div class="tile"><div class="lab">In Search</div>' +
-    '<div class="big">' + d.archive.files.toLocaleString() + ' files</div>' +
-    '<div class="sub">' + tb(d.archive.bytes) + ', on ' + searched + (searched === 1 ? ' drive' : ' drives') +
-      (listing.length ? ' · ' + esc(listing.map(function (x) { return x.name; }).join(', ')) + ' still being listed…' : '') + '</div></div>');
+    '<div class="big">' + searched + (searched === 1 ? ' drive' : ' drives') + '</div>' +
+    '<div class="sub">' + (sd.length ? sd.map(function (x) { return esc(x.name) + ' ' + (x.files != null ? x.files.toLocaleString() + ' files · ' + tb(x.bytes || 0) : 'not listed yet'); }).join('<br>')
+      : d.archive.files.toLocaleString() + ' files · ' + tb(d.archive.bytes)) +
+      (listing.length ? '<br>' + esc(listing.map(function (x) { return x.name; }).join(', ')) + ' still being listed…' : '') + '</div></div>');
 
   // How many copies: the archive is one; the place each file came from, still
   // holding it, is a second. Shown once the helper has looked (weekly).

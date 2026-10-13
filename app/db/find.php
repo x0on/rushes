@@ -381,10 +381,10 @@ const $   = function (i) { return document.getElementById(i); };
 const esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
   return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
 const tb  = function (b) {
-  return b >= 1099511627776 ? (b / 1099511627776).toFixed(2) + ' TB'
-       : b >= 1073741824    ? (b / 1073741824).toFixed(1) + ' GB'
-       : b >= 1048576       ? Math.round(b / 1048576) + ' MB'
-       : Math.round(b / 1024) + ' KB';
+  return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB'
+       : b >= 1e9    ? (b / 1e9).toFixed(1) + ' GB'
+       : b >= 1e6       ? Math.round(b / 1e6) + ' MB'
+       : Math.round(b / 1e3) + ' KB';
 };
 const short = function (p) {
   p = p || '';

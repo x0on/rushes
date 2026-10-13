@@ -47,8 +47,8 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
 // same place the admin page gets them, so they can never disagree.
 fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (s) {
   if (s.error) return;
-  var tb = function (b) { return b >= 1099511627776 ? (b / 1099511627776).toFixed(2) + ' TB'
-                                : b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : Math.round(b / 1048576) + ' MB'; };
+  var tb = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB'
+                                : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB'; };
   document.getElementById('fFiles').textContent = s.archive.files.toLocaleString() + ' files · ' + tb(s.archive.bytes);
   document.getElementById('fFree').textContent = tb(s.disk.free) + ' free · ' + (s.disk.pct || 0) + '% used';
   var m = document.getElementById('fMeter');
