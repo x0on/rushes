@@ -36,8 +36,43 @@ $queue = function (string $what) use ($W) {
         bail(500, 'Could not ask the runner: is the web folder writable?');
 };
 
+// Servers Rescue may look at over SSH (runner.py ssh_list): with the Mac's own SSH login, never a password here.
+// Only looked at and read from: nothing on them is ever changed.
+function ssh_servers(): array {
+    return array_values(array_filter(settings()['ssh_sources'] ?? [], fn($x) => is_array($x) && ssh_ok((string)($x['host'] ?? ''), (string)($x['path'] ?? ''))));
+}
+function ssh_ok(string $host, string $path): bool {        // the same rule as runner.py ssh_ok
+    return (bool)preg_match('/^([A-Za-z0-9._][A-Za-z0-9._-]*@[A-Za-z0-9._:-]+|[A-Za-z0-9._][A-Za-z0-9._:-]*)$/', $host)
+        && (bool)preg_match('#^/[^\x00-\x1f\'"`$\\\\]*$#', $path) && !in_array('..', explode('/', $path), true);
+}
+function ssh_key(array $x): string { return preg_replace('/[^A-Za-z0-9-]/', '_', $x['host'] . $x['path']); }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $do = (string)($_POST['action'] ?? '');
+    if ($do === 'ssh-save') {
+        $name = trim(preg_replace('/[\x00-\x1f]+/', ' ', (string)($_POST['name'] ?? '')));
+        $host = trim((string)($_POST['host'] ?? '')); $path = rtrim(trim((string)($_POST['path'] ?? '')), '/');
+        if ($name === '' || mb_strlen($name) > 40) bail(400, 'Give it a short name, such as QNAP.');
+        if (!ssh_ok($host, $path)) bail(400, 'The address is user@address (as you type it after ssh), and the folder starts with / (such as /share/VIDEO).');
+        $s = settings(); $list = array_values(array_filter($s['ssh_sources'] ?? [], fn($x) => ($x['name'] ?? '') !== $name));
+        $list[] = ['name' => $name, 'host' => $host, 'path' => $path];
+        $s['ssh_sources'] = $list;
+        if (!save_settings($s)) bail(500, 'Could not save it.');
+        $_POST["name"] = $name; $do = "ssh-list";          // saved: listed at once
+    }
+    if ($do === 'ssh-list') {
+        $name = (string)($_POST['name'] ?? '');
+        if (!array_filter(ssh_servers(), fn($x) => $x['name'] === $name)) bail(400, 'No server called that in Rescue.');
+        @mkdir("$W/queue", 0777, true);
+        @file_put_contents("$W/queue/" . date('Ymd-His') . '-ssh-list.job', "ACTION=ssh-list\nNAME=" . str_replace("\n", ' ', $name) . "\n");
+        out(['ok' => 'ssh-list', 'name' => $name]);
+    }
+    if ($do === 'ssh-forget') {
+        $name = (string)($_POST['name'] ?? ''); $s = settings();
+        $s['ssh_sources'] = array_values(array_filter($s['ssh_sources'] ?? [], fn($x) => ($x['name'] ?? '') !== $name));
+        if (!save_settings($s)) bail(500, 'Could not save it.');
+        out(['ok' => 'ssh-forget']);
+    }
     if ($do === 'scan') { $queue('rescue-scan'); out(['ok' => 'scan']); }
     if ($do === 'rescue') {
         // only what the scan found, with the good copy it found: never a path or a source sent by the page
@@ -70,6 +105,7 @@ $asked = (bool)array_filter(glob("$W/queue/*.job") ?: [], fn($j) => preg_match('
 // which place a good copy is in, in words: the archive itself, or a drive in Search by its name
 $where = function (string $p) use ($A): string {
     if ($p === '') return '';
+    if (str_starts_with($p, 'ssh:')) return explode(':', $p, 3)[1] . ' (over SSH)';
     if (str_starts_with($p, "$A/")) return 'the archive';
     $d = kept_drive_of($p);
     return $d ? (string)$d['name'] : dirname($p);
@@ -78,8 +114,10 @@ $rows = array_values($found());
 $withGood = count(array_filter($rows, fn($r) => $r['sure']));
 $maybe = count(array_filter($rows, fn($r) => $r['good'] !== '' && !$r['sure']));
 $rows = array_map(fn($r) => $r + ['rel' => str_starts_with($r['path'], "$A/") ? substr($r['path'], strlen($A) + 1) : $r['path'],
-                                  'where' => $where($r['good'])], array_slice($rows, 0, 5000));
-out(['looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked' => $asked,
+                                  'where' => $where($r['good']),
+                                  'show' => str_starts_with($r['good'], 'ssh:') ? explode(':', $r['good'], 3)[2] : $r['good']], array_slice($rows, 0, 5000));
+$servers = array_map(fn($x) => $x + ['state' => json_decode((string)@file_get_contents("$W/ssh-" . ssh_key($x) . '.json'), true) ?: null], ssh_servers());
+out(['servers' => $servers, 'looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked' => $asked,
      'running' => str_contains($st, 'rescue-') ? (str_contains($st, 'apply') ? 'rescuing' : 'looking') : '',
      'total' => count($found()), 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,
      'done' => array_map(fn($l) => array_slice(explode("\t", rtrim($l, "\n")), 0, 4), array_slice(array_reverse($done), 0, 50))]);

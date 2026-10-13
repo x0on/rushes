@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.7 — October 2026
+
+- **Rescue looks on a server over SSH too** (Rescue → Also look on a server over SSH), for a NAS Finder cannot open but SSH can. Give it a name, the address as you type it after `ssh`, and its folder (such as `/share/VIDEO`). Rushes uses this Mac's own SSH login, the one Terminal uses: it never asks for or keeps a password. It lists the server's files once (names and sizes only, light on its disks), and **Look for broken files** then looks there for good copies too, reading only the first bytes of the candidates, with the same "sure" rules. **Rescue** copies only what you tick from it, one file at a time, and swaps it in only when the fingerprint taken on the server and the one taken here agree. Nothing on the server is ever changed.
+
 ## 0.13.6 — October 2026
 
 - **Rescue only calls a copy good when more than its name says so.** Cameras number their clips the same on every card (Clip0004, DJI_0004, C0153), so a file of the same name elsewhere may be another shoot: 0.13.5 offered *2020/AUGUST/Clip0004.MXF* as the good copy of *2021/CASA LINDA/Clip0004.MXF*. Now a copy is **sure** only when it is where the file was copied from, or the one in a folder of the same name, or a name no camera gives with every copy the same size. Anything else is shown as **same name only** with a warning, and is never ticked for you; **Tick all sure ones** ticks only the sure. Look again after updating: the list from before does not know which are sure.

@@ -41,11 +41,11 @@ HOLD, OLD_HOLD = "_Recently Removed", "_duplicates"
 VIDEO_EXT = (".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".braw", ".r3d")     # the same list as proxy.sh
 
 
-def broken(path, size):
-    """Rescue: why a file in the archive is broken, or None. Only clips and their XML sidecars are judged:
+def broken(path, size, head=None):
+    """Rescue: why a file is broken, or None. Only clips and their XML sidecars are judged:
     empty; too small to be a clip; or not starting the way its kind must (an MP4 or MOV with "ftyp", "moov"…
     in its first bytes, an MXF with its key, an XML with "<"): a 1 KB "MP4", or an XML holding a video's
-    bytes, as a damaged disk leaves them. Only the first 16 bytes are read."""
+    bytes, as a damaged disk leaves them. Only the first 16 bytes are read (head: already read, over SSH)."""
     ext = os.path.splitext(path)[1].lower()
     if ext not in VIDEO_EXT + (".xml", ".m2ts"):
         return None
@@ -53,11 +53,13 @@ def broken(path, size):
         return "empty: zero bytes"
     if ext != ".xml" and size < 65536:
         return f"too small to be a clip ({size:,} bytes)"
-    try:
-        with open(path, "rb") as f:
-            h = f.read(16)
-    except OSError as e:
-        return f"cannot be read ({e.strerror or e})"
+    h = head
+    if h is None:
+        try:
+            with open(path, "rb") as f:
+                h = f.read(16)
+        except OSError as e:
+            return f"cannot be read ({e.strerror or e})"
     ok = {".mp4": lambda: h[4:8] in (b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"),
           ".mxf": lambda: h[:4] == b"\x06\x0e\x2b\x34",
           ".avi": lambda: h[:4] == b"RIFF",
@@ -67,6 +69,33 @@ def broken(path, size):
     if ext in ok and not ok[ext]():
         return "what is inside is not " + ("XML" if ext == ".xml" else f"a {ext[1:].upper()} clip") + " (another file's data, or damaged)"
     return None
+
+
+# ── a server over SSH (Rescue): looked at and read from, never written to ──────────────────────────
+# Only with the Mac's own SSH login (a key it already has): BatchMode, so it never waits for a password.
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30"]
+SSH_SKIP = r"\( -name '.*' -o -name '@Recycle' -o -name '@Recently-Snapshot' -o -name '.@__thumb' -o -name '_duplicates' -o -name '_Recently Removed' \) -prune -o"
+
+
+def ssh_ok(host, path):
+    """A server as Setup names it: user@address and an absolute folder, nothing a shell would read twice."""
+    return bool(re.fullmatch(r"[A-Za-z0-9._][A-Za-z0-9._-]*@[A-Za-z0-9._:-]+|[A-Za-z0-9._][A-Za-z0-9._:-]*", host or "")) and \
+        bool(re.fullmatch(r"/[^\x00-\x1f'\"`$\\]*", path or "")) and ".." not in path.split("/")
+
+
+def ssh_heads(host, paths):
+    """The first 16 bytes of each file on the server, in one connection. -> {path: bytes or None}"""
+    import shlex
+    script = "while IFS= read -r f; do printf '%s\\t' \"$f\"; head -c 16 \"$f\" 2>/dev/null | od -An -tx1 | tr -d ' \\n'; echo; done"
+    r = subprocess.run(["ssh", *SSH_OPTS, "--", host, script], input="\n".join(paths) + "\n", capture_output=True, text=True, timeout=600)
+    out = {}
+    for l in r.stdout.splitlines():
+        p, _, hx = l.partition("\t")
+        try: out[p] = bytes.fromhex(hx) if hx else None
+        except ValueError: out[p] = None
+    return out
+
+
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
@@ -936,6 +965,8 @@ class Runner:
             self.scan()
         elif action == "rescue-scan":
             self.rescue_scan()
+        elif action == "ssh-list":
+            self.ssh_list(re.sub(r"[\x00-\x1f]", "", f.get("NAME", ""))[:60])
         elif action == "rescue-apply":
             self.rescue_apply(who)
         elif action in ("cacheclean", "cache-undo"):
@@ -1033,6 +1064,54 @@ class Runner:
                 pass
         return at
 
+    def ssh_servers(self):
+        """The servers Rushes may look at over SSH (Rescue → A server over SSH): [{name, host, path, key}]."""
+        out = []
+        for x in (self.settings().get("ssh_sources") or []):
+            if isinstance(x, dict) and ssh_ok(x.get("host", ""), x.get("path", "")):
+                out.append(dict(x, key=re.sub(r"[^A-Za-z0-9-]", "_", x["host"] + x["path"])))
+        return out
+
+    def ssh_list(self, name):
+        """One server's files, listed over SSH (names and sizes only: nothing of the footage is read), into
+        ssh/<key>.tsv: size, then the full path on the server. Said as it goes; a test first."""
+        import shlex
+        sv = next((x for x in self.ssh_servers() if x["name"] == name), None)
+        if not sv:
+            self.log(f"  no server called {name} in Rescue"); return
+        st = lambda **k: self.write(f"ssh-{sv['key']}.json", json.dumps(dict(k, at=int(time.time()))))
+        st(state="testing")
+        t = subprocess.run(["ssh", *SSH_OPTS, "--", sv["host"], "test -d " + shlex.quote(sv["path"]) + " && echo ok"], capture_output=True, text=True, timeout=60)
+        if t.stdout.strip() != "ok":
+            why = (t.stderr.strip().splitlines() or ["no answer"])[-1][:300]
+            st(state="failed", why=why if t.returncode else f"there is no folder {sv['path']} there")
+            self.log(f"  {sv['host']}: could not look ({why})"); return
+        os.makedirs(self.p("ssh"), exist_ok=True)
+        out = self.p(os.path.join("ssh", sv["key"] + ".tsv"))
+        # ls -ln, not stat: every NAS has it with the same columns (busybox, GNU, BSD), size fifth, the name after the time
+        cmd = f"find {shlex.quote(sv['path'])} {SSH_SKIP} -type f -exec ls -ln {{}} +"
+        n, t0 = 0, time.time()
+        with open(out + ".new", "w") as f:
+            p = subprocess.Popen(["ssh", *SSH_OPTS, "--", sv["host"], cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="surrogateescape")
+            for l in p.stdout:
+                f8 = l.rstrip("\n").split(None, 8)
+                size, path = (f8[4], f8[8]) if len(f8) == 9 else ("", "")
+                if size.isdigit() and path.startswith(sv["path"]):
+                    f.write(f"{size}\t{path}\n"); n += 1
+                    if n % 5000 == 0:
+                        self.log(f"listing: {sv['name']} · {n:,} files so far"); st(state="listing", n=n)
+            p.wait()
+        if p.returncode not in (0, 1) or not n:
+            why = (p.stderr.read().strip().splitlines() or ["nothing listed"])[-1][:300]
+            st(state="failed", why=why); self.log(f"  {sv['name']}: listing stopped ({why})")
+            try: os.remove(out + ".new")
+            except OSError: pass
+            return
+        os.replace(out + ".new", out)
+        st(state="listed", n=n, secs=int(time.time() - t0))
+        self.log(f"  {sv['name']}: {n:,} files listed in {int(time.time() - t0)} s")
+        self.activity("check", f"Listed {sv['name']} over SSH for Rescue: {n:,} files (nothing on it was changed)")
+
     def rescue_scan(self):
         """Every clip and sidecar in the archive looked at (rescue-found.tsv): the broken ones, where each came
         from, and the best good copy Rushes can see (its source, or a file of the same name elsewhere in Search,
@@ -1065,6 +1144,27 @@ class Runner:
         except (sqlite3.Error, OSError):
             pass
         rows, hold = [], os.path.join(a, HOLD) + "/"
+        # each server's list (ssh_list), by name: a file of the same name there is a candidate too, "ssh:<name>:<path>"
+        remote = {}
+        for sv in self.ssh_servers():
+            try:
+                for l in open(self.p(os.path.join("ssh", sv["key"] + ".tsv")), encoding="utf-8", errors="surrogateescape"):
+                    size, _, path = l.rstrip("\n").partition("\t")
+                    remote.setdefault(os.path.basename(path), []).append((sv, path, int(size)))
+            except (OSError, ValueError):
+                pass
+        heads = {}                             # the server's first bytes, read once for every candidate there
+        if remote:
+            want = {}
+            for p, _, _ in found:
+                for sv, path, size in remote.get(os.path.basename(p), [])[:40]:
+                    if size > 0: want.setdefault(sv["host"], {}).setdefault(path, sv)
+            for host, ps in want.items():
+                self.log(f"  reading the first bytes of {len(ps):,} files on {host}")
+                try: got = ssh_heads(host, list(ps))
+                except (OSError, subprocess.SubprocessError) as e:
+                    self.log(f"  {host}: could not read them ({e})"); got = {}
+                for path, sv in ps.items(): heads[(sv["name"], path)] = got.get(path)
         for i, (p, size, why) in enumerate(found, 1):
             if i % 50 == 0:
                 self.log(f"progress: {i} of {len(found)} ({100 * i // len(found)}%)")
@@ -1079,6 +1179,12 @@ class Runner:
                 while k < min(len(q), len(parts)) - 1 and q[-2 - k] == parts[-2 - k]: k += 1
                 return k
             ok = []
+            for sv, path, cs in remote.get(os.path.basename(p), [])[:40]:
+                h = heads.get((sv["name"], path))
+                if cs > 0 and h is not None and broken(path, cs, h) is None:
+                    q = path.split("/"); k = 0
+                    while k < min(len(q), len(parts)) - 1 and q[-2 - k] == parts[-2 - k]: k += 1
+                    ok.append((f"ssh:{sv['name']}:{path}", cs, k))
             for c in dict.fromkeys(cands):
                 if c.startswith(hold) or c == p:
                     continue
@@ -1130,17 +1236,41 @@ class Runner:
                     raise OSError("not a file of the archive")
                 if broken(bad, os.path.getsize(bad)) is None:
                     raise OSError("it is not broken any more")
-                gs = os.path.getsize(good)
-                if broken(good, gs) is not None:
-                    raise OSError("the good copy is not good any more")
-                out, tmp = ts.new_part(bad)
-                with out, open(good, "rb") as g:
-                    while True:
-                        b = g.read(ts.CHUNK)
-                        if not b: break
-                        out.write(b)
-                if ts.same_bytes(tmp, good) is not True:
-                    raise OSError("the copy did not match the good one byte for byte")
+                if good.startswith("ssh:"):
+                    # from a server over SSH: read there, and the fingerprint (md5) taken there and here must agree
+                    import hashlib as hl, shlex
+                    _, name, rpath = good.split(":", 2)
+                    sv = next((x for x in self.ssh_servers() if x["name"] == name), None)
+                    if not sv or not rpath.startswith(sv["path"].rstrip("/") + "/"):
+                        raise OSError(f"{name} is not a server in Rescue any more")
+                    out, tmp = ts.new_part(bad); md = hl.md5()
+                    with out:
+                        pr = subprocess.Popen(["ssh", *SSH_OPTS, "--", sv["host"], "cat " + shlex.quote(rpath)], stdout=subprocess.PIPE)
+                        while True:
+                            b = pr.stdout.read(ts.CHUNK)
+                            if not b: break
+                            out.write(b); md.update(b)
+                        pr.wait()
+                    if pr.returncode != 0:
+                        raise OSError("the server stopped sending it")
+                    there = subprocess.run(["ssh", *SSH_OPTS, "--", sv["host"], "md5sum " + shlex.quote(rpath)], capture_output=True, text=True, timeout=3600)
+                    if there.stdout.split()[:1] != [md.hexdigest()]:
+                        raise OSError("the copy's fingerprint did not match the one taken on the server")
+                    gs = os.path.getsize(tmp)
+                    if broken(bad, gs, open(tmp, "rb").read(16)) is not None:
+                        raise OSError("the copy from the server is not good either")
+                else:
+                    gs = os.path.getsize(good)
+                    if broken(good, gs) is not None:
+                        raise OSError("the good copy is not good any more")
+                    out, tmp = ts.new_part(bad)
+                    with out, open(good, "rb") as g:
+                        while True:
+                            b = g.read(ts.CHUNK)
+                            if not b: break
+                            out.write(b)
+                    if ts.same_bytes(tmp, good) is not True:
+                        raise OSError("the copy did not match the good one byte for byte")
                 held = os.path.join(a, HOLD, os.path.relpath(bad, a))
                 if os.path.lexists(held): held += time.strftime(" (%Y-%m-%d %H%M%S)")
                 os.makedirs(os.path.dirname(held), exist_ok=True)

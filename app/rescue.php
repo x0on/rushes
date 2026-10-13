@@ -39,6 +39,19 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       <button class="btn" type="button" id="rLook">Look for broken files</button>
       <span class="note" id="rSaid"></span>
     </div>
+    <!-- a server that only answers over SSH (a NAS whose sharing is off): its files listed, looked at, read from -->
+    <details class="rgrp" id="rSsh" style="padding:0"><summary style="padding:9px 12px;cursor:pointer;font-size:13px"><b>Also look on a server over SSH</b>
+      <span class="note" id="rSshSum"></span> <?= $tip('For a server Finder cannot open but SSH can (a NAS whose file sharing is off). Rushes uses this Mac’s own SSH login, the one Terminal uses, so it never asks for or keeps a password. It lists the server’s files once (names and sizes only), looks there for good copies, and copies only what you rescue, checked by a fingerprint taken on both ends. Nothing on the server is ever changed.') ?></summary>
+      <div style="padding:4px 12px 12px">
+        <div id="rSshList"></div>
+        <div class="rbar" style="margin:10px 0 0">
+          <input type="text" id="sName" placeholder="Name, e.g. QNAP" style="width:140px">
+          <input type="text" id="sHost" placeholder="user@address, as after ssh" style="width:230px">
+          <input type="text" id="sPath" placeholder="/share/VIDEO" style="width:180px">
+          <button class="btn quiet" type="button" id="sAdd">Add and list its files</button>
+        </div>
+      </div>
+    </details>
     <div class="rbar rAct" hidden>
       <button class="btn rGo" type="button" disabled>Rescue the ticked</button>
       <button class="btn quiet rAll" type="button">Tick all sure ones</button>
@@ -65,8 +78,35 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   var ticked = {}, last = null;
   // where a broken file came from, as a group: the source's drive and top folder, or "not copied by Rushes"
   var from = function (c) { if (!c) return 'Not copied by Rushes (no record of where it came from)'; var p = c.split('/'); return 'Copied from ' + p.slice(0, p[1] === 'Volumes' ? 4 : 3).join('/'); };
+  // the servers over SSH: each with what it last did (listed, failed and why, listing now)
+  function servers(d) {
+    var sv = d.servers || [];
+    $('rSshSum').textContent = sv.length ? '· ' + sv.map(function (x) { return x.name; }).join(', ') : '';
+    $('rSshList').innerHTML = sv.map(function (x) {
+      var st = x.state || {};
+      return '<div class="rrow" style="grid-template-columns:1fr auto auto;border:0;padding:6px 0"><span class="p"><b>' + esc(x.name) + '</b> · ' + esc(x.host) + ':' + esc(x.path) +
+        '<small' + (st.state === 'failed' ? ' class="bad"' : '') + '>' +
+        (st.state === 'listed' ? '✓ ' + (st.n || 0).toLocaleString() + ' files listed ' + esc(when(st.at)) + ': Look for broken files looks there too'
+         : st.state === 'listing' ? '<span class="spin"></span> listing… ' + (st.n || 0).toLocaleString() + ' files so far'
+         : st.state === 'testing' ? '<span class="spin"></span> connecting…'
+         : st.state === 'failed' ? 'Could not: ' + esc(st.why || '') + (/denied|password|key/i.test(st.why || '') ? ' — this Mac’s SSH login did not let Rushes in without a password' : '')
+         : 'not listed yet') + '</small></span>' +
+        '<button class="btn quiet" type="button" data-sl="' + esc(x.name) + '">List again</button><button class="lnk" type="button" data-sf="' + esc(x.name) + '">Remove</button></div>';
+    }).join('') || '<p class="note">None yet.</p>';
+    $('rSshList').querySelectorAll('[data-sl]').forEach(function (b) { b.onclick = function () { b.disabled = true; b.textContent = 'Asked ✓';
+      post({ action: 'ssh-list', name: b.dataset.sl }).then(load).catch(function (e) { $('rSaid').textContent = e.message; }); }; });
+    $('rSshList').querySelectorAll('[data-sf]').forEach(function (b) { b.onclick = function () {
+      post({ action: 'ssh-forget', name: b.dataset.sf }).then(load).catch(function (e) { $('rSaid').textContent = e.message; }); }; });
+    if (sv.some(function (x) { return x.state && /testing|listing/.test(x.state.state); })) $('rSsh').open = true;
+  }
+  $('sAdd').onclick = function () {
+    $('sAdd').disabled = true; $('sAdd').textContent = 'Asking…';
+    post({ action: 'ssh-save', name: $('sName').value, host: $('sHost').value, path: $('sPath').value }).then(function () {
+      $('sAdd').disabled = false; $('sAdd').textContent = 'Add and list its files'; $('sName').value = $('sHost').value = $('sPath').value = ''; load();
+    }).catch(function (e) { $('sAdd').disabled = false; $('sAdd').textContent = 'Add and list its files'; $('rSaid').textContent = 'Not added: ' + e.message; });
+  };
   function draw(d) {
-    last = d;
+    last = d; servers(d);
     var busy = d.running || d.asked;
     window.rushesBusy = !!busy;
     $('rLook').disabled = !!busy;
@@ -88,8 +128,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           g[k].map(function (r) {
             return '<label class="rrow"><input type="checkbox" data-p="' + esc(r.path) + '"' + (r.good ? '' : ' disabled') + (ticked[r.path] ? ' checked' : '') + '>' +
               '<span class="p">' + esc(r.rel) + '<small class="bad">' + esc(r.why) + '</small></span>' +
-              (r.good && r.sure ? '<span class="p">' + esc(r.good) + '<small>a good copy · ' + size(r.gsize) + ' · on ' + esc(r.where) + '</small></span>'
-               : r.good ? '<span class="p">' + esc(r.good) + '<small class="warn">same name only · ' + size(r.gsize) + ' · on ' + esc(r.where) + (r.other ? ' · ' + (r.other + 1) + ' files have this name' : '') +
+              (r.good && r.sure ? '<span class="p">' + esc(r.show) + '<small>a good copy · ' + size(r.gsize) + ' · on ' + esc(r.where) + '</small></span>'
+               : r.good ? '<span class="p">' + esc(r.show) + '<small class="warn">same name only · ' + size(r.gsize) + ' · on ' + esc(r.where) + (r.other ? ' · ' + (r.other + 1) + ' files have this name' : '') +
                   ': cameras name clips the same on every card, so this may be another shoot. Tick it only if you know it is the same.</small></span>'
                       : '<span class="none">No good copy anywhere Rushes can see. Plug in a drive that may have it and add it to Rushes, then look again.</span>') + '</label>';
           }).join('') + '</div>';
@@ -121,6 +161,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   }
   function load() { return fetch('/db/rescue.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(draw)
     .catch(function (e) { $('rOut').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; }); }
-  load(); setInterval(function () { if (last && (last.running || last.asked)) load(); }, 5000);
+  load(); setInterval(function () { if (last && (last.running || last.asked || (last.servers || []).some(function (x) { return !x.state || /testing|listing/.test(x.state.state); }))) load(); }, 5000);
 })();
 </script>

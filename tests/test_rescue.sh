@@ -25,3 +25,8 @@ curl -s -d pass=rushes -d action=rescue --data-urlencode "paths=$J" "$U/db/rescu
   && ok "only a found file with a good copy is rescued, from the copy the scan found; the runner is asked" || no "rescue"
 curl -s -d pass=rushes -d action=scan "$U/db/rescue.php" > /dev/null; ls "$W"/queue/*rescue-scan.job > /dev/null 2>&1 && ok "Look asks the runner" || no "scan"
 [ "$(curl -s -o /dev/null -w '%{http_code}' "$U/db/rescue.php")" = 403 ] && ok "only signed in" || no "auth"
+case "$(curl -s -d pass=rushes -d action=ssh-save -d name=QNAP --data-urlencode "host=-oProxyCommand=x" -d path=/share/VIDEO "$U/db/rescue.php")" in *error*) ok "a server address ssh would misread is refused" ;; *) no "bad host" ;; esac
+curl -s -d pass=rushes -d action=ssh-save -d name=QNAP -d host=admin@192.168.1.20 -d path=/share/VIDEO "$U/db/rescue.php" > /dev/null
+python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["ssh_sources"] == [{"name": "QNAP", "host": "admin@192.168.1.20", "path": "/share/VIDEO"}]' "$W/settings.json" && ls "$W"/queue/*ssh-list.job > /dev/null 2>&1 \
+  && ok "a server over SSH is saved (no password anywhere) and listed at once" || no "ssh save: $(cat "$W/settings.json")"
+

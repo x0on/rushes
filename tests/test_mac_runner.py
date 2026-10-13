@@ -330,7 +330,7 @@ class RescueByName(unittest.TestCase):
         other = self.put("VIDEOS/2020/AUGUST/Clip/Clip0004.MXF", b"\x06\x0e\x2b\x34" + os.urandom(90000))
         same = self.put("OLD/2021/CASA LINDA/Clip0005.MXF", b"\x06\x0e\x2b\x34" + os.urandom(90000))
         bad5 = self.put("VIDEOS/2021/CASA LINDA/Clip0005.MXF", b"")
-        named = self.put("OLD/AMAZON/Doral Park.mov", mp4); bad_named = self.put("VIDEOS/AMAZON2/Doral Park.mov", b"")
+        named = self.put("OLD/AMAZON/Meadow Park.mov", mp4); bad_named = self.put("VIDEOS/AMAZON2/Meadow Park.mov", b"")
         db = sqlite3.connect(os.path.join(self.web, "rushes.sqlite"))
         db.execute("CREATE TABLE files (path TEXT, name TEXT, bytes INTEGER)")
         for p in (other, same, named): db.execute("INSERT INTO files VALUES (?, ?, ?)", (p, os.path.basename(p), os.path.getsize(p)))
@@ -340,6 +340,40 @@ class RescueByName(unittest.TestCase):
         self.assertEqual((rows[bad][4], rows[bad][7]), (other, "0"), "Clip0004 from another card: offered as same name only")
         self.assertEqual((rows[bad5][4], rows[bad5][7]), (same, "1"), "the same name in a folder of the same name: sure")
         self.assertEqual((rows[bad_named][4], rows[bad_named][7]), (named, "1"), "a name no camera gives, one size everywhere: sure")
+
+
+class RescueOverSSH(unittest.TestCase):
+    """A server only SSH reaches (a NAS whose sharing is off): listed, looked in, copied from with a fingerprint taken
+    on both ends; never written to. ssh here is a stand-in that runs the command on this computer."""
+    setUp, tearDown, put = MacJobs.setUp, MacJobs.tearDown, MacJobs.put
+
+    def test_a_broken_file_is_rescued_from_the_server(self):
+        fake = os.path.join(self.t, "bin", "ssh")
+        open(fake, "w").write('#!/bin/sh\nwhile [ "$1" != "--" ]; do shift; done; shift; shift; exec sh -c "$1"\n')
+        os.chmod(fake, 0o755)
+        nas = os.path.join(self.t, "nas", "VIDEO"); os.makedirs(os.path.join(nas, "001 ALL CARD", "Kite"))
+        mxf = b"\x06\x0e\x2b\x34" + os.urandom(120000)
+        open(os.path.join(nas, "001 ALL CARD", "Kite", "Clip0007.MXF"), "wb").write(mxf)
+        os.makedirs(os.path.join(nas, ".@__thumb")); open(os.path.join(nas, ".@__thumb", "x.MXF"), "wb").write(b"t")
+        bad = self.put("VIDEOS/Parks/Kite/Clip0007.MXF", b"")
+        s = json.load(open(os.path.join(self.web, "settings.json")))
+        s["ssh_sources"] = [{"name": "QNAP", "host": "admin@nas.local", "path": nas}]
+        json.dump(s, open(os.path.join(self.web, "settings.json"), "w"))
+        self.r.job("ssh-list", {"NAME": "QNAP"})
+        listed = open(os.path.join(self.web, "ssh", [f for f in os.listdir(os.path.join(self.web, "ssh"))][0])).read()
+        self.assertIn("Clip0007.MXF", listed); self.assertNotIn(".@__thumb", listed, "the NAS's own folders are not listed")
+        self.r.job("rescue-scan", {})
+        row = open(os.path.join(self.web, "rescue-found.tsv")).read().rstrip("\n").split("\t")
+        self.assertEqual((row[4], row[7]), (f"ssh:QNAP:{nas}/001 ALL CARD/Kite/Clip0007.MXF", "1"), "on the server, in a folder of the same name: sure")
+        open(os.path.join(self.web, "rescue-pick.tsv"), "w").write(f"{bad}\t{row[4]}\n")
+        self.r.job("rescue-apply", {"WHO": "Ana"})
+        self.assertEqual(open(bad, "rb").read(), mxf, "copied from the server, fingerprints agreeing")
+        self.assertEqual(open(os.path.join(nas, "001 ALL CARD", "Kite", "Clip0007.MXF"), "rb").read(), mxf, "the server's copy untouched")
+
+    def test_an_address_a_shell_or_ssh_would_misread_is_refused(self):
+        self.assertFalse(runner.ssh_ok("-oProxyCommand=x", "/share/VIDEO"))
+        self.assertFalse(runner.ssh_ok("admin@nas", "/share/$(rm -rf x)"))
+        self.assertTrue(runner.ssh_ok("admin@192.168.1.20", "/share/VIDEO"))
 
 
 class Drives(MacJobs):

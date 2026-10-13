@@ -849,6 +849,15 @@ looked at. For each broken file:
 
 Nothing is changed by looking (`rescue-found.tsv`).
 
+**A server over SSH** (Rescue → Also look on a server over SSH; `settings.ssh_sources`: name, host, folder),
+for a NAS Finder cannot open but SSH can. Only with this Mac's own SSH login (`ssh -o BatchMode=yes`: a key it
+already has; never a password, which Rushes neither asks for nor keeps). `runner.py ssh_list`: one
+`find … -exec ls -ln` over SSH, names and sizes only, the NAS's own folders left out, into `web/ssh/<key>.tsv`.
+Its files are candidates in the scan like any (`ssh:<name>:<path>`), their first 16 bytes read over SSH in one
+connection (`ssh_heads`). Rescuing from it: `cat` over SSH into the temporary file, and the swap only when the
+`md5sum` taken on the server equals the one taken here. Nothing on the server is written, moved or deleted.
+The address and folder are checked so neither ssh nor a shell can read them as anything else (`ssh_ok`).
+
 **Rescue** the ticked ones (only those the scan found, with the good copy it found; never a path sent by the
 page): the good copy is copied in beside the broken one under a temporary name and read back byte for byte;
 the broken one goes to Recently Removed (`removed-moves.tsv`, so Delete All may take it); the good one takes
