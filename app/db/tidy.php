@@ -11,7 +11,8 @@
 //   POST undo=<record file>       queue putting one tidy-up back
 //   ?tree=<folder>  ?matches=1  ?runs=1               the drag view: one level of what waits, what looks like a
 //                                                     department, the tidy-ups done (Reorganize → Drag and drop)
-//   POST drag=1 drops={<folder>: {dept, keep}} [go=1] what that moves, looked at first; go=1 queues it
+//   POST drag=1 token=<t> drops={<folder>: {dept, keep}}  works the plan out once, saying how far (?dragsaid=<t>)
+//   POST drag=1 token=<t> go=1                         queues exactly that plan
 //
 // Where a file goes is read from the ORIGIN record, never from where it sits
 // now: footage copied before the records existed was sorted by date and lost
@@ -372,7 +373,8 @@ function drag_tree(string $rel): array {
 // wins (a folder dragged out of one already placed). keep: the folder goes in under its own name, by its
 // year; otherwise its name is dropped (PARKS → Parks & Recreation) and what is in it goes in, each folder
 // in it by its own year. -> [lines, files, bytes, per drop {n, b, years}, examples]
-function drag_plan(array $drops): array {
+function drag_plan(array $drops, ?callable $say = null): array {
+    $say ??= fn() => null;
     $A = rtrim(archive_dir(), '/'); $H = rtrim(helper_archive(), '/\\'); $L = strlen($A) + 1; $shelf = shelf_as_helper();
     $ok = [];
     foreach ($drops as $rel => $d) {
@@ -381,8 +383,10 @@ function drag_plan(array $drops): array {
         $ok[$rel] = ['dept' => (string)$d['dept'], 'keep' => !empty($d['keep'])];
     }
     uksort($ok, fn($a, $b) => strlen($b) <=> strlen($a));          // deepest first
-    $files = []; $clips = [];
-    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind) use ($L, $ok, &$files, &$clips) {
+    $files = []; $clips = []; $seen = 0;
+    $say('Listing the files that wait', 0, 0);
+    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind) use ($L, $ok, &$files, &$clips, &$seen, $say) {
+        if (++$seen % 20000 === 0) $say('Listing the files that wait', $seen, 0);
         if (str_contains($path, "\t") || str_contains($path, "\n")) return;
         $rel = substr($path, $L);
         foreach ($ok as $r => $d) {
@@ -395,9 +399,13 @@ function drag_plan(array $drops): array {
         }
     });
     $year = []; $per = []; $lines = []; $eg = []; $n = 0; $b = 0;
+    $units = count(array_unique(array_filter(array_column($files, 4), 'strlen')));
     foreach ($files as [$path, $bytes, $r, $in, $unit]) {
         $d = $ok[$r];
-        if ($unit !== '' && !array_key_exists($unit, $year)) $year[$unit] = folder_year("$A/$unit", $A, $clips[$unit] ?? [])[0];
+        if ($unit !== '' && !array_key_exists($unit, $year)) {
+            $say('Reading clip dates to find each folder\'s year', count($year), $units);
+            $year[$unit] = folder_year("$A/$unit", $A, $clips[$unit] ?? [])[0];
+        }
         $y = $unit !== '' ? $year[$unit] : null;
         $to = $shelf . '/' . dept_folder($d['dept']) . ($y ? "/$y" : '') . ($d['keep'] ? '/' . basename($r) : '') . "/$in";
         $lines[] = "file\t$H/" . substr($path, $L) . "\t$to";
@@ -419,20 +427,48 @@ if (isset($_REQUEST['runs'])) {                             // the drag view's l
 if (isset($_REQUEST['tree'])) out(['folders' => drag_tree(trim((string)$_REQUEST['tree'], '/'))]);
 if (isset($_REQUEST['matches'])) out(['matches' => drag_matches(), 'depts' => array_column(departments(), 'name'),
                                   'shelf' => !shelf_chosen() ? '' : (shelf_is_top() ? (settings()['archive']['label'] ?? 'the archive') : shelf_name())]);
+// The review and the move are one plan: the review writes it (tidy-draft-<token>.tsv) while saying how far it
+// is (drag-<token>.json, read by ?dragsaid=<token> while it works), and Yes queues exactly that file.
+function drag_token(): string {
+    $t = (string)($_REQUEST['token'] ?? $_REQUEST['dragsaid'] ?? '');
+    if (!preg_match('/^[a-z0-9]{8,32}$/', $t)) bail(400, 'That review is not one this page made: press Move… again.');
+    return $t;
+}
+if (isset($_REQUEST['dragsaid'])) {
+    $t = drag_token();
+    out(json_decode((string)@file_get_contents(web_dir() . "/drag-$t.json"), true) ?: ['said' => 'Starting', 'i' => 0, 'of' => 0]);
+}
 if (($_POST['drag'] ?? '') === '1') {
     if (helper_archive() === '') bail(400, 'Setup does not know where the helper finds the archive yet.');
     if (!shelf_chosen()) bail(400, 'Choose the folder ' . strtolower(shelf_word(true)) . ' live in first: Setup → Archive structure.');
+    $t = drag_token(); $draft = web_dir() . "/tidy-draft-$t.tsv"; $said = web_dir() . "/drag-$t.json";
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();   // so the page can ask how far it is meanwhile
+    if (($_POST['go'] ?? '') === '1') {
+        // Yes: exactly the plan that was reviewed, not worked out again
+        if (!is_file($draft)) bail(400, 'That review is gone (more than a day old, or moved already): press Move… again.');
+        $id = date('Ymd-His');
+        if (!@rename($draft, web_dir() . "/tidy-$id.tsv")) bail(500, 'Could not write the plan — is the web folder writable?');
+        @unlink($said);
+        queue_add("tidy\t$id");
+        $m = json_decode((string)@file_get_contents("$draft.json"), true) ?: []; @unlink("$draft.json");
+        out(['queued' => $id, 'files' => (int)($m['files'] ?? 0), 'bytes' => (int)($m['bytes'] ?? 0)]);
+    }
     $drops = json_decode((string)($_POST['drops'] ?? ''), true);
     if (!is_array($drops) || !$drops) bail(400, 'Nothing is placed yet.');
-    [$lines, $n, $b, $per, $eg] = drag_plan($drops);
-    if (!$lines) bail(400, 'Nothing to move: those folders are empty, or filed already.');
-    if (($_POST['go'] ?? '') !== '1') out(['files' => $n, 'bytes' => $b, 'per' => $per, 'eg' => $eg]);   // looked at first
-    $id = date('Ymd-His');
-    $plan = web_dir() . "/tidy-$id.tsv";
-    if (@file_put_contents("$plan.new", implode("\n", $lines) . "\n") === false || !@rename("$plan.new", $plan))
+    foreach (glob(web_dir() . '/tidy-draft-*') ?: [] as $old) if (filemtime($old) < time() - 86400) @unlink($old);   // reviews left a day ago
+    $last = 0.0;
+    $say = function (string $what, int $i, int $of) use ($said, &$last) {
+        if (microtime(true) - $last < 0.5 && $i) return; $last = microtime(true);
+        @file_put_contents("$said.new", json_encode(['said' => $what, 'i' => $i, 'of' => $of])); @rename("$said.new", $said);
+    };
+    [$lines, $n, $b, $per, $eg] = drag_plan($drops, $say);
+    $say('Writing the plan', 1, 1);
+    if (!$lines) { @unlink($said); bail(400, 'Nothing to move: those folders are empty, or filed already.'); }
+    if (@file_put_contents("$draft.new", implode("\n", $lines) . "\n") === false || !@rename("$draft.new", $draft))
         bail(500, 'Could not write the plan — is the web folder writable?');
-    queue_add("tidy\t$id");
-    out(['queued' => $id, 'files' => $n, 'bytes' => $b]);
+    @file_put_contents("$draft.json", json_encode(['files' => $n, 'bytes' => $b]));
+    @file_put_contents("$said.new", json_encode(['said' => 'Ready', 'i' => 1, 'of' => 1, 'done' => true])); @rename("$said.new", $said);
+    out(['files' => $n, 'bytes' => $b, 'per' => $per, 'eg' => $eg, 'token' => $t]);
 }
 
 if (($_POST['go'] ?? '') === '1') {

@@ -1107,6 +1107,10 @@ folders, and one example per folder, and asks again.
   are still to place.
 - **What is placed is kept in this browser** until it is moved: a reload does not
   lose it.
+- **Move… works the plan out once**, saying how far it is while it reads the
+  folders' clip dates (`drag-<token>.json`, read with `?dragsaid=`), and keeps
+  it (`tidy-draft-<token>.tsv`, never served, gone after a day). **Yes** queues
+  exactly that file, so what was reviewed is what moves.
 - The plan is the same as any tidy-up's (`file` lines, `tidy-<id>.tsv`, queued
   for the helper): moved one file at a time, never over another file, written
   down, and put back with **Put back**.

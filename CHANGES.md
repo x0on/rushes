@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.43 — October 2026
+
+- **Move… says what it is doing.** Working out where every file goes (reading each folder's clip dates for its year) can take minutes on a big archive: it now says so as it goes, "Reading clip dates to find each folder's year: 120 of 316 folders · 45 s", instead of a still button.
+- **What you approve is exactly what moves.** The plan is worked out once, for the review; **Yes** queues that same plan instead of working it out again (faster, and nothing can change in between).
+- After **Yes**, it says how the move runs: one file at a time, never over another file, progress in the top bar, and it carries on where it stopped if paused.
+
 ## 0.12.42 — October 2026
 
 - **Being under a department is the yes.** Rushes places every folder that matches a department, so there are no "Yes, here" buttons any more: you **Take out** what does not belong (it goes back to the left, and stays there). Names that are only similar are marked **guess: check it**, and each department's heading says how many there are to check.

@@ -538,24 +538,42 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       $('dragView').addEventListener('dragend', function () { dragging = null; document.querySelectorAll('.over').forEach(function (o) { o.classList.remove('over'); }); });
 
       var drops = function () { var o = {}; Object.keys(plan).forEach(function (r) { o[r] = {dept: plan[r].dept, keep: plan[r].keep}; }); return JSON.stringify(o); };
+      // Move…: the plan is worked out once, on the archive, and said as it goes ("Reading clip dates: 120 of 316
+      // folders"); Yes queues exactly that plan (db/tidy.php drag=1, ?dragsaid)
+      var token = '';
       $('dvAsk').onclick = function () {
-        var b = this; b.disabled = true; b.textContent = 'Working out where each file goes…';
-        ask({drag: 1, drops: drops()}).then(function (d) {
+        var b = this, t0 = Date.now(); token = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+        b.disabled = true; b.textContent = 'Working out where each file goes…';
+        $('dvSum').textContent = 'Starting…';
+        var poll = setInterval(function () {
+          ask({dragsaid: token}).then(function (p) {
+            if (p.done) return;
+            var secs = Math.round((Date.now() - t0) / 1000);
+            $('dvSum').textContent = p.said + (p.of ? ': ' + num(p.i) + ' of ' + num(p.of) + ' folders' : p.i ? ': ' + num(p.i) + ' files so far' : '') + ' · ' + secs + ' s';
+          }).catch(function () {});
+        }, 1000);
+        ask({drag: 1, token: token, drops: drops()}).then(function (d) {
+          clearInterval(poll);
           $('dvSureWhat').textContent = 'Move ' + num(d.files) + ' files (' + size(d.bytes) + ') onto ' + <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?> + '?';
-          var yrs = 0; Object.keys(d.per).forEach(function (r) { yrs += d.per[r].years.length; });
-          $('dvSureMore').textContent = Object.keys(d.per).length + ' folders, into ' + yrs + ' year folders where their clips agree on one. For example:';
+          var yrs = {}; Object.keys(d.per).forEach(function (r) { d.per[r].years.forEach(function (y) { yrs[y] = 1; }); });
+          $('dvSureMore').textContent = Object.keys(d.per).length + ' folders, into years ' + (Object.keys(yrs).sort().join(', ') || 'none') + ' where their clips agree on one. For example:';
           $('dvEg').innerHTML = d.eg.map(function (e) { return esc(e[0]) + '<br>&nbsp;&nbsp;&rarr; ' + esc(e[1]); }).join('<br>');
-          $('dvSure').hidden = false; $('dvYes').focus(); draw(); $('dvSure').hidden = false;
-        }).catch(function (e) { draw(); $('tWait').hidden = false; $('tWait').className = 'banner bad'; $('tWait').querySelector('.txt').innerHTML = '<b>Nothing was worked out.</b> ' + esc(e.message); });
+          draw(); $('dvSure').hidden = false; $('dvYes').focus();
+          $('dvSum').textContent = 'Worked out in ' + Math.round((Date.now() - t0) / 1000) + ' s. Nothing has moved yet.';
+        }).catch(function (e) {
+          clearInterval(poll); draw(); $('dvSum').textContent = '';
+          $('tWait').hidden = false; $('tWait').className = 'banner bad'; $('tWait').querySelector('.txt').innerHTML = '<b>Nothing was worked out.</b> ' + esc(e.message);
+        });
       };
       $('dvNo').onclick = function () { $('dvSure').hidden = true; };
       $('dvYes').onclick = function () {
         var b = this; b.disabled = true; b.textContent = 'Queuing…';
-        ask({drag: 1, go: 1, drops: drops()}).then(function (d) {
+        ask({drag: 1, go: 1, token: token}).then(function (d) {
           b.disabled = false; b.textContent = 'Yes, move them';
-          plan = {}; save(); kids = {}; open = {};
+          plan = {}; save(); kids = {}; open = {}; $('dvSure').hidden = true; $('dvSum').textContent = '';
           $('tWait').className = 'banner ok'; $('tWait').hidden = false;
-          $('tWait').querySelector('.txt').innerHTML = '<b>Queued ✓</b> ' + num(d.files) + ' files. The helper moves them next &mdash; watch the top bar. Once moved, they leave the left side.';
+          $('tWait').querySelector('.txt').innerHTML = '<b>Queued ✓</b> ' + num(d.files) + ' files (' + size(d.bytes) + '). The helper moves them one at a time, never over another file &mdash; '
+            + 'the top bar shows how far it is, and Done so far below shows the result. It can be paused and carries on where it stopped.';
           load();
         }).catch(function (e) { b.disabled = false; b.textContent = 'Yes, move them'; $('dvSureMore').textContent = 'Nothing was queued: ' + e.message; });
       };

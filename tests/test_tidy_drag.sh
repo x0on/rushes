@@ -50,12 +50,15 @@ J=$(python3 -c 'import json,sys; q=sys.argv[1]; print(json.dumps({q+"/001 VIDEO/
   q+"/001 VIDEO/PARKS/Spring Fest": {"dept": "Police Department", "keep": True},
   q+"/COUNCIL EVENTS": {"dept": "Elected Officials", "keep": True}, "POLICE": {"dept": "Elected Officials"},
   q+"/../x": {"dept": "Parks & Recreation"}, q: {"dept": "Nobody"}}))' "$Q")
-D=$(curl -s -d pass=rushes -d drag=1 --data-urlencode "drops=$J" "$U/db/tidy.php")
+D=$(curl -s -d pass=rushes -d drag=1 -d token=review0001 --data-urlencode "drops=$J" "$U/db/tidy.php")
 echo "$D" | python3 -c '
 import json, sys; d = json.load(sys.stdin)
 assert d["files"] == 6 and "queued" not in d, d
 ' && ok "looked at first: how many files, nothing queued; a filed folder, a way out and an unknown department count for nothing" || no "dry: $D"
-G=$(curl -s -d pass=rushes -d drag=1 -d go=1 --data-urlencode "drops=$J" "$U/db/tidy.php")
+S=$(curl -s -d pass=rushes -d dragsaid=review0001 "$U/db/tidy.php")
+echo "$S" | grep -q '"done":true' && [ -f "$W/tidy-draft-review0001.tsv" ] && ok "the review is worked out once, saying how far it is, and kept" || no "said: $S"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$U/tidy-draft-review0001.tsv")" != 200 ] && ok "a review is not handed out" || no "draft served"
+G=$(curl -s -d pass=rushes -d drag=1 -d go=1 -d token=review0001 "$U/db/tidy.php")
 id=$(echo "$G" | python3 -c 'import json,sys; print(json.load(sys.stdin)["queued"])') || no "go: $G"
 plan=$(cat "$W/tidy-$id.tsv")
 has() { printf '%s\n' "$plan" | grep -qxF "file	$A/$1	$A/$2" || no "missing: $1 → $2 in
@@ -67,4 +70,5 @@ has "$Q/COUNCIL EVENTS/Gala/d.mov" "Elected Officials/2023/COUNCIL EVENTS/Gala/d
 has "$Q/COUNCIL EVENTS/Gala/inner/e.mov" "Elected Officials/2023/COUNCIL EVENTS/Gala/inner/e.mov"
 [ "$(printf '%s\n' "$plan" | wc -l | tr -d ' ')" = 6 ] && ! printf '%s\n' "$plan" | grep -q "filed.mov\|c.mov" \
   && ok "a department's folder gives up its name, any other keeps it under its year; the deepest drop wins; the rest stays" || no "plan: $plan"
-grep -q "^tidy	$id$" "$W/ingest-queue.tsv" && ok "queued for the helper, as any tidy-up" || no "queue"
+grep -q "^tidy	$id$" "$W/ingest-queue.tsv" && [ ! -f "$W/tidy-draft-review0001.tsv" ] && ok "Yes queues exactly the plan reviewed, as any tidy-up" || no "queue"
+case "$(curl -s -d pass=rushes -d drag=1 -d go=1 -d token=review0001 "$U/db/tidy.php")" in *"press Move"*) ok "a review is queued once" ;; *) no "twice" ;; esac
