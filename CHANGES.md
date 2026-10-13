@@ -3,7 +3,9 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.12.50 — October 2026
+## 0.12.51 — October 2026
+
+- **The technical log is live during a tidy-up or a copy.** Each step runs in its own process, which held its lines back and wrote them in chunks: a tidy-up showed only its first line for many minutes. Now every line appears as it is written.
 
 - **A tidy-up shows progress from its first file.** The helper read the size of every file in the plan before moving the first one: on a network share, hundreds of thousands of looks, minutes with "0 / 0" and nothing else. Now each file's size is read as it is moved, the first line of progress comes at once, and the top bar says "getting ready" while the records are read.
 - **The review reads as a summary, not an error:** "Ready to move · 319,296 files (43.1 TB) from 175 folders, into VIDEOS", the years in one sentence, and the examples folded under "Examples: where one file from each of a few folders will go".

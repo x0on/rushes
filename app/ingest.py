@@ -3304,7 +3304,8 @@ def describe_folder(path, asked=""):
 
 def run_self(*args):
     """Run one section in its own process, so a failure cannot stop the watch."""
-    cmd = [sys.executable, os.path.abspath(__file__), *args, "--url", NAS_URL]
+    # -u: each line reaches the technical log as it is written (a tidy-up said nothing for minutes: held back)
+    cmd = [sys.executable, "-u", os.path.abspath(__file__), *args, "--url", NAS_URL]
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i"] + cmd       # awake while this step runs, and only then
     t0 = time.time()
