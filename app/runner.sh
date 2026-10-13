@@ -155,7 +155,7 @@ if [ "$(curl -fsS --max-time 5 "$RUSHES/db/helper.php?builtin" 2>/dev/null)" = "
             echo "$(date '+%Y-%m-%d %H:%M:%S')  built-in helper not started: the code in _rushes is not a signed release" >> "$LOG"
         else
             rm -rf "$HC"; mv "$HC.new" "$HC"
-            RUSHES_LOG=$WEB/helper.log "$PY" -u $HC/ingest.py --watch --url "$RUSHES" --service >> $WEB/helper.log 2>&1 &
+            RUSHES_LOG=$LOG "$PY" -u $HC/ingest.py --watch --url "$RUSHES" --service >> "$LOG" 2>&1 &   # one log: its lines say helper
             echo $! > $WEB/helper.pid
             echo "started" > $WEB/helper-builtin.txt
             echo "$(date '+%Y-%m-%d %H:%M:%S')  started the built-in helper (signed release)" >> "$LOG"

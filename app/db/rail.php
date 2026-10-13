@@ -31,7 +31,7 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
     <?= $railItem('setup',      'Setup',      'tools',     '/setup.php',               false) ?>
 
     <div class="rail-foot">
-      <span class="note" title="One number for the pages, the helper's code and both apps">Rushes <?= htmlspecialchars(rushes_version()) ?></span>
+      <div class="note" title="One number for the pages, the helper's code and both apps" style="margin-bottom:4px">Rushes <?= htmlspecialchars(rushes_version()) ?></div>
       <span id="fFiles">&mdash;</span>
       <div class="meter"><i id="fMeter"></i></div>
       <span id="fFree">&mdash;</span>
@@ -41,19 +41,24 @@ $railItem = function (string $id, string $label, string $ico, string $href, bool
       </form>
     </div>
   </nav>
-<?php if ($RAIL === 'structure' || $RAIL === 'setup'): ?>
 <script>
-// The same two numbers at the foot of the rail on every admin page, from the
-// same place the admin page gets them, so they can never disagree.
-fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (s) {
-  if (s.error) return;
-  var tb = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB'
-                                : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB'; };
-  document.getElementById('fFiles').textContent = s.archive.files.toLocaleString() + ' files · ' + tb(s.archive.bytes);
+// The foot of the rail: the archive and how full it is. Not a total of files: each drive's are on its card
+// in Overview (a total added up drives holding the same footage twice).
+window.railFoot = function (s) {
+  var tb = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB'; };
+  var a = (s.drives_in || []).filter(function (x) { return x.kind === 'archive'; })[0];
+  document.getElementById('fFiles').textContent = 'The archive' + (a ? ': ' + a.name : '');
   document.getElementById('fFree').textContent = tb(s.disk.free) + ' free · ' + (s.disk.pct || 0) + '% used';
   var m = document.getElementById('fMeter');
   m.style.width = (s.disk.pct || 0) + '%';
   m.className = s.disk.pct >= 90 ? 'full' : s.disk.pct >= 80 ? 'hot' : '';
+};
+</script>
+<?php if ($RAIL === 'structure' || $RAIL === 'setup'): ?>
+<script>
+// the admin page draws it with everything else; the other pages ask for it once
+fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (s) {
+  if (!s.error) window.railFoot(s);
 }).catch(function () {});
 </script>
 <?php endif; ?>

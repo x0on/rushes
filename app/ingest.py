@@ -2514,6 +2514,28 @@ def trim_own_log(limit=5_000_000, keep=1_000_000):
         pass
 
 
+class Tagged:
+    """Rushes keeps one log (job.log, beside the pages): its own jobs and the helper's work, newest last,
+    seen in Manage → Activity and in the Mac app alike. When the helper writes into it (RUSHES_LOG), each
+    of its lines starts with the time and "helper ·", so the two are told apart and read in one order."""
+    def __init__(self, raw):
+        self.raw, self.start = raw, True
+    def write(self, s):
+        out = []
+        for part in s.splitlines(True):
+            if self.start and part.strip():
+                part = time.strftime("%Y-%m-%d %H:%M:%S  helper · ") + part
+            out.append(part)
+            self.start = part.endswith("\n")
+        return self.raw.write("".join(out))
+    def __getattr__(self, name):
+        return getattr(self.raw, name)
+
+def tag_lines():
+    if os.environ.get("RUSHES_LOG", "").endswith("job.log") and not isinstance(sys.stdout, Tagged):
+        sys.stdout, sys.stderr = Tagged(sys.stdout), Tagged(sys.stderr)
+
+
 HELPER_FILES = ("ingest.py", "transfer_state.py", "analyze.py", "release.py")
 HERE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -3327,6 +3349,7 @@ def run_self(*args):
 
 
 def main():
+    tag_lines()
     ap = argparse.ArgumentParser()
     ap.add_argument("--job", default="", help=argparse.SUPPRESS)                 # the saved transfer this belongs to
     ap.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # started by the Mac itself (only changes the wording)

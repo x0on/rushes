@@ -726,6 +726,18 @@ class TidyHereTests(unittest.TestCase):
         self.assertTrue((old / 'PARKS' / 'loose.mov').is_file())
 
 
+class OneLogTests(unittest.TestCase):
+    """Rushes keeps one log: the helper's lines, written into it, start with the time and "helper ·"."""
+    setUp, tearDown = CopyTests.setUp, CopyTests.tearDown
+
+    def test_each_line_of_the_helper_is_marked_once(self):
+        buf = io.StringIO(); t = self.mod.Tagged(buf)
+        t.write("moving 3 files"); t.write("\n"); t.write("a\n\nb\n")
+        lines = buf.getvalue().split("\n")
+        self.assertRegex(lines[0], r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d  helper · moving 3 files$")
+        self.assertTrue(lines[1].endswith("helper · a") and lines[2] == "" and lines[3].endswith("helper · b"), lines)
+
+
 class TidyInsideTests(unittest.TestCase):
     """Tidy up inside the structure ("refile"): a file already on the shelf moves to another place on it,
     recorded and put back; never from Rushes' own folders, never off the shelf, and "file" lines (from

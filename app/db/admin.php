@@ -202,8 +202,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       </div>
       <?php endif; ?>
 
-      <!-- always true, then only what is -->
-      <!-- what is happening, in one line -->
+      <!-- what is happening, first: the helper's work (a tidy-up, a copy) as a box with its bar, or one line -->
+      <div class="now" id="now" hidden></div>
       <p class="ov-now" id="ovNow"></p>
       <div class="tiles" id="tiles"></div>
       <!-- the drives Rushes uses, and the rest this Mac sees (state.php drives_in, drives_other) -->
@@ -211,8 +211,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       <!-- only when there is something: a suggestion each, with the page that handles it -->
       <div class="panel" id="worth" style="margin-top:14px" hidden></div>
 
-      <!-- what the helper is doing this second -->
-      <div class="now" id="now" hidden></div>
       <!-- the helper itself: is it there, which version, and its buttons -->
       <div class="hctl" id="hctl" hidden></div>
 
@@ -358,8 +356,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <div id="events"></div>
         </div>
         <details style="margin-top:16px">
-          <summary class="note" style="cursor:pointer">Show the raw log — the jobs this machine ran, in the order they ran:
-            newest at the bottom, the last few screens only</summary>
+          <summary class="note" style="cursor:pointer">Show the technical log — Rushes' jobs and the helper's work (its lines say helper), in the order they happened:
+            newest at the bottom, the last few screens only. The Rushes app shows the same log</summary>
           <pre id="log" class="code block" style="max-height:420px;overflow:auto;
                white-space:pre-wrap;margin-top:10px">&nbsp;</pre>
         </details>
@@ -1544,7 +1542,8 @@ function drawDrives(d) {
         '<div class="roles">' + x.roles.map(function (r) { return '<span>' + esc(r) + '</span>'; }).join('') + '</div>' +
         (x.now ? '<div class="lnow"><span class="spin" style="margin-right:6px"></span>' + esc(x.now) + '</div>' : '') +
         drvLevels(x) +
-        (x.levels && x.levels.wait && x.levels.wait.n ? '<div class="more"><span class="bad" style="color:var(--warn)">' + x.levels.wait.n.toLocaleString() + ' files waiting to be filed</span></div>' : '') +
+        (x.levels && x.levels.wait && x.levels.wait.n ? '<div class="more"><span class="bad" style="color:var(--warn)">' + x.levels.wait.n.toLocaleString() + ' files waiting to be filed' +
+          (x.kind === 'archive' && d.copy && !d.copy.stale && d.copy.phase === 'tidying' ? ' · being filed now' : '') + '</span></div>' : '') +
         '<div class="acts">' + (own ? '<button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button>' : '') +
           (x.roles.indexOf('To copy from') >= 0 ? ' · <button class="lnk" data-how="in_place" data-src="' + esc(x.path) + '">Search it where it is</button>' : '') +
           (canMk && x.kind !== 'archive' && x.kind !== 'card' && mkOpen !== x.path ? (own ? ' · ' : '') + '<button class="lnk" data-mk="' + esc(x.path) + '">Make this the archive…</button>' : '') +
@@ -1634,18 +1633,12 @@ function drawTiles(d) {
   drawDrives(d);
   const t = [];
   // what is happening, in one line
+  // one answer for both parts of Rushes: its own jobs (d.running) and the helper's work (helperNow), as the top bar
+  const hb = helperNow(d.copy), hbusy = hb && hb.busy && !hb.bad;
   $('ovNow').innerHTML = d.running ? '<span class="spin" style="margin-right:6px"></span><b>' + esc(window.nowSaid(d)) + '</b>'
+    : hbusy ? (pane === 'overview' && !liveFor(d.transfer, d.copy) ? '' : '<span class="spin" style="margin-right:6px"></span><b>' + esc(hb.title) + '</b>')
     : 'Nothing running' + (d.backup && d.backup.at ? ' · last backup ' + esc(whenWords(d.backup.at)) + (d.backup.late ? ' (late)' : ' ✓') : '') + '.';
-  // the headline: what is in Search, and on how many drives; why it has not grown yet, while a drive is listed
-  const ins = d.drives_in || [], listing = ins.filter(function (x) { return x.now; });
-  const searched = ins.filter(function (x) { return x.kind === 'archive' || x.roles.indexOf('In Search') >= 0; }).length || 1;
-  // per drive, never one total: drives that hold the same footage (an old server copied into the archive) would count it twice
-  const sd = ins.filter(function (x) { return x.kind === 'archive' || x.roles.indexOf('In Search') >= 0; });
-  t.push('<div class="tile"><div class="lab">In Search</div>' +
-    '<div class="big">' + searched + (searched === 1 ? ' drive' : ' drives') + '</div>' +
-    '<div class="sub">' + (sd.length ? sd.map(function (x) { return esc(x.name) + ' ' + (x.files != null ? x.files.toLocaleString() + ' files · ' + tb(x.bytes || 0) : 'not listed yet'); }).join('<br>')
-      : d.archive.files.toLocaleString() + ' files · ' + tb(d.archive.bytes)) +
-      (listing.length ? '<br>' + esc(listing.map(function (x) { return x.name; }).join(', ')) + ' still being listed…' : '') + '</div></div>');
+  const ins = d.drives_in || [];
 
   // How many copies: the archive is one; the place each file came from, still
   // holding it, is a second. Shown once the helper has looked (weekly).
@@ -1814,11 +1807,7 @@ async function load() {
   }
 
   $('built').textContent = d.search && d.search.state !== 'current' ? 'Search updating automatically' : 'Search updated ' + (d.archive.imported_ago || 'never');
-  $('fFiles').textContent = d.archive.files.toLocaleString() + ' files · ' + tb(d.archive.bytes);
-  $('fFree').textContent  = tb(d.disk.free) + ' free · ' + (d.disk.pct || 0) + '% used';
-  const m = $('fMeter');
-  m.style.width = (d.disk.pct || 0) + '%';
-  m.className = (d.disk.pct >= 90 ? 'full' : d.disk.pct >= 80 ? 'hot' : '');
+  window.railFoot(d);
 
   const bad = (d.conditions || []).filter(function (c) { return c.level === 'bad'; }).length;
   $('nOverview').hidden = !bad; $('nOverview').textContent = bad || '';

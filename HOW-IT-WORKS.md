@@ -114,7 +114,7 @@ is the folder the archive machine's web server serves.
   - `tidy-<id>.tsv` (a tidy-up plan);
   - `cache-files.txt` (caches to move).
 - **What the runner and helper report:**
-  - `job.log` and `job-status.txt` (the runner);
+  - `job.log`, the one log: the runner's jobs and the helper's work (its lines start with the time and `helper ·`), when the helper runs on the same machine; and `job-status.txt` (the runner);
   - `runner-alive.txt` (the runner's heartbeat);
   - `disk.txt` and `tmp-disk.txt` (free space);
   - `helper-volumes.tsv` (drives the helper sees);
@@ -138,7 +138,7 @@ is the folder the archive machine's web server serves.
   - `db-damaged.txt`;
   - `helper-refused.tsv`;
   - `gpu-test.txt`;
-  - built-in helper only: `helper.log`, `helper.pid` and `helper-builtin.txt`.
+  - built-in helper only: `helper.pid` and `helper-builtin.txt`.
 
 **The archive share** (`settings → archive.local`, by default `/share/VIDEO`):
 
@@ -191,7 +191,7 @@ is the folder the archive machine's web server serves.
 - `~/Library/Application Support/Rushes`: the helper's code (with its
   `release.sig`) and the Rushes
   address;
-- `~/Library/Logs/Rushes`: `helper.log` and `setup.log`;
+- `~/Library/Logs/Rushes`: `setup.log`, and `helper.log` when Rushes is not on this Mac (with Rushes on this Mac the helper writes into Rushes' one log, `job.log`);
 - `~/Library/LaunchAgents/org.rushes.helper.plist`: the background service.
 
 The runner and its scripts find the web folder as the folder `runner.sh` is
@@ -1417,9 +1417,12 @@ width.
 
 ### Overview
 
-**Tiles:**
+**What is happening, first:** the helper's work (a tidy-up, a copy) as a box with its bar and numbers, or
+Rushes' own job in one line, or "Nothing running · last backup …". The top bar, this and the Rushes app
+answer from the same two places, so they never disagree.
 
-- **In Search:** files and size, on how many drives.
+**Tiles** (only when there is something; files and sizes are on each drive's card, never one total):
+
 - **Kept twice:** how much has a second copy.
 - One tile for each thing that needs you. Pressing it is the button.
 
@@ -1488,15 +1491,17 @@ is something to do:
   last ran, and whether it stopped. Updates have **Check now**.
 
 **Activity** (a side column, and its own pane) lists what happened, newest
-first, and shows the runner's raw log.
+first, and shows the technical log.
 
 ### Activity
 
 What came in, what went out, what changed, and who did it, in plain sentences,
 newest first (`db/activity.php`). Manage → Activity and the Rushes app's
 Activity page tell the same story; both can show one kind at a time: **In**,
-**Out**, **Changes**, **Checks**, **Problems**. The raw log stays one click
-below, for when something is wrong.
+**Out**, **Changes**, **Checks**, **Problems**. The technical log stays one click
+below, for when something is wrong: one log, `job.log`, with Rushes' jobs and the helper's work in the order
+they happened (the helper's lines say `helper ·`), the same in Manage and in the Rushes app. A helper on
+another computer keeps its own log there, and its progress still reaches every page.
 
 It is two records read together:
 

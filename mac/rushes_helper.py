@@ -61,7 +61,6 @@ def _home_app():
 
 
 HOMEAPP = _home_app()
-WORKLOG = os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")      # what the work itself says
 # Rushes Watcher's own notes: its pairing (config.json), what it is doing (now.json), Pause watching (paused)
 WDIR = os.path.join(HOME, "Library", "Application Support", "Rushes Watcher")
 # When Rushes was last asked for a newer app, and its answer (once a week, or Check for updates)
@@ -86,6 +85,15 @@ UID = str(os.getuid())
 RES = os.path.dirname(os.path.abspath(__file__))       # inside the app: the pages, PHP, runner.py, router.php
 WEB = os.path.join(DIR, "web")
 LOCAL = os.path.join(DIR, "local.json")
+
+
+def worklog():
+    """What the work itself says. With Rushes on this Mac, one log for all of it: Rushes' jobs and the
+    helper's work in the same file, job.log beside the pages (the helper's lines marked "helper ·"),
+    the same one Manage → Activity shows. Otherwise the helper's own file."""
+    if not WATCHER and os.path.isdir(WEB):
+        return os.path.join(WEB, "job.log")
+    return os.path.join(LOGS, "watcher.log" if WATCHER else "helper.log")
 PORT = 8642
 
 
@@ -527,7 +535,7 @@ def rushes(url, path, data=None, timeout=6):
 def log_tail(n=12):
     """The helper's own words, newest last: what it did lately."""
     try:
-        with open(WORKLOG, "rb") as f:
+        with open(worklog(), "rb") as f:
             f.seek(0, 2); f.seek(max(0, f.tell() - 16000))
             lines = f.read().decode("utf-8", "replace").splitlines()
     except OSError:
@@ -577,10 +585,10 @@ def diagnostics(url):
             st = rushes(url, "/db/state.php")
             lines.append(json.dumps({k: st.get(k) for k in ("copy", "helper", "transfer", "conditions")}, indent=1, ensure_ascii=False))
         except Exception as e: lines.append(f"(Rushes did not answer: {e})")
-    for name, n in ((os.path.basename(WORKLOG), 300), ("setup.log", 80)):
-        add(f"The last {n} lines of {name}")
+    for path, n in ((worklog(), 300), (os.path.join(LOGS, "setup.log"), 80)):
+        add(f"The last {n} lines of {os.path.basename(path)}")
         try:
-            with open(os.path.join(LOGS, name), "rb") as f:
+            with open(path, "rb") as f:
                 f.seek(0, 2); f.seek(max(0, f.tell() - 200000))
                 lines += f.read().decode("utf-8", "replace").splitlines()[-n:]
         except OSError:
@@ -716,7 +724,7 @@ class Window:
 
     def home(self):
         loaded, pid = service_running()
-        h = {"running": loaded, "pid": pid, "log": log_tail(60), "app": HOMEAPP, "logfile": WORKLOG, "local_up": local_up(),
+        h = {"running": loaded, "pid": pid, "log": log_tail(60), "app": HOMEAPP, "logfile": worklog(), "local_up": local_up(),
              "newer": self.newer(), "version": app_version()}
         if WATCHER:
             # Everything is on this computer: what it says it is doing, and its switch.
@@ -849,7 +857,7 @@ class Window:
         elif do == "open-setup":
             subprocess.run(["open", (local_url() if local() else s["url"]) + "/setup.php"])
         elif do == "show-log":
-            subprocess.run(["open", "-a", "Console", WORKLOG])
+            subprocess.run(["open", "-a", "Console", worklog()])
         elif do == "open-window":
             subprocess.run(["open", "-n", APP])          # its window, as an instance of its own
         elif do == "quit":
@@ -1359,7 +1367,7 @@ function feed(evs, days) {
 const rawLog = s => '<div class="box"' + (raw ? '' : ' hidden') + '><div class="muted" style="margin-bottom:6px">The technical log, newest last <span style="float:right">' +
   lnk('Open the whole file', 'show-log') + '</span></div><pre>' + esc((s.log || []).join('\n') || 'Nothing written yet.') + '</pre></div>';
 const rawLink = () => '<p class="muted" style="font-size:12.5px"><button class="lnk" data-raw="1">' + (raw ? 'Hide the technical log' : 'Show the technical log') +
-  '</button> · for when something is wrong: every step, as this Mac wrote it</p>';
+  '</button> · for when something is wrong: every step of Rushes\' jobs and of the helper\'s work (its lines say helper), the same log as Manage → Activity</p>';
 
 const PHASE = {copying:'Copying', looking:'Looking for new footage', waiting:'Waiting', tracing:'Matching earlier copies to their originals',
   analysing:'Describing footage', tidying:'Tidying up', idle:'Nothing to describe', paused:'Paused', blocked:'Stopped: needs you', done:'Finished', stopped:'Stopped', planned:'Planned', proving:'Checking copies (reading only)'};
@@ -1889,7 +1897,7 @@ def service(args):
     ingest = os.path.join(DIR, "ingest.py")
     # Its output goes to helper.log, opened for appending, so the helper can
     # keep the file small itself (trim_own_log in ingest.py).
-    log = os.path.join(LOGS, "helper.log")
+    log = worklog()
     try:
         if "--service" not in args:
             raise OSError("run by hand: output stays where it is")

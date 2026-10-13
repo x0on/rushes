@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.52 — October 2026
+
+- **One log.** Rushes' jobs and the helper's work (copies, tidy-ups, describing) now write into one technical log, in the order they happened; the helper's lines say `helper ·`. Manage → Activity and the Rushes app show the same log. (A helper on another computer keeps its own.)
+- **What is running comes first on Overview,** with its bar: a tidy-up or a copy at the top, not halfway down. "Nothing running" is only said when nothing is: it no longer shows while a tidy-up moves files.
+- **No more In Search box:** each drive's card already says its files and size.
+- **The archive's card says "being filed now"** while a tidy-up runs (its waiting count updates when the move ends and Search reads the drive again).
+- **The foot of the side bar names the archive and how full it is,** instead of one total of files across drives that hold the same footage.
+
 ## 0.12.51 — October 2026
 
 - **The technical log is live during a tidy-up or a copy.** Each step runs in its own process, which held its lines back and wrote them in chunks: a tidy-up showed only its first line for many minutes. Now every line appears as it is written.
