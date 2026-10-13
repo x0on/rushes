@@ -1127,20 +1127,30 @@ folders, and one example per folder, and asks again.
 `dept_guess()`, `drag_plan()`), `structure.php`; tests:
 `tests/test_tidy_drag.sh`.
 
-**Tidy up** (Reorganize's second tab): changes *inside* the structure, so
-nothing in the archive is ever moved in Finder, where no move is recorded. The
-structure as a tree (`tidy.php ?shelftree=`: each department's folder, A to
-Z, then whatever is in it); on any folder below a department's own folder:
-**Move to…** another folder (as a folder inside it, or **merge**: what is
-inside goes into it, file by file, never over a file), **Rename**, and **New
-folder** on any folder (made on the drive when something moves into it). Each
-change is planned and shown first (struck through, with where it goes, and in
-a list of planned changes, kept in this browser); **Apply** works it out once
-with the same review as File in, and the helper moves each file as a `refile`
-line: only a file already in the structure, only to a place in it, never from
-Rushes' own folders. A department's own folder is never moved here (Setup
-names them), and a folder never goes inside itself. Recorded, put back and
-relinked as any tidy-up (`refile_plan()`, `tests/test_tidy_refile.sh`).
+**Tidy up** (Reorganize's second tab) works like Finder, because people already know it
+(`db/browse.php`, `tests/test_browse.sh`). Finder's column view, in two windows side by side
+(**Another window** adds one); each window looks at the archive or at a drive in Search. Click a folder
+to open it in the next column; ⌘-click and ⇧-click select several; drag onto a folder (a row, or the
+empty part of a column) to move there. Right-click: **Rename**, **New folder**, **Show in Finder** (on
+the Mac Rushes runs on). Space plays a clip's preview, when it has one.
+
+Each change happens **at once**, as in Finder: a move inside the archive is a rename on the drive, so
+nothing is copied and a folder of any size moves in a moment. And unlike Finder:
+- **Search follows at once** (`moved.php follow_moves()`), with what describing found;
+- **previews move with their clips** (PROXIES);
+- **every file's move is written down** in `_rushes/origin` (`<time> archive moved here.tsv`, "moved"
+  lines), so Premiere projects can still be relinked;
+- **Undo** puts the last changes back, one at a time (the last 50 are kept);
+- a folder dropped where one of the **same name** already is asks first: **Merge** puts each file into
+  the other, never over a file (a file whose name is taken stays where it was, and is named), its
+  preview with it; Undo takes a merge apart again;
+- **Rushes' own folders** (`_rushes`, PROXIES, the bin) are not shown and never move; a **drive kept
+  where it is** can be looked at, and nothing on it changes (bringing it in is Copying's);
+- **nothing changes here while a tidy-up** of the helper's is moving files;
+- each change is a line in Activity.
+
+The older planned way (`tidy.php ?shelftree`, `refile=1`: changes planned, then the helper moves each
+file as a `refile` line) is still there for the helper, `tests/test_tidy_refile.sh`.
 
 **The year.** Between the department and the folder, Tidy up puts the year, from
 evidence only (`tidy.php folder_year()`):

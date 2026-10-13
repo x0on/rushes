@@ -119,14 +119,29 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .tr input.nmin { display: inline-block; font: inherit; font-size: 12px; height: auto; min-height: 0; padding: 2px 6px; margin: 0 0 0 4px; width: 200px; max-width: 100%; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 5px }
   .tag2 { font-size: 10.5px; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); margin-left: 6px; font-weight: 400 }
   .sublab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: 8px 10px 2px }
-  .tuf { margin: 4px 12px 8px 46px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
-  .tuf input[type=text] { font: inherit; font-size: 12.5px; padding: 4px 8px; height: auto; min-height: 0; width: 320px; max-width: 100%; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 5px }
-  .tuf label { white-space: nowrap; color: var(--muted) }
-  .nd.chg .nm { color: var(--muted); text-decoration: line-through } .nd .will { font-size: 11.5px; color: var(--accent-text) }
-  .nd.new .nm { font-style: italic }
-  .tul { border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; background: var(--bg) }
-  .tul .row2 { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 12.5px } .tul .row2:first-of-type { border-top: 0 }
-  .tul .row2 span { flex: 1; word-break: break-word }
+  .fbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px }
+  .fwins { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px }
+  .fwin { min-width: 0 }
+  .fwin { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); overflow: hidden }
+  .fwin > header { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px }
+  .fwin > header select { font: inherit; font-size: 12.5px; padding: 3px 6px; height: auto; min-height: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--fg) }
+  .fwin > header .ro { color: var(--muted) } .fwin > header .x { margin-left: auto }
+  .fcols { display: flex; overflow-x: auto; height: 46vh; min-height: 260px }
+  .fcol { flex: none; width: 220px; border-right: 1px solid var(--line-soft); overflow-y: auto; padding: 3px 0 }
+  .fcol.over { background: var(--ok-bg) }
+  .fr { display: flex; align-items: center; gap: 7px; padding: 3px 10px; margin: 0 4px; border-radius: 5px; font-size: 13px; cursor: default; user-select: none; white-space: nowrap }
+  .fr .n { flex: 1; overflow: hidden; text-overflow: ellipsis } .fr small { color: var(--muted); font-size: 11px } .fr .gt { color: var(--faint) }
+  .fr .ic { width: 16px; text-align: center; color: var(--muted) } .fr.d .ic { color: var(--accent-text) }
+  .fr.open { background: var(--line-soft) } .fr.sel { background: var(--accent); color: var(--accent-fg) } .fr.sel small, .fr.sel .ic, .fr.sel .gt { color: var(--accent-fg) }
+  .fr.over { outline: 2px solid var(--accent); outline-offset: -2px }
+  .fr.empty { color: var(--faint) } .fr .pl { font-size: 10px; color: var(--accent-text) } .fr.sel .pl { color: var(--accent-fg) }
+  .fpath { padding: 4px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  .fmenu { position: fixed; z-index: 50; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; min-width: 170px }
+  .fmenu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer }
+  .fmenu button:hover { background: var(--accent); color: var(--accent-fg) }
+  .fplay { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center }
+  .fplay video { max-width: 86vw; max-height: 80vh; background: #000; border-radius: 6px }
+  .fplay p { position: absolute; bottom: 20px; color: #fff; font-size: 13px }
   .review { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg) }
   .review .rh { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent-text); font-weight: 650; margin-bottom: 4px }
   .review > b { font-size: 15px }
@@ -184,24 +199,16 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       </div>
 
       <!-- ══ Tidy up: inside the structure. Changes are planned here; nothing moves until Apply. ══ -->
+      <!-- ══ Tidy up: the archive as Finder shows it (db/browse.php). Each change happens at once, as in Finder. ══ -->
       <div id="tuView" hidden>
-        <div class="pane" id="tuP"><header><b>Your structure &middot; <?= $e($shelf) ?></b><small>Move a folder into another, merge two into one, rename one, or make a new folder: every change is planned first and shows here; nothing moves until <b>Apply</b>. Each move is recorded, so Premiere projects can be relinked and Put back undoes it.</small><small id="tuCount" style="color:var(--fg);margin-top:4px"></small></header>
-          <div id="tuTree"><p class="note" style="margin:10px 12px">Looking &hellip;</p></div></div>
-        <datalist id="tuDest"></datalist>
-        <div id="tuList" style="margin-top:12px"></div>
-        <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="tuAsk" disabled>No changes planned</button>
-          <span class="note" id="tuSum">Nothing moves until you press it, and it shows what it will do first.</span></div>
-        <!-- the review: a calm summary, not a warning; the examples folded, labelled for what they are -->
-        <div id="tuSure" class="review" hidden>
-          <div class="rh">Ready to move</div>
-          <b id="tuSureWhat"></b>
-          <p id="tuSureMore" class="note" style="margin:4px 0 0"></p>
-          <details class="egs"><summary>Examples: where one file from each of a few folders will go</summary><div class="eg" id="tuEg"></div></details>
-          <p class="note" style="margin:8px 0 0">The helper on <span class="tHelper"></span> moves them one file at a time, never over another file. Every move is written down and can be put back.</p>
-          <div class="btns" style="margin-top:10px">
-            <button class="btn" type="button" id="tuYes">Yes, move them</button>
-            <button class="btn quiet" type="button" id="tuNo">Not yet</button>
-          </div></div>
+        <div class="fbar">
+          <button class="btn quiet" type="button" id="fUndo" disabled>Undo</button>
+          <button class="btn quiet" type="button" id="fAdd">Another window</button>
+          <span class="note" id="fSaid">Drag folders and clips onto a folder, as in Finder. Right-click for Rename, New folder, Show in Finder. Space plays a clip that has a preview.</span>
+        </div>
+        <div id="fAsk" class="banner warn" hidden><div class="txt"></div></div>
+        <div class="fwins" id="fWins"></div>
+        <p class="note" style="margin-top:8px">A move inside the archive is a rename on the drive: nothing is copied, Search follows at once, and every file’s move is written down, so Premiere projects can be relinked; Undo puts the last changes back. Drives kept where they are can be looked at here; nothing on them changes.</p>
       </div>
 
       <div id="listView" hidden>
@@ -391,135 +398,209 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
     </script>
     <script>
     (function () {
-      // ══ Tidy up (db/tidy.php ?shelftree, refile=1): changes inside the structure, planned here first ══
-      // ops: {folder: what it becomes} (both below the shelf), kept in this browser until moved. A folder moved
-      // into another becomes there/its name; merged, it becomes that folder; renamed, beside it/the new name.
+      // ══ Tidy up (db/browse.php): Finder's column view, in windows side by side. A drag onto a folder moves
+      // at once, as in Finder; right-click for Rename, New folder, Show in Finder; Undo puts the last change back.
+      // Each window remembers where it was (this browser only).
       var $ = function (id) { return document.getElementById(id); };
       var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
-      var size = function (b) { return b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? Math.round(b / 1e9) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB'; };
-      var num = function (n) { return Number(n).toLocaleString(); };
-      var ICON = function (cls) { return '<svg class="fi ' + (cls || '') + '" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.6 1.6H13A1.5 1.5 0 0 1 14.5 5.1v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>'; };
-      var FINDER = <?= $FINDER ? 'true' : 'false' ?>;
-      var KEY = 'rushes-tidy-plan', kids = {}, open = {}, ops = {}, made = [], form = null, token = '';
-      try { var k = JSON.parse(localStorage.getItem(KEY) || '{}'); ops = k.ops || {}; made = k.made || []; } catch (e) {}
-      var save = function () { try { localStorage.setItem(KEY, JSON.stringify({ops: ops, made: made})); } catch (e) {} };
-      var last = function (r) { return r.split('/').pop(); };
-      var parent = function (r) { return r.indexOf('/') < 0 ? '' : r.slice(0, r.lastIndexOf('/')); };
-      var shown = function (r) { return r.split('/').join(' / '); };
-      var ask = function (what) { var f = new FormData(); Object.keys(what).forEach(function (k) { f.append(k, what[k]); });
-        return fetch('/db/tidy.php', {method: 'POST', body: f}).then(function (r) { return r.json(); }).then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
-      var info = function (rel) { var k = kids[parent(rel)]; return (k && k.filter(function (x) { return x.rel === rel; })[0]) || null; };
-      // under a folder already changed: shown, but it goes with it
-      var within = function (rel) { for (var r = parent(rel); r; r = parent(r)) if (ops[r]) return r; return ''; };
+      var size = function (b) { return b == null ? '' : b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB'; };
+      var KEY = 'rushes-finder', roots = [], finder = false, wins = [], cache = {}, menu = null, busy = false;
+      var VIDEO = /\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i;
+      var get = function (q) { return fetch('/db/browse.php?' + q + '&t=' + Date.now()).then(function (r) { return r.json(); })
+        .then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
+      var post = function (o) { var f = new URLSearchParams(o); return fetch('/db/browse.php', { method: 'POST', body: f }).then(function (r) { return r.json(); })
+        .then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
+      var save = function () { try { localStorage.setItem(KEY, JSON.stringify(wins.map(function (w) { return w.open; }))); } catch (e) {} };
+      var said = function (html, bad) { $('fSaid').innerHTML = html; $('fSaid').className = 'note' + (bad ? ' bad' : ''); };
+      var rootOf = function (p) { return roots.filter(function (r) { return p === r.path || p.indexOf(r.path + '/') === 0; }).sort(function (a, b) { return b.path.length - a.path.length; })[0]; };
 
-      function node(f, depth) {
-        if (f.name === '') return '<div class="nd loose">' + num(f.n) + ' file' + (f.n > 1 ? 's' : '') + ' loose in this folder</div>';
-        var o = open[f.rel], k = kids[f.rel], to = ops[f.rel], dept = !!f.dept;
-        var newKids = made.filter(function (m) { return parent(m) === f.rel && !(k || []).some(function (x) { return x.rel === m; }); });
-        return '<div class="nd' + (to ? ' chg' : '') + '" data-rel="' + esc(f.rel) + '">'
-          + '<button type="button" class="tw" data-open="' + esc(f.rel) + '">' + (o ? '▾' : '▸') + '</button>' + ICON(dept ? 'd' : '')
-          + '<span class="nm">' + (dept ? '<b>' + esc(f.name) + '</b>' : esc(f.name)) + '</span>'
-          + '<small>' + (f.n ? num(f.n) + ' files &middot; ' + size(f.b) : 'empty') + '</small>'
-          + '<span class="acts">' + (to ? '<span class="will">&rarr; ' + esc(shown(to)) + '</span><button type="button" class="x" data-undo="' + esc(f.rel) + '" title="Do not change it">&times;</button>'
-            : (FINDER && f.n ? '<button type="button" class="mv" data-finder="' + esc(f.rel) + '">Show in Finder</button>' : '')
-              + (dept ? '' : '<button type="button" class="mv" data-move="' + esc(f.rel) + '">Move to&hellip;</button><button type="button" class="mv" data-rename="' + esc(f.rel) + '">Rename</button>')
-              + '<button type="button" class="mv" data-new="' + esc(f.rel) + '">New folder</button>') + '</span></div>'
-          + (form && form.rel === f.rel ? formHtml() : '')
-          + (o ? '<div class="kids">' + newKids.map(function (m) { return '<div class="nd new">' + ICON() + '<span class="nm">' + esc(last(m)) + '</span><small>new folder &middot; made when something moves into it</small>'
-                + '<span class="acts"><button type="button" class="x" data-unmake="' + esc(m) + '" title="Do not make it">&times;</button></span></div>'; }).join('')
-              + (k ? k.map(function (c) { return node(c, depth + 1); }).join('') : '<div class="nd loose">opening &hellip;</div>') + '</div>' : '');
+      // a folder's contents, kept until something changes
+      function list(dir) {
+        if (cache[dir]) return Promise.resolve(cache[dir]);
+        return get('dir=' + encodeURIComponent(dir)).then(function (d) { cache[dir] = d; return d; });
       }
-      function formHtml() {
-        if (form.kind === 'rename') return '<div class="tuf">Rename to <input type="text" id="tuIn" value="' + esc(last(form.rel)) + '">'
-          + '<button type="button" class="btn quiet sm" data-ok="1">OK</button><button type="button" class="lnk2" data-cancel="1">Cancel</button></div>';
-        if (form.kind === 'new') return '<div class="tuf">New folder in ' + esc(shown(form.rel)) + ': <input type="text" id="tuIn" placeholder="its name, e.g. DRONE">'
-          + '<button type="button" class="btn quiet sm" data-ok="1">Make it</button><button type="button" class="lnk2" data-cancel="1">Cancel</button>'
-          + '<small class="note" style="flex-basis:100%">Made on the drive when something moves into it.</small></div>';
-        return '<div class="tuf">Move <b>' + esc(last(form.rel)) + '</b> to <input type="text" id="tuIn" list="tuDest" placeholder="a folder, e.g. PUBLIC AFFAIRS/DRONE">'
-          + '<label><input type="radio" name="tuHow" value="in" checked> as a folder inside it</label>'
-          + '<label><input type="radio" name="tuHow" value="merge"> merge: what is inside goes into it</label>'
-          + '<button type="button" class="btn quiet sm" data-ok="1">OK</button><button type="button" class="lnk2" data-cancel="1">Cancel</button>'
-          + '<small class="note" style="flex-basis:100%">Type to pick a folder; a path that is not there yet becomes a new folder. Two folders merged into one fill it file by file, never over a file.</small></div>';
-      }
-
-      function draw() {
-        var keep = []; var e = $('tuP'); for (; e; e = e.parentElement) if (e.scrollTop) keep.push([e, e.scrollTop]);
-        $('tuTree').innerHTML = kids[''] ? kids[''].map(function (f) { return node(f, 0); }).join('') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
-        // every folder known so far, and the new ones, to pick as where a folder goes
-        var all = {}; Object.keys(kids).forEach(function (k) { (kids[k] || []).forEach(function (f) { if (f.rel) all[f.rel] = 1; }); }); made.forEach(function (m) { all[m] = 1; });
-        $('tuDest').innerHTML = Object.keys(all).sort().map(function (r) { return '<option value="' + esc(r) + '">'; }).join('');
-        var n = Object.keys(ops).length;
-        $('tuList').innerHTML = n ? '<div class="tul"><div class="sublab" style="padding:4px 0">Planned changes &middot; nothing has moved yet</div>' + Object.keys(ops).sort().map(function (r) {
-            return '<div class="row2"><span>' + esc(shown(r)) + ' <b>&rarr;</b> ' + esc(shown(ops[r])) + '</span><button type="button" class="x" data-undo="' + esc(r) + '" title="Do not change it">&times;</button></div>'; }).join('') + '</div>' : '';
-        $('tuAsk').disabled = !n; $('tuAsk').textContent = n ? 'Apply ' + n + ' change' + (n > 1 ? 's' : '') + '…' : 'No changes planned';
-        $('tuCount').textContent = n ? n + ' change' + (n > 1 ? 's' : '') + ' planned' : '';
-        $('tuSure').hidden = true;
-        keep.forEach(function (x) { x[0].scrollTop = x[1]; });
-        var inp = $('tuIn'); if (inp) { inp.focus(); inp.select && form.kind === 'rename' && inp.select(); }
-      }
-      function openFolder(rel) {
-        open[rel] = !open[rel]; draw();
-        if (!open[rel] || kids[rel]) return;
-        ask({shelftree: rel}).then(function (d) { kids[rel] = d.folders; draw(); }).catch(function (e) { open[rel] = false; draw(); });
-      }
-      function ok() {
-        var v = ($('tuIn').value || '').replace(/\\/g, '/').replace(/[:*?"<>|]+/g, ' ').split('/').map(function (x) { return x.trim(); }).filter(Boolean).join('/');
-        if (!v) return;
-        if (form.kind === 'rename') { if (v.indexOf('/') < 0 && v !== last(form.rel)) ops[form.rel] = (parent(form.rel) ? parent(form.rel) + '/' : '') + v; }
-        else if (form.kind === 'new') { var m = form.rel + '/' + v.replace(/\//g, ' '); if (made.indexOf(m) < 0) made.push(m); open[form.rel] = true; }
-        else {
-          var how = (document.querySelector('[name=tuHow]:checked') || {}).value, top = v.split('/')[0];
-          if (!(kids[''] || []).some(function (d) { return d.rel === top; })) { $('tuSum').textContent = 'It has to go inside a department’s folder: start with one of them.'; return; }
-          var to = how === 'merge' ? v : v + '/' + last(form.rel);
-          if (to === form.rel || (to + '/').indexOf(form.rel + '/') === 0) { $('tuSum').textContent = 'A folder cannot go inside itself.'; return; }
-          ops[form.rel] = to; if (made.indexOf(v) < 0 && !info(v)) made.push(v);
+      // ── one window: the folders open in it, left to right, and what is selected in the last one ──
+      function Win(open) { this.open = open; this.sel = {}; this.anchor = null; }
+      Win.prototype.draw = function () {
+        var w = this, i = wins.indexOf(w), el = w.el, root = rootOf(w.open[0]) || roots[0];
+        if (!el) {
+          el = w.el = document.createElement('div'); el.className = 'fwin';
+          $('fWins').appendChild(el);
         }
-        form = null; save(); draw();
-      }
-      $('tuView').addEventListener('click', function (ev) {
-        var t = ev.target, x;
-        if ((x = t.closest('[data-open]'))) return openFolder(x.dataset.open);
-        if ((x = t.closest('[data-finder]'))) return window.finder(x, x.dataset.finder, 'shelf');
-        if ((x = t.closest('[data-move]'))) { form = {kind: 'move', rel: x.dataset.move}; return draw(); }
-        if ((x = t.closest('[data-rename]'))) { form = {kind: 'rename', rel: x.dataset.rename}; return draw(); }
-        if ((x = t.closest('[data-new]'))) { form = {kind: 'new', rel: x.dataset.new}; return draw(); }
-        if ((x = t.closest('[data-ok]'))) return ok();
-        if ((x = t.closest('[data-cancel]'))) { form = null; return draw(); }
-        if ((x = t.closest('[data-undo]'))) { delete ops[x.dataset.undo]; save(); return draw(); }
-        if ((x = t.closest('[data-unmake]'))) { made = made.filter(function (m) { return m !== x.dataset.unmake; }); save(); return draw(); }
-      });
-      $('tuView').addEventListener('keydown', function (ev) { if (ev.target.id === 'tuIn' && ev.key === 'Enter') { ev.preventDefault(); ok(); } if (ev.key === 'Escape' && form) { form = null; draw(); } });
+        el.innerHTML = '<header><select>' + roots.map(function (r) {
+            return '<option value="' + esc(r.path) + '"' + (r === root ? ' selected' : '') + (r.here ? '' : ' disabled') + '>' + esc(r.name) + (r.archive ? ' · the archive' : r.here ? ' · looked at only' : ' · not plugged in') + '</option>'; }).join('') +
+          '</select>' + (root && !root.archive ? '<span class="ro">Nothing on this drive changes here.</span>' : '') +
+          (wins.length > 1 ? '<button class="lnk x" type="button">Close</button>' : '') + '</header>' +
+          '<div class="fcols"></div><div class="fpath"></div>';
+        el.querySelector('select').onchange = function () { w.open = [this.value]; w.sel = {}; save(); w.draw(); };
+        var x = el.querySelector('.x'); if (x) x.onclick = function () { wins.splice(wins.indexOf(w), 1); el.remove(); save(); wins.forEach(function (v) { v.draw(); }); };
+        var cols = el.querySelector('.fcols');
+        el.querySelector('.fpath').textContent = w.open[w.open.length - 1].replace(root ? root.path : '', root ? root.name : '').split('/').join(' › ');
+        w.open.forEach(function (dir, k) {
+          var c = document.createElement('div'); c.className = 'fcol'; c.dataset.dir = dir; cols.appendChild(c);
+          c.innerHTML = '<div class="fr empty"><span class="n">Looking…</span></div>';
+          list(dir).then(function (d) { w.col(c, d, k); }).catch(function (e) {
+            c.innerHTML = '<div class="fr empty"><span class="n" style="white-space:normal">' + esc(e.message) + '</span></div>'; });
+          dropOn(c, function () { return dir; });
+        });
+        setTimeout(function () { cols.scrollLeft = cols.scrollWidth; }, 0);
+      };
+      Win.prototype.col = function (c, d, k) {
+        var w = this, next = w.open[k + 1];
+        c.innerHTML = !d.items.length ? '<div class="fr empty"><span class="n">Empty</span></div>' : d.items.map(function (it, n) {
+          var p = d.dir + '/' + it.name;
+          return '<div class="fr' + (it.dir ? ' d' : '') + (w.selCol === k && w.sel[p] ? ' sel' : p === next ? ' open' : '') + '" draggable="' + d.archive + '" data-p="' + esc(p) + '" data-i="' + n + '">' +
+            '<span class="ic">' + (it.dir ? '▸' : VIDEO.test(it.name) ? '▶' : '·') + '</span><span class="n" title="' + esc(it.name) + '">' + esc(it.name) + '</span>' +
+            (it.plays ? '<span class="pl" title="has a preview: Space plays it">●</span>' : '') +
+            (it.dir ? '<span class="gt">›</span>' : '<small>' + size(it.size) + '</small>') + '</div>';
+        }).join('') + (d.more ? '<div class="fr empty"><span class="n">and ' + d.more.toLocaleString() + ' more</span></div>' : '');
+        c.querySelectorAll('.fr[data-p]').forEach(function (r) {
+          var p = r.dataset.p, it = d.items[+r.dataset.i];
+          r.onclick = function (e) { w.pick(k, d, it, p, e); };
+          r.ondblclick = function () { if (!it.dir) play(p, it); };
+          r.oncontextmenu = function (e) { e.preventDefault(); quiet(); openMenu(e, w, p, it, d); };
+          // a row dragged or right-clicked without being picked becomes what is picked, without drawing again
+          // (a drag whose row is drawn again is lost, and a menu closes as the columns scroll)
+          var quiet = function () { if (w.sel[p] && w.selCol === k) return; w.sel = {}; w.sel[p] = 1; w.selCol = k; w.anchor = p; current = w;
+            c.querySelectorAll('.fr.sel').forEach(function (x) { x.classList.remove('sel'); }); r.classList.add('sel'); };
+          r.ondragstart = function (e) {
+            quiet();
+            e.dataTransfer.setData('application/x-rushes-items', JSON.stringify(Object.keys(w.sel)));
+            e.dataTransfer.effectAllowed = 'move';
+          };
+          if (it.dir) dropOn(r, function () { return p; });
+        });
+      };
+      // click: a folder opens in the next column; ⌘ adds to what is selected, ⇧ selects a run, as in Finder
+      Win.prototype.pick = function (k, d, it, p, e) {
+        var w = this;
+        if ((e.metaKey || e.ctrlKey) && w.selCol === k) { if (w.sel[p]) delete w.sel[p]; else w.sel[p] = 1; w.open = w.open.slice(0, k + 1); }
+        else if (e.shiftKey && w.selCol === k && w.anchor) {
+          var names = d.items.map(function (x) { return d.dir + '/' + x.name; }), a = names.indexOf(w.anchor), b = names.indexOf(p);
+          w.sel = {}; names.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(function (x) { w.sel[x] = 1; }); w.open = w.open.slice(0, k + 1);
+        } else { w.sel = {}; w.sel[p] = 1; w.open = w.open.slice(0, k + 1).concat(it.dir ? [p] : []); }
+        if (!e.shiftKey) w.anchor = p;
+        w.selCol = k; current = w; save(); w.draw();
+      };
+      var current = null;
+      // what is selected in a window: the rows marked in the column they were picked in
+      Win.prototype.picked = function () { return Object.keys(this.sel); };
 
-      // Apply: worked out once, saying how far (as File in), then Yes queues exactly that plan
-      $('tuAsk').onclick = function () {
-        var b = this, t0 = Date.now(); token = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-        b.disabled = true; b.textContent = 'Working out where each file goes…';
-        var poll = setInterval(function () {
-          ask({dragsaid: token}).then(function (p) { if (!p.done) $('tuSum').textContent = p.said + (p.of ? ': ' + p.i + ' of ' + p.of + ' folders' : '') + ' · ' + Math.round((Date.now() - t0) / 1000) + ' s'; }).catch(function () {});
-        }, 1000);
-        ask({drag: 1, refile: 1, token: token, ops: JSON.stringify(Object.keys(ops).map(function (r) { return {src: r, dst: ops[r]}; }))}).then(function (d) {
-          clearInterval(poll); draw();
-          $('tuSureWhat').textContent = num(d.files) + ' files (' + size(d.bytes) + ') from ' + Object.keys(d.per).length + ' folder' + (Object.keys(d.per).length > 1 ? 's' : '');
-          $('tuSureMore').textContent = 'Each goes where you planned; nothing else is touched.';
-          $('tuEg').innerHTML = d.eg.map(function (e) { return esc(e[0]) + '<br>&nbsp;&nbsp;&rarr; ' + esc(e[1]); }).join('<br>');
-          $('tuSure').hidden = false; $('tuYes').focus();
-          $('tuSum').textContent = 'Worked out in ' + Math.round((Date.now() - t0) / 1000) + ' s. Nothing has moved yet.';
-        }).catch(function (e) { clearInterval(poll); draw(); $('tuSum').textContent = 'Nothing was worked out: ' + e.message; });
+      // ── drop: onto a folder row, or onto a column (its own folder) ──
+      function dropOn(el, where) {
+        el.addEventListener('dragover', function (e) {
+          if (e.dataTransfer.types.indexOf('application/x-rushes-items') < 0) return;
+          e.preventDefault(); e.stopPropagation(); el.classList.add('over');
+        });
+        el.addEventListener('dragleave', function () { el.classList.remove('over'); });
+        el.addEventListener('drop', function (e) {
+          e.preventDefault(); e.stopPropagation(); el.classList.remove('over');
+          var items = JSON.parse(e.dataTransfer.getData('application/x-rushes-items') || '[]');
+          if (items.length) move(items, where());
+        });
+      }
+      window.addEventListener('dragover', function (e) { if (e.dataTransfer && e.dataTransfer.types.indexOf('application/x-rushes-items') >= 0) e.preventDefault(); });
+      window.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.types.indexOf('application/x-rushes-items') >= 0) e.preventDefault(); });
+
+      function name(p) { return p.split('/').pop(); }
+      function refresh() { cache = {}; wins.forEach(function (w) { w.draw(); }); $('fUndo').disabled = false; }
+      // ── the changes, each at once ──
+      function move(items, to, merge) {
+        if (busy) return;
+        items = items.filter(function (p) { return p !== to && to.indexOf(p + '/') !== 0; });
+        if (!items.length) return;
+        busy = true; $('fAsk').hidden = true;
+        said('<span class="spin"></span> Moving ' + (items.length === 1 ? esc(name(items[0])) : items.length + ' items') + ' into ' + esc(name(to)) + '…');
+        post({ op: 'move', items: JSON.stringify(items), to: to, merge: merge ? '1' : '' }).then(function (d) {
+          busy = false;
+          // what moved leaves the windows' open paths
+          wins.forEach(function (w) { items.forEach(function (p) {
+            var i = w.open.findIndex(function (x) { return x === p || x.indexOf(p + '/') === 0; }); if (i > 0) w.open = w.open.slice(0, i); delete w.sel[p]; }); });
+          var parts = [];
+          if (d.moved.length) parts.push('Moved ✓ ' + esc(d.moved.length === 1 ? d.moved[0] : d.moved.length + ' items') + ' into <b>' + esc(name(to)) + '</b>' +
+            (d.files ? ' · ' + d.files.toLocaleString() + ' file' + (d.files === 1 ? '' : 's') + ' followed in Search' : ''));
+          d.merged.forEach(function (m) { parts.push('Merged ✓ ' + esc(m.name) + ': ' + m.n.toLocaleString() + ' files joined it' +
+            (m.kept_n ? ' · <span class="bad">' + m.kept_n + ' stayed where they were (a file of the same name is already there): ' + esc(m.kept.slice(0, 5).join(', ')) + (m.kept_n > 5 ? '…' : '') + '</span>' : '')); });
+          d.notes.forEach(function (n) { parts.push(esc(n)); });
+          said(parts.join('<br>') || 'Nothing to move: already there.');
+          if (d.taken.length) {
+            var dirs = d.taken.filter(function (t) { return t.dir; }), files = d.taken.filter(function (t) { return !t.dir; });
+            $('fAsk').querySelector('.txt').innerHTML = (dirs.length ? '<b>' + esc(dirs.map(function (t) { return t.name; }).join(', ')) + '</b> ' + (dirs.length === 1 ? 'is' : 'are') + ' already in ' + esc(name(to)) +
+                '. Merge, so each becomes one folder? Every file joins it; a file whose name is already there stays where it is. <button class="btn" type="button" id="fMerge">Merge</button> <button class="btn quiet" type="button" id="fNoMerge">Stop</button>' : '') +
+              (files.length ? '<p style="margin:6px 0 0">Not moved: ' + esc(files.map(function (t) { return t.name; }).join(', ')) + ' (a file of that name is already in ' + esc(name(to)) + '; rename one first).</p>' : '');
+            $('fAsk').hidden = false;
+            var m = $('fMerge'); if (m) m.onclick = function () { move(dirs.map(function (t) { return items.filter(function (p) { return name(p) === t.name; })[0]; }), to, true); };
+            var n = $('fNoMerge'); if (n) n.onclick = function () { $('fAsk').hidden = true; };
+          }
+          refresh();
+        }).catch(function (e) { busy = false; said('Did not move: ' + esc(e.message), true); refresh(); });
+      }
+      $('fUndo').onclick = function () {
+        said('<span class="spin"></span> Undoing the last change…');
+        post({ op: 'undo' }).then(function (d) { said('Undone ✓ ' + esc(d.said) + '.'); $('fUndo').disabled = !d.left; refresh(); })
+          .catch(function (e) { said(esc(e.message), true); });
       };
-      $('tuNo').onclick = function () { $('tuSure').hidden = true; };
-      $('tuYes').onclick = function () {
-        var b = this; b.disabled = true; b.textContent = 'Queuing…';
-        ask({drag: 1, go: 1, token: token}).then(function (d) {
-          b.disabled = false; b.textContent = 'Yes, move them';
-          ops = {}; made = []; save(); kids = {}; open = {};
-          $('tWait').className = 'banner ok'; $('tWait').hidden = false;
-          $('tWait').querySelector('.txt').innerHTML = '<b>Queued ✓</b> ' + num(d.files) + ' files (' + size(d.bytes) + '). The helper moves them one at a time, never over another file &mdash; the top bar shows how far it is, and Done so far below shows the result.';
-          $('tuSum').textContent = ''; window.tuLoad();
-        }).catch(function (e) { b.disabled = false; b.textContent = 'Yes, move them'; $('tuSureMore').textContent = 'Nothing was queued: ' + e.message; });
-      };
+      $('fAdd').onclick = function () { var w = new Win([wins.length ? wins[wins.length - 1].open[0] : roots[0].path]); wins.push(w); save(); wins.forEach(function (v) { v.draw(); }); };
+
+      // ── right-click ──
+      function openMenu(e, w, p, it, d) {
+        closeMenu();
+        var dir = it.dir ? p : d.dir, items = [];
+        if (d.archive) {
+          items.push(['Rename…', function () {
+            var n = prompt('A new name for ' + name(p), name(p)); if (!n || n === name(p)) return;
+            said('<span class="spin"></span> Renaming…');
+            post({ op: 'rename', item: p, name: n }).then(function (x) {
+              wins.forEach(function (v) { v.open = v.open.map(function (o) { return o === p || o.indexOf(p + '/') === 0 ? d.dir + '/' + n + o.slice(p.length) : o; }); v.sel = {}; });
+              save(); said('Renamed ✓ ' + esc(name(p)) + ' is now <b>' + esc(n) + '</b>' + (x.files ? ' · ' + x.files.toLocaleString() + ' files followed in Search' : '') + '.'); refresh();
+            }).catch(function (x) { said('Not renamed: ' + esc(x.message), true); });
+          }]);
+          items.push(['New folder in ' + name(dir) + '…', function () {
+            var n = prompt('Name of the new folder in ' + name(dir), 'untitled folder'); if (!n) return;
+            post({ op: 'mkdir', dir: dir, name: n }).then(function () { said('Made ✓ the folder <b>' + esc(n) + '</b> in ' + esc(name(dir)) + '.'); refresh(); })
+              .catch(function (x) { said('Not made: ' + esc(x.message), true); });
+          }]);
+        }
+        if (!it.dir && it.plays) items.push(['Play its preview', function () { play(p, it); }]);
+        if (finder) items.push(['Show in Finder', function () {
+          post({ op: 'reveal', item: p }).then(function () { said('Opened ✓ ' + esc(name(p)) + ' in a Finder window.'); }).catch(function (x) { said(esc(x.message), true); }); }]);
+        if (!items.length) return;
+        menu = document.createElement('div'); menu.className = 'fmenu';
+        items.forEach(function (m) { var b = document.createElement('button'); b.type = 'button'; b.textContent = m[0]; b.onclick = function () { closeMenu(); m[1](); }; menu.appendChild(b); });
+        document.body.appendChild(menu);
+        menu.style.left = Math.min(e.clientX, innerWidth - 190) + 'px'; menu.style.top = Math.min(e.clientY, innerHeight - menu.offsetHeight - 8) + 'px';
+      }
+      function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+      document.addEventListener('click', closeMenu); document.addEventListener('scroll', closeMenu, true);
+
+      // ── Space: a clip's preview, as Quick Look ──
+      function play(p, it) {
+        if (!it.plays) { said(esc(name(p)) + ' has no preview yet: Make previews and descriptions (on its drive\'s page) makes them.' + (finder ? ' Show in Finder plays the original.' : '')); return; }
+        var o = document.createElement('div'); o.className = 'fplay';
+        o.innerHTML = '<video controls autoplay src="/db/play.php?p=' + encodeURIComponent(p) + '"></video><p>' + esc(name(p)) + ' · its preview · Space or Esc closes</p>';
+        o.onclick = function (e) { if (e.target === o) o.remove(); };
+        document.body.appendChild(o);
+      }
+      document.addEventListener('keydown', function (e) {
+        var o = document.querySelector('.fplay');
+        if (o && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); o.remove(); return; }
+        if ($('tuView').hidden || e.key !== ' ' || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') || !current) return;
+        var ps = current.picked(); if (ps.length !== 1) return;
+        var p = ps[0], d = cache[p.slice(0, p.lastIndexOf('/'))]; if (!d) return;
+        var it = d.items.filter(function (x) { return x.name === name(p); })[0];
+        if (it && !it.dir) { e.preventDefault(); play(p, it); }
+      });
+
       window.tuLoad = function () {
-        ask({shelftree: ''}).then(function (d) { kids[''] = d.folders; draw(); })
-          .catch(function (e) { $('tuTree').innerHTML = '<div class="banner bad" style="margin:10px"><div class="txt">' + esc(e.message) + '</div></div>'; });
+        get('roots=1').then(function (d) {
+          roots = d.roots; finder = d.finder; cache = {};
+          var was = []; try { was = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
+          var ok = function (o) { return Array.isArray(o) && o.length && rootOf(o[0]); };
+          was = was.filter(ok);
+          if (!was.length) was = [[roots[0].path], [roots[0].path]];
+          $('fWins').innerHTML = ''; wins = was.map(function (o) { return new Win(o); });
+          wins.forEach(function (w) { w.draw(); });
+        }).catch(function (e) { $('fWins').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; });
       };
     })();
     </script>

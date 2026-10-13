@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.1 — October 2026
+
+- **Tidy up works like Finder.** Finder's column view, in two windows side by side (add more with **Another window**), each on the archive or a drive in Search. Click to open folders, ⌘-click and ⇧-click to select several, and drag onto a folder to move them there, at once. Right-click for Rename, New folder and Show in Finder; Space plays a clip that has a preview.
+- **Better than Finder where it counts:** a move inside the archive is a rename (nothing copied), Search follows at once, previews move with their clips, every file's move is written down so Premiere projects can be relinked, and **Undo** puts the last changes back. A folder of the same name asks before merging; a merge never puts a file over another, and can be undone too.
+- A drive kept where it is can be looked at side by side with the archive; nothing on it changes here. Nothing changes here while a tidy-up is moving files.
+
 ## 0.13.0 — October 2026
 
 Rushes around its drives: one log, what is running shown first, and previews for any drive, kept on the archive. (0.12.52 and 0.12.53 were built and never released; they are this.)
