@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.12.40 — October 2026
+
+- **Every suggestion shows its whole path**, the way Finder would: the drive it came on, then each folder, the one that would move in bold (`old server › Departments › **Building**`). **Show it** opens the left side down to that folder and points at it.
+- **Suggestions with the same name are one line:** "Building · 2 places · 28 files", with **Yes, all** or one by one. Folders with no video in them (permit records, documents) are not suggested; ones with fewer than 20 files wait behind "and 1 small one".
+- **The left side shrinks as you go:** a folder placed leaves it, the folders above it count only what is still to place ("3 of 31 files left"), and the top says how many files are still to place.
+
 ## 0.12.39 — October 2026
 
 - **Reorganize by drag and drop.** Two panes: on the left what waits to be filed, as folders that open like Finder's; on the right your departments. Drag any folder, however deep, onto a department (or use **Move to…**); drag it back, or press ×, to take it off. **Move** first shows how many files go, into how many year folders, with an example from each folder, and asks again. Nothing moves before that, every move is written down, and Put back puts it all back.

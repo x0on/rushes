@@ -331,18 +331,19 @@ function dept_guess(string $c): ?array {
 // path (Departments/Parks & Recreation, VIDEO from QNAP/001 VIDEO/POLICE DEPARTMNET), with what is in them.
 function drag_matches(): array {
     $A = rtrim(archive_dir(), '/'); $L = strlen($A) + 1; $m = [];
-    here_files(function ($path, $bytes) use ($L, &$m) {
+    here_files(function ($path, $bytes, $key, $base, $dept, $via, $kind) use ($L, &$m) {
         $parts = explode('/', substr($path, $L)); array_pop($parts);
         foreach ($parts as $i => $c) {
             if (!($g = dept_guess($c))) continue;
             $rel = implode('/', array_slice($parts, 0, $i + 1));
-            $m[$rel] ??= ['rel' => $rel, 'dept' => $g[0], 'sure' => $g[1], 'n' => 0, 'b' => 0];
-            $m[$rel]['n']++; $m[$rel]['b'] += $bytes;
+            $m[$rel] ??= ['rel' => $rel, 'dept' => $g[0], 'sure' => $g[1], 'n' => 0, 'b' => 0, 'v' => 0];
+            $m[$rel]['n']++; $m[$rel]['b'] += $bytes; if ($kind === 'video') $m[$rel]['v']++;
             break;
         }
     });
     ksort($m, SORT_NATURAL | SORT_FLAG_CASE);
-    return array_values($m);
+    // a folder with no video in it (permit records, a logo folder) is not footage: not worth asking about
+    return array_values(array_filter($m, fn($x) => $x['v'] > 0 || $x['sure']));
 }
 
 // One level of the left side: the folders in <rel> that wait to be filed. At the top, only those

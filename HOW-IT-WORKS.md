@@ -1100,6 +1100,14 @@ folders, and one example per folder, and asks again.
   already placed goes where it was dragged. Only files that wait to be filed
   are ever in the plan (`here_files()`): a folder already on the shelf, a way
   out, or a department taken out of Setup counts for nothing.
+- **Suggestions** show each folder's whole path, the drive it came on first and
+  the folder that would move last, in bold; **Show it** opens the left side down
+  to it. Suggestions with the same folder name are one line (**Yes, all**);
+  folders with no video are never suggested, and ones with fewer than 20 files
+  wait behind "and N small ones".
+- **The left side shrinks as you go:** a placed folder leaves it, each folder
+  above counts only what is still to place, and the top says how many files
+  are still to place.
 - **What is placed is kept in this browser** until it is moved: a reload does not
   lose it.
 - The plan is the same as any tidy-up's (`file` lines, `tidy-<id>.tsv`, queued

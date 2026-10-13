@@ -96,6 +96,13 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .pl.sug { background: none; border: 1px dashed var(--line); cursor: default }
   .pl label { font-size: 11.5px; color: var(--muted); white-space: nowrap; cursor: pointer }
   .pl .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px }
+  .crumb { display: block; font-size: 12.5px; overflow-wrap: break-word; line-height: 1.5 } .crumb b { color: var(--fg) } .crumb .sep { color: var(--faint); margin: 0 4px }
+  .drv { font-size: 11px; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; color: var(--muted); white-space: nowrap }
+  .sgrp { margin-top: 6px; border: 1px dashed var(--line); border-radius: 7px; padding: 6px 8px }
+  .sgh { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px } .sgh .nm { flex: 1; min-width: 140px } .sgh small { color: var(--muted) }
+  .sgrp .pl.sug { border: 0; border-top: 1px solid var(--line-soft); border-radius: 0; margin-top: 4px; padding: 6px 0 0 }
+  .lnk2 { background: none; border: 0; color: var(--accent-text); cursor: pointer; font-size: 12px; text-decoration: underline; padding: 0 }
+  .nd.flash { outline: 2px solid var(--accent); outline-offset: -2px }
   .eg { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.6; word-break: break-word }
   h3.part { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px }
 </style>
@@ -128,7 +135,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       <!-- ══ Drag and drop: folders from the left onto a <?= $e($one) ?> on the right. Nothing moves until Move. ══ -->
       <div id="dragView" hidden>
         <div class="dv">
-          <div class="pane" id="dvL"><header><b>To be filed</b><small>What is in the archive and not on the shelf yet. Open a folder to see its folders; drag any of them to the right.</small></header>
+          <div class="pane" id="dvL"><header><b>To be filed</b><small>What is in the archive and not on the shelf yet. Open a folder to see its folders; drag any of them to the right. Once placed, it leaves this side.</small><small id="dvLeft" style="color:var(--fg);margin-top:4px"></small></header>
             <div id="dvTree"><p class="note" style="margin:10px 12px">Looking &hellip;</p></div></div>
           <div class="pane" id="dvR"><header><b>How you want it &middot; <?= $e($shelf) ?></b><small>Drop a folder on a <?= $e($one) ?>. Drag it back to the left, or press &times;, to take it off.</small></header>
             <div id="dvDepts"></div></div>
@@ -344,8 +351,21 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var save = function () { try { localStorage.setItem(KEY, JSON.stringify({plan: plan, no: no})); } catch (e) {} };
       var last = function (rel) { return rel.split('/').pop(); };
       var parent = function (rel) { return rel.indexOf('/') < 0 ? '' : rel.slice(0, rel.lastIndexOf('/')); };
+      // a folder's whole path as Finder would show it: the drive it came on as a tag, then each folder, the last in bold
+      var crumbs = function (rel) {
+        var p = rel.split('/'), top = p.shift();
+        return '<span class="crumb"><span class="drv">' + esc(top) + '</span>' + p.map(function (x, i) {
+          return '<span class="sep">›</span>' + (i === p.length - 1 ? '<b>' + esc(x) + '</b>' : esc(x)); }).join('')
+          + (p.length ? '' : '') + '</span>';
+      };
+      var SMALL = 20;                  // fewer files than this: listed under "small ones", not in the way
+      var sopen = {}, ssmall = {};
       // placed: the folder itself or one above it is on the right (then it is not on the left any more)
       var placed = function (rel) { for (var r = rel; r; r = parent(r)) if (plan[r]) return true; return false; };
+      // files already given a place, under a folder: taken off its count on the left, so the left side shrinks
+      // as you go (a folder placed inside one already placed is counted once)
+      var top = function () { return Object.keys(plan).filter(function (r) { return !placed(parent(r)); }); };
+      var under = function (rel) { var n = 0, b = 0; top().forEach(function (r) { if (r.indexOf(rel + '/') === 0) { n += plan[r].n; b += plan[r].b; } }); return [n, b]; };
       var post = function (body) {
         return fetch('/db/tidy.php', {method: 'POST', body: body}).then(function (r) { return r.json(); })
           .then(function (d) { if (d.error) throw new Error(d.error); return d; });
@@ -363,10 +383,12 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       function node(f, depth) {
         if (f.name === '') return '<div class="nd loose" style="padding-left:' + (10 + depth * 16) + 'px">' + num(f.n) + ' loose file' + (f.n > 1 ? 's' : '') + ' &middot; they stay where they are</div>';
         if (placed(f.rel)) return '';
+        var u = under(f.rel), left = f.n - u[0];
+        if (left <= 0) return '';                       // everything in it has a place already
         var o = open[f.rel], k = kids[f.rel];
         return '<div class="nd" draggable="true" data-rel="' + esc(f.rel) + '" style="padding-left:' + (10 + depth * 16) + 'px">'
           + '<button type="button" class="tw" data-open="' + esc(f.rel) + '" aria-label="Open">' + (o ? '▾' : '▸') + '</button>'
-          + '<span class="nm">' + esc(f.name) + '</span><small>' + num(f.n) + ' files &middot; ' + size(f.b) + '</small>'
+          + '<span class="nm">' + esc(f.name) + '</span><small>' + (u[0] ? num(left) + ' of ' + num(f.n) + ' files left &middot; ' + size(Math.max(0, f.b - u[1])) : num(f.n) + ' files &middot; ' + size(f.b)) + '</small>'
           + (f.dept && !no[f.rel] ? '<button type="button" class="sg" data-put="' + esc(f.rel) + '" data-dept="' + esc(f.dept) + '" title="Place it there">&rarr; ' + esc(f.dept) + (f.sure ? '' : '?') + '</button>' : '')
           + '<button type="button" class="mv" data-to="' + esc(f.rel) + '">Move to&hellip;</button></div>'
           + (o ? (k ? k.map(function (c) { return node(c, depth + 1); }).join('') || '' : '<div class="nd loose" style="padding-left:' + (26 + depth * 16) + 'px">opening &hellip;</div>') : '');
@@ -378,28 +400,73 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         return m ? {n: m.n, b: m.b, dept: m.dept} : null;
       }
 
+      function groups(list) {
+        var by = {}, out = [];
+        list.forEach(function (m) {
+          var nm = last(m.rel), k = nm.toLowerCase();
+          if (!by[k]) { by[k] = {name: nm, items: [], n: 0, b: 0}; out.push(by[k]); }
+          by[k].items.push(m); by[k].n += m.n; by[k].b += m.b;
+        });
+        out.forEach(function (g) { g.items.sort(function (a, b) { return b.b - a.b; }); });
+        return out.sort(function (a, b) { return b.b - a.b; });
+      }
+      // Show it: open the left side down to that folder, and point at it
+      function reveal(rel) {
+        var p = rel.split('/'), chain = [];
+        for (var i = 1; i < p.length; i++) chain.push(p.slice(0, i).join('/'));
+        var step = function () {
+          var r = chain.shift();
+          if (r === undefined) {
+            draw(); var el = document.querySelector('#dvTree [data-rel="' + CSS.escape(rel) + '"]');
+            if (el) { el.scrollIntoView({block: 'center', behavior: 'smooth'}); el.classList.add('flash'); setTimeout(function () { el.classList.remove('flash'); }, 2500); }
+            return;
+          }
+          var known = Object.keys(kids).some(function (k) { return (kids[k] || []).some(function (f) { return f.rel === r; }); });
+          if (!known) return step();          // a named shelf's own folder: its drives are listed at the top already
+          open[r] = true;
+          if (kids[r]) return step();
+          ask({tree: r}).then(function (d) { kids[r] = d.folders; step(); });
+        };
+        step();
+      }
+
       function draw() {
         $('dvTree').innerHTML = kids[''] ? (kids[''].map(function (f) { return node(f, 0); }).join('')
           || '<p class="note" style="margin:10px 12px">Nothing waits to be filed.</p>') : '<p class="note" style="margin:10px 12px">Looking &hellip;</p>';
-        var n = 0, b = 0, c = 0;
+        var n = 0, b = 0, c = Object.keys(plan).length;
+        top().forEach(function (r) { n += plan[r].n; b += plan[r].b; });
+        var all = (kids[''] || []).reduce(function (s, f) { return s + (f.name ? f.n : 0); }, 0);
+        $('dvLeft').textContent = all ? (all - n > 0 ? num(all - n) + ' of ' + num(all) + ' files still to place' : 'Everything has a place ✓') + (n ? ' · ' + num(n) + ' placed' : '') : '';
         $('dvDepts').innerHTML = depts.map(function (d) {
           var here = Object.keys(plan).filter(function (r) { return plan[r].dept === d; }).sort();
           var maybe = sugg.filter(function (m) { return m.dept === d && !m.sure && !plan[m.rel] && !no[m.rel] && !placed(m.rel); });
           return '<div class="db" data-dept="' + esc(d) + '"><b>' + esc(d) + '</b>'
             + (!here.length && !maybe.length ? '<div class="dz">drop folders here</div>' : '')
             + here.map(function (r) {
-              var p = plan[r]; n += p.n; b += p.b; c++;
-              return '<div class="pl" draggable="true" data-rel="' + esc(r) + '"><span class="nm">' + esc(last(r))
-                + '<small>from ' + esc(parent(r).split('/').join(' / ') || 'the top') + (p.n ? ' &middot; ' + num(p.n) + ' files &middot; ' + size(p.b) : '')
-                + (p.by === 'rushes' ? ' &middot; placed by Rushes: the same name' : '') + '</small>'
-                + '<small>' + (p.keep ? '&rarr; ' + esc(d) + ' / year / ' + esc(last(r)) + ' / &hellip;' : '&rarr; what is in it goes into ' + esc(d) + ', each folder by its year') + '</small></span>'
+              var p = plan[r];
+              return '<div class="pl" draggable="true" data-rel="' + esc(r) + '"><span class="nm">' + crumbs(r)
+                + '<small>' + (p.n ? num(p.n) + ' files &middot; ' + size(p.b) : '') + (p.by === 'rushes' ? ' &middot; placed by Rushes: the same name' : '')
+                + ' &middot; ' + (p.keep ? 'goes in as ' + esc(d) + ' / year / ' + esc(last(r)) : 'its name goes; what is in it goes into ' + esc(d) + ', each folder by its year') + '</small></span>'
                 + '<label><input type="checkbox" data-keep="' + esc(r) + '"' + (p.keep ? ' checked' : '') + '> keep its name</label>'
                 + '<button type="button" class="x" data-off="' + esc(r) + '" title="Take it off">&times;</button></div>';
             }).join('')
-            + maybe.map(function (m) {
-              return '<div class="pl sug"><span class="nm">' + esc(last(m.rel)) + '?<small>looks like ' + esc(d) + ' &middot; in ' + esc(parent(m.rel).split('/').join(' / ')) + ' &middot; ' + num(m.n) + ' files &middot; ' + size(m.b) + '</small></span>'
-                + '<button type="button" class="btn quiet sm" data-yes="' + esc(m.rel) + '">Yes, here</button>'
-                + '<button type="button" class="x" data-nah="' + esc(m.rel) + '" title="Not this one">&times;</button></div>';
+            // suggestions, one group per folder name: "Building — 5 places", opened to see each one's whole path
+            + groups(maybe).map(function (g) {
+              var k = d + '|' + g.name, o = sopen[k] || g.items.length === 1, big = g.items.filter(function (m) { return m.n >= SMALL; }),
+                  small = g.items.length - big.length, shown = ssmall[k] || !big.length ? g.items : big;
+              return '<div class="sgrp"><div class="sgh">'
+                + (g.items.length > 1 ? '<button type="button" class="tw" data-sg="' + esc(k) + '">' + (o ? '▾' : '▸') + '</button>' : '')
+                + '<span class="nm">' + (g.items.length > 1 ? '<b>' + esc(g.name) + '</b> <small>&middot; ' + g.items.length + ' places &middot; ' + num(g.n) + ' files &middot; ' + size(g.b) + '</small><br>' : '')
+                + '<small>looks like <b>' + esc(d) + '</b>. Nothing moves until you say yes.</small></span>'
+                + (g.items.length > 1 ? '<button type="button" class="btn quiet sm" data-yesall="' + esc(k) + '">Yes, all ' + g.items.length + '</button>' : '')
+                + '</div>'
+                + (o ? shown.map(function (m) {
+                  return '<div class="pl sug"><span class="nm">' + crumbs(m.rel) + '<small>' + num(m.n) + ' files &middot; ' + size(m.b) + '</small></span>'
+                    + '<button type="button" class="btn quiet sm" data-yes="' + esc(m.rel) + '">Yes, here</button>'
+                    + '<button type="button" class="lnk2" data-show="' + esc(m.rel) + '">Show it</button>'
+                    + '<button type="button" class="x" data-nah="' + esc(m.rel) + '" title="Not this one">&times;</button></div>';
+                }).join('') + (small && big.length && !ssmall[k] ? '<button type="button" class="lnk2" data-small="' + esc(k) + '">and ' + small + ' small one' + (small > 1 ? 's' : '') + ' (fewer than ' + SMALL + ' files)</button>' : '') : '')
+                + '</div>';
             }).join('') + '</div>';
         }).join('');
         $('dvAsk').disabled = !c;
@@ -421,6 +488,14 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         if ((x = t.closest('[data-put]'))) return place(x.dataset.put, x.dataset.dept, info(x.dataset.put));
         if ((x = t.closest('[data-yes]'))) { var m = sugg.filter(function (s) { return s.rel === x.dataset.yes; })[0]; return place(m.rel, m.dept, m); }
         if ((x = t.closest('[data-nah]'))) { no[x.dataset.nah] = 1; save(); return draw(); }
+        if ((x = t.closest('[data-sg]'))) { sopen[x.dataset.sg] = !sopen[x.dataset.sg]; return draw(); }
+        if ((x = t.closest('[data-small]'))) { ssmall[x.dataset.small] = 1; return draw(); }
+        if ((x = t.closest('[data-show]'))) return reveal(x.dataset.show);
+        if ((x = t.closest('[data-yesall]'))) {
+          var k = x.dataset.yesall, d = k.slice(0, k.indexOf('|')), nm = k.slice(k.indexOf('|') + 1).toLowerCase();
+          sugg.forEach(function (m) { if (m.dept === d && last(m.rel).toLowerCase() === nm && !plan[m.rel] && !no[m.rel] && !placed(m.rel)) plan[m.rel] = {dept: d, keep: false, n: m.n, b: m.b, by: 'you'}; });
+          save(); return draw();
+        }
         if ((x = t.closest('[data-off]'))) return unplace(x.dataset.off);
         if ((x = t.closest('[data-to]'))) {
           var sel = document.createElement('select');
