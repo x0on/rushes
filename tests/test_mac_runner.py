@@ -290,6 +290,35 @@ class Rescue(unittest.TestCase):
     replaced by their good copy, read back byte for byte; the broken one goes to Recently Removed."""
     setUp, tearDown, put = MacJobs.setUp, MacJobs.tearDown, MacJobs.put
 
+    def test_a_sidecar_or_a_camera_name_is_not_sure_by_its_name_and_size(self):
+        import sqlite3
+        xml = b"<?xml version='1.0'?><NonRealTimeMeta/>"
+        other = os.path.join(self.t, "OldServer", "FEB", "SHOOT 3", "data", "CAM3", "C0051M01.XML")
+        card = os.path.join(self.t, "OldServer", "MAR", "Kite", "CLIP", "C0052M01.XML")
+        fx = os.path.join(self.t, "OldServer", "AUG", "Bike", "FX30.0944.MP4")
+        for f, b in ((other, xml), (card, xml), (fx, b"\x00\x00\x00\x18ftypmp42" + b"x" * 70000)):
+            os.makedirs(os.path.dirname(f), exist_ok=True); open(f, "wb").write(b)
+        db = sqlite3.connect(os.path.join(self.web, "rushes.sqlite"))
+        db.execute("CREATE TABLE IF NOT EXISTS files (path TEXT, name TEXT, bytes INTEGER)")
+        db.executemany("INSERT INTO files VALUES (?, ?, ?)", [(x, os.path.basename(x), os.path.getsize(x)) for x in (other, card, fx)])
+        db.commit(); db.close()
+        b1 = self.put("VIDEOS/APR/PENSIONS/CLIPS/C0051M01.XML", b"\x00" * 50)      # another month's sidecar
+        b2 = self.put("VIDEOS/APR/Garden/CLIP/C0052M01.XML", b"\x00" * 50)        # only a card's own CLIP in common
+        b3 = self.put("VIDEOS/SEP/Walk/FX30.0944.MP4", b"")                      # a camera's counter
+        self.r.job("rescue-scan", {})
+        rows = {l.split("\t")[0]: l.rstrip("\n").split("\t") for l in open(os.path.join(self.web, "rescue-found.tsv"))}
+        for b in (b1, b2, b3):
+            self.assertEqual((rows[b][4] != "", rows[b][7]), (True, "0"), f"{b}: offered, but as same name only")
+
+    def test_stop_stops_only_the_job_it_was_pressed_for(self):
+        self.r.now_job = "rescue-apply"
+        open(os.path.join(self.web, "job-stop.txt"), "w").write("rescue-scan\n")
+        self.assertFalse(self.r.stop_asked(), "a Stop pressed for another job is not this one's")
+        open(os.path.join(self.web, "job-stop.txt"), "w").write("rescue-apply\n")
+        self.assertTrue(self.r.stop_asked() and not self.r.may_v(), "Stop: this job stops at its next safe point")
+        self.r.now_job = None
+        self.assertFalse(self.r.stop_asked(), "and nothing else does")
+
     def test_small_real_files_and_code_are_not_called_broken(self):
         self.put("VIDEOS/FX/Thud.mp4", b"\x00\x00\x00\x18ftypmp42" + b"x" * 49000)        # a real 49 KB sound effect
         self.put("VIDEOS/App/node_modules/jiti/index.d.mts", b"\x47" + b"x" * 100)          # in an app's code: never looked at

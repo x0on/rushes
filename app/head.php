@@ -129,7 +129,9 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   <span class="grow"></span>
 
   <span class="pulse" id="hPulse" title="what is moving right now">
-    <span class="dot" id="hDot"></span><span id="hWhat">checking&hellip;</span>
+    <span class="dot" id="hDot"></span><a id="hWhat" class="hwhat">checking&hellip;</a>
+    <!-- Stop: on every page, for a job that stops between files; it says so at once, and until it has stopped -->
+    <button type="button" class="hstop" id="hStop" hidden>Stop</button>
   </span>
   <span class="slow" id="hSlow" hidden></span>
 
@@ -301,10 +303,22 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
           : s.running ? window.nowSaid(s)
           : (c && c.stale && /copying|looking|tracing|tidying/.test(c.phase)) ? 'the helper went quiet'
           : (s.runner && s.runner.ok ? 'nothing running' : 'not picking up jobs');
+        // what is running opens the page it belongs to; Stop stays "Stopping…" until the job has ended
+        var pg = !h && !jw && s.running && s.running_page;
+        if (pg) $('hWhat').setAttribute('href', pg); else $('hWhat').removeAttribute('href');
+        var st = $('hStop'), show = !h && !jw && !!s.running && s.can_stop;
+        st.hidden = !show;
+        if (show) { st.disabled = !!s.stopping; st.textContent = s.stopping ? 'Stopping after the file it is on…' : 'Stop'; }
         $('hPulse').title = h ? h.title + (h.facts ? ' — ' + h.facts.map(function (f) { return f[0] + ' ' + f[1]; }).join(', ') : '') : 'what is moving right now';
       })
       .catch(function () { $('hDot').className = 'dot off'; $('hWhat').textContent = 'no answer'; });
   }
+  $('hStop').onclick = function () {
+    var b = this; b.disabled = true; b.textContent = 'Asking…';
+    fetch('/db/stop.php', { method: 'POST', body: new URLSearchParams({}) }).then(function (r) { return r.json(); }).then(function (x) {
+      b.textContent = x.error ? 'Did not stop: ' + x.error : 'Stopping after the file it is on…'; if (x.error) setTimeout(function () { b.disabled = false; paint(); }, 4000);
+    }).catch(function () { b.textContent = 'Did not stop: no answer'; b.disabled = false; });
+  };
   every(paint, 5000);
 })();
 

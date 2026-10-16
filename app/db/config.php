@@ -27,6 +27,9 @@
     exit;
 })();
 
+// Jobs that stop between two files when Stop is pressed (db/stop.php, runner.py stop_asked), with their words
+const STOPPABLE = ['rescue-scan' => 'Looking for broken files', 'rescue-apply' => 'Rescuing broken files', 'empty' => 'Deleting Recently Removed'];
+
 function rules(): array {
     static $r = null;
     if ($r === null) $r = load_json('rules.json', __DIR__ . '/../rules.json');

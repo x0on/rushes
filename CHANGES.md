@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.10 — October 2026
+
+- **Rescue no longer calls a sidecar or a camera's file name sure by its name and size.** Sony cards reuse names like `C0051M01.XML` on every card, and sidecars are nearly all one size, so 0.13.9 could fill a broken April sidecar from a February one. Now a sidecar is sure only from where it was copied from, or from a folder of the same name; names a camera gives (`C0051M01`, `FX30.0944`, `A069C942_…`, `DJI_0128`, `IMG_6583`) are never sure by name and size alone; and a card's own folders (`CLIP`, `PRIVATE`, `CAM 2`) do not count as "a folder of the same name". Look again after updating.
+- **Rescue says what it is doing, where you clicked.** The ticked files stay ticked and each says *waiting*, *rescuing now*, *✓ rescued* or *✗ could not* (and why). A strip above the groups says "Asked ✓ 66 files: waiting for Rushes to start it (it looks for new work every minute)", then "Rescuing 14 of 66" with a bar, then how it ended. Rescued lately is short: the file, and the folder its good copy came from.
+- **Stop, in the top bar, on every page** for a job that stops between files (Rescue, Look for broken files, Delete All): it finishes the file it is on and stops; the rest stay as they were. What is running in the top bar opens its page.
+- **The working spinner shows on every page.** It was defined page by page, and Rescue, Tidy up and the Activity column had none: "working" showed as nothing moving.
+
 ## 0.13.9 — October 2026
 
 - **Rescue is three groups of folders, not one long list.** Tiles at the top: **Ready to rescue**, **Check first** (a file of the same name only) and **No copy found**; one is open at a time. Inside, the files are in folders that fold, as in Reorganize; a chain of folders that each hold one folder is one line. A folder's box ticks everything in it. Each row is short (the name, *empty* / *damaged* / *too small*, where the good copy is); hover it for the whole path.

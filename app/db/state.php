@@ -536,6 +536,10 @@ echo json_encode([
     'disk'     => $disk,
     'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive), 'stopped' => $stopped],
     'running'  => $running, 'running_said' => $running_said, 'progress' => $progress,
+    // Stop in the top bar: offered for jobs that stop between files; 'stopping' once it was pressed
+    'can_stop' => $running !== null && isset(STOPPABLE[$running]),
+    'stopping' => $running !== null && trim((string)@file_get_contents("$WEB/job-stop.txt")) === $running,
+    'running_page' => $running && str_starts_with($running, 'rescue-') ? '/rescue.php' : null,
     // asked from Manage, waiting for the runner's next turn
     'queued'   => array_values(array_filter(array_map(fn($j) => preg_match('/^ACTION=(.+)$/m', (string)@file_get_contents($j), $m) ? trim($m[1]) : '',
                     glob("$WEB/queue/*.job") ?: []))),

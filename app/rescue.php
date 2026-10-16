@@ -32,7 +32,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .rt .r { display: flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: 13px; min-height: 26px }
   .rt .r:hover { background: var(--line-soft) }
   .rt .tw { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; width: 18px; padding: 0; flex: none }
-  .rt .nm { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .rt .nm { flex: 1 1 0; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .rt .d .nm { font-weight: 500 } .rt .n { color: var(--muted); font-size: 12px; flex: none }
   .rt .src { flex: 0 1 40%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; text-align: right }
   .rt .rm { visibility: hidden; flex: none; font-size: 12px } .rt .r:hover .rm { visibility: visible }
@@ -41,6 +41,11 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .fmenu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer }
   .fmenu button:hover { background: var(--accent); color: var(--accent-fg) }
   @media (max-width: 700px) { .rtiles { grid-template-columns: 1fr } .rt .src { display: none } }
+  .chip { flex: none; font-size: 11.5px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted) }
+  .chip.ok { color: var(--ok, var(--accent)); border-color: currentColor } .chip.run { color: var(--accent-text, var(--accent)); border-color: currentColor }
+  .chip.bad { color: var(--bad); border-color: currentColor; max-width: 340px; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  #rTop .banner { margin-bottom: 10px; align-items: center } #rTop .banner .btn { margin-left: auto; flex: none }
+  .rprog { height: 5px; border-radius: 3px; background: var(--line-soft); margin-top: 8px; overflow: hidden } .rprog i { display: block; height: 100%; background: var(--accent) }
   .rdone { font-size: 12px; color: var(--muted); margin-top: 18px } .rdone div { word-break: break-all; padding: 2px 0 }
 </style>
 
@@ -94,7 +99,14 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   var when = function (t) { return t ? new Date(t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
   var post = function (o) { return fetch('/db/rescue.php', { method: 'POST', body: new URLSearchParams(o) }).then(function (r) { return r.json(); })
     .then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
-  var ticked = {}, last = null, grp = null, open = {}, menu = null;
+  var ticked = {}, last = null, grp = null, open = {}, menu = null, pending = null;
+  // a rescue asked or running: each picked file's state, said on its own row (never a silent wait)
+  var picked = function (d) { return d.run && d.run.picked.length ? d.run.picked : pending || []; };
+  var stateOf = function (d, p) {
+    var r = d.run || {};
+    return (r.done || []).indexOf(p) >= 0 ? 'done' : r.failed && r.failed[p] !== undefined ? 'failed' : r.at === p ? 'now' : picked(d).indexOf(p) >= 0 ? 'wait' : '';
+  };
+  var CHIP = { done: '<span class="chip ok">✓ rescued</span>', now: '<span class="chip run"><span class="spin"></span>rescuing now</span>', wait: '<span class="chip">waiting</span>' };
   var G = {
     sure: ['Ready to rescue', 'Rushes found the same file: where it was copied from, one in a folder of the same name, or a name no camera gives with one size everywhere. Rescue copies it in and checks it byte for byte; the broken one goes to Recently Removed.'],
     maybe: ['Check first', 'Only a file with the same name was found. Cameras name clips the same on every card (Clip0004, DJI_0128), so it may be another shoot: compare before ticking. Hover a file to see the whole path of both.'],
@@ -146,9 +158,20 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
     var unread = Object.keys(d.ssh_read || {}).filter(function (k) { return d.ssh_read[k].read < d.ssh_read[k].want; }).map(function (k) { var x = d.ssh_read[k];
       return '<div class="banner warn"><div class="txt"><b>' + esc(k) + ': read ' + x.read.toLocaleString() + ' of ' + x.want.toLocaleString() + ' files there</b>The ones not read are not offered as good copies, so some files below may have one on ' + esc(k) + '.' + (x.why ? ' ssh said: ' + esc(x.why) : '') + ' Look for broken files again to try again.</div></div>'; }).join('');
     if (!d.total) { $('rTop').innerHTML = unread; $('rOut').innerHTML = '<div class="banner ok"><div class="txt"><b>No broken files found ✓</b>Every clip and sidecar looked at is what it says it is.</div></div>'; acts(true); return; }
-    var n = { sure: 0, maybe: 0, none: 0 }; d.rows.forEach(function (r) { n[kind(r)]++; });
+    var n = { sure: 0, maybe: 0, none: 0 }; d.rows.forEach(function (r) { if (stateOf(d, r.path) !== 'done') n[kind(r)]++; });
+    // the run, above everything: asked (waiting for the runner), how far, or how it ended
+    var pk = picked(d), R = d.run || {}, nd = (R.done || []).length, nf = Object.keys(R.failed || {}).length, L = R.last, strip = '';
+    if (pk.length && d.running !== 'rescuing') strip = '<div class="banner"><div class="txt"><b><span class="spin"></span> ' + (d.run.picked.length ? 'Asked ✓ ' : 'Asking… ') + pk.length.toLocaleString() + ' file' + (pk.length === 1 ? '' : 's') + ' to rescue</b>' +
+        'Waiting for Rushes to start it: it looks for new work every minute' + (d.other ? ', after what is running now (the top bar says what)' : '') + '. Each file below says when its turn comes.</div></div>';
+    else if (pk.length) strip = '<div class="banner"><div class="txt"><b><span class="spin"></span> Rescuing ' + Math.min(nd + nf + 1, pk.length).toLocaleString() + ' of ' + pk.length.toLocaleString() + '</b>' +
+        nd.toLocaleString() + ' rescued' + (nf ? ' · <span class="bad">' + nf.toLocaleString() + ' could not</span>' : '') + '. Each good copy is copied in and read back before the broken one is moved aside.' +
+        '<div class="rprog"><i style="width:' + Math.round(100 * (nd + nf) / pk.length) + '%"></i></div></div>' +
+        '<button class="btn quiet" type="button" id="rStop"' + (d.stopping ? ' disabled>Stopping after the file it is on…' : '>Stop') + '</button></div>';
+    else if (L && L.at >= d.looked) strip = '<div class="banner ' + (L.failed || L.stopped ? 'warn' : 'ok') + '"><div class="txt"><b>Rescued ' + L.done.toLocaleString() + ' of ' + L.asked.toLocaleString() + (L.failed || L.stopped ? '' : ' ✓') + '</b>' +
+        (L.failed ? L.failed.toLocaleString() + ' could not: they are marked ✗ below, with why. ' : '') + (L.stopped ? 'Stopped before the rest: they are still here, tick them and Rescue again. ' : '') +
+        'The broken ones are in Recently Removed until Delete All. ' + esc(when(L.at)) + '</div></div>';
     if (!grp || !n[grp]) grp = ['sure', 'maybe', 'none'].filter(function (k) { return n[k]; })[0] || 'sure';
-    $('rTop').innerHTML = unread + '<div class="rtiles">' + ['sure', 'maybe', 'none'].map(function (k) {
+    $('rTop').innerHTML = strip + unread + '<div class="rtiles">' + ['sure', 'maybe', 'none'].map(function (k) {
         return '<button type="button" class="rtile' + (k === grp ? ' on' : '') + '" data-g="' + k + '"><b>' + n[k].toLocaleString() + '</b><span>' + G[k][0] + '</span></button>'; }).join('') + '</div>' +
       '<p class="rwhy">' + esc(G[grp][1]) + '</p>' +
       (d.rows.length < d.total ? '<p class="note">The first ' + d.rows.length.toLocaleString() + ' of ' + d.total.toLocaleString() + ' are shown; look again for the rest.</p>' : '');
@@ -178,8 +201,9 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       x.files.sort(function (a, b) { return a.rel < b.rel ? -1 : 1; }).forEach(function (r) {
         var nm = r.rel.split('/').pop();
         h += '<label class="r" style="padding-left:' + (28 + depth * 18) + 'px" title="' + esc(r.rel + '\n' + r.why + (r.good ? '\ngood copy: ' + r.show + ' (' + r.where + ')' : '') + (r.came ? '\ncopied from: ' + r.came : '')) + '">' +
-          '<input type="checkbox" data-p="' + esc(r.path) + '"' + (ticked[r.path] ? ' checked' : '') + '>' +
-          '<span class="nm">' + esc(nm) + '</span><span class="why bad">' + short(r.why) + '</span>' +
+          '<input type="checkbox" data-p="' + esc(r.path) + '"' + (ticked[r.path] || /wait|now|done/.test(stateOf(d, r.path)) ? ' checked' : '') + (/wait|now|done/.test(stateOf(d, r.path)) ? ' disabled' : '') + '>' +
+          '<span class="nm">' + esc(nm) + '</span>' + (CHIP[stateOf(d, r.path)] || (stateOf(d, r.path) === 'failed' ? '<span class="chip bad" title="Why: ' + esc(d.run.failed[r.path]) + '">✗ could not: ' + esc(d.run.failed[r.path]) + '</span>' : '')) +
+          '<span class="why bad">' + short(r.why) + '</span>' +
           (r.good ? '<span class="src">' + esc(r.where) + ' · ' + size(r.gsize) + (r.other ? ' · ' + (r.other + 1) + ' with this name' : '') + '</span>' : '') + '</label>';
       });
       return h;
@@ -206,7 +230,13 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
     });
     acts(false); allShown();
     count();
-    $('rDone').innerHTML = d.done.length ? '<b>Rescued lately</b>' + d.done.map(function (x) { return '<div>✓ ' + esc(x[0]) + ' <span>from ' + esc(x[1]) + '</span></div>'; }).join('') : '';
+    // short: the file, and the folder its good copy came from; the whole paths on hover
+    $('rDone').innerHTML = d.done.length ? '<b>Rescued lately</b>' + d.done.map(function (x) {
+      var g = String(x[1]).replace(/^ssh:([^:]+):/, '$1: '), f = g.split('/');
+      return '<div title="' + esc(x[0] + '\nfrom ' + g) + '">✓ ' + esc(String(x[0]).split('/').pop()) + ' <span>· from ' + esc(f.length > 1 ? f[f.length - 2] : g) + '</span></div>'; }).join('') : '';
+    if ($('rStop')) $('rStop').onclick = function () { var b = this; b.disabled = true; b.textContent = 'Asking…';
+      fetch('/db/stop.php', { method: 'POST', body: new URLSearchParams({}) }).then(function (r) { return r.json(); })
+        .then(function (x) { b.textContent = x.error ? 'Did not stop: ' + x.error : 'Stopping after the file it is on…'; load(); }); };
   }
   function closeMenu() { if (menu) { menu.remove(); menu = null; } }
   document.addEventListener('click', closeMenu); document.addEventListener('scroll', closeMenu, true);
@@ -231,7 +261,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   function count() {
     var n = mine().length, rm = grp === 'none';
     document.querySelectorAll('.rGo').forEach(function (b) {
-      b.disabled = !n || !!(last && (last.running || last.asked));
+      b.disabled = !n || !!(last && (last.running || last.asked || picked(last).length));
       b.classList.toggle('danger', rm);
       b.textContent = (rm ? 'Remove' : 'Rescue') + ' ' + (n ? n.toLocaleString() + ' file' + (n === 1 ? '' : 's') : 'the ticked'); });
   }
@@ -259,13 +289,14 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       })();
       return;
     }
-    document.querySelectorAll('.rGo').forEach(function (b) { b.disabled = true; }); $('rSaid').innerHTML = '<span class="spin"></span> Asking…';
-    post({ action: 'rescue', paths: JSON.stringify(ps) }).then(function (d) {
-      ps.forEach(function (p) { delete ticked[p]; }); $('rSaid').innerHTML = 'Asked ✓ ' + d.n.toLocaleString() + ' file' + (d.n === 1 ? '' : 's') + ' to rescue: it starts within a minute, and the broken ones go to Recently Removed.'; load();
-    }).catch(function (e) { $('rSaid').textContent = 'Did not happen: ' + e.message; count(); });
+    // said at once, on the rows themselves: they stay ticked, each says "waiting", and the strip above says why
+    pending = ps; draw(last);
+    post({ action: 'rescue', paths: JSON.stringify(ps) }).then(function () {
+      ps.forEach(function (p) { delete ticked[p]; }); load().then(function () { pending = null; });
+    }).catch(function (e) { pending = null; draw(last); $('rMsg').innerHTML = '<span class="bad">Not asked: ' + esc(e.message) + '</span>'; });
   }
   function load() { return fetch('/db/rescue.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(draw)
     .catch(function (e) { $('rOut').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; }); }
-  load(); setInterval(function () { if (last && (last.running || last.asked || (last.servers || []).some(function (x) { return !x.state || /testing|listing|asked/.test(x.state.state); }))) load(); }, 5000);
+  load(); setInterval(function () { if (last && (last.running || last.asked || picked(last).length || (last.servers || []).some(function (x) { return !x.state || /testing|listing|asked/.test(x.state.state); }))) load(); }, 5000);
 })();
 </script>

@@ -112,6 +112,16 @@ $where = function (string $p) use ($A): string {
     return $d ? (string)$d['name'] : dirname($p);
 };
 // what was removed since (Remove here or in Tidy up) leaves the list at once; only with the archive there to say so
+// a rescue asked or running: which files, the one now, and each one's end (rescued, or why not) since it began
+$pick = array_map(fn($l) => explode("\t", rtrim($l, "\n"))[0], @file("$W/rescue-pick.tsv") ?: []);
+$last = json_decode((string)@file_get_contents("$W/rescue-run.json"), true) ?: null;
+$since = $pick ? (int)@filemtime("$W/rescue-pick.tsv") : (int)($last['from'] ?? 0);
+$doneNow = []; $failNow = [];
+foreach ($done as $l) { $f = explode("\t", rtrim($l, "\n")); if ((int)($f[3] ?? 0) >= $since) $doneNow[$f[0]] = 1; }
+foreach (@file("$W/rescue-failed.tsv") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n")); if ((int)($f[2] ?? 0) >= $since) $failNow[$f[0]] = $f[1] ?? ''; }
+$run = ['picked' => $pick, 'at' => trim((string)@file_get_contents("$W/rescue-at.txt")), 'done' => array_keys($doneNow),
+        'failed' => (object)$failNow, 'last' => $last];
+
 $rows = array_values($found());
 if (is_dir($A)) $rows = array_values(array_filter($rows, fn($r) => file_exists($r['path'])));
 $total = count($rows);
@@ -132,5 +142,5 @@ out(['servers' => $servers, 'looked' => (int)$lt, 'looked_n' => (int)$ln, 'asked
      // each server's first bytes, as the last look read them: {name: {want, read, why}}
      'ssh_read' => json_decode((string)@file_get_contents("$W/rescue-ssh.json"), true) ?: (object)[],
      'running' => str_contains($st, 'rescue-') ? (str_contains($st, 'apply') ? 'rescuing' : 'looking') : '',
-     'total' => $total, 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,
+     'total' => $total, 'run' => $run, 'stopping' => str_contains($st, 'rescue-') && trim((string)@file_get_contents("$W/job-stop.txt")) === trim(str_replace('running:', '', $st)), 'other' => $st !== '' && $st !== 'idle' && !str_contains($st, 'rescue-'), 'with_good' => $withGood, 'maybe' => $maybe, 'rows' => $rows,
      'done' => array_map(fn($l) => array_slice(explode("\t", rtrim($l, "\n")), 0, 4), array_slice(array_reverse($done), 0, 50))]);

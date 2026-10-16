@@ -77,6 +77,32 @@ def broken(path, size, head=None):
     return None
 
 
+# A card's own folders, the same on every card: a match there says nothing about which shoot it is
+CARD_FOLDERS = {"clip", "clips", "clpr", "sub", "private", "m4root", "xdroot", "bpav", "avchd", "bdmv", "stream",
+                "dcim", "general", "data", "contents", "video", "videos", "media", "footage", "thmbnl", "take"}
+
+
+def card_folder(n):
+    n = n.lower()
+    return n in CARD_FOLDERS or re.fullmatch(r"\d{3}[a-z_]*|(cam|card|camera|a|b)[ _-]?\d{1,3}", n) is not None
+
+
+def same_folders(c, p):
+    """Rescue: how many named folders, up from the file, a candidate shares with the broken file (stopping at
+    the first that differs); a card's own folders (CLIP, PRIVATE, CAM 2) are passed over, not counted."""
+    q, r, k, i = c.split("/"), p.split("/"), 0, 2
+    while i <= min(len(q), len(r)) - 1 and q[-i] == r[-i]:
+        k += not card_folder(q[-i]); i += 1
+    return k
+
+
+def camera_name(p):
+    """A name a camera gives, the same on every card: a counter in it and no spaces (Clip0004, C0051M01,
+    DJI_0128, FX30.0944, A069C942_2510161F_CANON, IMG_6583). An editor's export has words (FIU PROMO v2)."""
+    stem = os.path.splitext(os.path.basename(p))[0]
+    return " " not in stem and re.search(r"\d{3}", stem) is not None
+
+
 # ── a server over SSH (Rescue): looked at and read from, never written to ──────────────────────────
 # Only with the Mac's own SSH login (a key it already has): BatchMode, so it never waits for a password.
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30"]
@@ -186,7 +212,16 @@ class Runner:
             paused = '"paused":true' in open(self.p("helper-control.json")).read().replace(" ", "")
         except OSError:
             paused = False
-        return not paused and not self.tripped() and self.arch() is not None
+        return not paused and not self.stop_asked() and not self.tripped() and self.arch() is not None
+
+    def stop_asked(self):
+        """Stop, from the top bar (db/stop.php writes job-stop.txt with the job's name): only the job it was
+        pressed for stops, at its next safe point; the file goes when that job ends."""
+        now = getattr(self, "now_job", None)
+        try:
+            return bool(now) and open(self.p("job-stop.txt")).read().strip() == now
+        except OSError:
+            return False
 
     def v(self, what, fn, limit=None):
         """fn() in a thread, waited for at most `limit` seconds; one that has not
@@ -772,12 +807,21 @@ class Runner:
             except OSError:
                 continue
             action = fields.get("ACTION", "")
+            for n in ("job-stop.txt",):                   # a Stop pressed for an earlier job is not this one's
+                try: os.remove(self.p(n))
+                except OSError: pass
+            self.now_job = action
             self.write("job-status.txt", f"running: {action}\n")
             self.log(f"\n{'=' * 62}\n{time.strftime('%Y-%m-%d %H:%M:%S')}  {action}\n{'=' * 62}")
             try:
                 self.job(action, fields)
             except Exception as e:                       # said; the queue carries on
                 self.log(f"  {action} stopped: {e}")
+            if self.stop_asked():
+                self.log("  stopped, as asked (Stop)")
+            self.now_job = None
+            try: os.remove(self.p("job-stop.txt"))
+            except OSError: pass
             self.log(f"--- finished {time.strftime('%H:%M:%S')} ---")
             self.write("job-status.txt", "idle\n")
         # A new archive has no list yet: the first one is made by itself (once each start).
@@ -1148,7 +1192,8 @@ class Runner:
                     self.log(f"listing: the archive · {seen:,} files so far")
                     self.make_way()
                     if not self.may_v():
-                        self.log("  stopped: the archive stopped answering, or copying is paused — look again later"); return
+                        self.log("  stopped " + ("as asked (Stop)" if self.stop_asked() else "the archive stopped answering, or copying is paused")
+                                 + " — look again later"); return
                 try: size = os.lstat(p).st_size
                 except OSError: continue
                 why = broken(p, size)
@@ -1197,18 +1242,12 @@ class Runner:
             if db:
                 try: cands += [x[0] for x in db.execute("SELECT path FROM files WHERE name = ? AND path != ? AND bytes > 0 LIMIT 40", (os.path.basename(p), p))]
                 except sqlite3.Error: pass
-            parts = p.split("/")
-            def score(c):                      # how many of its folders, up from the file, have the same names
-                q = c.split("/"); k = 0
-                while k < min(len(q), len(parts)) - 1 and q[-2 - k] == parts[-2 - k]: k += 1
-                return k
+            score = lambda c: same_folders(c, p)
             ok = []
             for sv, path, cs in remote.get(os.path.basename(p), [])[:40]:
                 h = heads.get((sv["name"], path))
                 if cs > 0 and h is not None and broken(path, cs, h) is None:
-                    q = path.split("/"); k = 0
-                    while k < min(len(q), len(parts)) - 1 and q[-2 - k] == parts[-2 - k]: k += 1
-                    ok.append((f"ssh:{sv['name']}:{path}", cs, k))
+                    ok.append((f"ssh:{sv['name']}:{path}", cs, score(path)))
             for c in dict.fromkeys(cands):
                 if c.startswith(hold) or c == p:
                     continue
@@ -1217,19 +1256,20 @@ class Runner:
                 if cs > 0 and broken(c, cs) is None:
                     ok.append((c, cs, score(c)))
             # Sure only with evidence beyond a name: cameras number clips the same on every card (Clip0004,
-            # DJI_0004, C0153), so a file of the same name may be another shoot. Sure: where it was copied from;
-            # or the only one in a folder of the same name; or a name no camera gives (not letters + a counter)
-            # whose copies are all the same size. Anything else is offered as "same name only", never ticked for you.
+            # DJI_0004, C0153, C0051M01.XML, FX30.0944), so a file of the same name may be another shoot. Sure:
+            # where it was copied from; or the only one in a folder of the same name (a named folder: a card's
+            # own CLIP or PRIVATE is on every card); or, for a clip, a name no camera gives whose copies are all
+            # one size. A sidecar (XML) is never sure by its name and size: they are all nearly the same size.
+            # Anything else is offered as "same name only", never ticked for you.
             ok.sort(key=lambda x: (x[0] == came, x[2], x[1]), reverse=True)
             good, gsize, other, sure = "", 0, max(0, len(ok) - 1), 0
             if ok:
                 good, gsize, k = ok[0]
-                counter = re.fullmatch(r"[A-Za-z_]{0,8}\d{2,}", os.path.splitext(os.path.basename(p))[0]) is not None
                 if good == came:
                     sure = 1
                 elif k >= 1 and sum(1 for x in ok if x[2] == k and x[1] != gsize) == 0:
                     sure = 1
-                elif not counter and len({x[1] for x in ok}) == 1:
+                elif not camera_name(p) and not p.lower().endswith(".xml") and len({x[1] for x in ok}) == 1:
                     sure = 1
             rows.append("\t".join(map(str, (p, size, why, came, good, gsize, other, sure))))
         if db: db.close()
@@ -1248,14 +1288,17 @@ class Runner:
         a = self.arch()
         try: picks = [l.rstrip("\n").split("\t") for l in open(self.p("rescue-pick.tsv")) if "\t" in l]
         except OSError: picks = []
-        done, failed = [], 0
+        done, failed, stopped, t0 = [], 0, False, int(time.time())
         rec = os.path.join(a, "_rushes", "origin"); os.makedirs(rec, exist_ok=True)
         rec = os.path.join(rec, time.strftime("%Y%m%d-%H%M%S") + " archive rescued.tsv")
         for i, (bad, good) in enumerate(picks, 1):
             self.log(f"progress: {i} of {len(picks)} ({100 * i // len(picks)}%)")
+            self.write("rescue-at.txt", bad + "\n")          # the one being rescued now, for its row on the page
             self.make_way()
             if not self.may_v():
-                self.log("  stopped: the archive stopped answering, or copying is paused — the rest stay as they were"); break
+                stopped = True
+                self.log("  stopped " + ("as asked (Stop)" if self.stop_asked() else "the archive stopped answering, or copying is paused")
+                         + " — the rest stay as they were"); break
             tmp = None
             try:
                 if not ts.inside(bad, a) or ts.inside(bad, os.path.join(a, HOLD)):
@@ -1315,13 +1358,18 @@ class Runner:
             except OSError as e:
                 failed += 1
                 self.log(f"  not rescued {bad}: {e.strerror or e}")
+                with open(self.p("rescue-failed.tsv"), "a") as f: f.write(f"{bad}\t{e.strerror or e}\t{int(time.time())}\n")
                 if tmp:
                     try: os.remove(tmp)
                     except OSError: pass
         if done:
             self.removed_at("", time.time())
-        try: os.remove(self.p("rescue-pick.tsv"))
-        except OSError: pass
+        for n in ("rescue-pick.tsv", "rescue-at.txt"):
+            try: os.remove(self.p(n))
+            except OSError: pass
+        # how this run ended, for the page: said there until the next run (db/rescue.php)
+        self.write("rescue-run.json", json.dumps({"asked": len(picks), "done": len(done), "failed": failed,
+                                                  "stopped": stopped, "from": t0, "at": int(time.time())}))
         left = [l for l in open(self.p("rescue-found.tsv"))] if os.path.exists(self.p("rescue-found.tsv")) else []
         self.write("rescue-found.tsv", "".join(l for l in left if l.split("\t")[0] not in set(done)))
         self.activity("changed", f"Rescued {len(done):,} broken files from their good copies; the broken ones are in Recently Removed"

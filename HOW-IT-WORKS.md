@@ -846,8 +846,10 @@ broken file:
   drive kept where it is), the one in the most similar folders; only one that is there now and not broken
   itself; or "none anywhere Rushes can see". It is **sure** only with more than the name, because cameras
   number clips the same on every card: where the file was copied from; or the only one (or all one size) in a
-  folder of the same name; or a name that is not letters and a counter, with every copy the same size. Any
-  other is shown as **same name only**, with a warning, and never ticked for you.
+  folder of the same name (a card's own folders, `CLIP`, `PRIVATE`, `CAM 2`, are passed over: they are on every
+  card; `same_folders`); or, for a clip only, a name no camera gives (`camera_name`: no counter of three digits,
+  or words with spaces) with every copy the same size. A sidecar is never sure by name and size: they are all
+  nearly one size. Any other is shown as **same name only**, with a warning, and never ticked for you.
 
 Nothing is changed by looking (`rescue-found.tsv`).
 
@@ -869,6 +871,12 @@ folder (or a right click) offers each folder on its line, and moves the whole fo
 to Recently Removed; in No copy found, **Remove** moves the ticked files. Both are Tidy up's own Remove
 (`db/browse.php op=remove`: Undo there, or the Undo the page offers, brings it back; space comes back only with
 Delete All). What was removed leaves the list at once (`db/rescue.php` drops rows whose file is not there).
+
+**While it rescues**, each picked file says its state on its own row (`rescue-pick.tsv` asked, `rescue-at.txt`
+the one now, `rescue-done.tsv` and `rescue-failed.tsv` with why), a strip above says asked / how far / how it
+ended (`rescue-run.json`), and **Stop** (on the strip, and in the top bar on every page: `db/stop.php` writes
+`job-stop.txt` with the job's name; `runner.py stop_asked` honours it only for that job, between two files;
+`STOPPABLE` in config.php lists the jobs that can) leaves the rest as they were.
 
 **Rescue** the ticked ones (only those the scan found, with the good copy it found; never a path sent by the
 page): the good copy is copied in beside the broken one under a temporary name and read back byte for byte;
