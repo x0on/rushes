@@ -1491,7 +1491,8 @@ put back. **In the code:** `organize.sh`.
 ## Manage
 
 Manage is behind the password. Its left column: **Overview** (the dashboard:
-how things are, and every on/off switch), then **Transfer** (Copying,
+how things are, and every on/off switch), then **Drives** (each drive Rushes covers, the archive first; a click
+opens its page, a right click the same as a menu), then **Transfer** (Copying,
 Reorganize, Duplicates, Cache: the pages that move files, each showing
 everything first, asking first, recording every move, able to put it back),
 **Footage** (Describe, Editors' projects) and **System** (Activity, Setup),
@@ -1499,6 +1500,19 @@ plus **Sign out**. "Copying" was called Transfers until 0.12.24. Each has its ow
 so the column does not repeat it. Activity in full hides the short feed beside
 the other panes. Every pane uses the window's width; paragraphs stay a readable
 width.
+
+**Built around the drives.** A drive's page (`db/admin.php#drive=<its folder>`, so a reload or a link comes
+back to it) has its three levels, a **Health** box (the archive's broken files, files waiting to be filed,
+editing cache, Recently Removed; duplicates and Tidy up for any drive; what is running, with Stop), and its
+folders. Everything done to a drive opens with the drive's **bar** on top (`head.php driveBar`): its name and
+what can be done to it as tabs (Overview, Tidy up, File in, Rescue, Duplicates, Cache, Back up or Copy, only
+those that apply), with a count where something wants you. Tidy up opened for a drive (`structure.php?drive=`)
+starts there. A right click on a drive (Overview's cards, the left column) offers the same as a menu
+(`driveMenu`). The archive is always among the drives, even before the helper has said which drives it sees.
+
+**The side panels fold away.** The left column folds to its icons (its « button, or ⌘\); what wants you still
+shows as a count on the icon, and each says its name on hover. Activity folds to a strip (its » button). Both
+are remembered in this browser.
 
 ### Overview
 
@@ -2230,6 +2244,7 @@ seconds after each answer: the switches, the state, and pairing.
 | stop the helper on a Mac | Rushes Helper → **Run in the background** off | It stops now and does not start at the next login. |
 | stop everything on the archive machine | Manage → Overview → **Stop Rushes on the server** (beside Pause copying; also on the runner's line in What runs by itself), or put a file called `STOP` in the web folder | The runner does nothing at all, every minute, until **Start** (or the file is removed). What it is in the middle of finishes; the pages keep answering. |
 | skip one folder | Overview → **Skip** (offered when a folder has stopped for 3 minutes) | That folder is taken out of the transfer and the work list. |
+| stop the job running now | **Stop** in the top bar (any page), on Rescue's strip, or on the drive's Health | Offered for jobs that stop between files (Look for broken files, Rescue, Delete All): it finishes the file it is on and stops; the rest stay as they were. |
 | look again now | **Try again now** | The helper stops waiting and looks again. It also clears "stopped by itself". |
 
 **How buttons ask.** Buttons that start work, move files or take something

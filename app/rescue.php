@@ -37,9 +37,6 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .rt .src { flex: 0 1 40%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; text-align: right }
   .rt .rm { visibility: hidden; flex: none; font-size: 12px } .rt .r:hover .rm { visibility: visible }
   .rt .why { flex: none; font-size: 12px }
-  .fmenu { position: fixed; z-index: 50; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; min-width: 170px }
-  .fmenu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer }
-  .fmenu button:hover { background: var(--accent); color: var(--accent-fg) }
   @media (max-width: 700px) { .rtiles { grid-template-columns: 1fr } .rt .src { display: none } }
   .chip { flex: none; font-size: 11.5px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted) }
   .chip.ok { color: var(--ok, var(--accent)); border-color: currentColor } .chip.run { color: var(--accent-text, var(--accent)); border-color: currentColor }
@@ -54,6 +51,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
 <?php $RAIL = 'rescue'; require __DIR__ . '/db/rail.php'; ?>
   <main class="work">
   <div class="pad form">
+    <div id="dvBar"></div>
     <div class="head"><h1>Rescue</h1>
       <span class="sub">Broken copies in the archive, and good ones brought back. <?= $tip('Rushes reads the first bytes of every clip and sidecar in the archive: an empty clip, one too small to be a clip, or one with another file’s data inside (as a damaged disk or a broken copy leaves them) is broken. For each, it says where it came from and looks for a good copy: where it was copied from, or a file of the same name elsewhere in Search, on the archive or a drive. Looking changes nothing. Rescue replaces only what you tick: the good copy is copied in and read back byte for byte, and the broken one goes to Recently Removed.') ?></span></div>
 
@@ -297,6 +295,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   }
   function load() { return fetch('/db/rescue.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(draw)
     .catch(function (e) { $('rOut').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; }); }
+  window.driveBar($('dvBar'), <?= json_encode(rtrim(archive_dir(), '/')) ?>, 'rescue');      // Rescue looks after the archive
   load(); setInterval(function () { if (last && (last.running || last.asked || picked(last).length || (last.servers || []).some(function (x) { return !x.state || /testing|listing|asked/.test(x.state.state); }))) load(); }, 5000);
 })();
 </script>

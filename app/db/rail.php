@@ -7,13 +7,20 @@
 // already on it, its own script switches section without reloading.
 $RAIL = $RAIL ?? '';
 $railItem = function (string $id, string $label, string $ico, string $href, bool $section, string $extra = '') use ($RAIL) {
-    return '<a class="nav" href="' . $href . '"' . ($section ? ' data-go="' . $id . '"' : '')
+    return '<a class="nav" href="' . $href . '" title="' . htmlspecialchars($label) . '"' . ($section ? ' data-go="' . $id . '"' : '')
          . ($RAIL === $id ? ' aria-current="page"' : '') . '><span class="ico">' . icon($ico) . '</span> '
-         . $label . $extra . '</a>';
+         . '<span class="lb">' . $label . '</span>' . $extra . '</a>';
 };
 ?>
   <nav class="rail rail-manage" aria-label="Manage sections">
+    <!-- folds to its icons (⌘\), and opens again; what needs you still shows as a dot -->
+    <div class="rail-fold"><button type="button" data-fold="rail" data-on="»" data-off="«" data-ton="Show the side panel (⌘\)" data-toff="Fold the side panel to icons (⌘\)"
+      onclick="window.foldPanel('rail')"></button></div>
     <?= $railItem('overview',   'Overview',   'overview',  '/db/admin.php#overview',   true, ' <span class="badge bad" id="nOverview" hidden></span>') ?>
+
+    <!-- The drives: each opens its own page, where everything done to it is; right click for the same as a menu -->
+    <h2>Drives</h2>
+    <div id="railDrives"></div>
 
     <!-- The pages that move files: each shows everything first, asks before it moves, records every move, and can put it back -->
     <h2>Transfer</h2>
@@ -56,11 +63,24 @@ window.railFoot = function (s) {
   m.className = s.disk.pct >= 90 ? 'full' : s.disk.pct >= 80 ? 'hot' : '';
 };
 </script>
-<?php if ($RAIL === 'structure' || $RAIL === 'setup' || $RAIL === 'rescue'): ?>
 <script>
-// the admin page draws it with everything else; the other pages ask for it once
-fetch('/db/state.php?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (s) {
-  if (!s.error) window.railFoot(s);
-}).catch(function () {});
+(function () {
+  var b = document.querySelector('[data-fold="rail"]'), on = document.documentElement.classList.contains('rail-min');
+  b.textContent = b.dataset[on ? 'on' : 'off']; b.title = b.dataset[on ? 'ton' : 'toff'];
+  // the drives, from what the top bar reads every few seconds (head.php: rushes-state)
+  var here = <?= json_encode($RAIL_DRIVE ?? '') ?>;
+  var draw = function (s) {
+    window.railFoot(s);
+    var el = document.getElementById('railDrives'), e = function (v) { return String(v).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+    var ds = window.drivesOf(s);
+    el.innerHTML = ds.map(function (x, i) {
+      var t = window.driveTabs(x, s), want = t.reduce(function (n, y) { return n + (y[3] || 0); }, 0);
+      return '<a class="nav drv-nav" data-di="' + i + '" href="' + t[0][2] + '" title="' + e(x.name + ' · ' + window.driveKind(x)) + '"' + ((x.root || x.path) === here ? ' aria-current="page"' : '') + '>' +
+        '<span class="ico">' + window.driveIcon(x) + '</span> <span class="lb">' + e(x.name) + '</span>' + (want ? ' <span class="count">' + want.toLocaleString() + '</span>' : '') + '</a>';
+    }).join('') || '<p class="note lb" style="margin:0 9px">None yet</p>';
+    el.querySelectorAll('[data-di]').forEach(function (a) { a.oncontextmenu = function (ev) { window.driveMenu(ev, ds[+a.dataset.di], s); }; });
+  };
+  if (window.topState) draw(window.topState);
+  document.addEventListener('rushes-state', function (ev) { draw(ev.detail); });
+})();
 </script>
-<?php endif; ?>

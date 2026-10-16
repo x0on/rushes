@@ -526,7 +526,7 @@ usort($drives_other, fn($a, $b) => [$a['kind'] === 'card', $a['name']] <=> [$b['
 echo json_encode([
     'drives_in' => $drives_in, 'drives_other' => $drives_other, 'helper_seen' => (int)($hv['at'] ?? 0),
     'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
-    'can_make_archive' => helper_mode() !== 'external', 'can_preview_drives' => can_preview_drives(), 'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()),
+    'can_make_archive' => helper_mode() !== 'external', 'can_preview_drives' => can_preview_drives(), 'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()), 'archive_root' => rtrim(archive_dir(), '/'),
     'repeats'  => $repeats,
     'backup'   => backup_said(),
     'transfer' => $transfer,
@@ -535,6 +535,13 @@ echo json_encode([
                    'imported' => $imported, 'imported_ago' => $ago($searchAt)],
     'disk'     => $disk,
     'runner'   => ['ok' => $runner_ok, 'seen' => $alive, 'ago' => $ago($alive), 'stopped' => $stopped],
+    // the archive's health, for its page and its bar: each a count, opened where it is fixed
+    'health'   => (function () use ($WEB, $tot, $hold) {
+        $rows = @file("$WEB/rescue-found.tsv") ?: [];
+        return ['broken' => count($rows), 'sure' => count(array_filter($rows, fn($l) => str_ends_with(rtrim($l, "\n"), "\t1"))),
+                'looked' => (int)explode("\t", (string)@file_get_contents("$WEB/rescue-looked.txt"))[0],
+                'junk' => $tot['junk'], 'hold' => $hold];
+    })(),
     'running'  => $running, 'running_said' => $running_said, 'progress' => $progress,
     // Stop in the top bar: offered for jobs that stop between files; 'stopping' once it was pressed
     'can_stop' => $running !== null && isset(STOPPABLE[$running]),

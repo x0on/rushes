@@ -213,6 +213,17 @@ a:hover { text-decoration: underline }
               border-radius: 9px; padding: 1px 7px }
 .nav .badge.bad { background: var(--bad); color: var(--white) }
 
+/* the rail folded to icons (⌘\ or its « button; remembered): labels hidden, each says its name on hover,
+   and what needs you still shows, as a dot on its icon */
+:root.rail-min { --rail-w: 58px }
+.rail-min .rail h2, .rail-min .rail .lb, .rail-min .rail-foot > :not(.rail-fold), .rail-min .rail .count:empty { display: none }
+.rail-min .nav { justify-content: center; padding: 8px 0; position: relative }
+.rail-min .nav .badge, .rail-min .nav .count { position: absolute; top: 2px; right: 6px; margin: 0; font-size: 9px; padding: 0 4px; min-width: 8px }
+.rail-fold { display: flex; justify-content: flex-end; margin: -4px 0 6px }
+.rail-fold button, .side-fold { font: inherit; font-size: 12px; color: var(--faint); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 7px; cursor: pointer }
+.rail-fold button:hover, .side-fold:hover { border-color: var(--line); color: var(--fg) }
+.rail-min .rail-fold { justify-content: center }
+.rail .drv-nav .ico { color: var(--accent-text, var(--accent)) }
 .rail-foot { margin-top: auto; padding: 12px 9px 4px; border-top: 1px solid var(--line-soft);
              font-size: 11.5px; color: var(--muted); flex: none }
 .meter { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 7px 0 5px }
@@ -445,3 +456,21 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
   white-space: normal; text-align: left; box-shadow: var(--shadow) }
 .infotip.tip-l:hover::after, .infotip.tip-l:focus::after { left: auto; right: -8px }
 .infotip.tip-u:hover::after, .infotip.tip-u:focus::after { top: auto; bottom: calc(100% + 6px) }
+
+/* ══ a drive: its bar (name, what can be done to it as tabs) on every page that works on it ══ */
+.dbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; padding: 0 0 10px; border-bottom: 1px solid var(--line) }
+.dbar .dn { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; margin-right: 6px }
+.dbar .dn small { font-weight: 400; color: var(--muted); font-size: 12px }
+.dbar .dn svg { width: 18px; height: 18px }
+.dbar nav { display: flex; gap: 2px; flex-wrap: wrap }
+.dbar nav a { font-size: 13px; color: var(--muted); padding: 5px 10px; border-radius: 7px; text-decoration: none; white-space: nowrap }
+.dbar nav a:hover { background: var(--raised); color: var(--fg) }
+.dbar nav a[aria-current] { background: var(--sel-bg); color: var(--sel-fg); font-weight: 600 }
+.dbar nav a b { font-weight: 600; font-size: 11px; margin-left: 4px; color: var(--bad) }
+.dbar .back { font-size: 12px; color: var(--muted); margin-left: auto }
+/* a menu at the pointer (right click on a drive, Remove… in Rescue) */
+.fmenu { position: fixed; z-index: 50; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; min-width: 190px }
+.fmenu button, .fmenu a { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer; text-decoration: none }
+.fmenu button:hover, .fmenu a:hover { background: var(--accent); color: var(--accent-fg) }
+.fmenu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px }
+.fmenu .h { font-size: 11px; color: var(--faint); padding: 4px 10px 2px }

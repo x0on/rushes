@@ -75,6 +75,10 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
   .lv i { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden } .lv i b { display: block; height: 100%; background: var(--ok) }
   .lv em { font-style: normal; text-align: right; color: var(--fg) }
   .drv-c .more { font-size: 11.5px; color: var(--muted); margin-top: 6px }
+  .hl > div { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; align-items: center; padding: 9px 14px; border-top: 1px solid var(--line-soft); font-size: 13px }
+  .hl > div:first-child { border-top: 0 } .hl b { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums } .hl span { color: var(--muted) }
+  .hl .bad b { color: var(--bad) } .hl .warn b { color: var(--warn) } .hl .ok b { color: var(--ok) } .hl .run b { font-size: 13.5px; grid-column: 1 / 3 } .hl .run span { display: none }
+  @media (max-width: 700px) { .hl > div { grid-template-columns: 70px 1fr } .hl .btn { grid-column: 2 } }
   .dlv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding: 12px 14px 14px }
   .dlv > div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg) }
   .dlv .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650 }
@@ -182,6 +186,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
 
   <main class="work">
     <div class="pad">
+      <!-- a drive's own bar: on its page and on every section opened from it (Duplicates, Cache, Copy) -->
+      <div id="dvBar" hidden></div>
       <div class="head">
         <h1 id="title">Overview</h1>
         <span class="sub" id="built"></span>
@@ -312,6 +318,8 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <p class="note" id="dvSaid" style="margin:8px 0 0"></p>
         </div>
         <div class="panel" style="margin-top:12px"><div class="dlv" id="dvLevels"></div></div>
+        <!-- what wants looking after on this drive, each a count, each opened where it is fixed -->
+        <div class="panel" style="margin-top:12px" id="dvHealthBox"><header><b>Health</b><span class="n">what wants looking after on this drive</span></header><div class="hl" id="dvHealth"></div></div>
         <div class="panel" style="margin-top:12px">
           <header><b>Folders</b><span class="n" id="dvAt"></span></header>
           <div class="crumbs" id="dvCrumbs"></div>
@@ -638,6 +646,7 @@ const tb  = function (b) {
 
 let busy = null, ticked = new Set(), seeded = false, sig = '', secs = [], BIG = 1099511627776;
 let pane = 'overview', latestTransfer = null, quiet = 0;
+let dctx = null;                      // the drive the section open was opened for (its bar on top), or none
 let drv = null;                       // the drive whose page is open (a card from state.php drives_in), and the folder in it
 let lastRunning = '';                 // the job the runner says it is doing (state.php)
 // Activity's filter: everything, or one kind (activity.php names them)
@@ -684,7 +693,13 @@ function show(which) {
   if (which === 'duplicates') { loadDup(); loadRemoved(); }
   if (which === 'transfers') loadCopy();
   if (which === 'drive') { loadDrive(); loadRemoved(); }
-  try { history.replaceState(null, '', '#' + which); } catch (e) {}
+  // the drive's bar on top of what was opened for it; its address says so, so a reload or a link comes back to it
+  if (!['drive', 'duplicates', 'cache', 'transfers'].includes(which)) dctx = null;
+  if (which === 'drive' && drv) dctx = drv;
+  $('dvBar').hidden = !dctx;
+  if (dctx) window.driveBar($('dvBar'), dctx.root || dctx.path, { drive: 'overview', duplicates: 'dup', cache: 'cache', transfers: 'copy' }[which]);
+  const r = dctx ? encodeURIComponent(dctx.root || dctx.path) : '';
+  try { history.replaceState(null, '', '#' + (dctx ? { drive: 'drive=', duplicates: 'dup=', cache: 'cache=', transfers: 'copy=' }[which] + r : which)); } catch (e) {}
   if (window.lastState) drawHelper(window.lastState);     // the switches show (or go) at once, not at the next refresh
 }
 document.addEventListener('click', function (e) {
@@ -692,8 +707,25 @@ document.addEventListener('click', function (e) {
   e.preventDefault(); show('overview'); $('hctl').scrollIntoView({ block: 'start' });
 });
 document.querySelectorAll('.rail .nav[data-go]').forEach(function (b) {
-  b.onclick = function (e) { e.preventDefault(); show(b.dataset.go); };
+  b.onclick = function (e) { e.preventDefault(); dctx = null; show(b.dataset.go); };
 });
+// #drive=<root>, #dup=<root>, #cache=<root>, #copy=<root>: a drive's page, or a section opened for it. The drives
+// come with the state, so an address read before it is kept and followed once they are here.
+let wantRoute = null;
+function route(h) {
+  const m = /^#(drive|dup|cache|copy)=(.+)$/.exec(h || '');
+  if (!m) { show((h || '#overview').slice(1)); return; }
+  if (!window.lastState) { wantRoute = h; return; }
+  wantRoute = null;
+  const x = window.driveOf(window.lastState, decodeURIComponent(m[2]));
+  if (!x) { show('overview'); return; }
+  dctx = x; const arch = x.kind === 'archive';
+  if (m[1] === 'drive') { openDrive(x); return; }
+  if (m[1] === 'dup') { show('duplicates'); $('dupDrive').value = arch ? '' : (x.source || ''); dupList = null; loadDup(); loadRemoved(); return; }
+  if (m[1] === 'cache') { show('cache'); return; }
+  cpWas = { from: arch ? '@archive' : x.path, to: null }; show('transfers'); loadCopy();
+}
+window.addEventListener('hashchange', function () { route(location.hash); });
 $('sideMore').onclick = function (e) { e.preventDefault(); show('activity'); };
 // The password banner's button: Setup, at the form
 if ($('pwGo')) $('pwGo').onclick = function () { location.href = '/setup.php#password'; };
@@ -1404,7 +1436,31 @@ function drvLevels(x) {
 }
 function openDrive(x) {
   if (!x) return;
-  drv = Object.assign({}, x, { in: '' }); show('drive'); window.scrollTo(0, 0);
+  drv = Object.assign({}, x, { in: '' }); dctx = drv; show('drive'); window.scrollTo(0, 0);
+}
+// The drive's health: what is running on it (with Stop), broken files, files waiting to be filed, editing cache,
+// Recently Removed, duplicates; each a line with its count and the place it is looked after.
+function drawHealth() {
+  if (!drv || !window.lastState) return;
+  const s = window.lastState, h = s.health || {}, arch = drv.kind === 'archive', r = encodeURIComponent(drv.root || drv.path);
+  const n = function (v) { return (+v || 0).toLocaleString(); };
+  const row = function (cls, big, what, href, act) {
+    return '<div class="' + cls + '"><b>' + big + '</b><span>' + what + '</span>' + (href ? '<a class="btn quiet" href="' + href + '">' + act + '</a>' : '') + '</div>';
+  };
+  const w = drv.levels && drv.levels.wait;
+  let html = '';
+  if (s.running && (arch || (drv.now))) html += '<div class="run"><b><span class="spin"></span>' + esc(window.nowSaid(s)) + '</b><span>' + (s.stopping ? 'Stopping after the file it is on…' : 'Running now.') + '</span>' +
+    (s.can_stop && !s.stopping ? '<button class="btn quiet" type="button" id="dvStop">Stop</button>' : s.running_page ? '<a class="btn quiet" href="' + s.running_page + '">Open</a>' : '') + '</div>';
+  if (arch) html += row(h.broken ? 'bad' : 'ok', h.looked ? n(h.broken) : '?', h.looked ? (h.broken ? 'broken files (' + n(h.sure) + ' ready to rescue) · looked ' + esc(whenWords(h.looked)) : 'broken files: none found ✓ · looked ' + esc(whenWords(h.looked))) : 'broken files: not looked for yet', '/rescue.php', h.broken ? 'Rescue' : 'Look');
+  if (arch) html += row(w && w.n ? 'warn' : 'ok', n(w && w.n), 'files waiting to be filed' + (w && w.n ? ' · ' + tb(w.b) : ''), '/structure.php#filein', 'File in');
+  if (arch) html += row(h.junk && h.junk.n ? 'warn' : 'ok', n(h.junk && h.junk.n), 'editing cache files' + (h.junk && h.junk.n ? ' · ' + tb(h.junk.b) + ', rebuilt by the editing software by itself' : ''), '/db/admin.php#cache=' + r, 'Cache');
+  if (arch) html += row(h.hold ? 'warn' : 'ok', h.hold ? tb(h.hold) : '0', 'in Recently Removed · space comes back with Delete All', '/db/admin.php#cache=' + r, 'Recently Removed');
+  html += row('', '—', 'duplicates: the same file twice on this drive', '/db/admin.php#dup=' + r, 'Find duplicates');
+  html += row('', '', 'Folders: move, rename, remove, as in Finder', '/structure.php?drive=' + r + '#tidy', 'Tidy up');
+  $('dvHealth').innerHTML = html;
+  if ($('dvStop')) $('dvStop').onclick = function () { const b = this; b.disabled = true; b.textContent = 'Asking…';
+    fetch('/db/stop.php', { method: 'POST', body: new URLSearchParams({}) }).then(function (x) { return x.json(); })
+      .then(function (x) { b.textContent = x.error ? 'Did not stop: ' + x.error : 'Stopping after the file it is on…'; }); };
 }
 async function loadDrive(fresh) {
   if (!drv) return;
@@ -1414,9 +1470,10 @@ async function loadDrive(fresh) {
   const prepOk = arch || (kept && !!(window.lastState && window.lastState.can_preview_drives));
   const prepAt = function (inside) { return arch ? inside : drv.root + (inside ? '/' + inside : ''); };
   $('dvHead').textContent = drv.name; $('title').textContent = drv.name;
+  $('dvHead').hidden = $('dvBack').hidden = true;      // said once, by the drive's bar on top (its name, All drives)
   $('dvSub').textContent = DRV_KIND[drv.kind] + (drv.total ? ' · ' + tb(drv.free) + ' free of ' + tb(drv.total) : '') +
     (drv.roles && drv.roles.length ? ' · ' + drv.roles.join(' · ') : '');
-  $('dvBack').onclick = function (e) { e.preventDefault(); drv = null; show('overview'); };
+  $('dvBack').onclick = function (e) { e.preventDefault(); drv = null; dctx = null; show('overview'); };
   $('dvFolders').innerHTML = '<div class="note">Counting…</div>';
   let r;
   try { r = await (await fetch('drive.php?path=' + encodeURIComponent(drv.root) + '&in=' + encodeURIComponent(drv.in) + (fresh ? '&fresh=1' : '') + '&t=' + Date.now())).json(); }
@@ -1465,12 +1522,10 @@ async function loadDrive(fresh) {
     }).join('') + '</tbody></table>' +
     (loose ? '<p class="note" style="margin:8px 0 0">And ' + n(loose.n) + ' files loose in ' + esc(where) + '.</p>' : ''));
 
+  drawHealth();
   // what can be done on this drive: each opens the page that does it, set to this drive
   const isSrc = drv.roles && (drv.roles.indexOf('In Search') >= 0 || drv.roles.indexOf('To copy from') >= 0);
   $('dvActs').innerHTML =
-    '<button class="btn quiet" data-dv="dup">Find duplicates on this drive</button>' +
-    (arch ? '<button class="btn quiet" data-dv="cache">Clear editing cache</button>' : '') +
-    '<button class="btn quiet" data-dv="copy">' + (arch ? 'Back up the archive…' : 'Copy this drive…') + '</button>' +
     (prepOk ? '<button class="btn quiet" data-dv="describe">Previews and descriptions, in order</button>' : '') +
     (isSrc && !arch ? '<button class="btn quiet" data-dv="unsource">Remove from Rushes</button>' : '');
 
@@ -1625,6 +1680,8 @@ function drawDrives(d) {
     };
   });
   $('drivesNow').querySelectorAll('[data-open]').forEach(function (c) {
+    const x = (d.drives_in || []).find(function (y) { return y.path === c.dataset.open; });
+    c.oncontextmenu = function (e) { if (x) window.driveMenu(e, x, d); };     // everything that can be done to it, at the pointer
     c.onclick = function (e) {
       if (e.target.closest('button, .mk')) return;            // its own buttons (Remove from Rushes) and questions are not "open"
       openDrive((d.drives_in || []).find(function (x) { return x.path === c.dataset.open; }));
@@ -1820,6 +1877,8 @@ async function load() {
   drawTiles(d);
   drawNow(d);
   window.lastState = d; drawHelper(d);
+  if (wantRoute) route(wantRoute);
+  if (pane === 'drive') drawHealth();
   drawDescribeTools(d.helper);
   drawProxies(d.proxies);
   drawProxyTest(d);
@@ -2303,6 +2362,6 @@ every(loadAnalysis, 10000);
 
 // Jobs and tools moved to Setup (0.12.23): an old link or bookmark lands there
 if (location.hash === '#tools') location.replace('/setup.php#tools');
-else show((location.hash || '#overview').slice(1));
+else route(location.hash);
 every(load, 4000);
 </script>

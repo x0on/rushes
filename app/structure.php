@@ -145,9 +145,6 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .fi-e summary { cursor: pointer; color: var(--accent-text); font-size: 12px; margin-top: 4px } .fi-e div { font-size: 11.5px; color: var(--muted); word-break: break-all; padding: 1px 0 }
   .fi-v { word-break: break-word } .fi-v.warn { color: var(--warn) } .fi-v.bad { color: var(--bad); font-weight: 600 } .fi-v small { color: var(--muted) }
   .fpath { padding: 4px 10px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-  .fmenu { position: fixed; z-index: 50; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; min-width: 170px }
-  .fmenu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 5px 10px; border: 0; background: none; color: var(--fg); border-radius: 5px; cursor: pointer }
-  .fmenu button:hover { background: var(--accent); color: var(--accent-fg) }
   .fplay { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center }
   .fplay video { max-width: 86vw; max-height: 80vh; background: #000; border-radius: 6px }
   .fplay p { position: absolute; bottom: 20px; color: #fff; font-size: 13px }
@@ -165,6 +162,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
 
   <main class="work">
   <div class="pad form">
+    <div id="dvBar"></div>
     <div class="head"><h1>Reorganize</h1>
       <span class="sub">Moving what is already here into the structure set in <a href="/setup.php#plan">Setup</a>.</span></div>
 
@@ -237,6 +235,10 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
     </div>
 
     <script>
+  // the drive this page was opened for (?drive=, from its page or its menu), else the archive
+  var DRV = <?= json_encode(rtrim((string)($_GET['drive'] ?? archive_dir()), '/')) ?>;
+</script>
+<script>
     (function () {
       var SHELF = <?= json_encode($shelf, JSON_UNESCAPED_UNICODE) ?>, data = null, tops = [];
       var $ = function (id) { return document.getElementById(id); };
@@ -664,6 +666,8 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           var ok = function (o) { return Array.isArray(o) && o.length && rootOf(o[0]); };
           was = was.filter(ok);
           if (!was.length) was = [[roots[0].path], [roots[0].path]];
+          // opened for a drive (its page, its bar, its menu): the first window is that drive
+          if (DRV !== roots[0].path && rootOf(DRV)) was[0] = [DRV];
           $('fWins').innerHTML = ''; wins = was.map(function (o) { return new Win(o); });
           wins.forEach(function (w) { w.draw(); });
         }).catch(function (e) { $('fWins').innerHTML = '<div class="banner bad"><div class="txt">' + esc(e.message) + '</div></div>'; });
@@ -996,6 +1000,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       // the two views: Drag and drop first; the list (every row worked out at once) when asked for
       var listRead = false, tuRead = false;
       function show(v) {
+        window.driveBar($('dvBar'), DRV, v === 'tidy' ? 'tidy' : 'filein');
         try { localStorage.setItem('rushes-reorg-view', v); } catch (e) {}
         if (history.replaceState) history.replaceState(null, '', { tidy: '#tidy', drag: '#filein', list: '#list' }[v]);
         // the side bar has Reorganize and Tidy up, both this page: the one showing is the one marked

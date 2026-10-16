@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.11 — October 2026
+
+- **Rushes is built around the drives.** The left column lists them under **Drives**, the archive first. A click opens the drive's page: its three levels, a new **Health** box (broken files, files waiting to be filed, editing cache, Recently Removed, duplicates, Tidy up, and what is running on it, with Stop), each with its count and the button that opens it. A right click on a drive, in the column or on Overview's cards, offers everything that can be done to it as a menu.
+- **The drive's bar.** Everything opened for a drive (Tidy up, File in, Rescue, Duplicates, Cache, Back up or Copy) has the drive's name and those same choices as tabs on top, with counts (*Rescue 606*). Tidy up opened from a drive starts there. A drive's page has an address of its own, so a reload, the back button or a link comes back to it.
+- **The side panels fold away.** The left column folds to its icons (« or ⌘\), still showing counts; Activity folds to a strip (»). Rushes remembers how you left them.
+
 ## 0.13.10 — October 2026
 
 - **Rescue no longer calls a sidecar or a camera's file name sure by its name and size.** Sony cards reuse names like `C0051M01.XML` on every card, and sidecars are nearly all one size, so 0.13.9 could fill a broken April sidecar from a February one. Now a sidecar is sure only from where it was copied from, or from a folder of the same name; names a camera gives (`C0051M01`, `FX30.0944`, `A069C942_…`, `DJI_0128`, `IMG_6583`) are never sure by name and size alone; and a card's own folders (`CLIP`, `PRIVATE`, `CAM 2`) do not count as "a folder of the same name". Look again after updating.

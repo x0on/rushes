@@ -64,8 +64,10 @@ check(str_contains($html, 'id="now"') && str_contains($html, 'id="transferSummar
 check(str_contains($html, 'helperNow') && str_contains($html, 'tokens.css?v='), 'shared top bar with live words and a fresh stylesheet');
 check(str_contains($html, 'id="rlGo"') && !str_contains($html, 'id="pane-tools"') && str_contains($html, "'/setup.php#tools'"),
       "relinking after a tidy-up is in Editors' projects; Jobs and tools is in Setup, and an old link lands there");
-check(str_contains($html, '<h2>Transfer</h2>') && str_contains($html, '<h2>Footage</h2>') && str_contains($html, '> Copying') && str_contains($html, "pane !== 'overview'"),
-      'the menu: Overview, then Transfer, Footage and System; the switches only on Overview');
+check(str_contains($html, '<h2>Drives</h2>') && str_contains($html, '<h2>Transfer</h2>') && str_contains($html, '<h2>Footage</h2>') && str_contains($html, '<span class="lb">Copying</span>') && str_contains($html, "pane !== 'overview'"),
+      'the menu: Overview, the drives, then Transfer, Footage and System; the switches only on Overview');
+check(str_contains($html, 'data-fold="rail"') && str_contains($html, 'id="dvHealth"') && str_contains($html, 'id="dvBar"') && str_contains($html, "window.addEventListener('hashchange'"),
+      "a drive's page: its bar, its Health, an address of its own (#drive=); the side panel folds");
 check(str_contains($html, 'id="dBoxes"') && !str_contains($html, 'id="dFolders"') && str_contains($html, "action: 'pick'"),
       'Duplicates: three kinds with their own Remove, no row of folder chips');
 check(str_contains($html, 'id="cpFrom"') && str_contains($html, 'id="cpTo"') && str_contains($html, "fetch('backup.php") && str_contains($html, 'data-go-copy'),

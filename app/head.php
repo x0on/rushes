@@ -26,6 +26,9 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   document.documentElement.classList.add('on-phone');
 </script>
 <script>
+  // The side panels as they were left (folded or open), before first paint, so nothing jumps
+  try { if (localStorage.getItem('rushes-rail-min') === '1') document.documentElement.classList.add('rail-min');
+        if (localStorage.getItem('rushes-side-min') === '1') document.documentElement.classList.add('side-min'); } catch (e) {}
   // Theme before first paint, so a dark page never flashes white on the way in.
   try { var t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; }
   catch (e) {}
@@ -102,6 +105,70 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   window.nowSaid = function (d) {
     var p = d.progress, w = d.running_said || d.running || '';
     return w + (!p ? '' : p.said ? ' · ' + p.said : p.pct != null ? ' · ' + p.pct + '%' : '');
+  };
+  // ── the side panels: folded (the rail to its icons, Activity to a strip) or open; remembered ──
+  window.foldPanel = function (which) {
+    var c = which === 'rail' ? 'rail-min' : 'side-min', on = document.documentElement.classList.toggle(c);
+    try { localStorage.setItem('rushes-' + c, on ? '1' : '0'); } catch (e) {}
+    document.querySelectorAll('[data-fold="' + which + '"]').forEach(function (b) { b.textContent = b.dataset[on ? 'on' : 'off']; b.title = b.dataset['t' + (on ? 'on' : 'off')]; });
+  };
+  // ── a drive: everything Rushes can do to it, in one place (its page, its bar, its right-click menu) ──
+  var DRV_SVG = <?= json_encode(['archive' => icon('archive', 1.6), 'nas' => icon('server', 1.6), 'drive' => icon('drive', 1.6), 'card' => icon('card', 1.6)]) ?>;
+  window.driveIcon = function (x) { return DRV_SVG[x.kind] || DRV_SVG.drive; };
+  window.driveKind = function (x) { return { archive: 'the archive', nas: 'network share (NAS)', drive: 'drive plugged in', card: 'card' }[x.kind] || ''; };
+  // [id, words, where, how many want you]: only what can be done to this drive
+  window.driveTabs = function (x, s) {
+    var r = encodeURIComponent(x.root || x.path), arch = x.kind === 'archive', h = (s && s.health) || {};
+    var t = [['overview', 'Overview', '/db/admin.php#drive=' + r, 0], ['tidy', 'Tidy up', '/structure.php?drive=' + r + '#tidy', 0]];
+    if (arch) t.push(['filein', 'File in', '/structure.php#filein', x.levels && x.levels.wait ? x.levels.wait.n : 0],
+                     ['rescue', 'Rescue', '/rescue.php', h.broken || 0]);
+    t.push(['dup', 'Duplicates', '/db/admin.php#dup=' + r, 0]);
+    if (arch) t.push(['cache', 'Cache', '/db/admin.php#cache', 0]);
+    t.push(['copy', arch ? 'Back up' : 'Copy', '/db/admin.php#copy=' + r, 0]);
+    return t;
+  };
+  // the drives Rushes covers; the archive always among them (a helper that has not said which drives it sees yet,
+  // or an archive on the server itself, has no card: its own entry, from what Rushes knows of it)
+  window.drivesOf = function (s) {
+    var all = ((s && s.drives_in) || []).filter(function (x) { return x.root; });
+    if (s && s.archive_root && !all.some(function (x) { return x.kind === 'archive'; }))
+      all.unshift({ name: s.archive_name || 'The archive', kind: 'archive', root: s.archive_root, path: s.archive_root, roles: ['The archive'] });
+    return all;
+  };
+  window.driveOf = function (s, root) {
+    var all = window.drivesOf(s);
+    return all.filter(function (x) { return (x.root || x.path) === root; })[0] || all.filter(function (x) { return x.kind === 'archive'; })[0] || null;
+  };
+  // the bar on top of a page that works on one drive: its name, and what else can be done to it
+  window.driveBar = function (el, root, tab) {
+    if (!el) return;
+    el._db = { root: root, tab: tab };
+    var draw = function (s) {
+      var x = window.driveOf(s, el._db.root); if (!x) return; tab = el._db.tab;
+      var e = function (v) { return String(v).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+      el.innerHTML = '<div class="dbar"><span class="dn">' + window.driveIcon(x) + e(x.name) + ' <small>' + e(window.driveKind(x)) + '</small></span><nav>' +
+        window.driveTabs(x, s).map(function (t) { return '<a href="' + t[2] + '"' + (t[0] === tab ? ' aria-current="page"' : '') + '>' + t[1] + (t[3] ? '<b>' + t[3].toLocaleString() + '</b>' : '') + '</a>'; }).join('') +
+        '</nav><a class="back" href="/db/admin.php#overview">All drives</a></div>';
+    };
+    if (window.topState) draw(window.topState);
+    if (!el._dbOn) { el._dbOn = 1; document.addEventListener('rushes-state', function (ev) { draw(ev.detail); }); }
+  };
+  // right click on a drive (Overview's cards, the rail): the same, as a menu at the pointer
+  var dmenu = null;
+  var closeDM = function () { if (dmenu) { dmenu.remove(); dmenu = null; } };
+  document.addEventListener('click', closeDM); document.addEventListener('scroll', closeDM, true);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDM(); });
+  window.driveMenu = function (ev, x, s) {
+    ev.preventDefault(); closeDM();
+    dmenu = document.createElement('div'); dmenu.className = 'fmenu';
+    var h = document.createElement('div'); h.className = 'h'; h.textContent = x.name; dmenu.appendChild(h);
+    window.driveTabs(x, s || window.topState).forEach(function (t, i) {
+      var a = document.createElement('a'); a.href = t[2]; a.textContent = (i ? t[1] : 'Open') + (t[3] ? ' · ' + t[3].toLocaleString() : ''); dmenu.appendChild(a);
+      if (!i) dmenu.appendChild(document.createElement('hr'));
+    });
+    document.body.appendChild(dmenu);
+    dmenu.style.left = Math.min(ev.clientX, innerWidth - dmenu.offsetWidth - 8) + 'px';
+    dmenu.style.top = Math.min(ev.clientY, innerHeight - dmenu.offsetHeight - 8) + 'px';
   };
   // An ⓘ near the right or the bottom of the window opens its explanation the other way,
   // so it never runs under the Activity column or off the screen (tokens.css → .infotip)
@@ -277,6 +344,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
       .then(function (r) { return r.json(); })
       .then(function (s) {
         if (s.error) { $('hDot').className = 'dot off'; $('hWhat').textContent = 'needs setting up'; return; }
+        window.topState = s; document.dispatchEvent(new CustomEvent('rushes-state', { detail: s }));   // the drive bar, the rail's drives
         // Rushes was updated since this page was opened: the page is older than what answers it. Reloaded at once
         // when nothing is being done on it; otherwise said, with the link (a page must never run an older Rushes).
         if (s.version && s.version !== PAGE_VERSION) {
@@ -320,6 +388,8 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
     }).catch(function () { b.textContent = 'Did not stop: no answer'; b.disabled = false; });
   };
   every(paint, 5000);
+  // ⌘\ (Ctrl+\): the rail folds to its icons, or opens again; remembered
+  document.addEventListener('keydown', function (e) { if ((e.metaKey || e.ctrlKey) && e.key === '\\') { e.preventDefault(); window.foldPanel('rail'); } });
 })();
 
 // What the helper is doing, in words and numbers, from state.php's "copy".

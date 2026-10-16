@@ -19,6 +19,12 @@ $SIDE_SELF = $SIDE_SELF ?? false;
   .side-f { border-top: 1px solid var(--line); padding: 10px 14px; font-size: 11.5px;
             color: var(--muted); flex: none }
   .side .ev { padding: 9px 14px }
+  /* folded to a strip (its » button; remembered): the work gets the room, Activity is one click away */
+  :root.side-min .with-side { grid-template-columns: var(--rail-w) minmax(0,1fr) 38px }
+  .side-min .side .side-body, .side-min .side .side-f, .side-min .side .ghost { display: none }
+  .side-min .side .side-h { writing-mode: vertical-rl; padding: 12px 8px; border-bottom: 0; flex-direction: row-reverse; justify-content: flex-end }
+  .side-fold { margin-left: 4px }
+  .side-min .side-fold { margin: 0 0 8px }
   .with-side.no-side { grid-template-columns: var(--rail-w) minmax(0,1fr) } .no-side > .side { display: none }
   @media (max-width: 1200px) { .with-side { grid-template-columns: var(--rail-w) 1fr }
                                .side { display: none } }
@@ -27,10 +33,14 @@ $SIDE_SELF = $SIDE_SELF ?? false;
   <!-- The log lives beside the work, not behind a tab: half the point is seeing that something is still moving. -->
   <aside class="side" aria-label="Recent activity">
     <div class="side-h">Activity
-      <a class="ghost" id="sideMore" href="/db/admin.php#activity">all</a></div>
+      <a class="ghost" id="sideMore" href="/db/admin.php#activity">all</a>
+      <button type="button" class="side-fold" data-fold="side" data-on="«" data-off="»" data-ton="Show Activity" data-toff="Fold Activity away"
+        onclick="window.foldPanel('side')"></button></div>
     <div class="side-body" id="sideLog"><div class="empty">Nothing yet.</div></div>
     <div class="side-f" id="sideNow">&mdash;</div>
   </aside>
+<script>(function () { var b = document.querySelector('[data-fold="side"]'), on = document.documentElement.classList.contains('side-min');
+  b.textContent = b.dataset[on ? 'on' : 'off']; b.title = b.dataset[on ? 'ton' : 'toff']; })();</script>
 <?php if ($SIDE_SELF): ?>
 <script>
 (function () {
