@@ -1189,7 +1189,9 @@ folders, and one example per folder, and asks again.
 (**Another window** adds one); each window looks at the archive or at a drive in Search. Click a folder
 to open it in the next column; ⌘-click and ⇧-click select several; drag onto a folder (a row, or the
 empty part of a column) to move there. Right-click: **Rename**, **New folder**, **Show in Finder** (on
-the Mac Rushes runs on). Space plays a clip's preview, when it has one.
+the Mac Rushes runs on). Space plays a clip's preview, when it has one. Sizes, as in Finder: drag the line after a
+column to widen or narrow it (double-click it to fit the longest name), a window's bottom edge for the
+height, and the line between two windows to share the width; all remembered in this browser.
 
 Each change happens **at once**, as in Finder: a move inside the archive is a rename on the drive, so
 nothing is copied and a folder of any size moves in a moment. And unlike Finder:

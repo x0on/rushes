@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.13 — October 2026
+
+- **Tidy up's sizes, as in Finder.** Drag the line after a column to make it wider or narrower (double-click the line to fit the longest name), drag a window's bottom edge to make the windows taller, and drag the line between two windows to give one more room (double-click: half and half). Rushes remembers them.
+
 ## 0.13.12 — October 2026
 
 - **No numbers beside the drives in the left column**, open or folded: the counts are on the drive's page and its bar. Folded, the column shows no numbers at all, only a red dot where something needs you.

@@ -129,7 +129,15 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
   .fwin > header { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px }
   .fwin > header select { font: inherit; font-size: 12.5px; padding: 3px 6px; height: auto; min-height: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--fg) }
   .fwin > header .ro { color: var(--muted) } .fwin > header .x { margin-left: auto }
-  .fcols { display: flex; overflow-x: auto; height: 46vh; min-height: 260px }
+  .fcols { display: flex; overflow-x: auto; height: 46vh; min-height: 200px }
+  /* sizes, as in Finder: the line after a column (drag it; double-click fits the longest name), a window's bottom
+     edge, and the line between two windows; remembered in this browser */
+  .fgrip { flex: none; width: 7px; margin: 0 -4px 0 -3px; cursor: col-resize; position: relative; z-index: 2 }
+  .fgrip:hover, .fgrip.on { background: var(--accent); opacity: .5 }
+  .fhgrip { height: 6px; cursor: row-resize; border-top: 1px solid var(--line-soft) } .fhgrip:hover, .fhgrip.on { background: var(--accent); opacity: .5 }
+  .fvgrip { cursor: col-resize; border-radius: 4px } .fvgrip:hover, .fvgrip.on { background: var(--accent); opacity: .4 }
+  .fwins.sized { gap: 0 } .fwins.sized .fvgrip { width: 12px }
+  @media (max-width: 900px) { .fwins.sized { grid-template-columns: 1fr !important } .fwins.sized .fvgrip { display: none } }
   .fcol { flex: none; width: 220px; border-right: 1px solid var(--line-soft); overflow-y: auto; padding: 3px 0 }
   .fcol.over { background: var(--ok-bg) }
   .fr { display: flex; align-items: center; gap: 7px; padding: 3px 10px; margin: 0 4px; border-radius: 5px; font-size: 13px; cursor: default; user-select: none; white-space: nowrap }
@@ -420,6 +428,39 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var post = function (o) { var f = new URLSearchParams(o); return fetch('/db/browse.php', { method: 'POST', body: f }).then(function (r) { return r.json(); })
         .then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
       var save = function () { try { localStorage.setItem(KEY, JSON.stringify(wins.map(function (w) { return w.open; }))); } catch (e) {} };
+      // the sizes: each window's column widths (by depth), the windows' height, and how the width is shared between them
+      var SZ = { cw: [], h: 0, fr: [] };
+      try { SZ = Object.assign(SZ, JSON.parse(localStorage.getItem(KEY + '-size') || '{}')); } catch (e) {}
+      var saveSize = function () { try { localStorage.setItem(KEY + '-size', JSON.stringify(SZ)); } catch (e) {} };
+      // a drag: f(dx, dy) as the pointer moves, done() once it is let go
+      var dragging = function (e, el, f, done) {
+        e.preventDefault(); var x0 = e.clientX, y0 = e.clientY; el.classList.add('on'); document.body.style.userSelect = 'none';
+        var mv = function (ev) { f(ev.clientX - x0, ev.clientY - y0); };
+        var up = function () { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); el.classList.remove('on'); document.body.style.userSelect = ''; done(); };
+        addEventListener('pointermove', mv); addEventListener('pointerup', up);
+      };
+      // the windows side by side, the line between each two dragged to share the width differently
+      function layout() {
+        var box = $('fWins'), ws = [].slice.call(box.querySelectorAll(':scope > .fwin'));
+        box.querySelectorAll(':scope > .fvgrip').forEach(function (g) { g.remove(); });
+        if (ws.length < 2) { box.classList.remove('sized'); box.style.gridTemplateColumns = ''; return; }
+        if (SZ.fr.length !== ws.length) SZ.fr = ws.map(function () { return 1; });
+        box.classList.add('sized');
+        box.style.gridTemplateColumns = SZ.fr.map(function (f) { return 'minmax(0,' + f + 'fr)'; }).join(' 12px ');
+        ws.slice(0, -1).forEach(function (w, i) {
+          var g = document.createElement('div'); g.className = 'fvgrip'; g.title = 'Drag to share the width differently; double-click: half and half';
+          w.after(g);
+          g.onpointerdown = function (e) {
+            var a = ws[i].offsetWidth, b = ws[i + 1].offsetWidth, fa = SZ.fr[i], fb = SZ.fr[i + 1];
+            dragging(e, g, function (dx) {
+              var na = Math.max(260, Math.min(a + b - 260, a + dx));
+              SZ.fr[i] = (fa + fb) * na / (a + b); SZ.fr[i + 1] = (fa + fb) - SZ.fr[i];
+              box.style.gridTemplateColumns = SZ.fr.map(function (f) { return 'minmax(0,' + f + 'fr)'; }).join(' 12px ');
+            }, saveSize);
+          };
+          g.ondblclick = function () { var t = SZ.fr[i] + SZ.fr[i + 1]; SZ.fr[i] = SZ.fr[i + 1] = t / 2; saveSize(); layout(); };
+        });
+      }
       var said = function (html, bad) { $('fSaid').innerHTML = html; $('fSaid').className = 'note' + (bad ? ' bad' : ''); };
       var rootOf = function (p) { return roots.filter(function (r) { return p === r.path || p.indexOf(r.path + '/') === 0; }).sort(function (a, b) { return b.path.length - a.path.length; })[0]; };
 
@@ -440,13 +481,27 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
             return '<option value="' + esc(r.path) + '"' + (r === root ? ' selected' : '') + (r.here ? '' : ' disabled') + '>' + esc(r.name) + (r.hold ? '' : r.archive ? ' · the archive' : r.here ? ' · looked at only' : ' · not plugged in') + '</option>'; }).join('') +
           '</select>' + (root && root.hold ? '<span class="ro">Drag back out to recover.</span>' : root && !root.archive ? '<span class="ro">Nothing on this drive changes here.</span>' : '') +
           (wins.length > 1 ? '<button class="lnk x" type="button">Close</button>' : '') + '</header>' +
-          '<div class="fcols"></div><div class="fpath"></div>';
+          '<div class="fcols"' + (SZ.h ? ' style="height:' + SZ.h + 'px"' : '') + '></div><div class="fhgrip" title="Drag to make the windows taller or shorter"></div><div class="fpath"></div>';
         el.querySelector('select').onchange = function () { w.open = [this.value]; w.sel = {}; save(); w.draw(); };
-        var x = el.querySelector('.x'); if (x) x.onclick = function () { wins.splice(wins.indexOf(w), 1); el.remove(); save(); wins.forEach(function (v) { v.draw(); }); };
+        var x = el.querySelector('.x'); if (x) x.onclick = function () { SZ.cw.splice(wins.indexOf(w), 1); SZ.fr = []; saveSize(); wins.splice(wins.indexOf(w), 1); el.remove(); save(); wins.forEach(function (v) { v.draw(); }); };
         var cols = el.querySelector('.fcols');
+        // the bottom edge: every window the same height, side by side
+        el.querySelector('.fhgrip').onpointerdown = function (e) {
+          var h0 = cols.offsetHeight, g = this;
+          dragging(e, g, function (dx, dy) { SZ.h = Math.max(200, Math.min(innerHeight * 0.9, h0 + dy)); $('fWins').querySelectorAll('.fcols').forEach(function (c) { c.style.height = SZ.h + 'px'; }); }, saveSize);
+        };
+        var cw = SZ.cw[i] = SZ.cw[i] || [];
         el.querySelector('.fpath').textContent = w.open[w.open.length - 1].replace(root ? root.path : '', root ? root.name : '').split('/').join(' › ');
         w.open.forEach(function (dir, k) {
           var c = document.createElement('div'); c.className = 'fcol'; c.dataset.dir = dir; cols.appendChild(c);
+          if (cw[k]) c.style.width = cw[k] + 'px';
+          // the line after it: dragged, the column is wider or narrower; double-clicked, as wide as its longest name
+          var g = document.createElement('div'); g.className = 'fgrip'; g.title = 'Drag to make this column wider or narrower; double-click to fit the names'; cols.appendChild(g);
+          g.onpointerdown = function (e) { var w0 = c.offsetWidth; dragging(e, g, function (dx) { cw[k] = Math.max(120, Math.min(900, w0 + dx)); c.style.width = cw[k] + 'px'; }, saveSize); };
+          g.ondblclick = function () {
+            var m = 0; c.querySelectorAll('.fr').forEach(function (r) { var n = r.querySelector('.n'); if (n) m = Math.max(m, n.scrollWidth + r.offsetWidth - n.offsetWidth); });
+            cw[k] = Math.max(120, Math.min(900, m + 12)); c.style.width = cw[k] + 'px'; saveSize();
+          };
           c.innerHTML = '<div class="fr empty"><span class="n">Looking…</span></div>';
           list(dir).then(function (d) { w.col(c, d, k); }).catch(function (e) {
             c.innerHTML = '<div class="fr empty"><span class="n" style="white-space:normal">' + esc(e.message) + '</span></div>'; });
@@ -455,6 +510,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
         // one thing picked: its properties in a last column, dates first (as Finder's preview column)
         var one = w.picked(); if (one.length === 1) info(cols, one[0]);
         setTimeout(function () { cols.scrollLeft = cols.scrollWidth; }, 0);
+        layout();
       };
       Win.prototype.col = function (c, d, k) {
         var w = this, next = w.open[k + 1];
