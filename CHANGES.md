@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.16 — October 2026
+
+- **One answer to "is anything happening?", everywhere.** Rushes works in four lanes at once: its own jobs, previews (proxies), describing, and the helper's copying and checking. Each surface used to ask some of them, so the top bar said "nothing running" while previews were being made. Now one list holds every lane, and the top bar, Overview, the Activity column, a drive's Health and the menu bar all read it: *"Making previews · Human Resources · 1 of 25 · and 1 more"*. Click the top bar's line for the whole list, each with its progress and the page it belongs to. Something asked and waiting its turn says so ("starts within a minute"). "Nothing running" is said only when every lane is idle.
+
 ## 0.13.15 — October 2026
 
 - **Make previews and descriptions works on any folder name.** A folder with an apostrophe (*City Manager's Office*), a # or brackets was refused, and the refusal was said at the top of the page, out of sight: the link seemed to do nothing. Now any folder of the archive goes on the list (never one outside it), and if one is ever refused, it says why right under the link.

@@ -1449,8 +1449,9 @@ function drawHealth() {
   };
   const w = drv.levels && drv.levels.wait;
   let html = '';
-  if (s.running && (arch || (drv.now))) html += '<div class="run"><b><span class="spin"></span>' + esc(window.nowSaid(s)) + '</b><span>' + (s.stopping ? 'Stopping after the file it is on…' : 'Running now.') + '</span>' +
-    (s.can_stop && !s.stopping ? '<button class="btn quiet" type="button" id="dvStop">Stop</button>' : s.running_page ? '<a class="btn quiet" href="' + s.running_page + '">Open</a>' : '') + '</div>';
+  if (arch) (s.happening || []).forEach(function (x) {        // everything happening, as the top bar says it
+    html += '<div class="run"><b><span class="spin"></span>' + esc(x.what + (x.detail ? ' · ' + x.detail : '')) + '</b><span></span>' +
+      (x.stop && s.can_stop && !s.stopping ? '<button class="btn quiet" type="button" id="dvStop">Stop</button>' : x.stop && s.stopping ? '<span class="note">Stopping after the file it is on…</span>' : x.page ? '<a class="btn quiet" href="' + esc(x.page) + '">Open</a>' : '') + '</div>'; });
   if (arch) html += row(h.broken ? 'bad' : 'ok', h.looked ? n(h.broken) : '?', h.looked ? (h.broken ? 'broken files (' + n(h.sure) + ' ready to rescue) · looked ' + esc(whenWords(h.looked)) : 'broken files: none found ✓ · looked ' + esc(whenWords(h.looked))) : 'broken files: not looked for yet', '/rescue.php', h.broken ? 'Rescue' : 'Look');
   if (arch) html += row(w && w.n ? 'warn' : 'ok', n(w && w.n), 'files waiting to be filed' + (w && w.n ? ' · ' + tb(w.b) : ''), '/structure.php#filein', 'File in');
   if (arch) html += row(h.junk && h.junk.n ? 'warn' : 'ok', n(h.junk && h.junk.n), 'editing cache files' + (h.junk && h.junk.n ? ' · ' + tb(h.junk.b) + ', rebuilt by the editing software by itself' : ''), '/db/admin.php#cache=' + r, 'Cache');
@@ -1701,9 +1702,11 @@ function drawTiles(d) {
   const t = [];
   // what is happening, in one line
   // one answer for both parts of Rushes: its own jobs (d.running) and the helper's work (helperNow), as the top bar
-  const hb = helperNow(d.copy), hbusy = hb && hb.busy && !hb.bad;
-  $('ovNow').innerHTML = d.running ? '<span class="spin" style="margin-right:6px"></span><b>' + esc(window.nowSaid(d)) + '</b>'
-    : hbusy ? (pane === 'overview' && !liveFor(d.transfer, d.copy) ? '' : '<span class="spin" style="margin-right:6px"></span><b>' + esc(hb.title) + '</b>')
+  // the one list (state.php happening), every lane; the helper's copy has its own box below, so it is left out here
+  const L = (d.happening || []).filter(function (x) { return !(x.lane === 'helper' && pane === 'overview' && !liveFor(d.transfer, d.copy)); });
+  $('ovNow').innerHTML = L.length ? L.map(function (x) { return '<div><span class="spin" style="margin-right:6px"></span><b>' + esc(x.what) + '</b>' + (x.detail ? ' · ' + esc(x.detail) : '') +
+        (x.page ? ' · <a href="' + esc(x.page) + '">open</a>' : '') + '</div>'; }).join('')
+    : (d.happening || []).length ? ''
     : 'Nothing running' + (d.backup && d.backup.at ? ' · last backup ' + esc(whenWords(d.backup.at)) + (d.backup.late ? ' (late)' : ' ✓') : '') + '.';
   const ins = d.drives_in || [];
 
@@ -1934,11 +1937,7 @@ async function load() {
   const recent = d.recent || [];
   const evs = recent.filter(function (r) { return actKind === 'all' || r.kind === actKind || (actKind === 'changed' && r.kind === 'people'); }).map(ev);
   // what is happening now, in words and how far, first: in Activity and in the column beside every page
-  const nowRow = d.running
-      ? '<div class="ev"><span class="ico"><span class="spin"></span></span><div class="t">' + esc(d.running_said || d.running) +
-        '<small>happening now' + (d.progress && d.progress.said ? ' · ' + esc(d.progress.said) : d.progress && d.progress.pct != null ? ' · ' + d.progress.pct + '%' : '') + '</small>' +
-        '<div class="bar' + (d.progress && d.progress.pct != null ? '' : ' wait') + '"><i style="width:' +
-        ((d.progress && d.progress.pct) || 0) + '%"></i></div></div></div>' : '';
+  const nowRow = window.happeningRows(d);      // the one list (state.php happening): every lane, as the top bar
   $('events').innerHTML = (actKind === 'all' ? nowRow : '') + (evs.length ? evs.join('') : '<div class="empty">Nothing ' + (actKind === 'all' ? 'yet.' : 'of this kind yet.') + '</div>');
   $('sideLog').innerHTML = nowRow + (recent.length ? recent.slice(0, 12).map(ev).join('') : '<div class="empty">Nothing yet.</div>');
   $('sideNow').textContent = d.runner && d.runner.ok

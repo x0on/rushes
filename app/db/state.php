@@ -85,7 +85,7 @@ if ($running && is_readable("$WEB/job.log")) {
         $progress = ['pct' => null, 'said' => 'paused while the helper uses the disk, it carries on by itself' . (!empty($progress['said']) ? ' · ' . $progress['said'] : (isset($progress['done']) ? ' · ' . $progress['done'] . ' of ' . $progress['total'] : ''))];
 }
 // What is running, in words (the top bar, Activity): never a job's internal name
-$running_said = $running === null ? null : ([
+$JOB_WORDS = [
     'reindex' => 'Listing the files', 'manifest' => 'Listing the files', 'import' => 'Updating search',
     'find' => 'Finding duplicates', 'scan' => 'Finding duplicates', 'plan' => 'Planning which copies go',
     'apply' => 'Removing duplicate copies', 'undo' => 'Putting copies back', 'verify' => 'Checking removed copies',
@@ -94,7 +94,9 @@ $running_said = $running === null ? null : ([
     'proxy-plan' => 'Counting videos without proxies', 'proxy-build' => 'Making proxies', 'proxy-remake' => 'Making proxies again',
     'proxy-stop' => 'Stopping proxies', 'proxy-test' => 'Testing proxy quality', 'gpu-test' => 'Testing the video chip',
     'organize-undo' => 'Undoing the old layout', 'rescue-scan' => 'Looking for broken files', 'rescue-apply' => 'Rescuing broken files', 'reset-breaker' => 'Trying the archive again',
-][$running] ?? ucfirst(str_replace('-', ' ', $running)));
+];
+$jobWords = fn(string $j) => $JOB_WORDS[$j] ?? ucfirst(str_replace('-', ' ', $j));
+$running_said = $running === null ? null : $jobWords($running);
 
 $mac = [];
 foreach (@file("$WEB/ingest-status.tsv") ?: [] as $l) {
@@ -528,7 +530,50 @@ usort($drives_other, fn($a, $b) => [$a['kind'] === 'card', $a['name']] <=> [$b['
 // JSON_INVALID_UTF8_SUBSTITUTE: one file or drive name that is not valid UTF-8 (a name from an old
 // Windows server, say) must not empty the whole answer: json_encode() returns false then, and the page
 // said only "not answering"
+// ── what is happening now: ONE list, from every lane ─────────────────────────
+// Rushes works in four places at once: its own jobs (job-status), the proxies (proxy-status), the helper's
+// copying and checking (ingest-status) and its describing (describe-status), and each can be asked and waiting
+// its turn. Every surface (the top bar, Overview, the Activity column, a drive's Health, the menu bar) reads
+// this one list, so none can say "nothing running" while another lane works. Each: what, detail, pct, page.
+$happening = (function () use ($WEB, $running, $running_said, $progress, $mac, $mac_stale, $jobWords) {
+    require_once __DIR__ . '/prepare.php';
+    $h = [];
+    $one = fn($lane, $what, $detail = '', $pct = null, $page = null, $stop = false) => compact('lane', 'what', 'detail', 'pct', 'page', 'stop');
+    // 1. Rushes' own job, and what is asked behind it
+    if ($running !== null)
+        $h[] = $one('job', $running_said, $progress ? ($progress['said'] ?? ($progress['done'] . ' of ' . $progress['total'])) : '', $progress['pct'] ?? null,
+                    str_starts_with($running, 'rescue-') ? '/rescue.php' : null, isset(STOPPABLE[$running]));
+    foreach (glob("$WEB/queue/*.job") ?: [] as $j)
+        if (preg_match('/^ACTION=(.+)$/m', (string)@file_get_contents($j), $m) && !in_array(trim($m[1]), ['proxy-plan', 'proxy-build'], true))
+            $h[] = $one('job', $jobWords(trim($m[1])), $running !== null ? 'asked: starts after ' . strtolower($running_said) : 'asked: starts within a minute');
+    // 2. proxies (previews), made on this machine
+    $px = proxy_now(); $only = (string)($px['only'] ?? ''); $nm = $only === '' ? 'the archive' : basename($only);
+    if (!empty($px['running'])) {
+        $st = $px['state'] ?? '';
+        $h[] = $st === 'building'
+            ? $one('proxies', 'Making previews', $nm . ' · ' . (int)($px['done'] ?? 0) . ' of ' . (int)($px['total'] ?? 0), ($px['total'] ?? 0) ? (int)(100 * (int)$px['done'] / max(1, (int)$px['total'])) : null, '/db/admin.php#describe')
+            : $one('proxies', 'Making previews', $nm . ' · ' . ($px['step'] ?? 'getting ready'), null, '/db/admin.php#describe');
+    } elseif (($next = trim((string)@file_get_contents("$WEB/proxy-next.txt"))) !== '')
+        $h[] = $one('proxies', 'Making previews', basename($next) . ' · starts within a minute', null, '/db/admin.php#describe');
+    // 3. describing, on the helper
+    $d = describing_now();
+    if ($d) $h[] = $one('describe', 'Describing', trim(($d['label'] ?? basename((string)($d['source'] ?? ''))) . (!empty($d['of']) ? ' · ' . (int)($d['n'] ?? 0) . ' of ' . (int)$d['of'] : '')), !empty($d['of']) ? (int)(100 * (int)($d['n'] ?? 0) / max(1, (int)$d['of'])) : null, '/db/admin.php#describe');
+    else {
+        $q = count(array_filter(@file("$WEB/ingest-queue.tsv") ?: [], fn($l) => str_starts_with($l, "analyze\t")));
+        if ($q) $h[] = $one('describe', 'Describing', $q . ' folder' . ($q === 1 ? '' : 's') . ' with previews ready · starts beside any copying', null, '/db/admin.php#describe');
+    }
+    // 4. the helper's copying and checking
+    $ph = $mac && !$mac_stale ? ($mac['phase'] ?? '') : '';
+    $W = ['copying' => 'Copying', 'looking' => 'Looking for new footage', 'tracing' => 'Matching earlier copies', 'tidying' => 'Filing copies in',
+          'delivering' => "Taking in an editor's delivery", 'proving' => 'Checking copies (reading only)'];
+    if (isset($W[$ph]))
+        $h[] = $one('helper', $W[$ph], trim(basename(rtrim((string)($mac['source'] ?? ''), '/')) . (!empty($mac['of']) ? ' · ' . number_format((int)($mac['copied'] ?? 0)) . ' of ' . number_format((int)$mac['of']) : '')),
+                    !empty($mac['of']) ? (int)(100 * (int)($mac['copied'] ?? 0) / max(1, (int)$mac['of'])) : null, '/db/admin.php#overview');
+    return $h;
+})();
+
 echo json_encode([
+    'happening' => $happening,
     'drives_in' => $drives_in, 'drives_other' => $drives_other, 'helper_seen' => (int)($hv['at'] ?? 0),
     'in_place' => (settings()['organise']['shape'] ?? '') === 'in_place',
     'can_make_archive' => helper_mode() !== 'external', 'can_preview_drives' => can_preview_drives(), 'archive_name' => settings()['archive']['label'] ?? basename(archive_dir()), 'archive_root' => rtrim(archive_dir(), '/'),

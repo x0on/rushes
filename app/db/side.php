@@ -41,6 +41,15 @@ $SIDE_SELF = $SIDE_SELF ?? false;
   </aside>
 <script>(function () { var b = document.querySelector('[data-fold="side"]'), on = document.documentElement.classList.contains('side-min');
   b.textContent = b.dataset[on ? 'on' : 'off']; b.title = b.dataset[on ? 'ton' : 'toff']; })();</script>
+<script>
+// Everything happening now, at the top of Activity: the same list as the top bar (state.php happening)
+window.happeningRows = function (d) {
+  var e = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+  return (d.happening || []).map(function (x) {
+    return '<div class="ev"><span class="ico"><span class="spin"></span></span><div class="t">' + e(x.what) + '<small>happening now' + (x.detail ? ' · ' + e(x.detail) : '') + '</small>' +
+      (x.pct != null ? '<div class="meter" style="margin:5px 0 0"><i style="width:' + Math.max(2, x.pct) + '%"></i></div>' : '') + '</div></div>'; }).join('');
+};
+</script>
 <?php if ($SIDE_SELF): ?>
 <script>
 (function () {
@@ -56,9 +65,7 @@ $SIDE_SELF = $SIDE_SELF ?? false;
     if (document.hidden) return;
     try {
       var d = await (await fetch('/db/state.php?t=' + Date.now())).json(), recent = d.recent || [];
-      document.getElementById('sideLog').innerHTML = (d.running
-          ? '<div class="ev"><span class="ico"><span class="spin"></span></span><div class="t">' + esc(d.running_said || d.running) + '<small>happening now' +
-            (d.progress && d.progress.said ? ' · ' + esc(d.progress.said) : d.progress && d.progress.pct != null ? ' · ' + d.progress.pct + '%' : '') + '</small></div></div>' : '') +
+      document.getElementById('sideLog').innerHTML = window.happeningRows(d) +
         (recent.length ? recent.slice(0, 12).map(ev).join('') : '<div class="empty">Nothing yet.</div>');
       document.getElementById('sideNow').textContent = d.runner && d.runner.ok ? 'Picking up jobs · checked ' + (d.runner.ago || 'just now')
         : d.runner && d.runner.stopped ? 'Stopped: nothing runs until Start' : 'Not picking up jobs';

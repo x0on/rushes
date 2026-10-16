@@ -356,8 +356,8 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
         }
         // What the helper is doing counts as running. Saying "nothing running"
         // while a transfer is moving is the one lie this must never tell.
-        var h = helperNow(s.copy), c = s.copy, j = s.transfer;
-        var busy = !!s.running || (h && h.busy);
+        var h = helperNow(s.copy), c = s.copy, j = s.transfer, L = s.happening || [];
+        var busy = !!s.running || (h && h.busy) || L.length > 0;
         // No live helper, but a selection is unfinished: say where it stands,
         // from the progress saved on the archive (it survives restarts).
         var jw = !h && j && j.phase !== 'done' ? ({copying: 'transferring', checking: 'checking files', queued: 'transfer waiting for the helper',
@@ -366,14 +366,18 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
             + (j.pct === null ? '' : ' · ' + j.pct + '%') : '';
         $('hDot').className = 'dot' + (h && h.bad ? ' off' : busy ? ' busy'
           : jw && /interrupted|blocked|stopped/.test(j.phase) ? ' off' : (s.runner && s.runner.ok ? '' : ' off'));
-        $('hWhat').textContent = h ? h.short
+        // the one list (state.php happening): the first thing, and how many more; a click shows them all
+        var first = L[0], line = function (x) { return x.lane === 'helper' && h && h.busy ? h.short : x.what + (x.detail ? ' · ' + x.detail : ''); };
+        window.happening = L;
+        $('hWhat').textContent = h && h.bad ? h.short
+          : first ? line(first) + (L.length > 1 ? ' · and ' + (L.length - 1) + ' more' : '')
+          : h ? h.short
           : jw ? jw
           : s.running ? window.nowSaid(s)
           : (c && c.stale && /copying|looking|tracing|tidying/.test(c.phase)) ? 'the helper went quiet'
           : (s.runner && s.runner.ok ? 'nothing running' : 'not picking up jobs');
-        // what is running opens the page it belongs to; Stop stays "Stopping…" until the job has ended
-        var pg = !h && !jw && s.running && s.running_page;
-        if (pg) $('hWhat').setAttribute('href', pg); else $('hWhat').removeAttribute('href');
+        $('hWhat').style.cursor = L.length ? 'pointer' : '';
+        if (nowOpen) drawNowList();
         var st = $('hStop'), show = !h && !jw && !!s.running && s.can_stop;
         st.hidden = !show;
         if (show) { st.disabled = !!s.stopping; st.textContent = s.stopping ? 'Stopping after the file it is on…' : 'Stop'; }
@@ -381,6 +385,25 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
       })
       .catch(function () { $('hDot').className = 'dot off'; $('hWhat').textContent = 'no answer'; });
   }
+  // everything happening, as a list under the top bar: each with its progress and the page it belongs to
+  var nowOpen = null;
+  function drawNowList() {
+    var L = window.happening || [], e = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+    if (!L.length) { closeNow(); return; }
+    nowOpen.innerHTML = '<div class="h">Happening now</div>' + L.map(function (x) {
+      return '<a class="nowi"' + (x.page ? ' href="' + e(x.page) + '"' : '') + '><b>' + e(x.what) + '</b><span>' + e(x.detail) + '</span>' +
+        (x.pct != null ? '<i class="nb"><i style="width:' + Math.max(2, x.pct) + '%"></i></i>' : '') + '</a>'; }).join('');
+  }
+  function closeNow() { if (nowOpen) { nowOpen.remove(); nowOpen = null; } }
+  $('hWhat').onclick = function (ev) {
+    if (!(window.happening || []).length) return;
+    ev.stopPropagation(); if (nowOpen) return closeNow();
+    nowOpen = document.createElement('div'); nowOpen.className = 'fmenu nowlist';
+    document.body.appendChild(nowOpen); drawNowList();
+    var r = $('hWhat').getBoundingClientRect();
+    nowOpen.style.top = (r.bottom + 8) + 'px'; nowOpen.style.left = Math.max(8, Math.min(r.left, innerWidth - nowOpen.offsetWidth - 8)) + 'px';
+  };
+  document.addEventListener('click', function (ev) { if (nowOpen && !nowOpen.contains(ev.target)) closeNow(); });
   $('hStop').onclick = function () {
     var b = this; b.disabled = true; b.textContent = 'Asking…';
     fetch('/db/stop.php', { method: 'POST', body: new URLSearchParams({}) }).then(function (r) { return r.json(); }).then(function (x) {

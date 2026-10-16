@@ -475,3 +475,12 @@ code, .code { font-family: var(--mono); font-size: 12px; background: var(--code-
 .fmenu button:hover, .fmenu a:hover { background: var(--accent); color: var(--accent-fg) }
 .fmenu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px }
 .fmenu .h { font-size: 11px; color: var(--faint); padding: 4px 10px 2px }
+
+/* the top bar's list of everything happening now (head.php) */
+.nowlist { min-width: 300px; max-width: 440px }
+.nowlist .nowi { display: block; padding: 7px 10px; cursor: default }
+.nowlist .nowi[href] { cursor: pointer }
+.nowlist .nowi b { display: block; font-weight: 600 } .nowlist .nowi span { display: block; font-size: 12px; color: var(--muted) }
+.nowlist .nowi:hover span { color: inherit }
+.nowlist .nb { display: block; height: 4px; border-radius: 2px; background: var(--line-soft); margin-top: 5px; overflow: hidden }
+.nowlist .nb i { display: block; height: 100%; background: var(--accent) }

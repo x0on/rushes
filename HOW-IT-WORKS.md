@@ -1512,6 +1512,11 @@ those that apply), with a count where something wants you. Tidy up opened for a 
 starts there. A right click on a drive (Overview's cards, the left column) offers the same as a menu
 (`driveMenu`). The archive is always among the drives, even before the helper has said which drives it sees.
 
+**What is happening now is one list** (`state.php happening`): Rushes' own job and what is asked behind it,
+previews being made or next, describing (running, or folders with previews ready waiting their turn), and the
+helper's copying and checking. The top bar (its line opens the whole list), Overview, the Activity column, a
+drive's Health and the menu bar all read it, so none can say "nothing running" while another lane works.
+
 **The side panels fold away.** The left column folds to its icons (its « button, or ⌘\); what wants you still
 shows as a count on the icon, and each says its name on hover. Activity folds to a strip (its » button). Both
 are remembered in this browser.

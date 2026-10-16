@@ -775,6 +775,7 @@ class Window:
                             "files": x.get("files"), "bytes": x.get("bytes"), "free": x.get("free", 0), "total": x.get("total", 0)}
                            for x in (st.get("drives_in") or [])]
             r["describing"] = ((st.get("helper") or {}).get("describe")) or {}
+            r["happening"] = st.get("happening") or []      # every lane, as the pages' top bar says it (state.php)
             r["rushes"] = True
         except Exception as e:
             r["rushes"] = False; r["rushes_why"] = str(getattr(e, "reason", e))
@@ -1605,7 +1606,7 @@ def serve(port, key):
 # menu holds every switch someone changes day to day, as Tailscale's does:
 # each acts at once and can be turned back. What cannot be undone (Remove,
 # pairing) is in the window, which asks twice.
-PHASE = {"copying": "Copying", "looking": "Looking for new footage", "waiting": "Waiting — nothing queued",
+PHASE = {"copying": "Copying", "looking": "Looking for new footage", "waiting": "Nothing running",
          "tracing": "Matching earlier copies", "analysing": "Describing footage", "tidying": "Tidying up",
          "delivering": "Taking in an editor's delivery", "paused": "Paused from Manage", "blocked": "Stopped: needs you",
          "done": "Finished", "stopped": "Stopped", "proving": "Checking copies (reading only)"}
@@ -1720,19 +1721,21 @@ def own_menu(w):
             items.append({"label": f"Pair with Rushes… (in the window)", "do": "open-window"})
     else:
         n, up = s.get("now") or {}, s.get("rushes")
-        busy = n.get("phase") in ("copying", "looking", "tracing", "analysing", "tidying", "delivering", "proving")
+        hp = s.get("happening") or []                   # the one list: what the pages' top bar says, every lane
+        busy = bool(hp) or n.get("phase") in ("copying", "looking", "tracing", "analysing", "tidying", "delivering", "proving")
         icon = ("exclamationmark.triangle" if s.get("stopped") or n.get("phase") == "blocked" else "wifi.exclamationmark" if not up
                 else "pause.circle" if s.get("paused") else "arrow.triangle.2.circlepath" if busy else "film")
         head = (f"Stopped by itself — {s['stopped']}" if s.get("stopped") else "Asking Rushes …" if up is None
                 else f"Cannot reach Rushes ({s.get('rushes_why', '')})" if not up
                 else "Paused — copying starts nothing new" if s.get("paused") else
-                PHASE.get(n.get("phase"), n.get("phase") or "Waiting — nothing queued")
+                short(hp[0].get("what", "") + (f" · {hp[0]['detail']}" if hp[0].get("detail") else "")) if hp else
+                PHASE.get(n.get("phase"), n.get("phase") or "Nothing running")
                 + (f" · {os.path.basename(n['source'].rstrip('/'))}" if n.get("source") else "")
                 + (f" · {n.get('copied', 0):,} of {n['of']:,}" if n.get("of") else ""))
         items += [info(head)]
-        d = s.get("describing") or {}
-        if d.get("phase") == "analysing":
-            items.append(info(f"Describing {d.get('label', '')}" + (f" · {d.get('n')} of {d.get('of')}" if d.get("of") else "")))
+        # the rest of what is happening, one line each (the first is the head)
+        if hp and not s.get("stopped") and up and not s.get("paused"):
+            items += [info("   " + short(x.get("what", "") + (f" · {x['detail']}" if x.get("detail") else ""))) for x in hp[1:4]]
         if said: items.append(info("✓ " + said))
         # the last thing that happened, from Activity (what people and Rushes did), not its log
         for e in (s.get("activity") or [])[:1]:
