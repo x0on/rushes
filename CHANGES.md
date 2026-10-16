@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.14 — October 2026
+
+- **A job cut short by a restart no longer says "running" for ever.** Installing an update restarts Rushes; a job running then (Look for broken files, at 75,000 files) stopped, but the top bar went on saying it ran, Stop did nothing and Look for broken files stayed greyed out. Now Rushes notices when it starts again, says in Activity that the job did not finish, and the button works again.
+- **A job waiting for the helper says so.** Heavy reading (Look for broken files, Find duplicates, Delete All's comparing) waits while the helper copies or checks copies on the disk. The top bar now says "paused while the helper uses the disk, it carries on by itself" instead of a number that stands still.
+
 ## 0.13.13 — October 2026
 
 - **Tidy up's sizes, as in Finder.** Drag the line after a column to make it wider or narrower (double-click the line to fit the longest name), drag a window's bottom edge to make the windows taller, and drag the line between two windows to give one more room (double-click: half and half). Rushes remembers them.

@@ -78,6 +78,11 @@ if ($running && is_readable("$WEB/job.log")) {
         $progress = ['done' => (int)end($m[1]), 'total' => (int)end($m[2]), 'pct' => (int)end($m[3])];
     elseif (preg_match_all('/listing: (.+?) · ([\d,]+) files so far/', $tail, $m))
         $progress = ['pct' => null, 'said' => end($m[1]) . ' · ' . end($m[2]) . ' files so far'];
+    // waiting its turn while the helper uses the disk (runner.py make_way): said, never a number that stands still
+    $w = strrpos($tail, 'waiting while copying uses the disk'); $d = strrpos($tail, 'the copy is done: carrying on');
+    $last = max((int)strrpos($tail, 'progress: '), (int)strrpos($tail, 'listing: '));
+    if ($w !== false && ($d === false || $d < $w) && $w > $last)
+        $progress = ['pct' => null, 'said' => 'paused while the helper uses the disk, it carries on by itself' . (!empty($progress['said']) ? ' · ' . $progress['said'] : (isset($progress['done']) ? ' · ' . $progress['done'] . ' of ' . $progress['total'] : ''))];
 }
 // What is running, in words (the top bar, Activity): never a job's internal name
 $running_said = $running === null ? null : ([

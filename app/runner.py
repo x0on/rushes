@@ -155,6 +155,7 @@ class Runner:
         self.busy = {}                                   # "upkeep" / "jobs": the thread doing it
         self.pending = {}                                # what the archive was asked and has not answered yet → its thread
         self.quiet = 120                                 # a long read with no data for this long is walked away from (watched)
+        self.fresh = True                                # the first minute looks for a job a restart cut short (interrupted)
 
     # ── small things ─────────────────────────────────────────────────────────
     def p(self, name):
@@ -386,11 +387,38 @@ class Runner:
         return None
 
     # ── the minute ───────────────────────────────────────────────────────────
+    def interrupted(self):
+        """A job that was running when Rushes stopped (an update, a restart, the Mac shut down) never finishes, and
+        job-status.txt would say "running" for ever: the page waits, Stop does nothing. Its process is checked
+        (job-pid.txt); one that is not there any more is said, in the log and Activity, and the status is idle."""
+        try: st = open(self.p("job-status.txt")).read().strip()
+        except OSError: return
+        if not st.startswith("running:"):
+            return
+        try: pid = int(open(self.p("job-pid.txt")).read().strip())
+        except (OSError, ValueError): pid = 0
+        if pid:
+            try:
+                os.kill(pid, 0); return                    # still running, in another process (the NAS's next minute)
+            except ProcessLookupError: pass
+            except OSError: return
+        elif platform.system() != "Darwin":
+            return                                         # from before job-pid.txt, on the NAS: not knowable, left
+        job = st.split(":", 1)[1].strip()
+        self.log(f"\n{time.strftime('%Y-%m-%d %H:%M:%S')}  {job} was cut short: Rushes restarted while it ran (an update, or the Mac). Nothing was half done; ask for it again.")
+        self.activity("problem", f"{job.replace('-', ' ').capitalize()} did not finish: Rushes restarted while it ran (an update, or the Mac). Start it again.")
+        for n in ("job-pid.txt", "job-stop.txt", "rescue-at.txt"):
+            try: os.remove(self.p(n))
+            except OSError: pass
+        self.write("job-status.txt", "idle\n")
+
     def minute(self):
         if os.path.exists(self.p("STOP")):
             return
         os.makedirs(self.p("queue"), exist_ok=True)
         self.write("runner-alive.txt", f"{int(time.time())}\n")
+        if self.fresh:
+            self.fresh = False; self.interrupted()
         t0, self.stalled = time.time(), False
         a = self.arch()
         # The archive's own drive, plugged in or not: said in Activity when that changes
@@ -811,6 +839,7 @@ class Runner:
                 try: os.remove(self.p(n))
                 except OSError: pass
             self.now_job = action
+            self.write("job-pid.txt", f"{os.getpid()}\n")    # whose job it is: a restart that cuts it short is told apart
             self.write("job-status.txt", f"running: {action}\n")
             self.log(f"\n{'=' * 62}\n{time.strftime('%Y-%m-%d %H:%M:%S')}  {action}\n{'=' * 62}")
             try:
@@ -820,8 +849,9 @@ class Runner:
             if self.stop_asked():
                 self.log("  stopped, as asked (Stop)")
             self.now_job = None
-            try: os.remove(self.p("job-stop.txt"))
-            except OSError: pass
+            for n in ("job-stop.txt", "job-pid.txt"):
+                try: os.remove(self.p(n))
+                except OSError: pass
             self.log(f"--- finished {time.strftime('%H:%M:%S')} ---")
             self.write("job-status.txt", "idle\n")
         # A new archive has no list yet: the first one is made by itself (once each start).

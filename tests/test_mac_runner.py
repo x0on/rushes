@@ -310,6 +310,16 @@ class Rescue(unittest.TestCase):
         for b in (b1, b2, b3):
             self.assertEqual((rows[b][4] != "", rows[b][7]), (True, "0"), f"{b}: offered, but as same name only")
 
+    def test_a_job_cut_short_by_a_restart_is_said_and_cleared(self):
+        open(os.path.join(self.web, "job-status.txt"), "w").write("running: rescue-scan\n")
+        open(os.path.join(self.web, "job-pid.txt"), "w").write(f"{os.getpid()}\n")
+        self.r.interrupted()
+        self.assertIn("running", open(os.path.join(self.web, "job-status.txt")).read(), "its process is still there: left alone")
+        open(os.path.join(self.web, "job-pid.txt"), "w").write("999999\n")
+        self.r.interrupted()
+        self.assertEqual(open(os.path.join(self.web, "job-status.txt")).read(), "idle\n", "its process is gone: no longer said to run")
+        self.assertFalse(os.path.exists(os.path.join(self.web, "job-pid.txt")))
+
     def test_stop_stops_only_the_job_it_was_pressed_for(self):
         self.r.now_job = "rescue-apply"
         open(os.path.join(self.web, "job-stop.txt"), "w").write("rescue-scan\n")

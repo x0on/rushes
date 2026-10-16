@@ -2246,6 +2246,7 @@ seconds after each answer: the switches, the state, and pairing.
 | stop the helper on a Mac | Rushes Helper → **Run in the background** off | It stops now and does not start at the next login. |
 | stop everything on the archive machine | Manage → Overview → **Stop Rushes on the server** (beside Pause copying; also on the runner's line in What runs by itself), or put a file called `STOP` in the web folder | The runner does nothing at all, every minute, until **Start** (or the file is removed). What it is in the middle of finishes; the pages keep answering. |
 | skip one folder | Overview → **Skip** (offered when a folder has stopped for 3 minutes) | That folder is taken out of the transfer and the work list. |
+| (nothing: a restart) | An update or a restart of Rushes while a job runs | The job stops where it is. When Rushes starts again it notices (`job-pid.txt`: the job's process is gone), says in Activity that it did not finish, and the job can be asked for again. |
 | stop the job running now | **Stop** in the top bar (any page), on Rescue's strip, or on the drive's Health | Offered for jobs that stop between files (Look for broken files, Rescue, Delete All): it finishes the file it is on and stops; the rest stay as they were. |
 | look again now | **Try again now** | The helper stops waiting and looks again. It also clears "stopped by itself". |
 
