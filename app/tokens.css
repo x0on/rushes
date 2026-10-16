@@ -214,11 +214,12 @@ a:hover { text-decoration: underline }
 .nav .badge.bad { background: var(--bad); color: var(--white) }
 
 /* the rail folded to icons (⌘\ or its « button; remembered): labels hidden, each says its name on hover,
-   and what needs you still shows, as a dot on its icon */
+   and what needs you still shows, as a red dot on its icon (no numbers) */
 :root.rail-min { --rail-w: 58px }
-.rail-min .rail h2, .rail-min .rail .lb, .rail-min .rail-foot > :not(.rail-fold), .rail-min .rail .count:empty { display: none }
+.rail-min .rail h2, .rail-min .rail .lb, .rail-min .rail-foot > :not(.rail-fold), .rail-min .rail .count { display: none }
 .rail-min .nav { justify-content: center; padding: 8px 0; position: relative }
-.rail-min .nav .badge, .rail-min .nav .count { position: absolute; top: 2px; right: 6px; margin: 0; font-size: 9px; padding: 0 4px; min-width: 8px }
+/* folded: no numbers, only a red dot where something needs you */
+.rail-min .nav .badge { position: absolute; top: 5px; right: 12px; margin: 0; padding: 0; width: 8px; height: 8px; font-size: 0; border-radius: 50% }
 .rail-fold { display: flex; justify-content: flex-end; margin: -4px 0 6px }
 .rail-fold button, .side-fold { font: inherit; font-size: 12px; color: var(--faint); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 7px; cursor: pointer }
 .rail-fold button:hover, .side-fold:hover { border-color: var(--line); color: var(--fg) }

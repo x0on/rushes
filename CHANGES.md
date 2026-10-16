@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.12 — October 2026
+
+- **No numbers beside the drives in the left column**, open or folded: the counts are on the drive's page and its bar. Folded, the column shows no numbers at all, only a red dot where something needs you.
+
 ## 0.13.11 — October 2026
 
 - **Rushes is built around the drives.** The left column lists them under **Drives**, the archive first. A click opens the drive's page: its three levels, a new **Health** box (broken files, files waiting to be filed, editing cache, Recently Removed, duplicates, Tidy up, and what is running on it, with Stop), each with its count and the button that opens it. A right click on a drive, in the column or on Overview's cards, offers everything that can be done to it as a menu.

@@ -74,9 +74,9 @@ window.railFoot = function (s) {
     var el = document.getElementById('railDrives'), e = function (v) { return String(v).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
     var ds = window.drivesOf(s);
     el.innerHTML = ds.map(function (x, i) {
-      var t = window.driveTabs(x, s), want = t.reduce(function (n, y) { return n + (y[3] || 0); }, 0);
+      var t = window.driveTabs(x, s);       // no number here: the counts are on the drive's page and its bar
       return '<a class="nav drv-nav" data-di="' + i + '" href="' + t[0][2] + '" title="' + e(x.name + ' · ' + window.driveKind(x)) + '"' + ((x.root || x.path) === here ? ' aria-current="page"' : '') + '>' +
-        '<span class="ico">' + window.driveIcon(x) + '</span> <span class="lb">' + e(x.name) + '</span>' + (want ? ' <span class="count">' + want.toLocaleString() + '</span>' : '') + '</a>';
+        '<span class="ico">' + window.driveIcon(x) + '</span> <span class="lb">' + e(x.name) + '</span></a>';
     }).join('') || '<p class="note lb" style="margin:0 9px">None yet</p>';
     el.querySelectorAll('[data-di]').forEach(function (a) { a.oncontextmenu = function (ev) { window.driveMenu(ev, ds[+a.dataset.di], s); }; });
   };
