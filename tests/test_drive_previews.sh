@@ -25,6 +25,10 @@ X=$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=$D/Gala" "$U
 [ "$(cut -f1 "$W/prepare.tsv")" = "$D/Gala" ] && ok "its folder goes on the Describe list by its full path" || no "prepare: $X"
 grep -qxF "$D/Gala" "$W/proxy-next.txt" && ok "its previews are next, for the runner" || no "next: $(cat "$W/proxy-next.txt" 2>&1)"
 case "$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=/etc" "$U/db/analyze.php")" in *error*) ok "a folder on no kept drive is refused" ;; *) no "elsewhere" ;; esac
+mkdir -p "$A/City Manager's Office"
+X=$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=City Manager's Office" "$U/db/analyze.php")
+cut -f1 "$W/prepare.tsv" | grep -qxF "City Manager's Office" && ok "a folder of the archive with an apostrophe in its name goes on the list" || no "apostrophe: $X"
+case "$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=../etc" "$U/db/analyze.php")" in *error*) ok "but never one outside it" ;; *) no "dotdot" ;; esac
 # the runner made it (runner.py, tested in test_mac_runner): a preview, and its line in the ledger
 mkdir -p "$A/_rushes/previews/UUID-1/Gala"; printf 'preview' > "$A/_rushes/previews/UUID-1/Gala/A001.mp4"
 printf '%s\t%s\tDuration: 00:00:01.00 Video: mpeg4, yuv420p, 1280x720, 25 fps\n' "$D/Gala/A001.mov" "$(date +%s)" > "$W/proxy-made.tsv"

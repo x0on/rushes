@@ -1562,7 +1562,12 @@ async function loadDrive(fresh) {
           $('dvSaid').innerHTML = 'Added ✓ <b>' + esc(f) + '</b> is on the list: previews first, then descriptions. Folders run one at a time, top to bottom; ' +
             '<a href="#" data-go-describe="1">Describe</a> shows the list and changes the order.';
           const g = $('dvSaid').querySelector('[data-go-describe]'); if (g) g.onclick = function (e) { e.preventDefault(); show('describe'); };
-        } catch (e) { b.disabled = false; b.textContent = was; $('dvSaid').textContent = 'Did not happen: ' + e.message; }
+        } catch (e) {
+          // said where it was clicked (the page's own line may be scrolled out of sight), and at the top
+          b.disabled = false; b.textContent = was; $('dvSaid').textContent = 'Did not happen: ' + e.message;
+          const n = b.nextElementSibling && b.nextElementSibling.classList.contains('prepErr') ? b.nextElementSibling : document.createElement('div');
+          n.className = 'prepErr bad'; n.style.fontSize = '12px'; n.textContent = 'Not added: ' + e.message; b.after(n);
+        }
       }
     };
   });

@@ -121,8 +121,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $drive = str_starts_with($rel, '/');
         if ($drive && !can_preview_drives())
             bail(400, 'Previews of a drive kept where it is are made by the Rushes app on a Mac, with its own helper.');
-        if (!$drive && ($rel === '' || str_contains($rel, '..') || preg_match('/[\t\n]/', $rel) || !preg_match('#^[\p{L}\p{N} _./&(),+-]+$#u', $rel)))
-            bail(400, 'Pick a folder inside the archive (letters, numbers, spaces and . _ - & ( ) , + only).');
+        // any name a folder has on the archive (City Manager's Office, #2, [B-roll]): never .., control characters,
+        // a backslash, or what a shell reads twice (` $), though no shell ever sees it
+        if (!$drive && ($rel === '' || in_array('..', explode('/', $rel), true) || preg_match('/[\x00-\x1f\\\\`$]/', $rel) || str_starts_with($rel, '/')))
+            bail(400, 'Pick a folder inside the archive.');
         $list = prepare_list();
         if ($_POST['action'] === 'forget') { unset($list[$rel]); }
         else {

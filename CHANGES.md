@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.15 — October 2026
+
+- **Make previews and descriptions works on any folder name.** A folder with an apostrophe (*City Manager's Office*), a # or brackets was refused, and the refusal was said at the top of the page, out of sight: the link seemed to do nothing. Now any folder of the archive goes on the list (never one outside it), and if one is ever refused, it says why right under the link.
+
 ## 0.13.14 — October 2026
 
 - **A job cut short by a restart no longer says "running" for ever.** Installing an update restarts Rushes; a job running then (Look for broken files, at 75,000 files) stopped, but the top bar went on saying it ran, Stop did nothing and Look for broken files stayed greyed out. Now Rushes notices when it starts again, says in Activity that the job did not finish, and the button works again.
