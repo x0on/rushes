@@ -575,6 +575,24 @@ if __name__ == "__main__":
 @unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
 class MacProxies(MacJobs):
     """Proxies made on a Mac for a folder on the list (runner.py), with the records proxy.sh keeps on a NAS."""
+    def test_one_file_that_breaks_never_stops_the_build(self):
+        """A file whose report cannot be read (metadata in another encoding) is said and skipped; the next is made."""
+        import subprocess, time
+        clips = [os.path.join(self.a, "Bldg", n) for n in ("A.mov", "B.mov")]; os.makedirs(os.path.dirname(clips[0]))
+        for c in clips:
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=640x360:d=1", "-c:v", "mpeg4", c], check=True)
+            old = time.time() - 3 * 3600; os.utime(c, (old, old))
+        real = self.r.probe
+        def probe(ff, src):
+            if src.endswith("A.mov"): raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+            return real(ff, src)
+        with unittest.mock.patch.object(self.r, "ffmpeg", return_value=shutil.which("ffmpeg")), unittest.mock.patch.object(self.r, "probe", probe):
+            self.r.job("proxy-build", {"QUERY": "Bldg"}); self.r.busy["proxies"].join(60)
+        st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+        self.assertEqual((st["state"], st["ok"], st["failed"]), ("done", "1", "1"), "B is made, A is said and skipped")
+        self.assertIn("could not make Bldg/A.mov: UnicodeDecodeError", open(os.path.join(self.web, "proxy.log")).read())
+        self.assertIn("A.mov", open(os.path.join(self.web, "proxy-failed.tsv")).read())
+
     def test_a_folder_on_the_list_gets_its_proxies_and_its_records(self):
         import subprocess, time
         clip = os.path.join(self.a, "Parks", "2026", "A001C002.mov"); os.makedirs(os.path.dirname(clip))

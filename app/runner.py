@@ -162,7 +162,7 @@ class Runner:
         return os.path.join(self.web, name)
 
     def write(self, name, text):
-        with open(self.p(name) + ".new", "w") as f:
+        with open(self.p(name) + ".new", "w", encoding="utf-8", errors="surrogateescape") as f:   # a name in another encoding is kept as it is
             f.write(text)
         os.replace(self.p(name) + ".new", self.p(name))
 
@@ -481,6 +481,8 @@ class Runner:
             fn()
         except Exception as e:                           # said, and tried again next minute
             self.say(f"{name}: {e}")
+            if name == "proxies":                        # said where the page shows the proxies' own words, too
+                self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  the build stopped: {type(e).__name__}: {e}"[:400])
 
     # ── upkeep ───────────────────────────────────────────────────────────────
     def mounts_said(self, every=300):
@@ -610,7 +612,7 @@ class Runner:
         self.write("proxy-alive.txt", f"{int(time.time())}\n")       # the heartbeat: a run is going (prepare.php)
 
     def plog(self, line):
-        with open(self.p("proxy.log"), "a") as f:
+        with open(self.p("proxy.log"), "a", errors="surrogateescape") as f:
             f.write(line + "\n")
 
     @staticmethod
@@ -646,7 +648,10 @@ class Runner:
 
     def probe(self, ff, src):
         """ffmpeg's own report of a file: what it is, and what the camera wrote inside it."""
-        return subprocess.run([ff, "-hide_banner", "-nostdin", "-i", src], capture_output=True, text=True).stderr
+        # errors="replace": cameras and Windows write metadata in other encodings, which must never stop a build;
+        # a file that does not answer in 5 minutes (a bad patch of disk) is reported as nothing
+        try: return subprocess.run([ff, "-hide_banner", "-nostdin", "-i", src], capture_output=True, text=True, errors="replace", timeout=300).stderr
+        except subprocess.TimeoutExpired: return ""
 
     @staticmethod
     def light(report, src):
@@ -677,13 +682,13 @@ class Runner:
             if self.proxy_halt.is_set():
                 return False, how
             self.proxy_proc = subprocess.Popen(nice + [ff, "-nostdin", "-loglevel", "error", "-y", *args, *audio, out],
-                                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace")
             while self.proxy_proc.poll() is None:            # the heartbeat while a long file is made
                 self.write("proxy-alive.txt", f"{int(time.time())}\n")
                 try: self.proxy_proc.wait(10)
                 except subprocess.TimeoutExpired: pass
             rc, err = self.proxy_proc.returncode, self.proxy_proc.stderr.read(); self.proxy_proc = None
-            with open(self.p("proxy-built.tsv.err"), "a") as f: f.write(err)
+            with open(self.p("proxy-built.tsv.err"), "a", errors="surrogateescape") as f: f.write(err)
             if rc == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
                 return True, how
             try: os.remove(out)
@@ -787,32 +792,43 @@ class Runner:
                     later += 1; continue
             except OSError:
                 failed += 1; continue
-            self.proxy_state(state="building", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
-                             file=os.path.relpath(src, top), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
-            report = self.probe(ff, src)
-            if self.light(report, src):              # no proxy: the original plays as it is
-                with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\t1\n")
-                with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"{src}\t{src}\tused as it is\n")
-                used += 1; ok += 1; continue
-            os.makedirs(os.path.dirname(out), exist_ok=True)
-            tmp, t0 = out + ".part.mp4", time.time()      # never a playable-looking half file
-            made, how = self.encode(ff, src, tmp, h, b, hw == "1")
-            if made:
-                os.replace(tmp, out); count[how] += 1; ok += 1
-                with open(self.p("proxy-speed.tsv"), "a") as f: f.write(f"{size(src)}\t{int(time.time() - t0)}\t{how}\n")
-                with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"{src}\t{out}\t{how}\n")
-                # What the original is and what the camera wrote inside it, read once here (the media ledger)
-                with open(self.p("proxy-made.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\n")
-            else:
-                if self.proxy_halt.is_set():
-                    continue                             # Stop: said at the top of the next turn
+            # one file, guarded: a file that breaks something (a name or metadata in another encoding, a probe that
+            # never ends) is said and skipped; it never ends the whole build, which would start again on it for ever
+            try:
+                self.proxy_state(state="building", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
+                                 file=os.path.relpath(src, top), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
+                report = self.probe(ff, src)
+                if self.light(report, src):              # no proxy: the original plays as it is
+                    with open(self.p("proxy-made.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\t1\n")
+                    with open(self.p("proxy-built.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{src}\tused as it is\n")
+                    used += 1; ok += 1; continue
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                tmp, t0 = out + ".part.mp4", time.time()      # never a playable-looking half file
+                made, how = self.encode(ff, src, tmp, h, b, hw == "1")
+                if made:
+                    os.replace(tmp, out); count[how] += 1; ok += 1
+                    with open(self.p("proxy-speed.tsv"), "a") as f: f.write(f"{size(src)}\t{int(time.time() - t0)}\t{how}\n")
+                    with open(self.p("proxy-built.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{out}\t{how}\n")
+                    # What the original is and what the camera wrote inside it, read once here (the media ledger)
+                    with open(self.p("proxy-made.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\n")
+                else:
+                    if self.proxy_halt.is_set():
+                        continue                             # Stop: said at the top of the next turn
+                    failed += 1
+                    err = getattr(self, "last_err", "")
+                    with open(self.p("proxy-built.tsv"), "a", errors="surrogateescape") as f: f.write(f"FAILED\t{src}\n")
+                    with open(self.p("proxy-failed.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{err.replace(chr(9), ' ')}\n")
+                    if "Permission denied" in err or "No space left" in err:   # nothing can be written: stop once, saying why
+                        self.proxy_state(state="stopped", only=only, done=n, total=total, ok=ok, failed=failed, why=err)
+                        runs("stopped", ok, failed, later, total); self.plog(f"stopped: the proxies cannot be written — {err}"); return
+            except Exception as e:
                 failed += 1
-                err = getattr(self, "last_err", "")
-                with open(self.p("proxy-built.tsv"), "a") as f: f.write(f"FAILED\t{src}\n")
-                with open(self.p("proxy-failed.tsv"), "a") as f: f.write(f"{src}\t{int(time.time())}\t{err.replace(chr(9), ' ')}\n")
-                if "Permission denied" in err or "No space left" in err:   # nothing can be written: stop once, saying why
-                    self.proxy_state(state="stopped", only=only, done=n, total=total, ok=ok, failed=failed, why=err)
-                    runs("stopped", ok, failed, later, total); self.plog(f"stopped: the proxies cannot be written — {err}"); return
+                why = f"{type(e).__name__}: {e}"[:300]
+                self.plog(f"  could not make {os.path.relpath(src, top)}: {why}")
+                with open(self.p("proxy-failed.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{why.replace(chr(9), ' ')}\n")
+                for x in (out + ".part.mp4",):
+                    try: os.remove(x)
+                    except OSError: pass
             if n % 25 == 0:
                 self.plog(f"progress: {n} of {total}")
         if self.proxy_halt.is_set():

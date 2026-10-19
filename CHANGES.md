@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.17 — October 2026
+
+- **One file can no longer stop the previews.** Over a weekend the Building Department's previews started every three minutes, listed 540 to make, and stopped before the first, for two days: one file broke the build (most likely metadata written in another encoding, which cameras and Windows do), the build ended, and started again on the same file. Now each file is guarded: one that breaks anything is said in the proxies' log (*could not make …: why*), counted as failed and skipped, and the next is made. A file whose report does not come within 5 minutes is skipped the same way. File names in other encodings are kept as they are. If a build ever stops for another reason, the proxies' own log says why, where the page shows it.
+
 ## 0.13.16 — October 2026
 
 - **One answer to "is anything happening?", everywhere.** Rushes works in four lanes at once: its own jobs, previews (proxies), describing, and the helper's copying and checking. Each surface used to ask some of them, so the top bar said "nothing running" while previews were being made. Now one list holds every lane, and the top bar, Overview, the Activity column, a drive's Health and the menu bar all read it: *"Making previews · Human Resources · 1 of 25 · and 1 more"*. Click the top bar's line for the whole list, each with its progress and the page it belongs to. Something asked and waiting its turn says so ("starts within a minute"). "Nothing running" is said only when every lane is idle.
