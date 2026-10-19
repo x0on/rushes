@@ -143,6 +143,70 @@ function prepare_save(array $list): bool {
     return @file_put_contents("$f.new", $body) !== false && @rename("$f.new", $f);
 }
 
+// The Describe list follows moves (Tidy up, File in: every move goes through follow_moves). A folder on the list
+// whose files moved is put where they went: the same place inside it (old/x/y.mov → new/x/y.mov gives new), its
+// place and history kept (when it was asked, its proxies' runs, its line for the helper). Only when the folder is
+// not there any more: a subfolder moved out of it leaves it where it is. [[old, new], …] absolute, in the archive.
+function prepare_follow(array $pairs): array {
+    $A = rtrim(archive_dir(), '/'); $list = prepare_list(); $moved = [];
+    foreach (array_keys($list) as $rel) {
+        if ($rel === '' || str_starts_with($rel, '/') || is_dir("$A/$rel")) continue;
+        $votes = [];
+        foreach ($pairs as [$a, $b]) {
+            if (!str_starts_with($a, "$A/$rel/")) continue;
+            $tail = substr($a, strlen("$A/$rel"));                       // /x/y.mov
+            if (str_ends_with($b, $tail) && str_starts_with($b, "$A/")) { $n = substr($b, strlen($A) + 1, -strlen($tail)); $votes[$n] = ($votes[$n] ?? 0) + 1; }
+        }
+        if (!$votes) continue;
+        arsort($votes); $to = array_key_first($votes);
+        if ($to !== '' && !isset($list[$to])) $moved[$rel] = $to;
+    }
+    if ($moved) prepare_rename($moved);
+    return $moved;
+}
+
+// Each folder [old rel => new rel] renamed on the list, in place, with what belongs to it.
+function prepare_rename(array $moved): void {
+    $W = web_dir(); $h = rtrim(helper_archive(), '/');
+    $list = []; foreach (prepare_list() as $rel => $t) $list[$moved[$rel] ?? $rel] = $t;
+    prepare_save($list);
+    // its proxies' runs (so "✓ 73 made" stays), the helper's queue line, what is next for proxies
+    $runs = ''; foreach (@file("$W/proxy-folders.tsv") ?: [] as $l) { $f = explode("\t", rtrim($l, "\n")); if (isset($moved[$f[0]])) { $f[0] = $moved[$f[0]]; $runs .= implode("\t", $f) . "\n"; } }
+    if ($runs !== '') @file_put_contents("$W/proxy-folders.tsv", $runs, FILE_APPEND);
+    $q = @file("$W/ingest-queue.tsv") ?: [];
+    if ($q && $h !== '') {
+        $q2 = array_map(function ($l) use ($moved, $h) { foreach ($moved as $a => $b) if (str_starts_with($l, "analyze\t$h/$a\t")) return "analyze\t$h/$b\t" . substr($l, strlen("analyze\t$h/$a\t")); return $l; }, $q);
+        if ($q2 !== $q) { @file_put_contents("$W/ingest-queue.tsv.new", implode('', $q2)); @rename("$W/ingest-queue.tsv.new", "$W/ingest-queue.tsv"); }
+    }
+    $nx = trim((string)@file_get_contents("$W/proxy-next.txt"));
+    if (isset($moved[$nx])) @file_put_contents("$W/proxy-next.txt", $moved[$nx] . "\n");
+    require_once __DIR__ . '/activity.php';
+    foreach ($moved as $a => $b) activity_add('changed', "Describe list: $a moved to $b, and the list follows it");
+}
+
+// Folders on the list that were moved before the list followed moves: found again by Search, where its files
+// are now. Only a folder of the same name that Search knows in exactly one place is taken; else it is left,
+// said on its row. -> [old rel => new rel]
+function prepare_find_moved(): array {
+    $A = rtrim(archive_dir(), '/'); $moved = []; $lost = [];
+    foreach (array_keys(prepare_list()) as $rel) {
+        if ($rel === '' || str_starts_with($rel, '/') || is_dir("$A/$rel")) continue;
+        require_once __DIR__ . '/schema.php'; db_init();
+        $name = basename($rel); $st = db()->prepare("SELECT path FROM files WHERE path LIKE ? ESCAPE '\\' LIMIT 5000");
+        $st->bindValue(1, '%/' . addcslashes($name, '%_\\') . '/%');
+        $r = $st->execute(); $at = [];
+        while ($row = $r->fetchArray(SQLITE3_NUM)) {
+            $p = $row[0]; if (!str_starts_with($p, "$A/")) continue;
+            $i = strpos($p, "/$name/"); $f = substr($p, strlen($A) + 1, $i + strlen($name) + 1 - strlen($A) - 1);
+            if (is_dir("$A/$f")) $at[$f] = 1;
+        }
+        if (count($at) === 1) $moved[$rel] = array_key_first($at);
+        else $lost[$rel] = array_keys($at);
+    }
+    if ($moved) prepare_rename($moved);
+    return $lost;
+}
+
 // The proxy build going on now, if any (proxy.sh writes it as it goes).
 // A proxy build is running only if the process in proxy.pid really is proxy.sh:
 // the number can outlive its job and belong to another program later.
@@ -245,6 +309,8 @@ function prepare_table(bool $look = false): array {
         else
             $px = ['step' => 'waiting'];
 
+        if (!str_starts_with($rel, '/') && !is_dir(rtrim(archive_dir(), '/') . "/$rel"))   // moved away, and not found again
+            $px = ['step' => 'gone'];
         $path = str_starts_with($rel, '/') ? $rel : "$h/$rel";     // a kept drive's folder is where it is
         $d = $desc[$path] ?? null;
         if ($dnow && ($dnow['source'] ?? '') === $path)
@@ -252,6 +318,8 @@ function prepare_table(bool $look = false): array {
                    'file' => basename((string)($dnow['file'] ?? '')), 'doing' => (string)($dnow['step'] ?? '')];
         elseif ($d && $d['asked'] === $asked)            // described for this very request
             $ds = ['step' => 'done'] + $d;
+        elseif ($px['step'] === 'gone')
+            $ds = ['step' => 'gone'];
         elseif (in_array("analyze\t$path\t$asked", $queue, true))
             $ds = ['step' => 'queued'];
         else

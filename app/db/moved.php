@@ -48,6 +48,8 @@ function follow_moves(array $pairs): array {
         $updated++;
     }
     $db->exec('COMMIT');
+    // the Describe list follows too: a folder on it whose files moved is put where they went
+    require_once __DIR__ . '/prepare.php'; prepare_follow($pairs);
     return [$updated, $refused];
 }
 

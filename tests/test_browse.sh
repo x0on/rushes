@@ -28,8 +28,10 @@ G() { curl -s -G -d pass=rushes --data-urlencode "$1" "$U/db/browse.php"; }
 G roots=1 | grep -q '"name":"Films","archive":false' && ok "the places to look: the archive, and each drive in Search" || no "roots"
 G "dir=$A" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert [i["name"] for i in d["items"]] == ["VIDEOS"], d' && ok "the archive's top, without Rushes' own folders" || no "top"
 G "dir=$A/../" | grep -q error && ok "never a way out of it" || no "way out"
+printf 'VIDEOS/Public Works/2025/Shelter\t100\n' > "$W/prepare.tsv"     # on the Describe list before it moves
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Public Works/2025/Shelter")
 X=$(B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks/2025")
+[ "$(cat "$W/prepare.tsv")" = "VIDEOS/Parks/2025/Shelter	100" ] && ok "the Describe list follows the folder, its place and history kept" || no "list: $(cat "$W/prepare.tsv")"
 [ -f "$A/VIDEOS/Parks/2025/Shelter/d.mov" ] && [ ! -e "$A/VIDEOS/Public Works/2025/Shelter" ] && ok "a folder moves at once, as in Finder" || no "move: $X"
 curl -s -G --data-urlencode "q=d.mov" "$U/db/search.php" | grep -q "Parks/2025/Shelter/d.mov" && ok "Search follows it at once" || no "search"
 grep -qF "moved	$A/VIDEOS/Public Works/2025/Shelter/d.mov	$A/VIDEOS/Parks/2025/Shelter/d.mov" "$A"/_rushes/origin/*moved\ here.tsv && ok "each file's move is written down, for relinking Premiere projects" || no "record"
@@ -103,4 +105,11 @@ grep -qF "$A/_Recently Removed/VIDEOS/Moved in Finder/2024/z.mov" "$W/removed-mo
 mkdir -p "$A/VIDEOS/Card/CLIPS"; : > "$A/VIDEOS/Card/CLIPS/A001.MXF"; : > "$A/VIDEOS/Card/CLIPS/marker.ind"
 G "info=$A/VIDEOS/Card" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["zero"] == 2 and d["zero_clips"] == 1 and d["empty"][0] == "CLIPS/A001.MXF", d' \
   && ok "empty clips (broken) are told from other empty files (markers), clips first, with where" || no "zero kinds"
-
+f "Public Works/2024/Picnic/p.mov"; mkdir -p "$A/VIDEOS/Parks/2024"
+J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Public Works/2024/Picnic")
+B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks/2024" > /dev/null    # Search knows it there now
+printf 'Kite\t1\nPicnic\t2\n' > "$W/prepare.tsv"                  # moved before the list followed moves
+T=$(curl -s -G -d pass=rushes "$U/db/analyze.php")
+grep -qx "VIDEOS/Parks/2024/Picnic	2" "$W/prepare.tsv" || no "found again: $(cat "$W/prepare.tsv")" ; ok "a folder moved earlier is found again where Search has its files (one place of that name)"
+echo "$T" | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["table"] if x["folder"]=="Kite"][0]; assert r["describe"]["step"]=="gone" and len(r["describe"]["at"])==2, r' \
+  && ok "two folders of that name: none is guessed; its row says so, with both" || no "kite: $(echo "$T" | head -c 400)"

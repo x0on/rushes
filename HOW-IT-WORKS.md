@@ -1512,6 +1512,11 @@ those that apply), with a count where something wants you. Tidy up opened for a 
 starts there. A right click on a drive (Overview's cards, the left column) offers the same as a menu
 (`driveMenu`). The archive is always among the drives, even before the helper has said which drives it sees.
 
+**The Describe list follows moves** (`prepare.php prepare_follow`, from `moved.php follow_moves`, which every
+move in Tidy up and File in goes through): a folder on it whose files moved is put where they went, with its
+proxies' runs, its helper queue line and what is next. One moved before that is found again by its name in
+Search (`prepare_find_moved`), only when one folder of that name exists; otherwise its row says it is gone.
+
 **What is happening now is one list** (`state.php happening`): Rushes' own job and what is asked behind it,
 previews being made or next, describing (running, or folders with previews ready waiting their turn), and the
 helper's copying and checking. The top bar (its line opens the whole list), Overview, the Activity column, a

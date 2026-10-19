@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.18 — October 2026
+
+- **The Describe list follows folders you move.** Search, previews and descriptions already followed every move made in Tidy up or File in; the list of folders to describe did not, so a folder filed after it was put on the list was looked for where it used to be, and said "queued, starts next" for ever. Now every move takes the list with it: the folder keeps its place on the list, its previews' count and its turn with the helper, and Activity says so. Folders moved before this are found again when Describe opens, where Search has their files, if one folder of that name exists; if there are several, none is guessed: the row says "not here any more" and names them.
+
 ## 0.13.17 — October 2026
 
 - **One file can no longer stop the previews.** Over a weekend the Building Department's previews started every three minutes, listed 540 to make, and stopped before the first, for two days: one file broke the build (most likely metadata written in another encoding, which cameras and Windows do), the build ended, and started again on the same file. Now each file is guarded: one that breaks anything is said in the proxies' log (*could not make …: why*), counted as failed and skipped, and the next is made. A file whose report does not come within 5 minutes is skipped the same way. File names in other encodings are kept as they are. If a build ever stops for another reason, the proxies' own log says why, where the page shows it.
