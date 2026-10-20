@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.21 — October 2026
+
+- **Previews of files ffmpeg has much to say about are made.** ffmpeg's words went into a pipe read only when it finished; a file it says thousands of lines about (a 4K Panasonic clip that plays perfectly in QuickTime) filled the pipe, and ffmpeg stopped, waiting for it to be read: the preview grew by nothing (once for a whole day). Its words now go to a file.
+- **A media engine that makes nothing is followed by software**, not by giving up: the next way is tried, and the log says so.
+- **"Could not be made" no longer says a file is damaged** when it is not known: it says whether the file reads fine, and ffmpeg's own last words. Files listed there before: **Try again** makes them.
+
 ## 0.13.20 — October 2026
 
 - **What is happening names the file it is on**, in Activity, the top bar's list and everywhere it is said: *"Making previews · Building Department · 2 of 197 · 1 could not · now: P1300126.MOV"*, *"Describing · … · now: <file>"*.

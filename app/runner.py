@@ -26,7 +26,7 @@ it touching the archive until Try again — the same breaker as runner.sh.
 Proxies are made here too (proxies(), as proxy.sh does on a NAS, with the
 same records), on the Mac's media engine, in software when it cannot.
 """
-import hashlib, json, os, platform, re, shutil, sqlite3, subprocess, threading, time, urllib.request
+import hashlib, json, os, platform, re, shutil, sqlite3, subprocess, tempfile, threading, time, urllib.request
 import transfer_state as ts          # the careful file operations (beside this file, in the app and in _rushes)
 
 HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.sh are beside this file
@@ -685,15 +685,17 @@ class Runner:
             tries.append(("video chip", ["-hwaccel", "videotoolbox", "-i", src, "-vf", fit, "-c:v", "h264_videotoolbox",
                                          "-b:v", f"{b}M", "-maxrate", f"{int(b) * 3 // 2}M"]))
         tries.append(("software", ["-i", src, "-vf", fit, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]))
-        err = ""
-        for how, args in tries:
+        err, stalls = "", []
+        for k, (how, args) in enumerate(tries):
             if self.proxy_halt.is_set():
                 return False, how
+            # ffmpeg's words go to a file, never a pipe read only at the end: a file it has much to say about
+            # (thousands of lines) filled the pipe, ffmpeg waited for it to be read, and made nothing for ever
+            log = tempfile.TemporaryFile(mode="w+", errors="replace")
             self.proxy_proc = subprocess.Popen(nice + [ff, "-nostdin", "-loglevel", "error", "-y", *args, *audio, out],
-                                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace")
-            # the heartbeat while a long file is made; and a file that makes nothing for STALL seconds (its
-            # reading stuck on a bad patch of disk or share) is given up, said, and the next one is made:
-            # one such file once held the whole list for a day, the heartbeat saying all was well
+                                               stdout=subprocess.DEVNULL, stderr=log)
+            # the heartbeat while a long file is made; and a try that makes nothing for STALL seconds is ended:
+            # the next way is tried (software after the media engine), then the file is given up and the next made
             grew, last, stalled = time.time(), -1, False
             while self.proxy_proc.poll() is None:
                 self.write("proxy-alive.txt", f"{int(time.time())}\n")
@@ -707,26 +709,32 @@ class Runner:
                     try: self.proxy_proc.wait(30)            # a read stuck in the share may not even let it end: left
                     except subprocess.TimeoutExpired: pass
                     break
-            if stalled:                                      # not tried again in software: the reading is what is stuck
-                self.proxy_proc = None
-                try: os.remove(out)
-                except OSError: pass
-                self.last_err = f"nothing was made for {STALL // 60} minutes: " + self.readable(src)
-                return False, how
-            rc, err = self.proxy_proc.returncode, self.proxy_proc.stderr.read(); self.proxy_proc = None
-            with open(self.p("proxy-built.tsv.err"), "a", errors="surrogateescape") as f: f.write(err)
-            if rc == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+            rc = self.proxy_proc.returncode; self.proxy_proc = None
+            try: log.seek(0); err = log.read()[-20000:]
+            except (OSError, ValueError): err = ""
+            log.close()
+            with open(self.p("proxy-built.tsv.err"), "a", errors="surrogateescape") as f: f.write(err[-4000:])
+            if not stalled and rc == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
                 return True, how
             try: os.remove(out)
             except OSError: pass
-        self.last_err = (err.strip().splitlines() or ["ffmpeg stopped"])[-1][:200]
+            if stalled:
+                stalls.append(how)
+                if k + 1 < len(tries):
+                    self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {os.path.basename(src)}: nothing was made {'on the ' + how if how == 'video chip' else 'in ' + how} for {STALL // 60} minutes; trying {tries[k + 1][0]}")
+        said = (err.strip().splitlines() or [""])[-1][:200]
+        if stalls:
+            self.last_err = (f"nothing was made for {STALL // 60} minutes ({' or '.join(stalls)}): " + self.readable(src)
+                             + (f" · ffmpeg said: {said}" if said else ""))
+        else:
+            self.last_err = said or "ffmpeg stopped"
         return False, tries[-1][0]
 
     @staticmethod
     def readable(src, budget=60):
-        """Which of the two it is, when a proxy made nothing: the file's bytes are read (its start, middle and end,
-        a few MB each, at most `budget` seconds, never waited on longer). They come: the disk answers, so the file
-        itself is damaged. They do not: the disk or share does not give that file's data (a bad patch, a drive)."""
+        """When a proxy made nothing: the file's bytes are read (its start, middle and end, a few MB each, at most
+        `budget` seconds, never waited on longer), to say whether the disk gives them. Never "damaged": a file that
+        reads fine may play perfectly (QuickTime) and still be one ffmpeg cannot make a proxy of."""
         out = {}
         def read():
             try:
@@ -739,7 +747,7 @@ class Runner:
                 out["err"] = e.strerror or str(e)
         t = threading.Thread(target=read, daemon=True); t.start(); t.join(budget)
         if out.get("ok"):
-            return "the disk gives its data, so the file itself is damaged (it may not play anywhere: look at it in Finder, or Rescue)"
+            return "the file reads fine (the disk gives its data), but ffmpeg made nothing from it; Show in Finder to look at it, and Try again"
         if out.get("err"):
             return f"the disk refused to give its data ({out['err']}): a bad patch of disk, or a damaged file"
         return "the disk did not give its data within a minute: a bad patch of the disk, or the share not answering for this file"

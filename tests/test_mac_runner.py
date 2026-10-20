@@ -575,6 +575,25 @@ if __name__ == "__main__":
 @unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
 class MacProxies(MacJobs):
     """Proxies made on a Mac for a folder on the list (runner.py), with the records proxy.sh keeps on a NAS."""
+    def test_a_file_ffmpeg_says_much_about_is_made_and_a_stuck_chip_falls_back_to_software(self):
+        """ffmpeg's words go to a file (a pipe read only at the end filled and stopped it for ever); a media
+        engine that makes nothing is followed by software, not by giving up."""
+        import subprocess, time
+        c = os.path.join(self.a, "Talky", "C.mov"); os.makedirs(os.path.dirname(c))
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=640x360:d=1", "-c:v", "mpeg4", c], check=True)
+        old = time.time() - 3 * 3600; os.utime(c, (old, old))
+        fake = os.path.join(self.t, "bin", "ffmpeg-talky")
+        open(fake, "w").write('#!/bin/sh\ncase "$*" in *videotoolbox*) sleep 600 ;; esac\n'
+                              'head -c 300000 /dev/zero | tr "\\0" "x" >&2\nexec ffmpeg "$@"\n'); os.chmod(fake, 0o755)
+        with unittest.mock.patch.object(runner, "STALL", 2), unittest.mock.patch.object(runner, "PROBE_WAIT", 20), \
+             unittest.mock.patch.object(self.r, "ffmpeg", return_value=fake), unittest.mock.patch.object(self.r, "media_engine", return_value=(True, "")), \
+             unittest.mock.patch.object(self.r, "proxy_setting", return_value=(720, "4")):
+            self.r.job("proxy-build", {"QUERY": "Talky"}); self.r.busy["proxies"].join(120)
+        st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+        self.assertEqual((st["state"], st["ok"], st["failed"]), ("done", "1", "0"), "made in software after the chip made nothing")
+        self.assertTrue(os.path.getsize(os.path.join(self.a, "PROXIES", "Talky", "C.mp4")) > 0)
+        self.assertIn("trying software", open(os.path.join(self.web, "proxy.log")).read())
+
     def test_a_file_that_makes_nothing_is_given_up_and_the_next_is_made(self):
         """A file whose reading is stuck (the proxy grows by nothing) is given up after STALL; the build goes on."""
         import subprocess, time
