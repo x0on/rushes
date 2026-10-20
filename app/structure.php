@@ -679,7 +679,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
               .catch(function (x) { said('Not made: ' + esc(x.message), true); });
           }]);
         }
-        if (d.archive && !inHold) items.push(['Move to Recently Removed', function () { removeNow(w.picked().length ? w.picked() : [p]); }]);
+        if (d.archive && !inHold) items.push(['Remove', function () { removeNow(w.picked().length ? w.picked() : [p]); }]);
         if (!it.dir && it.plays) items.push(['Play its preview', function () { play(p, it); }]);
         if (finder) items.push(['Show in Finder', function () {
           post({ op: 'reveal', item: p }).then(function () { said('Opened ✓ ' + esc(name(p)) + ' in a Finder window.'); }).catch(function (x) { said(esc(x.message), true); }); }]);

@@ -5,7 +5,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
 ## 0.13.24 — October 2026
 
-- **A file that will not play can be moved out of the way from where it is listed.** Each file under "Could not be made" has **Move to Recently Removed** beside Show in Finder: look at it, and if it does not play, move it aside. It is Tidy up's own Remove: its folders kept, Undo right there, and nothing is deleted until Delete All. It leaves the list at once.
+- **A file that will not play can be moved out of the way from where it is listed.** Each file under "Could not be made" has **Remove** beside Show in Finder (it goes into Recently Removed; Tidy up's right-click says Remove too): look at it, and if it does not play, move it aside. It is Tidy up's own Remove: its folders kept, Undo right there, and nothing is deleted until Delete All. It leaves the list at once.
 
 ## 0.13.23 — October 2026
 

@@ -2350,7 +2350,7 @@ function drawPrepare(rows, a) {
             return '<li><b>' + esc(f.file) + '</b> — ' + esc(f.why || 'no reason given') +
               ' <span class="note">(' + (old ? 'from an earlier run — being made again now' : esc(clock(f.at))) + ')</span>' +
               ' <button class="lnk" type="button" data-reveal="' + esc(abs) + '">Show in Finder</button>' +
-              ' · <button class="lnk" type="button" data-rmfile="' + esc(abs) + '">Move to Recently Removed</button></li>'; }).join('') + '</ul>' +
+              ' · <button class="lnk" type="button" data-rmfile="' + esc(abs) + '" title="Moves it into Recently Removed: Undo brings it back, nothing is deleted until Delete All">Remove</button></li>'; }).join('') + '</ul>' +
           '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
