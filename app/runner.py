@@ -134,6 +134,8 @@ def ssh_heads(host, paths):
     return out, r.stderr.decode("utf-8", "replace").strip()[-300:]
 
 
+PROBE_WAIT = 300       # ffmpeg's report of a file that does not come in 5 minutes: none (probe)
+STALL = 900            # a proxy that grows by nothing for 15 minutes is given up (encode)
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
@@ -650,8 +652,14 @@ class Runner:
         """ffmpeg's own report of a file: what it is, and what the camera wrote inside it."""
         # errors="replace": cameras and Windows write metadata in other encodings, which must never stop a build;
         # a file that does not answer in 5 minutes (a bad patch of disk) is reported as nothing
-        try: return subprocess.run([ff, "-hide_banner", "-nostdin", "-i", src], capture_output=True, text=True, errors="replace", timeout=300).stderr
-        except subprocess.TimeoutExpired: return ""
+        # (a read stuck in a share may not even let ffmpeg end when told to: then it is left, never waited on)
+        p = subprocess.Popen([ff, "-hide_banner", "-nostdin", "-i", src], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace")
+        try: return p.communicate(timeout=PROBE_WAIT)[1]
+        except subprocess.TimeoutExpired:
+            p.kill()
+            try: p.wait(30)
+            except subprocess.TimeoutExpired: pass
+            return ""
 
     @staticmethod
     def light(report, src):
@@ -683,10 +691,28 @@ class Runner:
                 return False, how
             self.proxy_proc = subprocess.Popen(nice + [ff, "-nostdin", "-loglevel", "error", "-y", *args, *audio, out],
                                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace")
-            while self.proxy_proc.poll() is None:            # the heartbeat while a long file is made
+            # the heartbeat while a long file is made; and a file that makes nothing for STALL seconds (its
+            # reading stuck on a bad patch of disk or share) is given up, said, and the next one is made:
+            # one such file once held the whole list for a day, the heartbeat saying all was well
+            grew, last, stalled = time.time(), -1, False
+            while self.proxy_proc.poll() is None:
                 self.write("proxy-alive.txt", f"{int(time.time())}\n")
-                try: self.proxy_proc.wait(10)
+                try: self.proxy_proc.wait(min(10, STALL))
                 except subprocess.TimeoutExpired: pass
+                try: now = os.path.getsize(out)
+                except OSError: now = -1
+                if now != last: last, grew = now, time.time()
+                elif time.time() - grew > STALL:
+                    stalled = True; self.proxy_proc.kill()
+                    try: self.proxy_proc.wait(30)            # a read stuck in the share may not even let it end: left
+                    except subprocess.TimeoutExpired: pass
+                    break
+            if stalled:                                      # not tried again in software: the reading is what is stuck
+                self.proxy_proc = None
+                try: os.remove(out)
+                except OSError: pass
+                self.last_err = f"nothing was made for {STALL // 60} minutes: the file could not be read (a damaged file, or the disk or share not answering for it)"
+                return False, how
             rc, err = self.proxy_proc.returncode, self.proxy_proc.stderr.read(); self.proxy_proc = None
             with open(self.p("proxy-built.tsv.err"), "a", errors="surrogateescape") as f: f.write(err)
             if rc == 0 and os.path.exists(out) and os.path.getsize(out) > 0:

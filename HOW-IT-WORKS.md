@@ -1514,8 +1514,9 @@ starts there. A right click on a drive (Overview's cards, the left column) offer
 
 **The Describe list follows moves** (`prepare.php prepare_follow`, from `moved.php follow_moves`, which every
 move in Tidy up and File in goes through): a folder on it whose files moved is put where they went, with its
-proxies' runs, its helper queue line and what is next. One moved before that is found again by its name in
-Search (`prepare_find_moved`), only when one folder of that name exists; otherwise its row says it is gone.
+proxies' runs, its helper queue line and what is next. One moved before that is found again from the moves
+written down in `_rushes/origin` (`prepare_find_moved`): its files are followed through every move, never
+guessed by its name; with no such move its row says it is gone, folders of that name shown only as hints.
 
 **What is happening now is one list** (`state.php happening`): Rushes' own job and what is asked behind it,
 previews being made or next, describing (running, or folders with previews ready waiting their turn), and the

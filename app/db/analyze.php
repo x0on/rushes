@@ -162,6 +162,7 @@ while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
 $plog = @file(web_dir() . '/proxy.log', FILE_IGNORE_NEW_LINES) ?: [];
 $perr = @file(web_dir() . '/proxy-built.tsv.err', FILE_IGNORE_NEW_LINES) ?: [];
 // folders moved before the list followed moves: found again where their files are (or said on their row)
+prepare_undo_name_guesses();
 $lost = prepare_find_moved();
 $table = array_map(fn($r) => isset($lost[$r['folder']]) && $r['describe']['step'] === 'gone' ? array_replace_recursive($r, ['describe' => ['at' => $lost[$r['folder']]]]) : $r, prepare_table());
 out(['table' => $table, 'why' => prepare_why(),

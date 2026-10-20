@@ -575,6 +575,22 @@ if __name__ == "__main__":
 @unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
 class MacProxies(MacJobs):
     """Proxies made on a Mac for a folder on the list (runner.py), with the records proxy.sh keeps on a NAS."""
+    def test_a_file_that_makes_nothing_is_given_up_and_the_next_is_made(self):
+        """A file whose reading is stuck (the proxy grows by nothing) is given up after STALL; the build goes on."""
+        import subprocess, time
+        clips = [os.path.join(self.a, "Stuck", n) for n in ("A.mov", "B.mov")]; os.makedirs(os.path.dirname(clips[0]))
+        for c in clips:
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=640x360:d=1", "-c:v", "mpeg4", c], check=True)
+            old = time.time() - 3 * 3600; os.utime(c, (old, old))
+        hang = os.path.join(self.t, "bin", "ffmpeg-hangs-on-A")       # A.mov: nothing written, for ever; B: the real one
+        open(hang, "w").write('#!/bin/sh\ncase "$*" in *A.mov*) sleep 600 ;; *) exec ffmpeg "$@" ;; esac\n'); os.chmod(hang, 0o755)
+        with unittest.mock.patch.object(runner, "STALL", 2), unittest.mock.patch.object(runner, "PROBE_WAIT", 3), \
+             unittest.mock.patch.object(self.r, "ffmpeg", return_value=hang), unittest.mock.patch.object(self.r, "media_engine", return_value=(False, "test")):
+            self.r.job("proxy-build", {"QUERY": "Stuck"}); self.r.busy["proxies"].join(120)
+        st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+        self.assertEqual((st["state"], st["ok"], st["failed"]), ("done", "1", "1"), "A given up, B made")
+        self.assertIn("nothing was made for", open(os.path.join(self.web, "proxy-failed.tsv")).read())
+
     def test_one_file_that_breaks_never_stops_the_build(self):
         """A file whose report cannot be read (metadata in another encoding) is said and skipped; the next is made."""
         import subprocess, time

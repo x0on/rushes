@@ -166,7 +166,7 @@ function prepare_follow(array $pairs): array {
 }
 
 // Each folder [old rel => new rel] renamed on the list, in place, with what belongs to it.
-function prepare_rename(array $moved): void {
+function prepare_rename(array $moved, string $how = 'it was moved'): void {
     $W = web_dir(); $h = rtrim(helper_archive(), '/');
     $list = []; foreach (prepare_list() as $rel => $t) $list[$moved[$rel] ?? $rel] = $t;
     prepare_save($list);
@@ -181,30 +181,89 @@ function prepare_rename(array $moved): void {
     $nx = trim((string)@file_get_contents("$W/proxy-next.txt"));
     if (isset($moved[$nx])) @file_put_contents("$W/proxy-next.txt", $moved[$nx] . "\n");
     require_once __DIR__ . '/activity.php';
-    foreach ($moved as $a => $b) activity_add('changed', "Describe list: $a moved to $b, and the list follows it");
+    foreach ($moved as $a => $b) activity_add('changed', "Describe list: $a is now $b ($how)");
 }
 
-// Folders on the list that were moved before the list followed moves: found again by Search, where its files
-// are now. Only a folder of the same name that Search knows in exactly one place is taken; else it is left,
-// said on its row. -> [old rel => new rel]
+// Folders on the list that were moved before the list followed moves: found again from the moves themselves,
+// never from a name (a folder of the same name elsewhere, a cache that copies a drive's folder names, is not it).
+// Every move is written down in _rushes/origin ("moved  old  new", by Tidy up and by File in); the folder's old
+// files are followed there, through every later move, and the folder is where they are now. Not found that way:
+// its row says it is gone, with the folders of that name as a hint only. -> [old rel => [hints]]
 function prepare_find_moved(): array {
-    $A = rtrim(archive_dir(), '/'); $moved = []; $lost = [];
-    foreach (array_keys(prepare_list()) as $rel) {
-        if ($rel === '' || str_starts_with($rel, '/') || is_dir("$A/$rel")) continue;
-        require_once __DIR__ . '/schema.php'; db_init();
-        $name = basename($rel); $st = db()->prepare("SELECT path FROM files WHERE path LIKE ? ESCAPE '\\' LIMIT 5000");
-        $st->bindValue(1, '%/' . addcslashes($name, '%_\\') . '/%');
-        $r = $st->execute(); $at = [];
-        while ($row = $r->fetchArray(SQLITE3_NUM)) {
-            $p = $row[0]; if (!str_starts_with($p, "$A/")) continue;
-            $i = strpos($p, "/$name/"); $f = substr($p, strlen($A) + 1, $i + strlen($name) + 1 - strlen($A) - 1);
-            if (is_dir("$A/$f")) $at[$f] = 1;
+    $A = rtrim(archive_dir(), '/'); $h = rtrim(helper_archive(), '/');
+    $gone = array_values(array_filter(array_keys(prepare_list()), fn($r) => $r !== '' && !str_starts_with($r, '/') && !is_dir("$A/$r")));
+    if (!$gone) return [];
+    // asked every few seconds while Describe is open: the records are read again only when they or the list change
+    $recs = glob("$A/_rushes/origin/*.tsv") ?: []; sort($recs);
+    $sig = md5(implode('|', $gone) . '#' . implode('|', array_map(fn($f) => basename($f) . ':' . @filesize($f), $recs)));
+    $memo = json_decode((string)@file_get_contents(web_dir() . '/prepare-gone.json'), true);
+    if (($memo['sig'] ?? '') === $sig) return $memo['lost'] ?? [];
+    $local = fn(string $p) => $h !== '' && $h !== $A && str_starts_with($p, "$h/") ? $A . substr($p, strlen($h)) : $p;
+    $moved = []; $lost = [];
+    // the records, oldest first; only the lines under a folder looked for (or under where it went) count
+    foreach ($gone as $rel) {
+        $at = $rel;
+        for ($hop = 0; $hop < 6 && !is_dir("$A/$at"); $hop++) {
+            $pre = "$A/$at/"; $votes = [];
+            foreach ($recs as $f) {
+                $fh = @fopen($f, 'r'); if (!$fh) continue;
+                while (($l = fgets($fh)) !== false) {
+                    if (strncmp($l, "moved\t", 6) !== 0) continue;
+                    $x = explode("\t", rtrim($l, "\n"));
+                    if (count($x) < 3) continue;
+                    $o = $local($x[1]); if (!str_starts_with($o, $pre)) continue;
+                    $n = $local($x[2]); $tail = substr($o, strlen($pre) - 1);        // /x/y.mov
+                    if (str_ends_with($n, $tail) && str_starts_with($n, "$A/")) { $k = substr($n, strlen($A) + 1, -strlen($tail)); $votes[$k] = ($votes[$k] ?? 0) + 1; }
+                }
+                fclose($fh);
+            }
+            if (!$votes) break;
+            arsort($votes); $at = array_key_first($votes);
         }
-        if (count($at) === 1) $moved[$rel] = array_key_first($at);
-        else $lost[$rel] = array_keys($at);
+        if ($at !== $rel && is_dir("$A/$at")) $moved[$rel] = $at;
+        else $lost[$rel] = prepare_name_hints($rel);
     }
-    if ($moved) prepare_rename($moved);
+    if ($moved) prepare_rename($moved, 'its files were followed through the moves written down');
+    else @file_put_contents(web_dir() . '/prepare-gone.json', json_encode(['sig' => $sig, 'lost' => $lost], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
     return $lost;
+}
+
+// Folders of the same name, from Search: shown on a gone folder's row as a hint, never taken by themselves
+function prepare_name_hints(string $rel): array {
+    require_once __DIR__ . '/schema.php'; db_init();
+    $A = rtrim(archive_dir(), '/'); $name = basename($rel);
+    $st = db()->prepare("SELECT path FROM files WHERE path LIKE ? ESCAPE '\\' LIMIT 5000");
+    $st->bindValue(1, '%/' . addcslashes($name, '%_\\') . '/%');
+    $r = $st->execute(); $at = [];
+    while ($row = $r->fetchArray(SQLITE3_NUM)) {
+        $p = $row[0]; if (!str_starts_with($p, "$A/")) continue;
+        $i = strpos($p, "/$name/"); $f = substr($p, strlen($A) + 1, $i + strlen($name) - strlen($A));
+        if (is_dir("$A/$f")) $at[$f] = 1;
+    }
+    return array_keys($at);
+}
+
+// 0.13.18 found two folders again by their name alone, and one of those was a cache's copy of a drive's folder
+// names. Each folder put on the list that way, now with no videos in it, goes back to the name it had, to be
+// found again from the moves (prepare_find_moved). Once; Activity says so.
+function prepare_undo_name_guesses(): void {
+    $W = web_dir(); $A = rtrim(archive_dir(), '/');
+    if (file_exists("$W/prepare-undo-names.done")) return;
+    $list = prepare_list(); $back = [];
+    foreach (@file("$W/activity.tsv") ?: [] as $l)
+        if (preg_match('/Describe list: (.+?) moved to (.+?), and the list follows it/', $l, $m) && isset($list[$m[2]]) && !isset($list[$m[1]])) {
+            $videos = 0;
+            if (is_dir("$A/$m[2]")) foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$A/$m[2]", FilesystemIterator::SKIP_DOTS)) as $f)
+                if (preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $f->getFilename())) { $videos++; break; }
+            if (!$videos) $back[$m[2]] = $m[1];
+        }
+    if ($back) {
+        $new = []; foreach ($list as $rel => $t) $new[$back[$rel] ?? $rel] = $t;
+        prepare_save($new);
+        require_once __DIR__ . '/activity.php';
+        foreach ($back as $wrong => $was) activity_add('changed', "Describe list: $was had been taken for $wrong by its name alone (a mistake); it is looked for again from the moves written down");
+    }
+    @touch("$W/prepare-undo-names.done");
 }
 
 // The proxy build going on now, if any (proxy.sh writes it as it goes).

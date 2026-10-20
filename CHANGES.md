@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.19 — October 2026
+
+- **A moved folder is found from the moves, never from its name.** 0.13.18 looked for a folder moved earlier by its name, and took a folder of the same name that was only a cache's copy of a drive's folder names (no videos in it). Now Rushes follows the folder's own files through the moves it wrote down (Tidy up and File in write every one, in `_rushes/origin`), however many times they moved, and the folder is where they are now. If no move says where it went, its row says so, with the folders of that name only as hints. The folders 0.13.18 took by name, now holding no videos, go back and are looked for again this way.
+- **A file whose reading is stuck no longer holds up the previews.** A proxy that grows by nothing for 15 minutes (the file damaged, or the disk or share not answering for it) is given up, said with why, and the next file is made. ffmpeg's report of a file is waited on for at most 5 minutes, and never for ever, even if ffmpeg itself cannot end. One such file held the Building Department at 1 of 197 for a day.
+
 ## 0.13.18 — October 2026
 
 - **The Describe list follows folders you move.** Search, previews and descriptions already followed every move made in Tidy up or File in; the list of folders to describe did not, so a folder filed after it was put on the list was looked for where it used to be, and said "queued, starts next" for ever. Now every move takes the list with it: the folder keeps its place on the list, its previews' count and its turn with the helper, and Activity says so. Folders moved before this are found again when Describe opens, where Search has their files, if one folder of that name exists; if there are several, none is guessed: the row says "not here any more" and names them.

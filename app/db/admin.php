@@ -2298,7 +2298,7 @@ function drawPrepare(rows, a) {
         (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>'
       : d.step === 'done' ? '<span class="ok">✓ ' + n(d.files) + ' files</span>' + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
-      : d.step === 'gone' ? 'it was moved, and Rushes could not tell where to (' + (d.at && d.at.length ? 'folders of this name: ' + esc(d.at.join(', ')) : 'no folder of this name in Search') + '): take it off the list and add it where it is now'
+      : d.step === 'gone' ? 'it is not here any more, and the moves Rushes wrote down do not say where it went (it may have been moved in Finder). ' + (d.at && d.at.length ? 'Folders of this name, not taken by themselves: ' + esc(d.at.join(' · ')) + '. ' : '') + 'Take it off the list and add it where it is now.'
       : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
       : d.step === 'next' ? 'starting'
       : '<span class="dim">waiting for proxies</span>') + off;

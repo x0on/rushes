@@ -108,8 +108,13 @@ G "info=$A/VIDEOS/Card" | python3 -c 'import json,sys; d=json.load(sys.stdin); a
 f "Public Works/2024/Picnic/p.mov"; mkdir -p "$A/VIDEOS/Parks/2024"
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Public Works/2024/Picnic")
 B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks/2024" > /dev/null    # Search knows it there now
-printf 'Kite\t1\nPicnic\t2\n' > "$W/prepare.tsv"                  # moved before the list followed moves
+printf 'Kite\t1\nVIDEOS/Public Works/2024/Picnic\t2\n' > "$W/prepare.tsv"   # moved before the list followed moves; rm -f "$W/prepare-gone.json"
 T=$(curl -s -G -d pass=rushes "$U/db/analyze.php")
-grep -qx "VIDEOS/Parks/2024/Picnic	2" "$W/prepare.tsv" || no "found again: $(cat "$W/prepare.tsv")" ; ok "a folder moved earlier is found again where Search has its files (one place of that name)"
+grep -qx "VIDEOS/Parks/2024/Picnic	2" "$W/prepare.tsv" || no "found again: $(cat "$W/prepare.tsv")" ; ok "a folder moved earlier is found again from the moves written down, where its files went"
 echo "$T" | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["table"] if x["folder"]=="Kite"][0]; assert r["describe"]["step"]=="gone" and len(r["describe"]["at"])==2, r' \
-  && ok "two folders of that name: none is guessed; its row says so, with both" || no "kite: $(echo "$T" | head -c 400)"
+  && ok "never by its name: a folder no move says went anywhere is said gone, the folders of that name only as hints" || no "kite: $(echo "$T" | head -c 400)"
+mkdir -p "$A/VIDEOS/Cache/Picnic Grill"; printf x > "$A/VIDEOS/Cache/Picnic Grill/a.wav"   # a cache's folder of that name: no videos
+printf 'VIDEOS/Cache/Picnic Grill\t3\n' > "$W/prepare.tsv"; rm -f "$W/prepare-gone.json" "$W/prepare-undo-names.done"
+printf '%s\tchanged\t\tDescribe list: Picnic Grill moved to VIDEOS/Cache/Picnic Grill, and the list follows it\n' "$(date '+%Y-%m-%d %H:%M:%S')" >> "$W/activity.tsv"
+curl -s -G -d pass=rushes "$U/db/analyze.php" > /dev/null
+grep -qx "Picnic Grill	3" "$W/prepare.tsv" && ok "a folder 0.13.18 took by its name alone, with no videos there, goes back to be found from the moves" || no "undo: $(cat "$W/prepare.tsv")"
