@@ -551,13 +551,15 @@ $happening = (function () use ($WEB, $running, $running_said, $progress, $mac, $
     if (!empty($px['running'])) {
         $st = $px['state'] ?? '';
         $h[] = $st === 'building'
-            ? $one('proxies', 'Making previews', $nm . ' · ' . (int)($px['done'] ?? 0) . ' of ' . (int)($px['total'] ?? 0), ($px['total'] ?? 0) ? (int)(100 * (int)$px['done'] / max(1, (int)$px['total'])) : null, '/db/admin.php#describe')
+            ? $one('proxies', 'Making previews', $nm . ' · ' . (int)($px['done'] ?? 0) . ' of ' . (int)($px['total'] ?? 0)
+                     . ((int)($px['failed'] ?? 0) ? ' · ' . (int)$px['failed'] . ' could not' : '') . (!empty($px['file']) ? ' · now: ' . basename((string)$px['file']) : ''), ($px['total'] ?? 0) ? (int)(100 * (int)$px['done'] / max(1, (int)$px['total'])) : null, '/db/admin.php#describe')
             : $one('proxies', 'Making previews', $nm . ' · ' . ($px['step'] ?? 'getting ready'), null, '/db/admin.php#describe');
     } elseif (($next = trim((string)@file_get_contents("$WEB/proxy-next.txt"))) !== '')
         $h[] = $one('proxies', 'Making previews', basename($next) . ' · starts within a minute', null, '/db/admin.php#describe');
     // 3. describing, on the helper
     $d = describing_now();
-    if ($d) $h[] = $one('describe', 'Describing', trim(($d['label'] ?? basename((string)($d['source'] ?? ''))) . (!empty($d['of']) ? ' · ' . (int)($d['n'] ?? 0) . ' of ' . (int)$d['of'] : '')), !empty($d['of']) ? (int)(100 * (int)($d['n'] ?? 0) / max(1, (int)$d['of'])) : null, '/db/admin.php#describe');
+    if ($d) $h[] = $one('describe', 'Describing', trim(($d['label'] ?? basename((string)($d['source'] ?? ''))) . (!empty($d['of']) ? ' · ' . (int)($d['n'] ?? 0) . ' of ' . (int)$d['of'] : '')
+                     . (!empty($d['file']) ? ' · now: ' . basename((string)$d['file']) : (($d['step'] ?? '') !== '' ? ' · ' . $d['step'] : ''))), !empty($d['of']) ? (int)(100 * (int)($d['n'] ?? 0) / max(1, (int)$d['of'])) : null, '/db/admin.php#describe');
     else {
         $q = count(array_filter(@file("$WEB/ingest-queue.tsv") ?: [], fn($l) => str_starts_with($l, "analyze\t")));
         if ($q) $h[] = $one('describe', 'Describing', $q . ' folder' . ($q === 1 ? '' : 's') . ' with previews ready · starts beside any copying', null, '/db/admin.php#describe');

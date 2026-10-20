@@ -590,6 +590,7 @@ class MacProxies(MacJobs):
         st = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
         self.assertEqual((st["state"], st["ok"], st["failed"]), ("done", "1", "1"), "A given up, B made")
         self.assertIn("nothing was made for", open(os.path.join(self.web, "proxy-failed.tsv")).read())
+        self.assertIn("could not make Stuck/A.mov: nothing was made for", open(os.path.join(self.web, "proxy.log")).read(), "said by name, where the page shows it")
 
     def test_one_file_that_breaks_never_stops_the_build(self):
         """A file whose report cannot be read (metadata in another encoding) is said and skipped; the next is made."""

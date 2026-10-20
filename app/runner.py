@@ -842,6 +842,7 @@ class Runner:
                         continue                             # Stop: said at the top of the next turn
                     failed += 1
                     err = getattr(self, "last_err", "")
+                    self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  could not make {os.path.relpath(src, top)}: {err}"[:500])   # said, by name
                     with open(self.p("proxy-built.tsv"), "a", errors="surrogateescape") as f: f.write(f"FAILED\t{src}\n")
                     with open(self.p("proxy-failed.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{err.replace(chr(9), ' ')}\n")
                     if "Permission denied" in err or "No space left" in err:   # nothing can be written: stop once, saying why
@@ -850,7 +851,7 @@ class Runner:
             except Exception as e:
                 failed += 1
                 why = f"{type(e).__name__}: {e}"[:300]
-                self.plog(f"  could not make {os.path.relpath(src, top)}: {why}")
+                self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  could not make {os.path.relpath(src, top)}: {why}"[:500])
                 with open(self.p("proxy-failed.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{why.replace(chr(9), ' ')}\n")
                 for x in (out + ".part.mp4",):
                     try: os.remove(x)

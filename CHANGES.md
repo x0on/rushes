@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.20 — October 2026
+
+- **What is happening names the file it is on**, in Activity, the top bar's list and everywhere it is said: *"Making previews · Building Department · 2 of 197 · 1 could not · now: P1300126.MOV"*, *"Describing · … · now: <file>"*.
+- **Every file a preview could not be made for is said by name** in the proxies' log (the page's "What the archive machine said last"), with why.
+- **The folder 0.13.18 took by name is no longer described.** Putting the list back left the helper's own line for that folder (a cache, no videos) in its queue, so it went on "describing" it; that line is taken out.
+
 ## 0.13.19 — October 2026
 
 - **A moved folder is found from the moves, never from its name.** 0.13.18 looked for a folder moved earlier by its name, and took a folder of the same name that was only a cache's copy of a drive's folder names (no videos in it). Now Rushes follows the folder's own files through the moves it wrote down (Tidy up and File in write every one, in `_rushes/origin`), however many times they moved, and the folder is where they are now. If no move says where it went, its row says so, with the folders of that name only as hints. The folders 0.13.18 took by name, now holding no videos, go back and are looked for again this way.

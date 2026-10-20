@@ -243,6 +243,22 @@ function prepare_name_hints(string $rel): array {
     return array_keys($at);
 }
 
+// The helper's line for a folder 0.13.18 took by its name stayed in its queue when the list was put back: the
+// helper went on describing that folder (a cache, no videos). Lines for those folders are taken out. Once.
+function prepare_drop_guessed_lines(): void {
+    $W = web_dir(); $h = rtrim(helper_archive(), '/');
+    if (file_exists("$W/prepare-undo-lines.done") || $h === '') return;
+    $wrong = [];
+    foreach (@file("$W/activity.tsv") ?: [] as $l)
+        if (preg_match('/Describe list: .+? had been taken for (.+?) by its name alone/', $l, $m)) $wrong[] = "analyze\t$h/$m[1]\t";
+    if ($wrong) {
+        $q = @file("$W/ingest-queue.tsv") ?: [];
+        $q2 = array_values(array_filter($q, function ($l) use ($wrong) { foreach ($wrong as $w) if (str_starts_with($l, $w)) return false; return true; }));
+        if ($q2 !== $q) { @file_put_contents("$W/ingest-queue.tsv.new", implode('', $q2)); @rename("$W/ingest-queue.tsv.new", "$W/ingest-queue.tsv"); }
+    }
+    @touch("$W/prepare-undo-lines.done");
+}
+
 // 0.13.18 found two folders again by their name alone, and one of those was a cache's copy of a drive's folder
 // names. Each folder put on the list that way, now with no videos in it, goes back to the name it had, to be
 // found again from the moves (prepare_find_moved). Once; Activity says so.
