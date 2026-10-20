@@ -6,7 +6,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 ## 0.13.21 — October 2026
 
 - **Previews of files ffmpeg has much to say about are made.** ffmpeg's words went into a pipe read only when it finished; a file it says thousands of lines about (a 4K Panasonic clip that plays perfectly in QuickTime) filled the pipe, and ffmpeg stopped, waiting for it to be read: the preview grew by nothing (once for a whole day). Its words now go to a file.
-- **A media engine that makes nothing is followed by software**, not by giving up: the next way is tried, and the log says so.
+- **A media engine that makes nothing is followed by software**, not by giving up: after 3 minutes of nothing on the chip, the same file is made in software, and the log says so. Checked on the clip that stopped (P1300126.MOV, 4K Panasonic): read whole at 275 MB/s, and made in software from its start, middle and end.
 - **"Could not be made" no longer says a file is damaged** when it is not known: it says whether the file reads fine, and ffmpeg's own last words. Files listed there before: **Try again** makes them.
 
 ## 0.13.20 — October 2026

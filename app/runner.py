@@ -135,6 +135,7 @@ def ssh_heads(host, paths):
 
 
 PROBE_WAIT = 300       # ffmpeg's report of a file that does not come in 5 minutes: none (probe)
+CHIP_STALL = 180       # on the media engine, nothing for 3 minutes: on to software (encode)
 STALL = 900            # a proxy that grows by nothing for 15 minutes is given up (encode)
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
@@ -704,7 +705,7 @@ class Runner:
                 try: now = os.path.getsize(out)
                 except OSError: now = -1
                 if now != last: last, grew = now, time.time()
-                elif time.time() - grew > STALL:
+                elif time.time() - grew > (STALL if how == "software" else min(STALL, CHIP_STALL)):   # the chip makes MBs a second: 3 minutes of nothing is stuck
                     stalled = True; self.proxy_proc.kill()
                     try: self.proxy_proc.wait(30)            # a read stuck in the share may not even let it end: left
                     except subprocess.TimeoutExpired: pass
@@ -721,7 +722,7 @@ class Runner:
             if stalled:
                 stalls.append(how)
                 if k + 1 < len(tries):
-                    self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {os.path.basename(src)}: nothing was made {'on the ' + how if how == 'video chip' else 'in ' + how} for {STALL // 60} minutes; trying {tries[k + 1][0]}")
+                    self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {os.path.basename(src)}: nothing was made {'on the ' + how if how == 'video chip' else 'in ' + how} for {(STALL if how == 'software' else min(STALL, CHIP_STALL)) // 60} minutes; trying {tries[k + 1][0]}")
         said = (err.strip().splitlines() or [""])[-1][:200]
         if stalls:
             self.last_err = (f"nothing was made for {STALL // 60} minutes ({' or '.join(stalls)}): " + self.readable(src)
