@@ -2281,7 +2281,8 @@ function drawPrepare(rows, a) {
     const p = r.proxies, f = (r.failures || []).length;
     const fails = f ? ' · <a href="#" class="bad" data-fails="' + esc(r.folder) + '">' + n(f) + ' could not be made — see why</a>' : '';
     return p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>' + fails
-      : p.step === 'done' ? '<span class="ok">✓ ' + n(p.ok) + ' made</span>' + fails + (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
+      : p.step === 'done' ? (r.plan && r.plan.videos ? '<span class="' + (r.plan.have >= r.plan.videos ? 'ok' : 'busy') + '">' + (r.plan.have >= r.plan.videos ? '✓ ' : '') + n(r.plan.have) + ' of ' + n(r.plan.videos) + ' play</span>' +
+            '<div class="note">' + n(r.plan.previews || 0) + ' previews · ' + n(r.plan.asis || 0) + ' as they are</div>' : '<span class="ok">✓ ' + n(p.ok) + ' made</span>') + fails + (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
       : p.step === 'again' ? 'making the ones that were still arriving' + fails
       : p.step === 'stopped' ? '<span class="bad">stopped' + (p.why ? ': ' + esc(p.why) : '') + '</span> · ' + n(p.ok) + ' made · Try again carries on' + fails
       : p.step === 'no-room' ? '<span class="bad">not enough room on the archive: about ' + gb(p.need) + ' needed, ' + gb(p.free) + ' free</span> · free some space, then Try again'
@@ -2290,13 +2291,14 @@ function drawPrepare(rows, a) {
       : p.step === 'gone' ? '<span class="bad">not here any more</span>'
       : '<span class="dim">waiting its turn</span>';
   };
-  const ds = function (d) {
+  const ds = function (d, r) {
     const off = a.helper_fresh === false && ['queued', 'next', 'describing'].includes(d.step)
       ? ' · <span class="bad">the helper Mac is off or asleep, so this waits</span>' : '';
     return (d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>' +
         '<div class="note">' + (d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' : 'looking at ') +
         (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>'
-      : d.step === 'done' ? '<span class="ok">✓ ' + n(d.files) + ' files</span>' + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
+      : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
+          (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: add the folder again (it describes only what is missing)</div>' : '') + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
       : d.step === 'gone' ? 'it is not here any more, and the moves Rushes wrote down do not say where it went (it may have been moved in Finder). ' + (d.at && d.at.length ? 'Folders of this name, not taken by themselves: ' + esc(d.at.join(' · ')) + '. ' : '') + 'Take it off the list and add it where it is now.'
       : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
@@ -2351,7 +2353,7 @@ function drawPrepare(rows, a) {
           '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
-        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left ? ' · <b>about ' + hm(r.left) + '</b>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe) + '</td>' +
+        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left ? ' · <b>about ' + hm(r.left) + '</b>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
         '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + fails;
     }).join('') + '</table>';
   const ps = document.getElementById('pxSaid');

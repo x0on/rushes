@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.22 — October 2026
+
+- **Each folder's row counts what is there, not what the last run did.** Proxies: *"✓ 40 of 40 play · 33 previews · 7 as they are"* (a video already light enough plays as it is, and needs none), instead of "25 made". Descriptions: *"70 of 71 files described"* (videos, photos and sound), and how many are not yet, instead of "70 files".
+
 ## 0.13.21 — October 2026
 
 - **Previews of files ffmpeg has much to say about are made.** ffmpeg's words went into a pipe read only when it finished; a file it says thousands of lines about (a 4K Panasonic clip that plays perfectly in QuickTime) filled the pipe, and ffmpeg stopped, waiting for it to be read: the preview grew by nothing (once for a whole day). Its words now go to a file.

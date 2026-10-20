@@ -82,18 +82,23 @@ function media_import(): array {
 function prepare_plan(string $rel, bool $fresh = false, bool $look = true): array {
     $f = web_dir() . '/prepare-plan.json';
     $cache = json_decode((string)@file_get_contents($f), true) ?: [];
-    if (isset($cache[$rel]) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600))) return $cache[$rel];
+    if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600))) return $cache[$rel];   // (one counted before 0.13.22 is counted again)
     require_once __DIR__ . '/schema.php';
     $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it
     $st = db()->prepare('SELECT path, bytes, m.asis FROM files LEFT JOIN media m ON m.file_id = files.id WHERE path >= ? AND path < ?');
     $st->bindValue(1, "$dir/"); $st->bindValue(2, "$dir" . '0');     // '0' sorts right after '/'
     $r = $st->execute();
-    $p = ['videos' => 0, 'have' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => []];
+    // counted from what is there, not from the last run: every video that plays (its preview, or as it is), and
+    // every file the AI describes (videos, photos, sound), so a folder's row says "40 of 40", never "25 made"
+    $p = ['videos' => 0, 'have' => 0, 'previews' => 0, 'asis' => 0, 'media' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => []];
     while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) {
+        if (preg_match('/\/\._[^\/]*$/', $x[0])) continue;                                 // macOS leftovers
+        if (preg_match('/\.(jpe?g|png|heic|dng|tiff?|wav|mp3|m4a|aiff?)$/i', $x[0])) { $p['media']++; continue; }
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
-        $p['videos']++; $p['bytes'] += (int)$x[1];
-        if ($x[2] === '1' || ($look && is_file((string)preview_of($x[0])))) $p['have']++;   // light enough to play as it is, or its proxy
+        $p['videos']++; $p['media']++; $p['bytes'] += (int)$x[1];
+        if ($x[2] === '1') { $p['have']++; $p['asis']++; }                                    // light enough to play as it is
+        elseif ($look && is_file((string)preview_of($x[0]))) { $p['have']++; $p['previews']++; }
         else $p['to_read'] += (int)$x[1];
     }
     if (!$look) return $p;
