@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.23 — October 2026
+
+- **Describing looks at the pictures only, as decided: speech is off.** Writing down what is said (Whisper) had been left on, listening to every clip. It is parked until "what is said" becomes its own kind of search; describing is faster without it. It can be turned on in the settings (`analysis.speech`); what was already transcribed is kept.
+
 ## 0.13.22 — October 2026
 
 - **Each folder's row counts what is there, not what the last run did.** Proxies: *"✓ 40 of 40 play · 33 previews · 7 as they are"* (a video already light enough plays as it is, and needs none), instead of "25 made". Descriptions: *"70 of 71 files described"* (videos, photos and sound), and how many are not yet, instead of "70 files".

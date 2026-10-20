@@ -3076,7 +3076,10 @@ def analysis_tools():
         os.path.expanduser("~/archive-pilot/venv/bin/python")) else str(AI / "python" / "bin" / "python3")))
     local = os.path.expanduser("~/archive-pilot/qwen3vl8b")
     model = a.get("model") or (local if os.path.isdir(local) else "mlx-community/Qwen3-VL-8B-Instruct-4bit")
-    return (py if os.path.exists(py) else ""), model, a.get("whisper", "mlx-community/whisper-large-v3-turbo")
+    # Speech (what is said, by Whisper) is parked: searching what is said is a different kind of search, to be
+    # kept apart from what is seen. Off unless Rushes' settings turn it on (analysis.speech); "" skips it.
+    speech = a.get("whisper") or "mlx-community/whisper-large-v3-turbo"
+    return (py if os.path.exists(py) else ""), model, speech if a.get("speech") else ""
 
 
 def install_ai():
@@ -3146,7 +3149,7 @@ def install_ai():
     ok("The AI tools")
     tools, model, whisper = analysis_tools()
     for what, m in (("the vision model (about 6 GB)", model), ("the speech model (about 1.6 GB)", whisper)):
-        if os.path.isdir(m): continue                  # a model already on this Mac, in a folder
+        if not m or os.path.isdir(m): continue         # speech off (parked), or a model already on this Mac, in a folder
         long_step(f"Downloading {what} — it takes a while …")
         run([tools or str(py), "-c", "import sys; from huggingface_hub import snapshot_download; snapshot_download(sys.argv[1])", m])
         ok(what[0].upper() + what[1:].split(" (")[0])

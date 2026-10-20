@@ -890,7 +890,8 @@ The helper describes footage with two models that run on its own computer:
 
 - **a vision model** (default Qwen3-VL 8B, 4-bit, through MLX on Apple chips),
   for the picture;
-- **Whisper** (default large-v3-turbo), for speech.
+- **Whisper** (default large-v3-turbo), for speech: **parked, off by default** (`settings.analysis.speech` turns it
+  on). What is said is meant to become its own kind of search, apart from what is seen.
 
 It describes videos, photos and audio, including HEIC, DNG, MP3 and M4A. It
 skips `_rushes`, `_duplicates`, the recycle bin, NAS thumbnail folders and
@@ -923,7 +924,7 @@ video, the cuts and the sound come from its proxy when there is one.
 4. An answer that is not valid JSON is repaired if possible, or asked for once
    more. If it still fails, the shot is counted as "could not be read" and the
    raw answer is kept.
-5. Speech is transcribed in whatever language was spoken. Stretches Whisper
+5. (Only with speech on.) Speech is transcribed in whatever language was spoken. Stretches Whisper
    itself rates as probably not speech are dropped. If transcription fails, the
    file is kept without speech and marked, and the next time the folder is
    described only its speech is tried again. Choosing a different speech model
