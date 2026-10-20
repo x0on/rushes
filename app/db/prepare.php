@@ -82,8 +82,10 @@ function media_import(): array {
 function prepare_plan(string $rel, bool $fresh = false, bool $look = true): array {
     $f = web_dir() . '/prepare-plan.json';
     $cache = json_decode((string)@file_get_contents($f), true) ?: [];
+    // what could not be made is read as it is now, every time (a file Removed leaves the list at once); the
+    // counts may be up to 10 minutes old
     if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600)))   // (one counted before 0.13.22 is counted again)
-        return $look ? ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel] : $cache[$rel];   // what could not be made: always as it is now
+        return ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel];
     require_once __DIR__ . '/schema.php';
     $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it
@@ -102,8 +104,8 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
         elseif ($look && is_file((string)preview_of($x[0]))) { $p['have']++; $p['previews']++; }
         else $p['to_read'] += (int)$x[1];
     }
-    if (!$look) return $p;
     $p['failures'] = array_slice(proxy_failures($rel), 0, 100);
+    if (!$look) return $p;
     $cache[$rel] = $p;
     @file_put_contents("$f.new", json_encode($cache)) && @rename("$f.new", $f);
     return $p;

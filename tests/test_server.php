@@ -183,9 +183,8 @@ file_put_contents("$root/app/proxy-speed.tsv", "100000000\t10\tvideo chip\n30000
 check(abs(proxy_rate() - 20000000) < 1, 'the speed is measured from the proxies really made (bytes per second)');
 file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n");
 $f = proxy_failures('PARKS');
-check(prepare_plan('PARKS', false, false)['failures'] === [] && count(prepare_plan('PARKS', true)['failures']) === 1
-      && count(prepare_plan('PARKS', false, false)['failures']) === 1,
-      'failures are looked up with the plan by the runner; a page gets what it found');
+check(count(prepare_plan('PARKS', false, false)['failures']) === 1 && count(prepare_plan('PARKS', true)['failures']) === 1,
+      'what could not be made is read as it is now, every time a page asks (a file Removed leaves the list at once)');
 check(count($f) === 1 && $f[0]['file'] === 'day1/b.mxf' && $f[0]['why'] === 'moov atom not found',
       "a folder's failures say which file and why, and leave out ones made since and other folders");
 // A pull for Premiere carries what describing found: a marker per shot and line spoken, at the right frame.

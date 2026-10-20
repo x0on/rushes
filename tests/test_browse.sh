@@ -118,3 +118,9 @@ printf 'VIDEOS/Cache/Picnic Grill\t3\n' > "$W/prepare.tsv"; rm -f "$W/prepare-go
 printf '%s\tchanged\t\tDescribe list: Picnic Grill moved to VIDEOS/Cache/Picnic Grill, and the list follows it\n' "$(date '+%Y-%m-%d %H:%M:%S')" >> "$W/activity.tsv"
 curl -s -G -d pass=rushes "$U/db/analyze.php" > /dev/null
 grep -qx "Picnic Grill	3" "$W/prepare.tsv" && ok "a folder 0.13.18 took by its name alone, with no videos there, goes back to be found from the moves" || no "undo: $(cat "$W/prepare.tsv")"
+mkdir -p "$A/VIDEOS/Parks/2023/Gala"; printf v > "$A/VIDEOS/Parks/2023/Gala/bad.mov"; printf 'VIDEOS/Parks/2023/Gala\t5\n' > "$W/prepare.tsv"
+printf '%s\t1\tInvalid data found when processing input\n' "$A/VIDEOS/Parks/2023/Gala/bad.mov" > "$W/proxy-failed.tsv"
+F() { curl -s -G -d pass=rushes "$U/db/analyze.php" | python3 -c 'import json,sys; print(len([x for x in json.load(sys.stdin)["table"] if x["folder"]=="VIDEOS/Parks/2023/Gala"][0]["plan"]["failures"]))'; }
+[ "$(F)" = 1 ] || no "listed: $(F)"
+J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Parks/2023/Gala/bad.mov"); B -d op=remove --data-urlencode "items=$J" > /dev/null
+[ "$(F)" = 0 ] && ok "a file that could not be made, Removed, leaves its folder's list at once" || no "still listed after Remove"

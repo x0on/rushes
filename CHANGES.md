@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.25 — October 2026
+
+- **A file you Remove leaves "Could not be made" at once.** The list came from the folder's saved count, up to ten minutes old (or older): three files moved into Recently Removed were still listed, and Show in Finder said they were not there. What could not be made is now read as it is, every time.
+
 ## 0.13.24 — October 2026
 
 - **A file that will not play can be moved out of the way from where it is listed.** Each file under "Could not be made" has **Remove** beside Show in Finder (it goes into Recently Removed; Tidy up's right-click says Remove too): look at it, and if it does not play, move it aside. It is Tidy up's own Remove: its folders kept, Undo right there, and nothing is deleted until Delete All. It leaves the list at once.
