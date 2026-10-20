@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.24 — October 2026
+
+- **A file that will not play can be moved out of the way from where it is listed.** Each file under "Could not be made" has **Move to Recently Removed** beside Show in Finder: look at it, and if it does not play, move it aside. It is Tidy up's own Remove: its folders kept, Undo right there, and nothing is deleted until Delete All. It leaves the list at once.
+
 ## 0.13.23 — October 2026
 
 - **Describing looks at the pictures only, as decided: speech is off.** Writing down what is said (Whisper) had been left on, listening to every clip. It is parked until "what is said" becomes its own kind of search; describing is faster without it. It can be turned on in the settings (`analysis.speech`); what was already transcribed is kept.

@@ -2349,7 +2349,8 @@ function drawPrepare(rows, a) {
             const abs = ((window.lastState || {}).archive_root || '') + '/' + r.folder + '/' + f.file;
             return '<li><b>' + esc(f.file) + '</b> — ' + esc(f.why || 'no reason given') +
               ' <span class="note">(' + (old ? 'from an earlier run — being made again now' : esc(clock(f.at))) + ')</span>' +
-              ' <button class="lnk" type="button" data-reveal="' + esc(abs) + '">Show in Finder</button></li>'; }).join('') + '</ul>' +
+              ' <button class="lnk" type="button" data-reveal="' + esc(abs) + '">Show in Finder</button>' +
+              ' · <button class="lnk" type="button" data-rmfile="' + esc(abs) + '">Move to Recently Removed</button></li>'; }).join('') + '</ul>' +
           '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
@@ -2369,6 +2370,21 @@ function drawPrepare(rows, a) {
     b.onclick = function () { b.disabled = true; b.textContent = 'Opening…';
       fetch('/db/browse.php', { method: 'POST', body: new URLSearchParams({ op: 'reveal', item: b.dataset.reveal }) }).then(function (r) { return r.json(); })
         .then(function (x) { b.textContent = x.error ? x.error : 'Shown in Finder ✓'; }).catch(function (e) { b.textContent = 'Did not open: ' + e.message; }); };
+  });
+  // a file that will not play, once looked at: out of the way, as Tidy up's Remove does it (Recently Removed,
+  // its folders kept, Undo brings it back; space comes back only with Delete All)
+  $('prepTable').querySelectorAll('[data-rmfile]').forEach(function (b) {
+    b.onclick = function () {
+      const li = b.closest('li'); b.disabled = true; b.textContent = 'Moving…';
+      fetch('/db/browse.php', { method: 'POST', body: new URLSearchParams({ op: 'remove', items: JSON.stringify([b.dataset.rmfile]) }) }).then(function (r) { return r.json(); })
+        .then(function (x) {
+          if (x.error || !(x.removed || []).length) throw new Error(x.error || (x.notes || []).join(' ') || 'it did not move');
+          li.innerHTML = '<s>' + esc(b.dataset.rmfile.split('/').pop()) + '</s> — moved to Recently Removed ✓ (nothing is deleted until Delete All) <button class="lnk" type="button">Undo</button>';
+          li.querySelector('button').onclick = function () { const u = this; u.disabled = true;
+            fetch('/db/browse.php', { method: 'POST', body: new URLSearchParams({ op: 'undo' }) }).then(function (r) { return r.json(); })
+              .then(function (y) { u.outerHTML = y.error ? '<span class="bad">Not undone: ' + esc(y.error) + '</span>' : '· back where it was ✓'; }); };
+        }).catch(function (e) { b.disabled = false; b.textContent = 'Not moved: ' + e.message; });
+    };
   });
   $('prepTable').querySelectorAll('[data-fails]').forEach(function (x) {
     x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };

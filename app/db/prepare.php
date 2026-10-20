@@ -82,7 +82,8 @@ function media_import(): array {
 function prepare_plan(string $rel, bool $fresh = false, bool $look = true): array {
     $f = web_dir() . '/prepare-plan.json';
     $cache = json_decode((string)@file_get_contents($f), true) ?: [];
-    if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600))) return $cache[$rel];   // (one counted before 0.13.22 is counted again)
+    if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600)))   // (one counted before 0.13.22 is counted again)
+        return $look ? ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel] : $cache[$rel];   // what could not be made: always as it is now
     require_once __DIR__ . '/schema.php';
     $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it
@@ -128,7 +129,8 @@ function proxy_failures(string $rel): array {
         if (!str_starts_with($src, "$dir/")) continue;
         $out[$src] = ['file' => substr($src, strlen("$dir/")), 'at' => (int)$at, 'why' => $why, 'src' => $src];
     }
-    return array_values(array_filter($out, fn($f) => !is_file((string)preview_of($f['src']))));
+    // a file made since, or not there any more (moved to Recently Removed, or elsewhere) leaves the list
+    return array_values(array_filter($out, fn($f) => is_file($f['src']) && !is_file((string)preview_of($f['src']))));
 }
 
 // rel folder => when it was (last) asked for
