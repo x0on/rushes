@@ -711,7 +711,7 @@ class Runner:
                 self.proxy_proc = None
                 try: os.remove(out)
                 except OSError: pass
-                self.last_err = f"nothing was made for {STALL // 60} minutes: the file could not be read (a damaged file, or the disk or share not answering for it)"
+                self.last_err = f"nothing was made for {STALL // 60} minutes: " + self.readable(src)
                 return False, how
             rc, err = self.proxy_proc.returncode, self.proxy_proc.stderr.read(); self.proxy_proc = None
             with open(self.p("proxy-built.tsv.err"), "a", errors="surrogateescape") as f: f.write(err)
@@ -721,6 +721,28 @@ class Runner:
             except OSError: pass
         self.last_err = (err.strip().splitlines() or ["ffmpeg stopped"])[-1][:200]
         return False, tries[-1][0]
+
+    @staticmethod
+    def readable(src, budget=60):
+        """Which of the two it is, when a proxy made nothing: the file's bytes are read (its start, middle and end,
+        a few MB each, at most `budget` seconds, never waited on longer). They come: the disk answers, so the file
+        itself is damaged. They do not: the disk or share does not give that file's data (a bad patch, a drive)."""
+        out = {}
+        def read():
+            try:
+                n = os.path.getsize(src)
+                with open(src, "rb") as f:
+                    for at in (0, n // 2, max(0, n - (4 << 20))):
+                        f.seek(at); f.read(4 << 20)
+                out["ok"] = True
+            except OSError as e:
+                out["err"] = e.strerror or str(e)
+        t = threading.Thread(target=read, daemon=True); t.start(); t.join(budget)
+        if out.get("ok"):
+            return "the disk gives its data, so the file itself is damaged (it may not play anywhere: look at it in Finder, or Rescue)"
+        if out.get("err"):
+            return f"the disk refused to give its data ({out['err']}): a bad patch of disk, or a damaged file"
+        return "the disk did not give its data within a minute: a bad patch of the disk, or the share not answering for this file"
 
     def prep_folder(self, raw):
         """A folder to make previews for, as Rushes asked: a folder of the archive (its path inside it), or a

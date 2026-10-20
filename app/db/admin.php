@@ -2344,8 +2344,10 @@ function drawPrepare(rows, a) {
           '<ul style="margin:6px 0 8px;padding-left:18px">' + r.failures.map(function (f) {
             // a failure from before this folder was (re)started is being made again right now
             const old = f.at && f.at < r.asked && r.proxies.step === 'making';
+            const abs = ((window.lastState || {}).archive_root || '') + '/' + r.folder + '/' + f.file;
             return '<li><b>' + esc(f.file) + '</b> — ' + esc(f.why || 'no reason given') +
-              ' <span class="note">(' + (old ? 'from an earlier run — being made again now' : esc(clock(f.at))) + ')</span></li>'; }).join('') + '</ul>' +
+              ' <span class="note">(' + (old ? 'from an earlier run — being made again now' : esc(clock(f.at))) + ')</span>' +
+              ' <button class="lnk" type="button" data-reveal="' + esc(abs) + '">Show in Finder</button></li>'; }).join('') + '</ul>' +
           '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
@@ -2359,6 +2361,12 @@ function drawPrepare(rows, a) {
     // a redraw keeps a "Sure?" that is still waiting for its second press
     if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
     b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake'].includes(b.dataset.l)); };
+  });
+  // the file itself, where it is: Finder on this Mac (Tidy up's own Show in Finder), to look at it or play it
+  $('prepTable').querySelectorAll('[data-reveal]').forEach(function (b) {
+    b.onclick = function () { b.disabled = true; b.textContent = 'Opening…';
+      fetch('/db/browse.php', { method: 'POST', body: new URLSearchParams({ op: 'reveal', item: b.dataset.reveal }) }).then(function (r) { return r.json(); })
+        .then(function (x) { b.textContent = x.error ? x.error : 'Shown in Finder ✓'; }).catch(function (e) { b.textContent = 'Did not open: ' + e.message; }); };
   });
   $('prepTable').querySelectorAll('[data-fails]').forEach(function (x) {
     x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };

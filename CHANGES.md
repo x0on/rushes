@@ -6,6 +6,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 ## 0.13.20 — October 2026
 
 - **What is happening names the file it is on**, in Activity, the top bar's list and everywhere it is said: *"Making previews · Building Department · 2 of 197 · 1 could not · now: P1300126.MOV"*, *"Describing · … · now: <file>"*.
+- **A file that made nothing says which it is:** its bytes are read once more (start, middle, end). They come: *"the file itself is damaged"*. They do not: *"the disk did not give its data: a bad patch, or the share"*. And each file on the "could not be made" list has **Show in Finder**, to look at it where it is.
 - **Every file a preview could not be made for is said by name** in the proxies' log (the page's "What the archive machine said last"), with why.
 - **The folder 0.13.18 took by name is no longer described.** Putting the list back left the helper's own line for that folder (a cache, no videos) in its queue, so it went on "describing" it; that line is taken out.
 
