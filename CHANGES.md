@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.27 — October 2026
+
+- **Another website can no longer use Rushes through the Mac's own browser.** A request from the Mac itself needs no password, and a website could point its own name at the Mac (DNS rebinding) to have its pages press Rushes buttons there. Rushes on a Mac now takes requests from the Mac itself only when they are addressed to `127.0.0.1` or `localhost`, as Rushes always opens itself. Other devices are unchanged: they still sign in.
+- **Guessing the password is stopped after 10 tries.** After 10 wrong passwords in a row, from any device and any door, Rushes takes no password for 15 minutes. The Mac Rushes runs on is never locked out, and its own wrong tries (a script there with an old password) are not counted. New passwords are at least 8 characters; one already set keeps working.
+- The upload's running fingerprint is read back only as a fingerprint (`unserialize` takes no other kind of object).
+
 ## 0.13.26 — October 2026
 
 - **The helper's own code is signed again, so the Mac takes it.** Rushes installs the helper's code (copying, describing) only when it carries the Rushes signature, and it had not been signed again since 0.12.11: every change to it since then (the one log, describing a kept drive's previews, speech off) stayed out, and the helper went on with the code of early October. Signed now for this version; the check that would have caught it (tests/test_menu.py) is in the list run before every build.

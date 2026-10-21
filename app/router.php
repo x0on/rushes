@@ -27,6 +27,17 @@ function refuse(int $code, string $why): bool {
     echo $why, "\n";
     return true;
 }
+// DNS rebinding: a request from this Mac skips the password (below), so it must also
+// have been addressed to this Mac by its own name for itself. Another website that
+// points its own name at 127.0.0.1 gets its browser this far, but its requests say
+// that website's name as their Host, and are refused here. Requests from other
+// devices are not checked: they still need the password, which such a page lacks
+// (so a phone over a VPN, by any name, is unaffected). Rushes opens itself at
+// http://127.0.0.1:port (rushes_helper.py), the helper's code asks localhost.
+if (in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
+    && !in_array(strtolower(preg_replace('/:\d+$/', '', (string)($_SERVER['HTTP_HOST'] ?? ''))), ['127.0.0.1', 'localhost', '[::1]'], true))
+    return refuse(403, 'Refused: this was asked for under another name than this Mac\'s own (127.0.0.1 or localhost). '
+        . 'Open Rushes from its menu bar icon.');
 if ($path === '' || $path[0] !== '/' || str_contains($path, "\0") || preg_match('#(^|/)\.#', $path))
     return refuse(404, 'Not found.');
 if (preg_match('/^(\.adminpass|\.pull-.*|rushes\.sqlite.*|db-copy\.sqlite.*|ingest-queue\.tsv|helper-refused\.tsv|activity\.tsv)$/', $base))

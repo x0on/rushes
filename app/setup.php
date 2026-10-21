@@ -102,10 +102,12 @@ $pw_said = '';
 if (isset($_POST['_newpass'])) {
     $new = (string)$_POST['_newpass'];
     // At the Mac itself the current one is not asked (auth.php at_this_mac); from anywhere else it is
-    if (!at_this_mac() && !pass_ok((string)($_POST['_oldpass'] ?? ''))) {
+    if (!at_this_mac() && locked_for() > 0) {
+        $pw_said = locked_said();
+    } elseif (!at_this_mac() && !pass_try((string)($_POST['_oldpass'] ?? ''))) {
         $pw_said = 'The current password is wrong.';
-    } elseif (strlen(trim($new)) < 4) {
-        $pw_said = 'Pick something at least four characters long.';
+    } elseif (strlen(trim($new)) < PASS_MIN) {
+        $pw_said = 'Pick something at least ' . PASS_MIN . ' characters long.';
     } elseif (new_pass($new, 'Changed the password' . (at_this_mac() ? ' on this Mac' : '') . '; other devices sign in again with it')) {
         $pw_said = 'ok';
     } else {

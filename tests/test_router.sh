@@ -24,6 +24,10 @@ U=http://127.0.0.1:18642
 for f in job.log .htaccess runner.sh ingest.py ingest-history.tsv 'x/../job.log' db/settings.json; do
     [ "$(code "$U/$f")" = 404 ] || no "$f was handed out"
 done; ok "logs, lists, hidden files and code are never handed out"
+[ "$(code -H 'Host: rushes.example.com:18642' $U/db/state.php)" = 403 ] && [ "$(code -H 'Host: rushes.example.com' -d x=1 $U/run.php)" = 403 ] \
+    && ok "from this Mac, a request addressed to another name is refused (DNS rebinding)" || no "another name let in from this Mac"
+[ "$(code -H 'Host: localhost:18642' $U/db/state.php)" = 200 ] && [ "$(code -H 'Host: LOCALHOST' $U/db/state.php)" = 200 ] && [ "$(code -H 'Host: [::1]:18642' $U/db/state.php)" = 200 ] \
+    && ok "localhost, with or without its port, is this Mac" || no "localhost refused"
 echo "1	$R/Archive/a" > "$R/web/manifest.tsv"; echo "map	a	b" > "$R/web/tidy-20261005-120000.tsv"
 [ "$(code $U/settings.json)" = 200 ] && [ "$(code $U/rules.json)" = 200 ] && [ "$(code $U/manifest.tsv)" = 200 ] \
     && [ "$(code $U/tidy-20261005-120000.tsv)" = 200 ] && ok "the files the helper reads are there for it" || no "the helper's files"

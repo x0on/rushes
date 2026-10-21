@@ -135,8 +135,8 @@ happens in HOW-IT-WORKS.
 **Security**
 
 - Plain http, one shared password, no user accounts. Rushes is for an office
-  network only. Requests from other websites are refused, but a site that points
-  its own name at your Rushes (DNS rebinding) is not.
+  network only. Requests from other websites are refused, and so is a site that
+  points its own name at Rushes on a Mac (DNS rebinding, since 0.13.27).
 - Without a password, anyone on the network can change and download pulls
   (including a zip of the files), and ingest a card. While no helper is paired,
   they can also press the helper's switches.

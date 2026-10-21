@@ -65,7 +65,7 @@ if (isset($_GET['piece']) && $method === 'POST') {
     // keep it between requests; otherwise read once at the end).
     $ctx = null;
     if ($have === 0) { try { $ctx = hash_init('sha256'); } catch (Throwable $e) {} }
-    elseif (is_file("$f.sum")) { try { $ctx = unserialize((string)file_get_contents("$f.sum")); } catch (Throwable $e) { $ctx = null; } }
+    elseif (is_file("$f.sum")) { try { $ctx = unserialize((string)file_get_contents("$f.sum"), ['allowed_classes' => ['HashContext']]); } catch (Throwable $e) { $ctx = null; } }
     if (@file_put_contents("$f.part", $body, FILE_APPEND) !== strlen($body)) up_said(500, ['error' => 'could not write in the web folder']);
     if ($ctx instanceof HashContext) { hash_update($ctx, $body); try { @file_put_contents("$f.sum", serialize($ctx)); } catch (Throwable $e) { @unlink("$f.sum"); $ctx = null; } }
     else @unlink("$f.sum");

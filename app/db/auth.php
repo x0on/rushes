@@ -52,9 +52,12 @@ function pass_ok(string $given): bool {
     return hash_equals($stored, trim($given));
 }
 
+// New passwords are at least this long. One already kept, shorter, still works.
+const PASS_MIN = 8;
+
 function set_pass(string $new): bool {
     $new = trim($new);
-    if (strlen($new) < 4) return false;
+    if (strlen($new) < PASS_MIN) return false;
     return php_keep(pass_file(), ['pass' => password_hash($new, PASSWORD_DEFAULT)]);
 }
 
@@ -97,9 +100,64 @@ function new_pass(string $new, string $how): bool {
 function may_act(string $given = ''): bool {
     if (signed_in()) return true;
     if ($given === '') return false;
-    if (pass_ok($given)) return true;
-    sleep(1);                                       // slow a guessing loop down, as at sign-in
+    return pass_try($given);
+}
+
+// ── wrong passwords ────────────────────────────────────────────────────────
+// After PASS_TRIES wrong passwords in a row, from any device and any door (sign-in,
+// scripts, Setup), every password is refused for PASS_WAIT seconds, the right one
+// too: a guessing loop gets ten tries every quarter of an hour, not thousands. The
+// Mac itself is never locked out (it does not need the password, and can set a
+// new one there). Counted in one file, under a lock, so tries sent all at once are
+// all counted. A .php file: asked for, it runs and prints nothing.
+const PASS_TRIES = 10;
+const PASS_WAIT = 15 * 60;
+
+function tries_file(): string { return web_dir() . '/signin-tries.php'; }
+
+// [wrong tries in a row, locked until (a time, or 0)], changed by $change under the lock
+function tries_with(?callable $change = null): array {
+    $h = @fopen(tries_file(), 'c+');
+    if (!$h) return [0, 0];
+    flock($h, $change ? LOCK_EX : LOCK_SH);
+    $raw = (string)stream_get_contents($h);
+    $t = json_decode(substr($raw, (int)strpos($raw, "\n")), true);
+    $t = [(int)($t['n'] ?? 0), (int)($t['until'] ?? 0)];
+    if ($change) {
+        $t = $change($t);
+        ftruncate($h, 0); rewind($h);
+        fwrite($h, "<?php exit; ?>\n" . json_encode(['n' => $t[0], 'until' => $t[1]]) . "\n");
+        fflush($h);
+    }
+    flock($h, LOCK_UN); fclose($h);
+    return $t;
+}
+
+// Seconds left before passwords are taken again (0: not locked out)
+function locked_for(): int {
+    if (at_this_mac()) return 0;
+    return max(0, tries_with()[1] - time());
+}
+
+// A password given at a door: checked, and counted when wrong
+function pass_try(string $given): bool {
+    if (at_this_mac()) return pass_ok($given);      // the Mac's own tries (a script with an old password) never lock others out
+    if (locked_for() > 0) return false;
+    if (pass_ok($given)) {
+        if (tries_with()[0] > 0) tries_with(fn($t) => [0, 0]);
+        return true;
+    }
+    tries_with(function ($t) {
+        $n = $t[0] + 1;
+        return $n >= PASS_TRIES ? [0, time() + PASS_WAIT] : [$n, $t[1]];
+    });
+    sleep(1);                                       // slow a guessing loop down
     return false;
+}
+
+function locked_said(): string {
+    return 'Too many wrong passwords. Rushes takes passwords again in ' . max(1, (int)ceil(locked_for() / 60))
+        . ' minute' . (locked_for() > 60 ? 's' : '') . '. On the Mac Rushes runs on, it opens without one.';
 }
 
 // ── the gate ───────────────────────────────────────────────────────────────
@@ -115,19 +173,19 @@ function require_sign_in(): void {
     $tried = false; $why = '';
     if (isset($_POST['_pass'])) {
         $tried = true;
-        if (pass_ok((string)$_POST['_pass'])) {
+        if (locked_for() > 0) $why = locked_said();
+        elseif (pass_try((string)$_POST['_pass'])) {
             $_SESSION['rushes_in'] = true; $_SESSION['rushes_gen'] = pass_gen();
             session_regenerate_id(true);           // a fresh id once signed in
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?')); exit;
         }
-        $why = 'That is not the password.';
-        sleep(1);                                   // slow a guessing loop down
+        else $why = locked_for() > 0 ? locked_said() : 'That is not the password.';
     }
 
     // Forgot it, at the Mac itself: a new one, no old one asked
     if (isset($_POST['_reset']) && at_this_mac()) {
         $tried = true;
-        if (strlen(trim((string)$_POST['_reset'])) < 4) $why = 'Pick something at least four characters long.';
+        if (strlen(trim((string)$_POST['_reset'])) < PASS_MIN) $why = 'Pick something at least ' . PASS_MIN . ' characters long.';
         elseif (new_pass((string)$_POST['_reset'], 'Set a new password on this Mac (the old one was not asked); other devices sign in again with it')) {
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?')); exit;
         } else $why = 'Could not keep the new password: ' . pass_file() . ' is not writable.';
@@ -186,7 +244,7 @@ function sign_in_page(string $why): void {
       <summary style="cursor:pointer;color:var(--accent-text)">Forgot it? Set a new one</summary>
       <p style="margin:10px 0">You are at the Mac Rushes runs on, so the old one is not needed.
         Phones and other computers sign in again with the new one.</p>
-      <input type="password" name="_reset" placeholder="new password" autocomplete="new-password" minlength="4">
+      <input type="password" name="_reset" placeholder="new password" autocomplete="new-password" minlength="<?= PASS_MIN ?>">
       <button class="btn" type="submit" formnovalidate>Set it and unlock</button>
     </details>
   <?php endif; ?>

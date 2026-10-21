@@ -1674,7 +1674,8 @@ things by hand, each asking twice:
 - Test the video chip.
 
 Below them: **Admin password**, to change it. It needs the current password,
-and the new one must be at least 4 characters.
+and the new one must be at least 8 characters (a shorter one kept from before
+still works).
 
 **Take everything with you** (below the buttons) downloads, to the computer
 you are on, what Rushes knows, in open formats:
@@ -2476,7 +2477,9 @@ A script can do most of this by sending the password with its request
 (`pass`) instead of signing in: jobs, transfers, updates, pairing, tidy-ups and
 relinking. Settings, Reorganize's plan and the password itself need a signed-in
 session. A wrong password, typed at sign-in or sent by a script, waits a
-second.
+second. After 10 wrong passwords in a row, from any device, every password is
+refused for 15 minutes, the right one too (counted in `signin-tries.php`). The
+Mac Rushes runs on is never locked out.
 
 **The paired helper** gets work and reports what it did. Its own window can press
 its switches. What it reports is checked:
@@ -2519,9 +2522,12 @@ its switches. What it reports is checked:
 
 - The pages use plain http, not https, so passwords cross the network
   unencrypted.
-- Rushes does not check that the address a browser used is one of its own: a
-  website that makes its own name point at your Rushes (DNS rebinding) is not
-  stopped by the same-site check above.
+- On a server, Rushes does not check that the address a browser used is one of
+  its own: a website that makes its own name point at the server (DNS
+  rebinding) is not stopped by the same-site check above, though it still needs
+  the password. On a Mac it is stopped: a request from the Mac itself, which
+  needs no password, must be addressed to `127.0.0.1` or `localhost`, or
+  `router.php` refuses it.
 - Anyone who can write to the web share can change the runner, which runs with
   full rights. Give write access to the web share to the administrator only
   (INSTALL.md).
