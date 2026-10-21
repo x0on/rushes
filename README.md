@@ -58,6 +58,7 @@ through a VPN. Putting it directly on the internet is not supported yet.
 | install it, update it, or fix it when something looks wrong | [INSTALL.md](INSTALL.md) |
 | change the code | [DEVELOPING.md](DEVELOPING.md) |
 | see what comes next and what is not right yet | [ROADMAP.md](ROADMAP.md) |
+| pick up the project (person or AI) | [HANDOFF.md](HANDOFF.md) |
 | see what it is built from | [CREDITS.md](CREDITS.md) |
 
 ## License
