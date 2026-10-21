@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.26 — October 2026
+
+- **The helper's own code is signed again, so the Mac takes it.** Rushes installs the helper's code (copying, describing) only when it carries the Rushes signature, and it had not been signed again since 0.12.11: every change to it since then (the one log, describing a kept drive's previews, speech off) stayed out, and the helper went on with the code of early October. Signed now for this version; the check that would have caught it (tests/test_menu.py) is in the list run before every build.
+
 ## 0.13.25 — October 2026
 
 - **A file you Remove leaves "Could not be made" at once.** The list came from the folder's saved count, up to ten minutes old (or older): three files moved into Recently Removed were still listed, and Show in Finder said they were not there. What could not be made is now read as it is, every time.
