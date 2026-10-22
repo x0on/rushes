@@ -977,6 +977,15 @@ time left comes from its own pace (the runner writes `run_t0`, `run_bytes`, `run
 out. A folder not started shows a guess from earlier folders' speed, said as a guess: 4K, limited by
 encoding rather than reading, goes several times slower.
 
+**What is in a folder** (`db/folders.php`) is read on the disk itself, in the background (its own php
+process), when the folder is added to the list, and again when Describe is opened while it is still
+being worked on and its last reading is more than half an hour old, one folder at a time. Every
+media file under it is kept with its size (`folder_files`), hidden files, `._` leftovers, recycle
+bins and Rushes' own folders left out; the row's counts come from that reading, not from Search
+(from Search only until a folder has been read once, said so). The row says when it was checked,
+how far a reading has got, a reading that has not moved for 10 minutes, and what changed since the
+reading before: files missing and new, by name (`folder_changes`, `analyze.php ?changes=`).
+
 **Describe without previews** (a row not described yet) makes no previews for that folder
 (`prepare-nopreview.json`); describing reads its originals, using any previews already made.
 **Make previews too** undoes it.

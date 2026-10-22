@@ -86,16 +86,26 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     // counts may be up to 10 minutes old
     if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600)))   // (one counted before 0.13.22 is counted again)
         return ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel];
-    require_once __DIR__ . '/schema.php';
+    require_once __DIR__ . '/folders.php';
     $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it
     $st = db()->prepare('SELECT path, bytes, m.asis FROM files LEFT JOIN media m ON m.file_id = files.id WHERE path >= ? AND path < ?');
     $st->bindValue(1, "$dir/"); $st->bindValue(2, "$dir" . '0');     // '0' sorts right after '/'
     $r = $st->execute();
+    // The files: as the folder itself was last read on the disk (folders.php), the source of truth; from
+    // Search's list only until it has been read once (said so: 'from' => 'search')
+    $read = folder_read($dir); $rows = [];
+    if ($read && (int)$read['at'] > 0) {
+        $asis = [];
+        while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) if ($x[2] === '1') $asis[$x[0]] = 1;
+        $q = db()->prepare('SELECT rel, bytes FROM folder_files WHERE folder = ?'); $q->bindValue(1, $dir); $ff = $q->execute();
+        while ($x = $ff->fetchArray(SQLITE3_NUM)) $rows[] = ["$dir/$x[0]", (int)$x[1], isset($asis["$dir/$x[0]"]) ? '1' : null];
+    } else while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) $rows[] = $x;
     // counted from what is there, not from the last run: every video that plays (its preview, or as it is), and
     // every file the AI describes (videos, photos, sound), so a folder's row says "40 of 40", never "25 made"
-    $p = ['videos' => 0, 'have' => 0, 'previews' => 0, 'asis' => 0, 'media' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => []];
-    while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) {
+    $p = ['videos' => 0, 'have' => 0, 'previews' => 0, 'asis' => 0, 'media' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => [],
+          'from' => $read && (int)$read['at'] > 0 ? 'disk' : 'search'];
+    foreach ($rows as $x) {
         if (preg_match('/\/\._[^\/]*$/', $x[0])) continue;                                 // macOS leftovers
         if (preg_match('/\.(jpe?g|png|heic|dng|tiff?|wav|mp3|m4a|aiff?)$/i', $x[0])) { $p['media']++; continue; }
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
@@ -370,6 +380,7 @@ function describing_now(): array {
 // Where each prepared folder stands, step by step. The one source of truth for
 // both the page and prepare_advance, so they can never disagree.
 function prepare_table(bool $look = false): array {
+    require_once __DIR__ . '/folders.php';
     $h = rtrim(helper_archive(), '/');
     $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now(); $rate = proxy_rate();
     $queue = array_map('rtrim', @file(web_dir() . '/ingest-queue.tsv') ?: []);
@@ -424,7 +435,10 @@ function prepare_table(bool $look = false): array {
         } elseif ($rate > 0 && !in_array($px['step'], ['done', 'skipped'], true)) {
             $left = (int)round($plan['to_read'] / $rate); $how = 'guess';
         }
+        $rd = folder_read(prep_abs($rel));
         $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => $plan, 'left' => $left, 'left_how' => $how,
+                   'read' => $rd ? ['state' => $rd['state'], 'at' => (int)$rd['at'], 'seen' => (int)$rd['seen'], 'missing' => (int)$rd['missing'],
+                                    'added' => (int)$rd['added'], 'prev_at' => (int)$rd['prev_at'], 'why' => (string)$rd['why']] : null,
                    'failures' => $plan['failures'] ?? [], 'proxies' => $px, 'describe' => $ds];
     }
     return $rows;

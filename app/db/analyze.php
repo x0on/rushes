@@ -46,6 +46,13 @@ if (isset($_GET['file'])) {
         if (str_starts_with($x[0], "$root/") && !str_starts_with($x[0], "$root/PROXIES/")) $files[] = substr($x[0], strlen($root) + 1);
     out(['files' => $files]);
 }
+// What changed in a folder since its reading before: the files missing and the new ones (Describe, the badge)
+if (isset($_GET['changes'])) {
+    require_once __DIR__ . '/folders.php';
+    $rel = drive_folder((string)$_GET['changes']) ?: trim(str_replace('\\', '/', (string)$_GET['changes']), '/');
+    if ($rel === '' || str_contains($rel, '..')) out(['error' => 'Pick a folder on the list.']);
+    out(['folder' => $rel, 'read' => folder_read(prep_abs($rel)), 'changes' => folder_changes(prep_abs($rel))]);
+}
 if (isset($_GET['locate'])) {
     require_once __DIR__ . '/schema.php';
     $find = db()->prepare('SELECT path FROM files WHERE name = ?');
@@ -200,6 +207,8 @@ QUERY=
         else {
             if (!is_dir(prep_abs($rel))) bail(400, $drive ? "“{$rel}” is not there now: is the drive plugged in?" : "There is no folder “{$rel}” in the archive.");
             unset($list[$rel]); $list[$rel] = time();      // asked again: to the end, and runs again
+            require_once __DIR__ . '/folders.php';
+            folder_read_start(prep_abs($rel), true);       // what is in it, read on the disk now, in the background
         }
         if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?');
         prepare_advance();
@@ -235,6 +244,10 @@ $perr = @file(web_dir() . '/proxy-built.tsv.err', FILE_IGNORE_NEW_LINES) ?: [];
 prepare_undo_name_guesses(); prepare_drop_guessed_lines();
 $lost = prepare_find_moved();
 $table = array_map(fn($r) => isset($lost[$r['folder']]) && $r['describe']['step'] === 'gone' ? array_replace_recursive($r, ['describe' => ['at' => $lost[$r['folder']]]]) : $r, prepare_table());
+// Describe open: the folders still being worked on are read again on the disk, one at a time, when their
+// last reading is more than half an hour old (folders.php), so what the list says is what is there
+foreach ($table as $r)
+    if (!(in_array($r['proxies']['step'], ['done', 'skipped'], true) && $r['describe']['step'] === 'done') && folder_read_start(prep_abs($r['folder']))) break;
 out(['table' => $table, 'why' => prepare_why(),
      'proxy_log' => ['lines' => array_slice($plog, -25), 'at' => (int)@filemtime(web_dir() . '/proxy.log'),
                      'errors' => array_slice($perr, -8)], 'rate' => proxy_rate(), 'helper_fresh' => (bool)(helper_volumes()['fresh'] ?? false), 'waiting' => $waiting, 'done' => $done, 'described' => $stats['files'],

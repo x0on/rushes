@@ -49,6 +49,19 @@ R2=$(cd "$W/db" && "$PHP" -r '
   file_put_contents(web_dir() . "/proxy-folders.tsv", "$f\tdone\t5\t0\t0\t5\t" . time() . "\n"); prepare_advance();
   echo json_encode([$a, $b, isset(prepare_resume()[$f])]); prepare_save($keep); @unlink(web_dir() . "/proxy-folders.tsv");')
 [ "$R2" = "[\"\",\"City Manager's Office\",false]" ] && ok "proxies stopped for another folder carry on by themselves after (and only those)" || no "resume: $R2"
+# What is in a folder: read on the disk the moment it is added (folders.php), not from Search, and what changed since
+mkdir -p "$D/Day Two/cam"; printf 1234 > "$D/Day Two/cam/a.mp4"; printf 12 > "$D/Day Two/b.mov"; printf x > "$D/Day Two/._b.mov"; printf x > "$D/Day Two/notes.txt"
+waitread() { for i in $(seq 1 50); do S=$(curl -s -G -d pass=rushes --data-urlencode "changes=$D/Day Two" "$U/db/analyze.php"); echo "$S" | grep -q '"state":"done"' && [ "$(echo "$S" | python3 -c 'import json,sys; print(json.load(sys.stdin)["read"]["at"])')" -ge "$1" ] && return 0; sleep 0.2; done; return 1; }
+T0=$(date +%s)
+curl -s -d pass=rushes -d action=prepare --data-urlencode "path=$D/Day Two" "$U/db/analyze.php" > /dev/null
+waitread "$T0" && P=$(curl -s -G -d pass=rushes --data-urlencode "plan=$D/Day Two" "$U/db/analyze.php") \
+    && echo "$P" | python3 -c "import json,sys; p=json.load(sys.stdin); assert p['videos']==2 and p['bytes']==6 and p['from']=='disk', p" \
+    && ok "a folder added is read on the disk at once: 2 videos, though Search has not listed them (no ._ leftovers, no other files)" || no "read: $P $S"
+rm "$D/Day Two/b.mov"; printf 123 > "$D/Day Two/c.MOV"; sleep 1; T0=$(date +%s)
+curl -s -d pass=rushes -d action=prepare --data-urlencode "path=$D/Day Two" "$U/db/analyze.php" > /dev/null
+waitread "$T0" && echo "$S" | python3 -c "
+import json,sys; d=json.load(sys.stdin); r=d['read']; c={(x['change'],x['rel']) for x in d['changes']}
+assert r['missing']==1 and r['added']==1 and c=={('missing','b.mov'),('new','c.MOV')}, d" && ok "read again, it says what changed since: 1 missing, 1 new, by name" || no "changes: $S"
 # Describe without previews: no previews, straight to describing, from the originals
 X=$(curl -s -d pass=rushes -d action=nopreview --data-urlencode "path=City Manager's Office" "$U/db/analyze.php")
 T=$(curl -s -G -d pass=rushes "$U/db/analyze.php")

@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.33 — October 2026
+
+- **What is in a folder is read on the disk itself, the moment it is used**, and that reading is what the Describe list shows: its videos and size, "checked on the disk 4:43 PM". It was counted from Search's list, which a drive just added has not finished: a folder of one 51 GB clip showed "0 videos". A folder is read when it is added to the list, and, while it is still being worked on, again when Describe is opened and its last reading is more than half an hour old (one folder at a time). The reading runs in the background and says how far it has got ("checking the folder on the disk… 1,200 files so far"); one that stops moving for 10 minutes is said, and starts again by itself. Nothing is changed: it only reads.
+- **What changed since the reading before is said**, on the row: "2 files missing · 1 new since the reading of 4:43 PM — see which", with the names.
+
 ## 0.13.32 — October 2026
 
 - **The time left for previews is honest.** It was the gigabytes left divided by the average speed of earlier folders, mostly 1080p, where reading is the limit; 4K is limited by encoding and went about three times slower than it said ("about 13 minutes" took over 30). Now, while a folder is being made, its time left comes from its own pace, once 3 files and a minute are behind it ("working out the time left" until then). A folder not started yet shows "perhaps …, a guess from earlier folders", said as a guess.

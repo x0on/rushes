@@ -2251,7 +2251,7 @@ $('prepGo').onclick = async function () {
   b.disabled = false; b.textContent = '+ Add to the list'; loadAnalysis();
 };
 // The list's buttons: each asks once more on the button itself, then acts.
-let listArmed = {key: '', until: 0}, openFails = {}, saidOpen = false;
+let listArmed = {key: '', until: 0}, openFails = {}, openChg = {}, saidOpen = false;
 async function listAct(action, folder, b, sure) {
   const key = action + '|' + folder;
   if (sure && (listArmed.key !== key || Date.now() > listArmed.until)) {
@@ -2367,9 +2367,24 @@ function drawPrepare(rows, a) {
               ' · <button class="lnk" type="button" data-rmfile="' + esc(abs) + '" title="Moves it into Recently Removed: Undo brings it back, nothing is deleted until Delete All">Remove</button></li>'; }).join('') + '</ul>' +
           '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
+      // what is in it, as the folder was read on the disk (folders.php): its reading said, and what changed since the one before
+      const rd = r.read || {};
+      const readSaid = rd.state === 'reading' ? '<div class="note"><span class="spin"></span>checking the folder on the disk… ' + n(rd.seen) + ' files so far</div>'
+        : rd.state === 'stuck' ? '<div class="note bad">the check has not moved for 10 minutes: the drive or share may not be answering. It starts again by itself.</div>'
+        : rd.state === 'failed' ? '<div class="note bad">could not read the folder: ' + esc(rd.why || 'no reason given') + '</div>'
+        : rd.at ? '<div class="note">checked on the disk ' + esc(whenWords(rd.at)) + '</div>'
+        : '<div class="note">from Search; not checked on the disk yet</div>';
+      const chg = rd.at && (rd.missing || rd.added) ? '<div><a href="#" class="bad" data-chg="' + esc(r.folder) + '">' +
+          [rd.missing ? n(rd.missing) + ' file' + (rd.missing === 1 ? '' : 's') + ' missing' : '', rd.added ? n(rd.added) + ' new' : ''].filter(Boolean).join(' · ') +
+          ' since the reading of ' + esc(clock(rd.prev_at)) + ' — see which</a></div>' : '';
+      const chgList = openChg[r.folder] ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
+          (openChg[r.folder] === 'loading' ? '<span class="spin"></span> reading the list…' : '<b>Since the reading before</b>' +
+            '<ul style="margin:6px 0 4px;padding-left:18px">' + openChg[r.folder].map(function (c) {
+              return '<li>' + (c.change === 'missing' ? '<span class="bad">missing</span> ' : '<span class="ok">new</span> ') + esc(c.rel) + ' <span class="note">' + gb(c.bytes) + '</span></li>'; }).join('') + '</ul>' +
+            '<span class="note">Missing: there at the reading before, not there now (moved or deleted outside Rushes, or Removed). Rushes changed nothing.</span>') + '</div></td></tr>' : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
-        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + fails;
+        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + readSaid + chg + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + chgList + fails;
     }).join('') + '</table>';
   const ps = document.getElementById('pxSaid');
   if (ps) ps.ontoggle = function () { saidOpen = ps.open; };    // stays as you left it when the list refreshes
@@ -2407,6 +2422,16 @@ function drawPrepare(rows, a) {
   });
   $('prepTable').querySelectorAll('[data-fails]').forEach(function (x) {
     x.onclick = function (e) { e.preventDefault(); openFails[x.dataset.fails] = !openFails[x.dataset.fails]; drawPrepare(rows, a); };
+  });
+  $('prepTable').querySelectorAll('[data-chg]').forEach(function (x) {
+    x.onclick = async function (e) {
+      e.preventDefault(); const f = x.dataset.chg;
+      if (openChg[f]) { delete openChg[f]; drawPrepare(rows, a); return; }
+      openChg[f] = 'loading'; drawPrepare(rows, a);
+      try { const j = await (await fetch('analyze.php?changes=' + encodeURIComponent(f))).json(); openChg[f] = j.changes || []; }
+      catch (err) { openChg[f] = []; }
+      drawPrepare(rows, a);
+    };
   });
 }
 every(loadAnalysis, 10000);
