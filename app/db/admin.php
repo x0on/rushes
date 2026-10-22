@@ -2263,7 +2263,7 @@ async function listAct(action, folder, b, sure) {
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
          up: 'Moved up ✓ ' + folder, down: 'Moved down ✓ ' + folder,
-         retry: 'Trying again ✓ ' + folder + ' — the files still missing a proxy are made again, in its place in the list.',
+         retry: 'Trying again ✓ ' + folder + ' — in its place in the list, only what is missing: proxies not made, files not described.',
          start: 'Asked ✓ The archive machine starts the proxies for ' + folder + ' at its next turn, within a minute.',
          remake: 'Asked ✓ Within a minute the archive machine throws away the proxies of ' + folder + ' and makes them again with the setting in use. The footage is not touched.'}[action];
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
@@ -2298,7 +2298,7 @@ function drawPrepare(rows, a) {
         '<div class="note">' + (d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' : 'looking at ') +
         (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>'
       : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
-          (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: add the folder again (it describes only what is missing)</div>' : '') + (d.note && d.note.indexOf('could not') > -1 ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
+          (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: Try again describes only those</div>' : '') + (d.note && /could not|speech failed/.test(d.note) ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '')) + '</span>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
       : d.step === 'gone' ? 'it is not here any more, and the moves Rushes wrote down do not say where it went (it may have been moved in Finder). ' + (d.at && d.at.length ? 'Folders of this name, not taken by themselves: ' + esc(d.at.join(' · ')) + '. ' : '') + 'Take it off the list and add it where it is now.'
       : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
@@ -2331,7 +2331,8 @@ function drawPrepare(rows, a) {
       const p = r.plan || {};
       const tools = (i > 0 ? '<button class="btn quiet" data-l="up" title="Move up">↑</button>' : '') +
         (i < rows.length - 1 ? '<button class="btn quiet" data-l="down" title="Move down">↓</button>' : '') +
-        (['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0)
+        ((['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0))
+          || (r.describe.step === 'done' && r.plan && r.plan.media && r.describe.files < r.plan.media)
           ? '<button class="btn quiet" data-l="retry">Try again</button>' : '') +
         // the first folder's start button says what is happening, and cannot start anything twice
         (place === 1 && !doneRow(r) && (['waiting', 'stopped', 'making'].includes(r.proxies.step) || why.state === 'making')

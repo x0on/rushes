@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.28 — October 2026
+
+- **Try again on a folder whose files are not all described** (Manage → Describe), on its row, in place of "add the folder again". It keeps the folder's place in the list and does only what is missing: proxies not made, files not described.
+- **A file whose speech failed is no longer counted as "could not be described"** when its pictures are described. It counts as described, and the folder says "speech failed on N" (its speech alone is tried next time). A folder of 951 files, every one described, showed "365 of 951" and "586 could not be described": the old helper code, with speech on, failed to transcribe them again on every try. Changes the helper's code (`analyze.py`, `ingest.py`): signed again.
+
 ## 0.13.27 — October 2026
 
 - **Another website can no longer use Rushes through the Mac's own browser.** A request from the Mac itself needs no password, and a website could point its own name at the Mac (DNS rebinding) to have its pages press Rushes buttons there. Rushes on a Mac now takes requests from the Mac itself only when they are addressed to `127.0.0.1` or `localhost`, as Rushes always opens itself. Other devices are unchanged: they still sign in.

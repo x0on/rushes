@@ -3335,9 +3335,10 @@ def describe_folder(path, asked=""):
         print(f"*** {stopped} — the files already described are kept")
         status(phase="paused", source=path, label=name, note=f"{stopped} — the files already described are kept")
         return 1
-    history("analysed", path, done.get("done", 0) + done.get("already", 0), 0, secs,
+    history("analysed", path, done.get("done", 0) + done.get("already", 0) + done.get("speech", 0), 0, secs,
             "; ".join(x for x in (f"asked={asked}" if asked else "",
-                                  f"{done.get('failed', 0)} could not be described" if done.get("failed") else "") if x))
+                                  f"{done.get('failed', 0)} could not be described" if done.get("failed") else "",
+                                  f"speech failed on {done.get('speech', 0)}" if done.get("speech") else "") if x))
     if rc == 0 and done:
         return 3 if done.get("failed") else 0     # 3: finished, but some files could not be described
     return 1

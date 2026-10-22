@@ -349,8 +349,8 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                         result = "done"
                     except Exception as e:
                         old["speech_failed"] = str(e)[:200]
-                        print(f"    could not transcribe ({e})")
-                        result = "failed"
+                        print(f"    could not transcribe ({e}) — its pictures stay described")
+                        result = "speech"           # described; only its speech is missing (not "could not be described")
                     tmp = out.with_suffix(".json.new")
                     tmp.write_text(json.dumps(old, indent=1, ensure_ascii=False)); os.replace(tmp, out)
                     return result
@@ -496,7 +496,7 @@ def main():
     store = Path(a.store); store.mkdir(parents=True, exist_ok=True)
     print(f"{len(files)} file(s) · model {a.model} · speech {a.whisper or 'off'} · question {prompt_id(themes)}")
     vision = Vision(a.model, themes)
-    counts = {"done": 0, "already": 0, "failed": 0}
+    counts = {"done": 0, "already": 0, "speech": 0, "failed": 0}
     for n, f in enumerate(files, 1):
         try:
             counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
@@ -505,7 +505,8 @@ def main():
             counts["failed"] += 1
             print(f"    could not describe {f.name}: {e}", flush=True)
     say(finished=True, **counts)
-    print(f"\ndescribed {counts['done']}, already described {counts['already']}, could not {counts['failed']}")
+    print(f"\ndescribed {counts['done']}, already described {counts['already']}, could not {counts['failed']}"
+          + (f", speech failed on {counts['speech']} (their pictures are described)" if counts["speech"] else ""))
     return 0
 
 
@@ -564,7 +565,7 @@ def selftest():
             assert analyse(f, store, vis, "w", th, False, 1, 1) == "already"            # nothing left to do
             def boom(p, m): raise RuntimeError("no")
             transcribe = boom
-            assert analyse(f, store, vis, "w2", th, False, 1, 1) == "failed"           # new speech model, failed: said
+            assert analyse(f, store, vis, "w2", th, False, 1, 1) == "speech"           # new speech model, failed: described, speech said apart
             assert json.loads(out.read_text())["speech_failed"] == "no"
     finally:
         transcribe, say = real, real_say

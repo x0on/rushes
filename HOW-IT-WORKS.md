@@ -941,7 +941,10 @@ so it survives moves and renames. Next to it is one still per shot.
 - A file that cannot be read at all, or that fails part-way, is not written.
   A folder where some files could not be described is tried again half an hour
   later, only those files, up to three times in all. After that it counts as
-  described; asking for the folder again tries once more. The tries are noted in
+  described; **Try again** on its row (or asking for the folder again) tries once
+  more, only the files still missing. A file whose pictures are described but
+  whose speech failed counts as described, with "speech failed on N" beside the
+  folder; its speech alone is tried next time. The tries are noted in
   `describe-tries.json` on the helper's computer.
 
 **No face recognition exists in Rushes.** People are only counted, with
