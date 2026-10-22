@@ -149,6 +149,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         prepare_advance();
         out(['ok' => 'first', 'folder' => $rel, 'stopped' => $stopped]);
     }
+    // Describe again: a folder described with an older version of describing (before moments inside long takes)
+    // is described again, only the files described with an older version, in its place on the list. Never by
+    // itself: describing improves, and a person says which folders are worth the time (ingest.py, --again).
+    if (($_POST['action'] ?? '') === 'again') {
+        $list = prepare_list();
+        if (!isset($list[$rel])) bail(400, "“{$rel}” is not on the list.");
+        $list[$rel] = time();
+        if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?');
+        $c = helper_control(); $p = str_starts_with($rel, '/') ? $rel : rtrim(helper_archive(), '/') . "/$rel";
+        $c['again'] = array_values(array_unique(array_merge((array)($c['again'] ?? []), [$p])));
+        if (!helper_control_save($c)) bail(500, 'Could not tell the helper — is the web folder writable?');
+        prepare_advance();
+        out(['ok' => 'again', 'folder' => $rel]);
+    }
     // Describe without previews (or with them again): for footage that only needs describing. Previews being
     // made for it stop (the ones finished are kept and used); describing reads the originals for the rest.
     if (in_array($_POST['action'] ?? '', ['nopreview', 'withpreview'], true)) {

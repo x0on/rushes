@@ -3300,6 +3300,8 @@ def describe_folder(path, asked=""):
            "--store", os.path.join(NAS_MOUNT, "_rushes", "analysis"), "--url", NAS_URL,
            "--model", model, "--whisper", whisper,
            *preview_args(path)]
+    if path in (control().get("again") or []):        # Describe again (Manage → Describe): files described with an older version, redone
+        cmd.append("--again")
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i"] + cmd
     status(phase="analysing", source=path, label=name, step="loading the model")
@@ -3361,10 +3363,11 @@ def describe_folder(path, asked=""):
         print(f"*** {stopped} — the files already described are kept")
         status(phase="paused", source=path, label=name, note=f"{stopped} — the files already described are kept")
         return 1
-    history("analysed", path, done.get("done", 0) + done.get("already", 0) + done.get("speech", 0), 0, secs,
+    history("analysed", path, done.get("done", 0) + done.get("already", 0) + done.get("speech", 0) + done.get("older", 0), 0, secs,
             "; ".join(x for x in (f"asked={asked}" if asked else "",
                                   f"{done.get('failed', 0)} could not be described" if done.get("failed") else "",
-                                  f"speech failed on {done.get('speech', 0)}" if done.get("speech") else "") if x))
+                                  f"speech failed on {done.get('speech', 0)}" if done.get("speech") else "",
+                                  f"{done.get('older', 0)} described with an older version" if done.get("older") else "") if x))
     if rc == 0 and done:
         return 3 if done.get("failed") else 0     # 3: finished, but some files could not be described
     return 1

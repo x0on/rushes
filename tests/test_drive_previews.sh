@@ -40,6 +40,8 @@ X=$(curl -s -d pass=rushes -d action=first --data-urlencode "path=City Manager's
 [ "$(head -1 "$W/prepare.tsv" | cut -f1)" = "City Manager's Office" ] && grep -q '"first":"[^"]*City Manager' "$W/helper-control.json" \
     && ok "Start on this one now puts it first, and tells the helper's describing" || no "first: $X $(cat "$W/helper-control.json" 2>&1)"
 case "$(curl -s -d pass=rushes -d action=first --data-urlencode "path=Nowhere" "$U/db/analyze.php")" in *error*) ok "only a folder on the list" ;; *) no "first not on list" ;; esac
+X=$(curl -s -d pass=rushes -d action=again --data-urlencode "path=City Manager's Office" "$U/db/analyze.php")
+grep -q '"again":\["[^"]*City Manager' "$W/helper-control.json" && ok "Describe again tells the helper which folder to redo (the files described with an older version)" || no "again: $X"
 # proxies stopped for it carry on by themselves after; stopped by a person, they wait for Try again
 R2=$(cd "$W/db" && "$PHP" -r '
   require "prepare.php"; $f = "City Manager'"'"'s Office"; $keep = prepare_list();

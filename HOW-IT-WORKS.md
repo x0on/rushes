@@ -930,7 +930,15 @@ video, the cuts and the sound come from its proxy when there is one.
    described only its speech is tried again. Choosing a different speech model
    transcribes again, the same way, every file that had speech.
 6. Morning, afternoon, evening or night come from the camera's clock, not from
-   the model.
+   the model (midnight to 5 am is night).
+7. A shot longer than 8 seconds is also looked at about every 5 seconds: each moment is its own
+   entry, with its start and end, `take` (the shot it is part of), `moment` and `of`, one still
+   each (`moments()` in analyze.py). Description version 3.
+
+**Describe again** (a described folder's row) describes again, in its place on the list, only the
+files described with an older version (`--again`, asked through `helper-control.json` "again").
+Rushes never does it by itself: a folder described before keeps its descriptions, and its row says
+how many are of an older version.
 
 **What it writes:** one description per file in `_rushes/analysis/`. It is
 named by a fingerprint of the file's content (its size plus first and last 4 MB),

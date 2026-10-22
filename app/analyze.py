@@ -40,7 +40,7 @@ no model.
 import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request
 from pathlib import Path
 
-VERSION = 2
+VERSION = 3          # 3: moments inside long takes (a still every few seconds); a file described before is kept, Describe again redoes it
 VIDEO = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".mkv", ".m2ts", ".wmv"}
 IMAGE = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp", ".dng"}
 AUDIO = {".wav", ".aif", ".aiff", ".mp3", ".m4a", ".aac", ".flac"}
@@ -152,7 +152,7 @@ def part_of_day(clock):
     if not m:
         return ""
     h = int(m.group(1))
-    return "morning" if 5 <= h < 12 else "afternoon" if h < 17 else "evening" if h < 21 else "night"
+    return "night" if h < 5 else "morning" if h < 12 else "afternoon" if h < 17 else "evening" if h < 21 else "night"
 
 
 # ── shots and frames ────────────────────────────────────────────────────────
@@ -180,6 +180,19 @@ def whole_shots(cuts, least=1.0):
             out.append((a, b))
     if len(out) > 1 and out[0][1] - out[0][0] < least:
         out[1] = (out[0][0], out[1][1]); out.pop(0)
+    return out
+
+
+def moments(cuts, long=8.0, every=5.0):
+    """A long take (a handheld speech, a dance floor, a swing) is one shot to the cut detector, and its best
+    moments hide inside it: a shot longer than `long` seconds is looked at every `every` seconds too, each piece
+    its own entry, said as part of its take. -> [(start, end, take, moment, of)]; moment 0 is a whole shot."""
+    out = []
+    for t, (a, b) in enumerate(cuts):
+        if b - a <= long:
+            out.append((a, b, t, 0, 1)); continue
+        n = max(2, round((b - a) / every)); step = (b - a) / n
+        out += [(a + k * step, a + (k + 1) * step if k < n - 1 else b, t, k + 1, n) for k in range(n)]
     return out
 
 
@@ -327,15 +340,18 @@ def transcribe(path, model):
 
 
 # ── one file ────────────────────────────────────────────────────────────────
-def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None):
+def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None, again=False):
     fp = fingerprint(path)                  # always the original: that is what search finds
     out = store / fp[:2] / f"{fp}.json"
     pid = prompt_id(themes)
     if out.exists() and not force:
         try:
             old = json.loads(out.read_text())
-            if old.get("prompt") == pid and old.get("model") == vision.name:
+            if old.get("prompt") == pid and old.get("model") == vision.name and not (again and old.get("version", 1) < VERSION):
                 changed = False
+                pod = part_of_day(old.get("camera_clock", ""))
+                if old.get("part_of_day", "") != pod:                         # the clock read right (0.13.34: midnight to 5 is night)
+                    old["part_of_day"] = pod; changed = True
                 if str(path) not in old.get("seen_at", []):          # the same footage, somewhere else too
                     old["seen_at"] = sorted(set(old.get("seen_at", [])) | {str(path)}); changed = True
                 # Speech only, again: it failed last time, or a different speech
@@ -356,6 +372,9 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                     return result
                 if changed:
                     out.write_text(json.dumps(old, indent=1, ensure_ascii=False))
+                if old.get("version", 1) < VERSION:                          # kept: Describe again redoes it
+                    print(f"[{n}/{of}] {path.name} — already described (an older version: no moments inside long takes)")
+                    return "older"
                 print(f"[{n}/{of}] {path.name} — already described")
                 return "already"
         except (OSError, ValueError):
@@ -383,7 +402,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
         pics = {"original": 0, "proxy": 0}
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
-            for i, (a, b) in enumerate(cuts):
+            for i, (a, b, take, k, of_take) in enumerate(moments(cuts)):
                 frames = []
                 if ext in IMAGE:
                     f = td / "f0.jpg"
@@ -391,12 +410,13 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                                     "-vf", "scale=768:-2", "-y", str(f)], check=False)
                     frames = [str(f)] if f.exists() else []
                 else:
-                    for k, at in enumerate(sample_times(a, b)):
+                    looks = sample_times(a, b) if not k else [max(a + (2.0 if a < 0.01 else 0.5), (a + b) / 2)]
+                    for j, at in enumerate(looks):
                         # The still from the ORIGINAL: full quality for the model, and
                         # one seek reads only a few MB of it. The proxy is where the
                         # cuts were found and the sound is heard; its picture is only
                         # used when the original cannot give one (RAW, unreadable).
-                        f = td / f"f{k}.jpg"
+                        f = td / f"f{j}.jpg"
                         if frame(path, at, f):
                             pics["original"] += 1; frames.append(str(f))
                         elif proxy and frame(proxy, at, f):
@@ -408,10 +428,12 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                 if not ok:
                     rec["failed_shots"] += 1
                 shot = {"shot": i, "start": round(a, 3), "end": round(b, 3), **got}
+                if k:
+                    shot.update(take=take, moment=k, of=of_take)          # one moment of a long take
                 if raw:
                     shot["raw"] = raw
                 rec["shots"].append(shot)
-                say(file=path.name, n=n, of=of, shot=i + 1, shots=len(cuts),
+                say(file=path.name, n=n, of=of, shot=i + 1, shots=len(moments(cuts)),
                     per_shot=round((time.time() - t0) / (i + 1), 1), failed=rec["failed_shots"])
         rec["pictures_from"] = {k: v for k, v in pics.items() if v}     # which file each still came from
         for s in rec["shots"]:        # one title read by two frames, merged
@@ -480,6 +502,7 @@ def main():
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--whisper", default=DEFAULT_WHISPER, help="'' to skip speech")
     ap.add_argument("--force", action="store_true", help="describe again even if already done")
+    ap.add_argument("--again", action="store_true", help="describe again the files described with an older version (Describe again)")
     ap.add_argument("--archive", default="", help="the archive root, to find each file's proxy")
     ap.add_argument("--proxies", default="", help="where the proxies are (same paths, as .mp4)")
     ap.add_argument("--selftest", action="store_true")
@@ -496,17 +519,18 @@ def main():
     store = Path(a.store); store.mkdir(parents=True, exist_ok=True)
     print(f"{len(files)} file(s) · model {a.model} · speech {a.whisper or 'off'} · question {prompt_id(themes)}")
     vision = Vision(a.model, themes)
-    counts = {"done": 0, "already": 0, "speech": 0, "failed": 0}
+    counts = {"done": 0, "already": 0, "older": 0, "speech": 0, "failed": 0}
     for n, f in enumerate(files, 1):
         try:
             counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
-                           proxy_of(f, a.archive, a.proxies))] += 1
+                           proxy_of(f, a.archive, a.proxies), a.again)] += 1
         except Exception as e:                       # one bad file never stops the folder
             counts["failed"] += 1
             print(f"    could not describe {f.name}: {e}", flush=True)
     say(finished=True, **counts)
     print(f"\ndescribed {counts['done']}, already described {counts['already']}, could not {counts['failed']}"
-          + (f", speech failed on {counts['speech']} (their pictures are described)" if counts["speech"] else ""))
+          + (f", speech failed on {counts['speech']} (their pictures are described)" if counts["speech"] else "")
+          + (f", {counts['older']} described with an older version (kept)" if counts["older"] else ""))
     return 0
 
 
@@ -529,6 +553,11 @@ def selftest():
     assert whole_shots([(0, 5), (5, 5.2), (5.2, 9), (9, 9.5)]) == [(0, 5.2), (5.2, 9.5)]
     assert whole_shots([(0, 0.4), (0.4, 6)]) == [(0, 6)] and whole_shots([(0, 0.4)]) == [(0, 0.4)]
     assert part_of_day("2025-12-03T15:20:11.000000Z") == "afternoon" and part_of_day("") == ""
+    assert part_of_day("2026-10-17T02:19:04.000000Z") == "night" and part_of_day("2026-10-17T00:15:05Z") == "night", "after midnight is night"
+    m = moments([(0.0, 6.0), (6.0, 216.0), (216.0, 226.0)])
+    assert m[0] == (0.0, 6.0, 0, 0, 1) and all(x[2] == 1 for x in m[1:43]) and m[-1][2] == 2, m
+    assert len([x for x in m if x[2] == 1]) == 42 and m[1][0] == 6.0 and m[42][1] == 216.0, "a 3.5-minute take: a moment every 5 s"
+    assert [x[4] for x in m if x[2] == 2] == [2, 2], "10 s: two moments" 
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "a.mov"; p.write_bytes(b"x" * 100)
         q = Path(td) / "b.mov"; q.write_bytes(b"x" * 100)
@@ -556,7 +585,11 @@ def selftest():
             f = Path(td) / "a.mov"; f.write_bytes(b"x" * 100); store = Path(td) / "store"
             fp = fingerprint(f); out = store / fp[:2] / f"{fp}.json"; out.parent.mkdir(parents=True)
             vis = type("V", (), {"name": "m"})()
-            out.write_text(json.dumps({"prompt": prompt_id(th), "model": "m", "whisper": "", "seen_at": [str(f)],
+            out.write_text(json.dumps({"version": 2, "prompt": prompt_id(th), "model": "m", "whisper": "", "seen_at": [str(f)],
+                                       "camera_clock": "2026-10-17T02:19:04Z", "part_of_day": "afternoon"}))
+            assert analyse(f, store, vis, "", th, False, 1, 1) == "older", "described before moments in long takes: kept, said older"
+            assert json.loads(out.read_text())["part_of_day"] == "night", "its part of day put right from its clock, nothing described again"
+            out.write_text(json.dumps({"version": VERSION, "prompt": prompt_id(th), "model": "m", "whisper": "", "seen_at": [str(f)],
                                        "shots": [{"description": "kept"}], "speech_failed": "boom"}))
             transcribe = lambda p, m: {"language": "en", "segments": [{"start": 0, "end": 1, "text": "hi"}]}
             assert analyse(f, store, vis, "w", th, False, 1, 1) == "done"

@@ -3,6 +3,15 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.34 — October 2026
+
+- **Moments inside long takes.** A shot longer than 8 seconds (a speech, a dance floor, a round of golf in one take) was one description, however long: a 3½-minute take had one. Now it is also looked at about every 5 seconds, each moment its own entry with its start and end, said as part of its take (`take`, `moment`, `of` in its description). Describing a long take takes longer.
+- **Describe again**, on a described folder's row: describes again only the files described with an older version (before moments inside long takes), in its place on the list. Rushes never re-describes by itself when describing improves; a folder described before says so on its row. Asks twice.
+- **Part of day after midnight is night.** A clip from midnight to 5 am was "afternoon" (the camera's clock was read right; the rule was wrong). Put right in every description already made the next time its folder is asked for, with nothing described again.
+- The describing line says "from the originals" for a folder without previews (it said "from these proxies").
+
+Changes the helper's code (`analyze.py`, `ingest.py`): signed again.
+
 ## 0.13.33 — October 2026
 
 - **What is in a folder is read on the disk itself, the moment it is used**, and that reading is what the Describe list shows: its videos and size, "checked on the disk 4:43 PM". It was counted from Search's list, which a drive just added has not finished: a folder of one 51 GB clip showed "0 videos". A folder is read when it is added to the list, and, while it is still being worked on, again when Describe is opened and its last reading is more than half an hour old (one folder at a time). The reading runs in the background and says how far it has got ("checking the folder on the disk… 1,200 files so far"); one that stops moving for 10 minutes is said, and starts again by itself. Nothing is changed: it only reads.
