@@ -2340,6 +2340,7 @@ function drawPrepare(rows, a) {
             : why.state === 'asked' || why.state === 'starting' ? '<button class="btn" disabled title="Asked; the archive machine starts it within a minute">Starting…</button>'
             : '<button class="btn" data-l="start">Start now</button>') : '') +
         (r.proxies.step === 'done' && r.describe.step !== 'describing' ? '<button class="btn quiet" data-l="remake" title="Throw its proxies away and make them again with the setting in use">Remake proxies</button>' : '') +
+        (r.describe.step === 'done' && r.describe.files ? '<button class="btn quiet" data-x="export" title="One JSON: every clip with its duration, and each shot\'s start and end with what was described">Export descriptions</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
         ? '<tr><td></td><td colspan="5"><div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 8px">' +
@@ -2365,6 +2366,11 @@ function drawPrepare(rows, a) {
     // a redraw keeps a "Sure?" that is still waiting for its second press
     if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
     b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake'].includes(b.dataset.l)); };
+  });
+  $('prepTable').querySelectorAll('[data-x="export"]').forEach(function (b) {
+    const f = b.closest('tr').dataset.f;
+    b.onclick = function () { window.exportDescriptions(f.charAt(0) === '/' ? f : ((window.lastState || {}).archive_root || '') + '/' + f,
+      function (html, bad) { $('prepSaid').innerHTML = html; $('prepSaid').className = 'note' + (bad ? ' bad' : ''); }); };
   });
   // the file itself, where it is: Finder on this Mac (Tidy up's own Show in Finder), to look at it or play it
   $('prepTable').querySelectorAll('[data-reveal]').forEach(function (b) {

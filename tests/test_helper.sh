@@ -72,6 +72,29 @@ check 'call GET "{\"what\":\"files\"}" "{}" db/export.php | grep -q "Sign in"' '
 check 'SIGNED=1 call GET "{\"what\":\"files\"}" "{}" db/export.php | head -1 | grep -q "path,name,kind,bytes"' 'the catalogue comes out as CSV'
 check 'SIGNED=1 call GET "{\"what\":\"pulls\"}" "{}" db/export.php | python3 -c "import json,sys; d=json.load(sys.stdin); assert \"pulls\" in d"' 'pulls come out as JSON'
 check 'SIGNED=1 call GET "{\"what\":\"moments\"}" "{}" db/export.php | head -1 | grep -q "path,kind,shot,start_s"' 'what describing found comes out as CSV'
+# one folder's descriptions, as JSON: clips under it (folders inside too), seconds first, exact rate, timecode marked
+A="$ROOT/archive"
+cat > "$ROOT/q.sql" <<SQL
+INSERT INTO files (id,path,name,kind) VALUES (901,'$A/Meadow Park/a.mov','a.mov','video'),(902,'$A/Meadow Park/Shoot 1/b.mp4','b.mp4','video'),
+  (903,'$A/Meadow Park/notes.txt','notes.txt','other'),(904,'$A/Meadow Park_2/c.mov','c.mov','video'),(905,'$A/Meadow Park/d.mov','d.mov','video');
+INSERT INTO media (file_id,fps,duration,timecode) VALUES (901,59.94,180.0,'01:00:00;00'),(902,25,10.0,NULL);
+SQL
+call SQL "$(cat "$ROOT/q.sql")" >/dev/null
+SIGNED=1 call GET '{"what":"moments"}' "{}" db/export.php >/dev/null     # makes the moments table
+call SQL "INSERT INTO moments (fp,path,kind,shot,start_s,end_s,what,tags,themes) VALUES ('f1','$A/Meadow Park/a.mov','shot',0,0,60,'a picnic shelter','people · table','Parks'),
+  ('f1','$A/Meadow Park/a.mov','shot',1,60,180,'a field',NULL,NULL),('f2','$A/Meadow Park/Shoot 1/b.mp4','speech',NULL,1.5,3,'hello',NULL,NULL)" >/dev/null
+SIGNED=1 call GET "{\"what\":\"folder\",\"path\":\"$A/Meadow Park\"}" "{}" db/export.php > "$ROOT/x.json"
+check 'python3 - "$ROOT/x.json" "$A" <<PY
+import json,sys; d=json.load(open(sys.argv[1])); A=sys.argv[2]; f={x["path"]:x for x in d["files"]}
+assert d["clips"]==3 and sorted(f)==[A+"/Meadow Park/Shoot 1/b.mp4",A+"/Meadow Park/a.mov",A+"/Meadow Park/d.mov"], sorted(f)
+a=f[A+"/Meadow Park/a.mov"]; s=a["shots"]
+assert a["fps"]=="60000/1001" and a["timecode_mode"]=="DF" and a["described"] and s[0]["tags"]==["people","table"], a
+assert s[1]["start_s"]==60 and s[1]["start_tc"]=="01:00:59;56" and s[0]["start_tc"]=="01:00:00;00", s
+b=f[A+"/Meadow Park/Shoot 1/b.mp4"]; assert b["fps"]=="25/1" and b["timecode_mode"]=="NDF" and b["speech"][0]["start_tc"]=="00:00:01:13"
+assert f[A+"/Meadow Park/d.mov"]["described"] is False
+PY' 'a folder exports as JSON: its clips and folders inside, not the folder beside it; seconds, exact rate, DF timecode, not described yet marked'
+check 'SIGNED=1 call GET "{\"what\":\"folder\",\"path\":\"/etc\"}" "{}" db/export.php | grep -q "Pick a folder"' 'and only a folder Rushes knows'
+call SQL "DELETE FROM media WHERE file_id > 900; DELETE FROM files WHERE id > 900; DELETE FROM moments" >/dev/null
 
 # Search plays a file's proxy, in pieces; nothing but a known file's proxy can be asked for
 mkdir -p "$ROOT/archive/PROXIES/Library/K"; printf '0123456789' > "$ROOT/archive/PROXIES/Library/K/a.mp4"; echo secret > "$ROOT/archive/x.txt"

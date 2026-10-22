@@ -493,6 +493,39 @@ window.helperNow = function (c) {
   return null;
 };
 
+// Export descriptions (db/export.php ?what=folder): one folder's clips in one JSON. Read as it arrives,
+// so say() is told "N of M clips" while it runs; then a save dialog where the browser has one
+// (Chrome, Edge), else Downloads. Nothing is ever written on the drive itself.
+window.exportDescriptions = async function (path, say) {
+  var nm = path.split('/').pop() || 'archive', file = nm + ' descriptions.json';
+  say('<span class="spin"></span> Exporting the descriptions of ' + nm + '…');
+  try {
+    var r = await fetch('/db/export.php?what=folder&path=' + encodeURIComponent(path));
+    if (!r.ok) throw new Error((await r.text()).trim() || 'the export did not start');
+    var rd = r.body.getReader(), dec = new TextDecoder(), parts = [], text = '', total = 0, n = 0, t = 0;
+    for (;;) {
+      var x = await rd.read(); if (x.done) break;
+      parts.push(x.value); var s = dec.decode(x.value, { stream: true }); text += s;
+      if (!total) { var m = /"clips":(\d+)/.exec(text); if (m) total = +m[1]; }
+      n += (s.match(/\n\{"path"/g) || []).length;          // one clip a line (a line split between two reads is counted at the end)
+      if (Date.now() - t > 150) { t = Date.now(); say('<span class="spin"></span> Exporting ' + nm + '… ' + n.toLocaleString() + ' of ' + total.toLocaleString() + ' clips'); }
+    }
+    var doc = JSON.parse(text), files = doc.files || [], not = files.filter(function (f) { return !f.described; }).length;
+    var blob = new Blob(parts, { type: 'application/json' }), where = 'in Downloads';
+    if (window.showSaveFilePicker) {
+      try {
+        var h = await showSaveFilePicker({ suggestedName: file, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }] });
+        var w = await h.createWritable(); await w.write(blob); await w.close(); where = 'where you chose';
+      } catch (e) { if (e.name === 'AbortError') { say('Not saved: the save window was closed. Export again to save it.', true); return; } throw e; }
+    } else {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+    }
+    say('Saved ✓ <b>' + file.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</b> ' + where + ' · ' + files.length.toLocaleString() + ' clip' + (files.length === 1 ? '' : 's') +
+      (not ? ' · ' + not.toLocaleString() + ' not described yet (in the file, marked so)' : ', all described'));
+  } catch (e) { say('Not exported: ' + String(e.message || e).replace(/</g, '&lt;'), true); }
+};
+
 // Copy anything, from any page. Every copy says it happened — or says what to
 // do instead, when the browser would not let it.
 window.copyText = function (text, btn) {

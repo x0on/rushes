@@ -1581,6 +1581,23 @@ the drive is plugged in. Made by the Rushes app on a Mac, where Rushes and its h
 (`can_preview_drives`); the helper describes from them as from the archive's (a `.from` note beside
 them says where the drive was).
 
+A folder's right-click in Tidy up's Finder columns has **Make previews and descriptions** too (the
+archive, or a drive kept where it is): only the folders picked go on the list.
+
+**Export descriptions** (a folder's right-click, and each row of Manage → Describe) writes one JSON
+file of the folder and every folder inside it (`db/export.php ?what=folder`), read from the
+catalogue, so it takes seconds:
+
+- per clip: `path` (as the Mac sees it), `kind`, `duration_s`, `fps` as an exact fraction
+  (`60000/1001`), `start_timecode`, `timecode_mode` (`DF` when its timecode is written with `;` at
+  29.97 or 59.94, else `NDF`), `described` (false for a clip not described yet, still listed);
+- per shot: `start_s`, `end_s` (the exact values: frame = round(seconds × fps)), `start_tc`, `end_tc`
+  (for reading: from the clip's own timecode, or 00:00:00:00), `description`, `tags`, `themes`,
+  `text_on_screen`, `shot_size`, `people`, `mood`; per line of speech, its times, text and language.
+
+The page counts the clips as they arrive ("N of M clips"), then offers a save window where the
+browser has one (Chrome, Edge), else saves to Downloads. Nothing is written on the drive.
+
 **Cards** say what is true right now, in plain words, with a button when there
 is something to do:
 

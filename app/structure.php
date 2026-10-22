@@ -421,7 +421,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
       var $ = function (id) { return document.getElementById(id); };
       var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
       var size = function (b) { return b == null ? '' : b === 0 ? 'Zero bytes' : b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB'; };
-      var KEY = 'rushes-finder', roots = [], finder = false, wins = [], cache = {}, menu = null, busy = window.rushesBusy = false;
+      var KEY = 'rushes-finder', roots = [], finder = false, previews = false, wins = [], cache = {}, menu = null, busy = window.rushesBusy = false;
       var VIDEO = /\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i;
       var get = function (q) { return fetch('/db/browse.php?' + q + '&t=' + Date.now()).then(function (r) { return r.json(); })
         .then(function (d) { if (d.error) throw new Error(d.error); return d; }); };
@@ -680,6 +680,22 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
           }]);
         }
         if (d.archive && !inHold) items.push(['Remove', function () { removeNow(w.picked().length ? w.picked() : [p]); }]);
+        if (it.dir && !inHold && (d.archive || previews)) items.push(['Make previews and descriptions', function () {
+          var ps = w.picked().indexOf(p) > -1 ? w.picked() : [p];      // several picked: each one (a file among them is said not added)
+          var A = roots[0].path, done = [], bad = [];
+          said('<span class="spin"></span> Putting ' + ps.length + ' folder' + (ps.length === 1 ? '' : 's') + ' on the Describe list…');
+          (async function () {
+            for (var i = 0; i < ps.length; i++) {
+              var rel = ps[i].indexOf(A + '/') === 0 ? ps[i].slice(A.length + 1) : ps[i];
+              try { var x = await (await fetch('/db/analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'prepare', path: rel }) })).json();
+                    if (x.error) bad.push(name(ps[i]) + ': ' + x.error); else done.push(name(ps[i])); }
+              catch (e) { bad.push(name(ps[i]) + ': ' + e.message); }
+            }
+            said((done.length ? 'On the Describe list ✓ ' + esc(done.join(', ')) + ' — previews first, then descriptions, by itself. Manage → Describe shows each one.' : '') +
+              bad.map(function (t) { return '<br><span class="bad">Not added: ' + esc(t) + '</span>'; }).join(''), !done.length);
+          })();
+        }]);
+        if (it.dir && !inHold) items.push(['Export descriptions', function () { window.exportDescriptions(p, said); }]);
         if (!it.dir && it.plays) items.push(['Play its preview', function () { play(p, it); }]);
         if (finder) items.push(['Show in Finder', function () {
           post({ op: 'reveal', item: p }).then(function () { said('Opened ✓ ' + esc(name(p)) + ' in a Finder window.'); }).catch(function (x) { said(esc(x.message), true); }); }]);
@@ -717,7 +733,7 @@ $shelf = !shelf_chosen() ? '(the folder chosen in Setup)' : (shelf_is_top() ? (s
 
       window.tuLoad = function () {
         get('roots=1').then(function (d) {
-          roots = d.roots; finder = d.finder; cache = {};
+          roots = d.roots; finder = d.finder; previews = !!d.previews; cache = {};
           var was = []; try { was = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
           var ok = function (o) { return Array.isArray(o) && o.length && rootOf(o[0]); };
           was = was.filter(ok);

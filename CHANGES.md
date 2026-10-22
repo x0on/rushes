@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.29 — October 2026
+
+- **Make previews and descriptions from a folder's right-click** (Tidy up's Finder columns), on the archive or a drive kept in place: only that folder, or each folder picked, goes on the Describe list, and nothing else of the drive. The results go where they go for any drive: previews on the archive, never on the drive itself.
+- **Export descriptions**, from a folder's right-click and on each Describe row: one JSON file of every clip under the folder (folders inside it too), with its path exactly as the Mac sees it, its duration and its frame rate as an exact fraction (`60000/1001`), and every shot's start and end in seconds (the exact values: frame = seconds × rate), with timecode beside them for reading, from the clip's own starting timecode and marked drop-frame or not, and its description, tags, themes and text on screen. Lines of speech too, when there are any. A clip not described yet is in the file, marked so. While it runs it says "N of M clips"; then a save window where the browser has one, else Downloads. Nothing is written on the drive.
+
 ## 0.13.28 — October 2026
 
 - **Try again on a folder whose files are not all described** (Manage → Describe), on its row, in place of "add the folder again". It keeps the folder's place in the list and does only what is missing: proxies not made, files not described.

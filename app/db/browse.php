@@ -66,7 +66,7 @@ if (isset($_GET['roots'])) {
           // what was removed, as it was: dragged out of here onto a folder, it is back
           ['path' => "$A/" . HOLD, 'name' => 'Recently Removed', 'archive' => true, 'hold' => true, 'here' => true]];
     foreach (drives_seen() as $d) $r[] = ['path' => rtrim($d['path'], '/'), 'name' => (string)$d['name'], 'archive' => false, 'here' => !empty($d['connected'])];
-    out(['roots' => $r, 'finder' => on_mac() && PHP_OS_FAMILY === 'Darwin' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)]);
+    out(['roots' => $r, 'previews' => can_preview_drives(), 'finder' => on_mac() && PHP_OS_FAMILY === 'Darwin' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)]);
 }
 if (isset($_GET['dir'])) {
     $dir = rtrim((string)$_GET['dir'], '/');
