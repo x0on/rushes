@@ -5,7 +5,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
 ## 0.13.34 — October 2026
 
-- **Moments inside long takes.** A shot longer than 8 seconds (a speech, a dance floor, a round of golf in one take) was one description, however long: a 3½-minute take had one. Now it is also looked at about every 5 seconds, each moment its own entry with its start and end, said as part of its take (`take`, `moment`, `of` in its description). Describing a long take takes longer.
+- **Moments inside long takes.** A shot longer than 8 seconds (a speech, a dance floor, a ceremony in one take) was one description, however long: a 3½-minute take had one. Now it is also looked at about every 5 seconds, each moment its own entry with its start and end, said as part of its take (`take`, `moment`, `of` in its description). Describing a long take takes longer.
 - **Describe again**, on a described folder's row: describes again only the files described with an older version (before moments inside long takes), in its place on the list. Rushes never re-describes by itself when describing improves; a folder described before says so on its row. Asks twice.
 - **Part of day after midnight is night.** A clip from midnight to 5 am was "afternoon" (the camera's clock was read right; the rule was wrong). Put right in every description already made the next time its folder is asked for, with nothing described again.
 - The describing line says "from the originals" for a folder without previews (it said "from these proxies").
