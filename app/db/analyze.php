@@ -65,6 +65,30 @@ if (isset($_GET['locate'])) {
         $find->reset();
         if ($found) break;
     }
+    // Not in Search yet (a drive just added, still being listed): looked for on the drives kept where they
+    // are and plugged in, by the folder's name and the files the browser named inside it. Folders only,
+    // hidden ones skipped, at most 8 deep and 20,000 folders a drive, so it answers in seconds.
+    if (!$found && can_preview_drives()) {
+        $rels = array_values(array_filter(array_map(fn($x) => trim(str_replace('\\', '/', (string)$x), '/'), array_slice((array)$_GET['locate'], 0, 5)),
+            fn($x) => str_contains($x, '/') && !str_contains($x, '..')));
+        $top = $rels ? explode('/', $rels[0])[0] : '';
+        foreach ($top === '' ? [] : drives_seen() as $d) {
+            if (empty($d['connected']) || !is_dir($root2 = rtrim((string)$d['path'], '/'))) continue;
+            $stack = [[$root2, 0]]; $seen = 0;
+            while ($stack && $seen < 20000) {
+                [$dir, $depth] = array_pop($stack); $seen++;
+                foreach (@scandir($dir) ?: [] as $n) {
+                    if ($n[0] === '.' || $n[0] === '$' || !is_dir("$dir/$n") || is_link("$dir/$n")) continue;
+                    if ($n === $top) {
+                        $all = true;
+                        foreach ($rels as $r) if (!file_exists("$dir/$r")) { $all = false; break; }
+                        if ($all && drive_folder("$dir/$n") !== '') $found["$dir/$n"] = 1;
+                    }
+                    if ($depth < 8) $stack[] = ["$dir/$n", $depth + 1];
+                }
+            }
+        }
+    }
     out(['folders' => array_keys($found)]);
 }
 
@@ -91,6 +115,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (@file_put_contents("$q/" . date('Ymd-His') . '-start.job', "ACTION=proxy-build\nQUERY=$rel\n") === false)
             bail(500, 'Could not ask the archive machine — is its queue folder writable?');
         out(['ok' => 'start', 'folder' => $rel]);
+    }
+    // Start on this one now: it goes to the top of the list. Proxies being made for another folder stop
+    // (the one being made is made again later; every one finished is kept) and carry on by themselves once this one's are
+    // made; the helper's describing steps aside between two files once this one is ready to describe
+    // (ingest.py, describe_lane: control "first"), and goes back to where it was after.
+    if (($_POST['action'] ?? '') === 'first') {
+        $list = prepare_list();
+        if (!isset($list[$rel])) bail(400, "“{$rel}” is not on the list.");
+        $asked = $list[$rel]; unset($list[$rel]); $list = [$rel => $asked] + $list;
+        if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?');
+        $now = proxy_now(); $other = (string)($now['only'] ?? '');
+        $stopped = '';
+        if (!empty($now['running']) && $other !== '' && $other !== $rel) {
+            $row = array_values(array_filter(prepare_table(), fn($r) => $r['folder'] === $rel))[0] ?? null;
+            if ($row && !in_array($row['proxies']['step'], ['done', 'again'], true)) {
+                prepare_resume($other, true);               // it carries on by itself once this one's are made
+                $q = web_dir() . '/queue'; if (!is_dir($q)) @mkdir($q, 0777, true);
+                @file_put_contents("$q/" . date('Ymd-His') . '-first.job', "ACTION=proxy-stop\nQUERY=\n");
+                $stopped = $other;
+            }
+        }
+        $c = helper_control(); $c['first'] = str_starts_with($rel, '/') ? $rel : rtrim(helper_archive(), '/') . "/$rel";
+        $c['by'] = 'first'; $c['at'] = time();
+        if (!helper_control_save($c)) bail(500, 'Could not tell the helper — is the web folder writable?');
+        prepare_advance();
+        out(['ok' => 'first', 'folder' => $rel, 'stopped' => $stopped]);
     }
     // Remake: its proxies thrown away and made again (a new Proxy setting). On the
     // archive machine itself, which may delete them; never while they are being

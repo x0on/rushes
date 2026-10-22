@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.31 — October 2026
+
+- **Start on this one now**, on each Describe row not finished. It goes to the top of the list. Proxies being made for another folder stop (every one finished is kept) and carry on by themselves once this one's are made; then describing steps aside for it between two files, and goes back to where it was after, keeping every file already described. Changes the helper's code (`ingest.py`): signed again.
+- **Choose folder…** (was Choose in Finder…) **finds a folder of a drive added to Rushes even before Search has listed it**, on the drive itself (folders only, at most 8 deep, in seconds): a drive just added waits behind the archive's listing, and its folder was "not in the archive".
+
 ## 0.13.30 — October 2026
 
 - **Choose in Finder (Manage → Describe) finds a folder of a drive kept where it is**, not only of the archive: it looked only in the archive, so a drive's folder was "not in the archive". If the drive is not added yet, it says to add it first.

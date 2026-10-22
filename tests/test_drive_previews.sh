@@ -31,6 +31,24 @@ mkdir -p "$A/City Manager's Office"
 X=$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=City Manager's Office" "$U/db/analyze.php")
 cut -f1 "$W/prepare.tsv" | grep -qxF "City Manager's Office" && ok "a folder of the archive with an apostrophe in its name goes on the list" || no "apostrophe: $X"
 case "$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=../etc" "$U/db/analyze.php")" in *error*) ok "but never one outside it" ;; *) no "dotdot" ;; esac
+# a folder of the drive not in Search yet (the drive still being listed): found on the drive itself
+mkdir -p "$D/Recap/Gala Night/Cam A"; printf x > "$D/Recap/Gala Night/Cam A/C001.mov"
+L=$(curl -s -G -d pass=rushes --data-urlencode "locate[]=Gala Night/Cam A/C001.mov" "$U/db/analyze.php")
+echo "$L" | grep -qF "/Recap/Gala Night\"" && ok "Choose folder finds a drive's folder Search has not listed yet, on the drive" || no "locate on disk: $L"
+# Start on this one now: to the top of the list, and the helper is told which folder goes first
+X=$(curl -s -d pass=rushes -d action=first --data-urlencode "path=City Manager's Office" "$U/db/analyze.php")
+[ "$(head -1 "$W/prepare.tsv" | cut -f1)" = "City Manager's Office" ] && grep -q '"first":"[^"]*City Manager' "$W/helper-control.json" \
+    && ok "Start on this one now puts it first, and tells the helper's describing" || no "first: $X $(cat "$W/helper-control.json" 2>&1)"
+case "$(curl -s -d pass=rushes -d action=first --data-urlencode "path=Nowhere" "$U/db/analyze.php")" in *error*) ok "only a folder on the list" ;; *) no "first not on list" ;; esac
+# proxies stopped for it carry on by themselves after; stopped by a person, they wait for Try again
+R2=$(cd "$W/db" && "$PHP" -r '
+  require "prepare.php"; $f = "City Manager'"'"'s Office"; $keep = prepare_list();
+  prepare_save([$f => time() - 60]);
+  file_put_contents(web_dir() . "/proxy-folders.tsv", "$f\tstopped\t1\t0\t0\t5\t" . time() . "\n");
+  $a = prepare_advance()["proxies_next"]; prepare_resume($f, true); $b = prepare_advance()["proxies_next"];
+  file_put_contents(web_dir() . "/proxy-folders.tsv", "$f\tdone\t5\t0\t0\t5\t" . time() . "\n"); prepare_advance();
+  echo json_encode([$a, $b, isset(prepare_resume()[$f])]); prepare_save($keep); @unlink(web_dir() . "/proxy-folders.tsv");')
+[ "$R2" = "[\"\",\"City Manager's Office\",false]" ] && ok "proxies stopped for another folder carry on by themselves after (and only those)" || no "resume: $R2"
 # the runner made it (runner.py, tested in test_mac_runner): a preview, and its line in the ledger
 mkdir -p "$A/_rushes/previews/UUID-1/Gala"; printf 'preview' > "$A/_rushes/previews/UUID-1/Gala/A001.mp4"
 printf '%s\t%s\tDuration: 00:00:01.00 Video: mpeg4, yuv420p, 1280x720, 25 fps\n' "$D/Gala/A001.mov" "$(date +%s)" > "$W/proxy-made.tsv"

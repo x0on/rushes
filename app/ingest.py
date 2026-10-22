@@ -3176,6 +3176,25 @@ def _describe_tries(save=None):
     except OSError: pass
 
 
+_first_seen = [0.0, False]
+_first_missing = set()       # folders the lane last found not there (a drive unplugged): never stepped aside for
+
+def _first_waiting(path, first):
+    """Start on this one now: is the folder asked to go first queued, not done, and not waiting out a
+    retry, while another one is being described? Looked at every 10 seconds at most."""
+    if not first or first == path or first in _first_missing:
+        return False
+    if time.time() < _first_seen[0]:
+        return _first_seen[1]
+    with _io:
+        jobs = [(p, a) for p, a in _describe_jobs if p == first]
+        done = set(DONE.read_text().splitlines()) if DONE.exists() else set()
+    tries = _describe_tries()
+    keys = [f"analyze {p}{' ' + a if a else ''}" for p, a in jobs]
+    _first_seen[:] = [time.time() + 10, any(k not in done and tries.get(k, [0, 0])[1] <= time.time() for k in keys)]
+    return _first_seen[1]
+
+
 def describe_lane(every=20):
     """The describing lane: the queue's describing jobs, one folder at a time,
     beside the copies. Its own Pause (Manage, or Rushes Helper's window)."""
@@ -3215,13 +3234,17 @@ def describe_lane(every=20):
             todo = [(p, a) for p, a in jobs if f"analyze {p}{' ' + a if a else ''}" not in done and p not in skip
                     and tries.get(f"analyze {p}{' ' + a if a else ''}", [0, 0])[1] <= time.time()]
             try:
-                todo = within("describe", 30, lambda: [(p, a) for p, a in todo if os.path.exists(p)]) if todo else []
+                there = within("describe", 30, lambda: [(p, a) for p, a in todo if os.path.exists(p)]) if todo else []
+                _first_missing.clear(); _first_missing.update(p for p, a in todo if (p, a) not in there)
+                todo = there
             except Stalled:
                 stall("the archive share (describing)"); time.sleep(every); continue
             if not todo:
                 if said != "idle":
                     status(phase="idle", note="nothing to describe"); said = "idle"
                 time.sleep(every); continue
+            first = control().get("first") or ""
+            todo.sort(key=lambda j: j[0] != first)      # Start on this one now (Manage → Describe): it goes first
             path, asked = todo[0]; said = ""
             print(f"\n=== describing {path} (vision model and speech), beside the copies ===")
             _describing.set()
@@ -3322,8 +3345,11 @@ def describe_folder(path, asked=""):
         else:
             print(line.rstrip(), flush=True)
         c = control()                         # Pause describing stops it between lines; a file part-done is redone
-        if c.get("describe_paused") or path in c.get("skip", []):
-            stopped = "describing paused" if c.get("describe_paused") else "skipped from Manage"
+        first = c.get("first") or ""
+        first_ready = _first_waiting(path, first)
+        if c.get("describe_paused") or path in c.get("skip", []) or first_ready:
+            stopped = ("describing paused" if c.get("describe_paused") else "skipped from Manage" if path in c.get("skip", [])
+                       else f"set aside for {os.path.basename(first)} (Start on this one now); it carries on after")
             if hasattr(os, "killpg"):
                 tell(signal.SIGCONT); tell(signal.SIGTERM)    # the whole group, held or not
             else:
@@ -3782,6 +3808,20 @@ def selftest():
     (ORIGIN / "3 archive untidy.tsv").write_text("moved\t/V/P/a.mov\t/A/x/a.mov\t5\tundo\n")
     assert load_origins() == {"/S/a.mov": ("/A/x/a.mov", "5")}, load_origins()
     ORIGIN = keep
+    # Start on this one now: step aside only while the first folder has work queued, not done, and is there
+    global DONE
+    keep_done, keep_jobs = DONE, list(_describe_jobs)
+    with tempfile.TemporaryDirectory() as td:
+        DONE = Path(td) / "done.txt"
+        _describe_jobs[:] = [("/P/Parks", "1"), ("/D/Gala", "2")]
+        _first_seen[:] = [0, False]; _first_missing.clear()
+        assert _first_waiting("/P/Parks", "/D/Gala") and not _first_waiting("/D/Gala", "/D/Gala")
+        assert not _first_waiting("/P/Parks", ""), "nothing asked first: nothing steps aside"
+        DONE.write_text("analyze /D/Gala 2\n"); _first_seen[:] = [0, False]
+        assert not _first_waiting("/P/Parks", "/D/Gala"), "the first folder done: the other one is never set aside again"
+        DONE.write_text(""); _first_seen[:] = [0, False]; _first_missing.add("/D/Gala")
+        assert not _first_waiting("/P/Parks", "/D/Gala"), "its drive unplugged: never stepped aside for"
+    DONE, _describe_jobs[:] = keep_done, keep_jobs; _first_seen[:] = [0, False]; _first_missing.clear()
     print("all checks pass")
 
 

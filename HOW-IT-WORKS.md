@@ -963,7 +963,13 @@ otherwise.
 2. For each folder, the archive machine makes the proxies, then the helper
    describes it. One step after the other, by itself, never twice.
 3. You can reorder the list (↑ ↓), **Start now**, **Try again**, **Remake
-   proxies** or **Take off the list**. Each asks twice, except ↑ ↓.
+   proxies**, **Start on this one now** or **Take off the list**. Each asks twice, except ↑ ↓.
+   **Start on this one now** puts the folder first: proxies being made for another folder stop
+   (finished ones kept) and carry on by themselves after (`prepare-resume.json`); describing steps
+   aside for it between two files once it is queued (`helper-control.json` "first", read by
+   `ingest.py`), and goes back after. A folder whose drive is unplugged is never stepped aside for.
+4. **Choose folder…** finds the folder picked in the Mac's window in the archive, or on a drive
+   added to Rushes: from Search, or, for a drive not listed yet, on the drive itself.
 
 The page shows the time left, measured from real speeds, and why any proxy
 failed.

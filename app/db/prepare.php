@@ -421,6 +421,15 @@ function prepare_table(bool $look = false): array {
     return $rows;
 }
 
+// Folders whose proxies were stopped for one started first (analyze.php action=first): they carry on
+// by themselves, in their place, instead of waiting for Try again.
+function prepare_resume(?string $add = null, bool $on = true): array {
+    $f = web_dir() . '/prepare-resume.json';
+    $r = json_decode((string)@file_get_contents($f), true) ?: [];
+    if ($add !== null) { if ($on) $r[$add] = time(); else unset($r[$add]); @file_put_contents($f, json_encode($r, JSON_UNESCAPED_SLASHES)); }
+    return $r;
+}
+
 // Once a minute: start what is next. Writes proxy-next.txt and queue lines only.
 function prepare_advance(): array {
     $h = rtrim(helper_archive(), '/');
@@ -428,9 +437,13 @@ function prepare_advance(): array {
     $building = !empty(proxy_now()['running']);
     $Q = web_dir() . '/ingest-queue.tsv';
     $lines = array_values(array_filter(array_map('rtrim', @file($Q) ?: []), fn($l) => $l !== ''));
+    $resume = prepare_resume();
     foreach (prepare_table(true) as $r) {
         $p = $r['proxies']['step'];
-        if (in_array($p, ['waiting', 'again'], true) && !$building && $next === '') $next = $r['folder'];
+        if ((in_array($p, ['waiting', 'again'], true) || ($p === 'stopped' && isset($resume[$r['folder']]))) && !$building && $next === '') {
+            $next = $r['folder'];
+        }
+        if (isset($resume[$r['folder']]) && in_array($p, ['done', 'again', 'gone'], true)) prepare_resume($r['folder'], false);   // finished: nothing left to carry on
         if (in_array($p, ['done', 'again'], true) && $r['describe']['step'] === 'next' && $h !== '') {
             $line = "analyze\t" . (str_starts_with($r['folder'], '/') ? $r['folder'] : "$h/{$r['folder']}") . "\t{$r['asked']}";
             if (!in_array($line, $lines, true)) { $lines[] = $line; $queued[] = $r['folder']; }

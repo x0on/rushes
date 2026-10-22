@@ -391,7 +391,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <div style="padding:14px">
             <p class="note" style="margin:0 0 10px">Rushes makes a light copy of each video to play in Search, then the AI describes it.</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button class="btn" id="prepChoose" type="button">Choose in Finder…</button>
+              <button class="btn" id="prepChoose" type="button">Choose folder…</button>
               <input id="prepPick" type="file" webkitdirectory hidden>
               <input id="prepPath" placeholder="or type a folder in the archive"
                      style="flex:1;min-width:220px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
@@ -2191,7 +2191,7 @@ async function loadAnalysis() {
     drawPrepare(a.table, a);
   } catch (e) { $('prepTable').textContent = 'Could not read the list: ' + e.message; }
 }
-// Choose in Finder: open the archive share there and pick the folder. The browser
+// Choose folder: the archive's, or a drive's kept where it is, picked in the Mac's own window. The browser
 // hands over the names inside it, never where it is, so Rushes looks those names
 // up in the archive to know which folder it is. Nothing is uploaded.
 $('prepChoose').onclick = function () { $('prepPick').value = ''; $('prepPick').click(); };
@@ -2261,6 +2261,8 @@ async function listAct(action, folder, b, sure) {
   try {
     const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: action, path: folder }) })).json();
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
+      : action === 'first' ? 'Starting ✓ ' + folder + ' is first. ' + (r.stopped ? 'The proxies of ' + r.stopped + ' stop now (the ones finished are kept) and carry on by themselves once these are made. ' : '') +
+          'Its previews start within a minute; then describing steps aside for it between two files, and goes back to where it was after.'
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
          up: 'Moved up ✓ ' + folder, down: 'Moved down ✓ ' + folder,
          retry: 'Trying again ✓ ' + folder + ' — in its place in the list, only what is missing: proxies not made, files not described.',
@@ -2340,6 +2342,9 @@ function drawPrepare(rows, a) {
             : why.state === 'asked' || why.state === 'starting' ? '<button class="btn" disabled title="Asked; the archive machine starts it within a minute">Starting…</button>'
             : '<button class="btn" data-l="start">Start now</button>') : '') +
         (r.proxies.step === 'done' && r.describe.step !== 'describing' ? '<button class="btn quiet" data-l="remake" title="Throw its proxies away and make them again with the setting in use">Remake proxies</button>' : '') +
+        // Start on this one now: what runs for other folders steps aside, keeping what is done, and carries on after
+        (!doneRow(r) && r.describe.step !== 'describing' && !(r.proxies.step === 'making') && ['waiting', 'stopped', 'done', 'again'].includes(r.proxies.step)
+          ? '<button class="btn" data-l="first" title="Proxies being made for another folder stop (everything finished is kept), and describing steps aside between two files once this one is ready; both carry on by themselves after">Start on this one now</button>' : '') +
         (r.describe.step === 'done' && r.describe.files ? '<button class="btn quiet" data-x="export" title="One JSON: every clip with its duration, and each shot\'s start and end with what was described">Export descriptions</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
@@ -2365,7 +2370,7 @@ function drawPrepare(rows, a) {
   $('prepTable').querySelectorAll('[data-l]').forEach(function (b) {
     // a redraw keeps a "Sure?" that is still waiting for its second press
     if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
-    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake'].includes(b.dataset.l)); };
+    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake', 'first'].includes(b.dataset.l)); };
   });
   $('prepTable').querySelectorAll('[data-x="export"]').forEach(function (b) {
     const f = b.closest('tr').dataset.f;
