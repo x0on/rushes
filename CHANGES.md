@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.30 — October 2026
+
+- **Choose in Finder (Manage → Describe) finds a folder of a drive kept where it is**, not only of the archive: it looked only in the archive, so a drive's folder was "not in the archive". If the drive is not added yet, it says to add it first.
+- **Search it where it is is now called Add to Rushes** (Drives, for a drive Rushes sees and does nothing with): kept where it is, nothing on it copied, moved or changed, as its question says.
+
 ## 0.13.29 — October 2026
 
 - **Make previews and descriptions from a folder's right-click** (Tidy up's Finder columns), on the archive or a drive kept in place: only that folder, or each folder picked, goes on the Describe list, and nothing else of the drive. The results go where they go for any drive: previews on the archive, never on the drive itself.

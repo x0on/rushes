@@ -1611,7 +1611,7 @@ function drawDrives(d) {
         (x.levels && x.levels.wait && x.levels.wait.n ? '<div class="more"><span class="bad" style="color:var(--warn)">' + x.levels.wait.n.toLocaleString() + ' files waiting to be filed' +
           (x.kind === 'archive' && d.copy && !d.copy.stale && d.copy.phase === 'tidying' ? ' · being filed now' : '') + '</span></div>' : '') +
         '<div class="acts">' + (own ? '<button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button>' : '') +
-          (x.roles.indexOf('To copy from') >= 0 ? ' · <button class="lnk" data-how="in_place" data-src="' + esc(x.path) + '">Search it where it is</button>' : '') +
+          (x.roles.indexOf('To copy from') >= 0 ? ' · <button class="lnk" data-how="in_place" data-src="' + esc(x.path) + '" title="Kept where it is: nothing is copied or moved">Add to Rushes, where it is</button>' : '') +
           (canMk && x.kind !== 'archive' && x.kind !== 'card' && mkOpen !== x.path ? (own ? ' · ' : '') + '<button class="lnk" data-mk="' + esc(x.path) + '">Make this the archive…</button>' : '') +
         '</div>' + mkPanel(x, archNow) +
         '</div>';
@@ -1622,7 +1622,7 @@ function drawDrives(d) {
           '<small>' + DRV_KIND[x.kind] + (x.total ? ' · ' + tb(x.total - x.free) + ' on it' : '') + '</small></span>' +
           // asked for each drive, not once for all: kept where it is, copied in, or the archive itself
           (x.kind === 'card' ? '<span class="note">use Ingest</span>'
-            : '<button class="btn quiet" data-addsrc="' + esc(x.path) + '" data-name="' + esc(x.name) + '" data-size="' + (x.total ? esc(tb(x.total - x.free)) : '') + '">Search it where it is</button>' +
+            : '<button class="btn quiet" data-addsrc="' + esc(x.path) + '" data-name="' + esc(x.name) + '" data-size="' + (x.total ? esc(tb(x.total - x.free)) : '') + '" title="Kept where it is: nothing is copied or moved">Add to Rushes</button>' +
               '<button class="btn quiet" data-copyfrom="' + esc(x.path) + '">Copy into the archive…</button>' +
               (canMk && mkOpen !== x.path ? '<button class="btn quiet" data-mk="' + esc(x.path) + '">Make it the archive…</button>' : '')) +
           mkPanel(x, archNow) + '</div>';
@@ -1630,13 +1630,13 @@ function drawDrives(d) {
   $('drivesNow').hidden = pane !== 'overview' || (!ins.length && !other.length);
   $('drivesNow').querySelectorAll('[data-addsrc]').forEach(function (b) {
     b.onclick = async function () {
-      if (!sure(b, 'Its files become searchable by name. Listing ' + (b.dataset.size ? b.dataset.size + ' ' : '') + 'takes a while on a big share; nothing on it is moved or changed.', 'add:' + b.dataset.addsrc)) return;
+      if (!sure(b, 'Kept where it is: nothing on it is copied, moved or changed. Its files become searchable, and its folders can be previewed and described. Listing ' + (b.dataset.size ? b.dataset.size + ' ' : '') + 'takes a while on a big share.', 'add:' + b.dataset.addsrc)) return;
       b.disabled = true; b.textContent = 'adding…';
       try {
         const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: b.dataset.addsrc, how: 'in_place' }) })).json();
         if (x.error) throw new Error(x.error);
         b.textContent = 'Added ✓ listing within a minute';
-      } catch (e) { b.disabled = false; b.textContent = 'Search it where it is'; oops('Did not happen: ' + e.message); }
+      } catch (e) { b.disabled = false; b.textContent = 'Add to Rushes'; oops('Did not happen: ' + e.message); }
     };
   });
   $('drivesNow').querySelectorAll('[data-how]').forEach(function (b) {
@@ -1647,7 +1647,7 @@ function drawDrives(d) {
         const x = await (await fetch('backup.php', { method: 'POST', body: new URLSearchParams({ action: 'source', drive: b.dataset.src, how: b.dataset.how }) })).json();
         if (x.error) throw new Error(x.error);
         b.textContent = 'Done ✓ listing within a minute';
-      } catch (e) { b.disabled = false; b.textContent = 'Search it where it is'; oops('Did not happen: ' + e.message); }
+      } catch (e) { b.disabled = false; b.textContent = 'Add to Rushes'; oops('Did not happen: ' + e.message); }
     };
   });
   $('drivesNow').querySelectorAll('[data-mk]').forEach(function (b) {
@@ -2213,7 +2213,7 @@ $('prepPick').onchange = async function () {
       said.querySelectorAll('[data-pick]').forEach(function (b) {
         b.onclick = function () { $('prepPath').value = b.dataset.pick; planOf(b.dataset.pick); };
       });
-    } else said.textContent = '“' + top + '” is not in the archive (or search has not seen it yet). Pick it from the archive share in Finder.';
+    } else said.textContent = '“' + top + '” is not in the archive or on a drive added to Rushes (or its listing is not finished yet). A drive not added yet: Drives → Add to Rushes, then pick the folder again.';
   } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
 };
 

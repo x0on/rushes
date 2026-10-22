@@ -1933,12 +1933,12 @@ at `http://<this Mac's name>.local:8642`, and then:
 A drive plugged in that Rushes does nothing with yet is listed under
 Overview → **Also on this Mac**, with the three things it can be:
 
-- **Search it where it is:** its files are listed and found in Search by
+- **Add to Rushes** (kept where it is; called Search it where it is before 0.13.30): its files are listed and found in Search by
   name; nothing on it is moved or changed (a source with `how: in_place`).
 - **Copy into the archive…:** Copying opens with it as From.
 - **Make it the archive…:** see below.
 
-A drive that is a place to copy from has **Search it where it is** on its
+A drive that is a place to copy from has **Add to Rushes, where it is** on its
 card too; Setup 03 shows and changes each drive's answer. A drive added
 before it was asked follows Setup 01, which is now only that default
 (`source_in_place()` in `db/config.php`, `drives()` in `runner.py`).

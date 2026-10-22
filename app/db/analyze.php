@@ -56,8 +56,12 @@ if (isset($_GET['locate'])) {
         if (!str_contains($rel, '/') || str_contains($rel, '..')) continue;
         $find->bindValue(1, basename($rel)); $r = $find->execute();
         while ($x = $r->fetchArray(SQLITE3_NUM))
-            if (str_ends_with($x[0], "/$rel") && str_starts_with($x[0], "$root/"))
+            if (!str_ends_with($x[0], "/$rel")) continue;
+            elseif (str_starts_with($x[0], "$root/"))
                 $found[substr($x[0], strlen($root) + 1, strlen($top) - strlen($rel)) ?: $top] = 1;
+            // a folder of a drive kept where it is (added to Rushes): its whole path, as the drive page gives it
+            elseif (can_preview_drives() && ($dir = substr($x[0], 0, strlen($x[0]) - strlen($rel) + strlen($top))) && drive_folder($dir) !== '')
+                $found[$dir] = 1;
         $find->reset();
         if ($found) break;
     }

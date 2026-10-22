@@ -21,6 +21,8 @@ no() { echo "FAIL $1"; tail -5 "$R/srv.log" "$W/php-errors.log" 2>/dev/null; exi
 curl -s "$U/db/import.php?part=web&force=1" > /dev/null
 P=$(cd "$W/db" && "$PHP" -r 'require "config.php"; echo preview_of($argv[1]), "|", preview_of("/elsewhere/x.mov") ?? "none";' "$D/Gala/A001.mov")
 [ "$P" = "$A/_rushes/previews/UUID-1/Gala/A001.mp4|none" ] && ok "a kept drive's preview lives on the archive, under the drive's ID; nowhere else has one" || no "preview_of: $P"
+L=$(curl -s -G -d pass=rushes --data-urlencode "locate[]=Gala/A001.mov" "$U/db/analyze.php")
+case "$L" in *"\"folders\":[\"${D//\//\\/}\/Gala\"]"*|*"\"folders\":[\"$D/Gala\"]"*) ok "Choose in Finder (Describe) finds a folder of a drive kept where it is, by its full path" ;; *) no "locate: $L" ;; esac
 X=$(curl -s -d pass=rushes -d action=prepare --data-urlencode "path=$D/Gala" "$U/db/analyze.php")
 [ "$(cut -f1 "$W/prepare.tsv")" = "$D/Gala" ] && ok "its folder goes on the Describe list by its full path" || no "prepare: $X"
 grep -qxF "$D/Gala" "$W/proxy-next.txt" && ok "its previews are next, for the runner" || no "next: $(cat "$W/proxy-next.txt" 2>&1)"
