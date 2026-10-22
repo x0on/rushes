@@ -834,6 +834,7 @@ class Runner:
             self.plog(f"not enough room for the proxies: about {need / 1e9:,.0f} GB needed, {free / 1e9:,.0f} GB free"); return
         total, ok, failed, later, n, used = len(plan), 0, 0, 0, 0, 0
         count = {"video chip": 0, "software": 0}
+        run_t0, run_b, run_n, pend = 0, 0, 0, 0     # this run's own pace (prepare.php: the time left, measured on this folder)
         self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {only or 'the whole archive'}: {total} proxies to make, {have} already made · "
                   + ("on the media engine" if hw == "1" else "in software") + f" · {h}p · {ff}")
         os.makedirs(proot, exist_ok=True)
@@ -852,8 +853,11 @@ class Runner:
             # one file, guarded: a file that breaks something (a name or metadata in another encoding, a probe that
             # never ends) is said and skipped; it never ends the whole build, which would start again on it for ever
             try:
+                run_b += pend; run_n += 1 if pend else 0; run_t0 = run_t0 or time.time()
+                pend = size(src) or 1
                 self.proxy_state(state="building", only=only, done=n, total=total, ok=ok, failed=failed, later=later,
-                                 file=os.path.relpath(src, top), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used)
+                                 file=os.path.relpath(src, top), hw=hw, chip=count["video chip"], mixed=0, soft=count["software"], asis=used,
+                                 run_t0=int(run_t0), run_bytes=run_b, run_files=run_n)
                 report = self.probe(ff, src)
                 if self.light(report, src):              # no proxy: the original plays as it is
                     with open(self.p("proxy-made.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\t1\n")

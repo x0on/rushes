@@ -2261,6 +2261,8 @@ async function listAct(action, folder, b, sure) {
   try {
     const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: action, path: folder }) })).json();
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
+      : action === 'nopreview' ? 'Asked ✓ ' + folder + ' is described without previews, from its originals' + (r.error ? '' : ' — any previews being made for it stop within a minute (the finished ones are used), and describing takes it in its turn.')
+      : action === 'withpreview' ? 'Asked ✓ ' + folder + ' gets its previews first again, then describing.'
       : action === 'first' ? 'Starting ✓ ' + folder + ' is first. ' + (r.stopped ? 'The proxies of ' + r.stopped + ' stop now (the ones finished are kept) and carry on by themselves once these are made. ' : '') +
           'Its previews start within a minute; then describing steps aside for it between two files, and goes back to where it was after.'
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
@@ -2282,7 +2284,8 @@ function drawPrepare(rows, a) {
   const px = function (r) {
     const p = r.proxies, f = (r.failures || []).length;
     const fails = f ? ' · <a href="#" class="bad" data-fails="' + esc(r.folder) + '">' + n(f) + ' could not be made — see why</a>' : '';
-    return p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>' + fails
+    return p.step === 'skipped' ? '<span class="dim">no previews: described from the originals</span>'
+      : p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>' + fails
       : p.step === 'done' ? (r.plan && r.plan.videos ? '<span class="' + (r.plan.have >= r.plan.videos ? 'ok' : 'busy') + '">' + (r.plan.have >= r.plan.videos ? '✓ ' : '') + n(r.plan.have) + ' of ' + n(r.plan.videos) + ' play</span>' +
             '<div class="note">' + n(r.plan.previews || 0) + ' previews · ' + n(r.plan.asis || 0) + ' as they are</div>' : '<span class="ok">✓ ' + n(p.ok) + ' made</span>') + fails + (+p.later ? ' · ' + n(p.later) + ' still arriving, later' : '')
       : p.step === 'again' ? 'making the ones that were still arriving' + fails
@@ -2308,13 +2311,15 @@ function drawPrepare(rows, a) {
       : '<span class="dim">waiting for proxies</span>') + off;
   };
   const busy = function (r) { return r.proxies.step === 'making' || r.proxies.step === 'again' || ['describing', 'queued', 'next'].includes(r.describe.step); };
-  const doneRow = function (r) { return r.proxies.step === 'done' && r.describe.step === 'done'; };
+  const doneRow = function (r) { return ['done', 'skipped'].includes(r.proxies.step) && r.describe.step === 'done'; };
   // the whole list: how much proxy time is left, at the speed measured on this machine
   const open = rows.filter(function (r) { return !doneRow(r); });
-  const total = open.reduce(function (t, r) { return t + (r.left || 0); }, 0);
+  // honest: the folder being made from its own pace; the others a guess from earlier folders, said as one
+  const meas = open.filter(function (r) { return r.left_how === 'measured'; }), guess = open.filter(function (r) { return r.left_how === 'guess'; });
+  const sum = function (l) { return l.reduce(function (t, r) { return t + (r.left || 0); }, 0); };
   const head = '<p class="note" style="margin:0 0 8px">' + n(open.length) + ' of ' + n(rows.length) + ' folder' + (rows.length === 1 ? '' : 's') + ' still to finish' +
-    (a.rate > 0 ? ' · proxies: about <b>' + hm(total) + '</b> left, at ' + (a.rate / 1e6).toFixed(0) + ' MB/s measured here'
-                : ' · the time left shows once the first proxies are made and the speed is known') + '</p>';
+    (meas.length ? ' · proxies being made now: about <b>' + hm(sum(meas)) + '</b> left, from their own pace' : open.some(function (r) { return r.left_how === 'working'; }) ? ' · proxies being made now: working out the time left (after 3 files)' : '') +
+    (guess.length ? ' · the folders waiting: perhaps ' + hm(sum(guess)) + ' more, a guess from earlier folders (4K takes longer)' : '') + '</p>';
   // why it is where it is, in words; Start now when it should have started and has not
   const why = a.why || {};
   const head2 = why.text ? '<p class="note" style="margin:0 0 8px">' + (why.state === 'stuck' ? '<span class="bad">' + esc(why.text) + '</span>'
@@ -2343,8 +2348,10 @@ function drawPrepare(rows, a) {
             : '<button class="btn" data-l="start">Start now</button>') : '') +
         (r.proxies.step === 'done' && r.describe.step !== 'describing' ? '<button class="btn quiet" data-l="remake" title="Throw its proxies away and make them again with the setting in use">Remake proxies</button>' : '') +
         // Start on this one now: what runs for other folders steps aside, keeping what is done, and carries on after
-        (!doneRow(r) && r.describe.step !== 'describing' && !(r.proxies.step === 'making') && ['waiting', 'stopped', 'done', 'again'].includes(r.proxies.step)
+        (!doneRow(r) && r.describe.step !== 'describing' && !(r.proxies.step === 'making') && ['waiting', 'stopped', 'done', 'again', 'skipped'].includes(r.proxies.step)
           ? '<button class="btn" data-l="first" title="Proxies being made for another folder stop (everything finished is kept), and describing steps aside between two files once this one is ready; both carry on by themselves after">Start on this one now</button>' : '') +
+        (r.proxies.step === 'skipped' && r.describe.step !== 'done' ? '<button class="btn quiet" data-l="withpreview" title="Make its previews first again, then describe">Make previews too</button>'
+          : ['waiting', 'stopped', 'making'].includes(r.proxies.step) && r.describe.step !== 'done' ? '<button class="btn quiet" data-l="nopreview" title="Describe it from the originals: no previews are made (the ones already made are used). Slower to describe, and it will not play in Search">Describe without previews</button>' : '') +
         (r.describe.step === 'done' && r.describe.files ? '<button class="btn quiet" data-x="export" title="One JSON: every clip with its duration, and each shot\'s start and end with what was described">Export descriptions</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length
@@ -2361,7 +2368,7 @@ function drawPrepare(rows, a) {
           '<span class="note">The reason is ffmpeg\'s own words. The original is never touched. Each file leaves this list as soon as its proxy is made; Try again makes just these once more.</span></div></td></tr>'
         : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
-        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left ? ' · <b>about ' + hm(r.left) + '</b>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
+        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
         '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + fails;
     }).join('') + '</table>';
   const ps = document.getElementById('pxSaid');
@@ -2370,7 +2377,7 @@ function drawPrepare(rows, a) {
   $('prepTable').querySelectorAll('[data-l]').forEach(function (b) {
     // a redraw keeps a "Sure?" that is still waiting for its second press
     if (listArmed.key === b.dataset.l + '|' + b.closest('tr').dataset.f && Date.now() < listArmed.until) b.textContent = 'Sure? ' + b.textContent;
-    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake', 'first'].includes(b.dataset.l)); };
+    b.onclick = function () { listAct(b.dataset.l, b.closest('tr').dataset.f, b, ['forget', 'retry', 'start', 'remake', 'first', 'nopreview'].includes(b.dataset.l)); };
   });
   $('prepTable').querySelectorAll('[data-x="export"]').forEach(function (b) {
     const f = b.closest('tr').dataset.f;

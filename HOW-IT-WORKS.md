@@ -971,8 +971,15 @@ otherwise.
 4. **Choose folder…** finds the folder picked in the Mac's window in the archive, or on a drive
    added to Rushes: from Search, or, for a drive not listed yet, on the drive itself.
 
-The page shows the time left, measured from real speeds, and why any proxy
-failed.
+The page shows the time left and why any proxy failed. While a folder's proxies are being made, its
+time left comes from its own pace (the runner writes `run_t0`, `run_bytes`, `run_files` in
+`proxy-status.txt`), once 3 files and a minute are behind it; before that it says it is working it
+out. A folder not started shows a guess from earlier folders' speed, said as a guess: 4K, limited by
+encoding rather than reading, goes several times slower.
+
+**Describe without previews** (a row not described yet) makes no previews for that folder
+(`prepare-nopreview.json`); describing reads its originals, using any previews already made.
+**Make previews too** undoes it.
 
 **In the code:**
 

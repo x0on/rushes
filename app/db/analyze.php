@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stopped = '';
         if (!empty($now['running']) && $other !== '' && $other !== $rel) {
             $row = array_values(array_filter(prepare_table(), fn($r) => $r['folder'] === $rel))[0] ?? null;
-            if ($row && !in_array($row['proxies']['step'], ['done', 'again'], true)) {
+            if ($row && !in_array($row['proxies']['step'], ['done', 'again', 'skipped'], true)) {
                 prepare_resume($other, true);               // it carries on by itself once this one's are made
                 $q = web_dir() . '/queue'; if (!is_dir($q)) @mkdir($q, 0777, true);
                 @file_put_contents("$q/" . date('Ymd-His') . '-first.job', "ACTION=proxy-stop\nQUERY=\n");
@@ -141,6 +141,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!helper_control_save($c)) bail(500, 'Could not tell the helper — is the web folder writable?');
         prepare_advance();
         out(['ok' => 'first', 'folder' => $rel, 'stopped' => $stopped]);
+    }
+    // Describe without previews (or with them again): for footage that only needs describing. Previews being
+    // made for it stop (the ones finished are kept and used); describing reads the originals for the rest.
+    if (in_array($_POST['action'] ?? '', ['nopreview', 'withpreview'], true)) {
+        if (!isset(prepare_list()[$rel])) bail(400, "“{$rel}” is not on the list.");
+        $on = $_POST['action'] === 'nopreview';
+        prepare_nopreview($rel, $on);
+        $now = proxy_now();
+        if ($on && !empty($now['running']) && ($now['only'] ?? '') === $rel) {
+            $q = web_dir() . '/queue'; if (!is_dir($q)) @mkdir($q, 0777, true);
+            @file_put_contents("$q/" . date('Ymd-His') . '-nopreview.job', "ACTION=proxy-stop
+QUERY=
+");
+        }
+        prepare_advance();
+        out(['ok' => $_POST['action'], 'folder' => $rel]);
     }
     // Remake: its proxies thrown away and made again (a new Proxy setting). On the
     // archive machine itself, which may delete them; never while they are being

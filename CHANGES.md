@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.32 — October 2026
+
+- **The time left for previews is honest.** It was the gigabytes left divided by the average speed of earlier folders, mostly 1080p, where reading is the limit; 4K is limited by encoding and went about three times slower than it said ("about 13 minutes" took over 30). Now, while a folder is being made, its time left comes from its own pace, once 3 files and a minute are behind it ("working out the time left" until then). A folder not started yet shows "perhaps …, a guess from earlier folders", said as a guess.
+- **Describe without previews**, on a Describe row not described yet: for footage that only needs describing. No previews are made (previews being made for it stop; the ones finished are used), and describing takes it in its turn from the originals: slower to describe, and it does not play in Search. **Make previews too** undoes it.
+
 ## 0.13.31 — October 2026
 
 - **Start on this one now**, on each Describe row not finished. It goes to the top of the list. Proxies being made for another folder stop (every one finished is kept) and carry on by themselves once this one's are made; then describing steps aside for it between two files, and goes back to where it was after, keeping every file already described. Changes the helper's code (`ingest.py`): signed again.

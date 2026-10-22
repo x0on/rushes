@@ -393,6 +393,8 @@ function prepare_table(bool $look = false): array {
         else
             $px = ['step' => 'waiting'];
 
+        if (isset(prepare_nopreview()[$rel]) && $px['step'] !== 'making')
+            $px = ['step' => 'skipped'];                           // Describe without previews: the originals are read
         if (!str_starts_with($rel, '/') && !is_dir(rtrim(archive_dir(), '/') . "/$rel"))   // moved away, and not found again
             $px = ['step' => 'gone'];
         $path = str_starts_with($rel, '/') ? $rel : "$h/$rel";     // a kept drive's folder is where it is
@@ -407,18 +409,34 @@ function prepare_table(bool $look = false): array {
         elseif (in_array("analyze\t$path\t$asked", $queue, true))
             $ds = ['step' => 'queued'];
         else
-            $ds = ['step' => in_array($px['step'], ['done', 'again'], true) ? 'next' : 'waiting'];
-        // time left for its proxies, from the speed measured here
-        $plan = prepare_plan($rel, false, $look); $left = null;
-        if ($rate > 0 && !in_array($px['step'], ['done'], true)) {
-            $bytes = $plan['to_read'];
-            if ($px['step'] === 'making' && $px['total'] > 0) $bytes = $plan['bytes'] * (1 - $px['done'] / $px['total']);
-            $left = (int)round($bytes / $rate);
+            $ds = ['step' => in_array($px['step'], ['done', 'again', 'skipped'], true) ? 'next' : 'waiting'];
+        // Time left for its proxies. While they are being made: from this folder's own pace, once 3 files
+        // and a minute are behind it (4K is limited by encoding, not by reading, and goes several times
+        // slower than earlier folders' average); before that, "working it out". A folder not started:
+        // a guess from earlier folders, said as one. Never a number the app cannot stand behind.
+        $plan = prepare_plan($rel, false, $look); $left = null; $how = '';
+        if ($px['step'] === 'making') {
+            $secs = (int)($now['at'] ?? 0) - (int)($now['run_t0'] ?? 0);
+            if ((int)($now['run_files'] ?? 0) >= 3 && $secs >= 60 && (int)($now['run_bytes'] ?? 0) > 0 && $px['total'] > 0) {
+                $left = (int)round($plan['bytes'] * (1 - $px['done'] / $px['total']) / ((int)$now['run_bytes'] / $secs));
+                $how = 'measured';
+            } else $how = 'working';
+        } elseif ($rate > 0 && !in_array($px['step'], ['done', 'skipped'], true)) {
+            $left = (int)round($plan['to_read'] / $rate); $how = 'guess';
         }
-        $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => $plan, 'left' => $left,
+        $rows[] = ['folder' => $rel, 'asked' => $asked, 'plan' => $plan, 'left' => $left, 'left_how' => $how,
                    'failures' => $plan['failures'] ?? [], 'proxies' => $px, 'describe' => $ds];
     }
     return $rows;
+}
+
+// Folders to describe without previews (Describe without previews on their row): their originals are read.
+function prepare_nopreview(?string $set = null, bool $on = true): array {
+    static $r = null;
+    $f = web_dir() . '/prepare-nopreview.json';
+    if ($r === null || $set !== null) $r = json_decode((string)@file_get_contents($f), true) ?: [];
+    if ($set !== null) { if ($on) $r[$set] = time(); else unset($r[$set]); @file_put_contents($f, json_encode($r, JSON_UNESCAPED_SLASHES)); }
+    return $r;
 }
 
 // Folders whose proxies were stopped for one started first (analyze.php action=first): they carry on
@@ -444,7 +462,7 @@ function prepare_advance(): array {
             $next = $r['folder'];
         }
         if (isset($resume[$r['folder']]) && in_array($p, ['done', 'again', 'gone'], true)) prepare_resume($r['folder'], false);   // finished: nothing left to carry on
-        if (in_array($p, ['done', 'again'], true) && $r['describe']['step'] === 'next' && $h !== '') {
+        if (in_array($p, ['done', 'again', 'skipped'], true) && $r['describe']['step'] === 'next' && $h !== '') {
             $line = "analyze\t" . (str_starts_with($r['folder'], '/') ? $r['folder'] : "$h/{$r['folder']}") . "\t{$r['asked']}";
             if (!in_array($line, $lines, true)) { $lines[] = $line; $queued[] = $r['folder']; }
         }

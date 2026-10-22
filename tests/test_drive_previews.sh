@@ -49,6 +49,24 @@ R2=$(cd "$W/db" && "$PHP" -r '
   file_put_contents(web_dir() . "/proxy-folders.tsv", "$f\tdone\t5\t0\t0\t5\t" . time() . "\n"); prepare_advance();
   echo json_encode([$a, $b, isset(prepare_resume()[$f])]); prepare_save($keep); @unlink(web_dir() . "/proxy-folders.tsv");')
 [ "$R2" = "[\"\",\"City Manager's Office\",false]" ] && ok "proxies stopped for another folder carry on by themselves after (and only those)" || no "resume: $R2"
+# Describe without previews: no previews, straight to describing, from the originals
+X=$(curl -s -d pass=rushes -d action=nopreview --data-urlencode "path=City Manager's Office" "$U/db/analyze.php")
+T=$(curl -s -G -d pass=rushes "$U/db/analyze.php")
+echo "$T" | python3 -c "import json,sys; r=[x for x in json.load(sys.stdin)['table'] if x['folder']==\"City Manager's Office\"][0]; assert r['proxies']['step']=='skipped' and r['describe']['step'] in ('queued','next'), r" \
+    && grep -q "^analyze	.*City Manager's Office	" "$W/ingest-queue.tsv" && ok "Describe without previews: no previews, and it goes to describing at once" || no "nopreview: $X $(cat "$W/ingest-queue.tsv" 2>&1)"
+curl -s -d pass=rushes -d action=withpreview --data-urlencode "path=City Manager's Office" "$U/db/analyze.php" > /dev/null
+# the time left: from the folder's own pace while it is made, never from earlier folders' average
+R3=$(cd "$W/db" && "$PHP" -r '
+  require "prepare.php"; $f = "City Manager'"'"'s Office"; $keep = prepare_list(); prepare_save([$f => time() - 60]);
+  $t = time(); file_put_contents(web_dir() . "/proxy-alive.txt", "$t\n");
+  $st = fn($files) => file_put_contents(web_dir() . "/proxy-status.txt", "at\t$t\nstate\tbuilding\nonly\t$f\ndone\t11\ntotal\t20\nok\t10\nrun_t0\t" . ($t - 600) . "\nrun_bytes\t" . (10 * 2**30) . "\nrun_files\t$files\n");
+  $st(10); $r = prepare_table()[0]; $a = [$r["left_how"], $r["left"]];
+  $st(2); $r = prepare_table()[0]; $b = [$r["left_how"], $r["left"]];
+  echo json_encode([$a, $b, $r["plan"]["bytes"]]); prepare_save($keep); @unlink(web_dir() . "/proxy-status.txt"); @unlink(web_dir() . "/proxy-alive.txt");')
+python3 -c "
+import json,sys; (a,b,bytes_)=json.loads(sys.argv[1])
+want=round(bytes_*(1-11/20)/(10*2**30/600))
+assert a==['measured',want] and b[0]=='working' and b[1] is None, (a,b,want)" "$R3" && ok "while making, the time left is this folder's own pace; before 3 files, it says it is working it out" || no "left: $R3"
 # the runner made it (runner.py, tested in test_mac_runner): a preview, and its line in the ledger
 mkdir -p "$A/_rushes/previews/UUID-1/Gala"; printf 'preview' > "$A/_rushes/previews/UUID-1/Gala/A001.mp4"
 printf '%s\t%s\tDuration: 00:00:01.00 Video: mpeg4, yuv420p, 1280x720, 25 fps\n' "$D/Gala/A001.mov" "$(date +%s)" > "$W/proxy-made.tsv"
