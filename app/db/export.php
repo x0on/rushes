@@ -107,7 +107,9 @@ if ($what === 'folder') {
     if (!export_root_ok($dir)) { http_response_code(400); header('Content-Type: text/plain'); exit("Pick a folder in the archive or on a drive Rushes knows.\n"); }
     // everything under it, by a range (no LIKE, so _ and % in names mean themselves): '0' comes right after '/'
     $in = "path >= :a AND path < :b"; $bind = function ($q) use ($dir) { $q->bindValue(':a', "$dir/"); $q->bindValue(':b', "{$dir}0"); return $q; };
-    $c = $bind($db->prepare("SELECT COUNT(*) FROM files WHERE $in AND kind IN ('video','image','audio')"))->execute()->fetchArray(SQLITE3_NUM)[0];
+    // and the described files Search has not listed yet (a folder just added): from their descriptions
+    $unl = "SELECT DISTINCT path FROM moments WHERE $in AND path NOT IN (SELECT path FROM files)";
+    $c = $bind($db->prepare("SELECT (SELECT COUNT(*) FROM files WHERE $in AND kind IN ('video','image','audio')) + (SELECT COUNT(*) FROM ($unl))"))->execute()->fetchArray(SQLITE3_NUM)[0];
     $send(preg_replace('/[\/\\\\:"\x00-\x1f]+/', '-', basename($dir)) . " descriptions.json", 'application/json; charset=utf-8');
     while (ob_get_level()) ob_end_flush();
     $J = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
@@ -115,12 +117,15 @@ if ($what === 'folder') {
          ',"times":"start_s and end_s (seconds from the start of the clip) are the exact values: frame = round(seconds x fps). fps is an exact fraction. start_tc and end_tc are for reading: timecode from the clip\'s own starting timecode, or from 00:00:00:00 when it has none, drop-frame (;) or not as timecode_mode says",'
          . '"composition":"per shot, when described with version 4: subject (what the eye goes to), tags (worked out by geometry from the marks), marks (subject box, eyes, horizon and lines as fractions of the frame, x from the left, y from the top; facing)",', "\n\"files\":[\n";
     $files = $bind($db->prepare("SELECT f.path, f.kind, m.duration, m.fps, m.timecode FROM files f LEFT JOIN media m ON m.file_id = f.id
-                                 WHERE f.$in AND f.kind IN ('video','image','audio') ORDER BY f.path"))->execute();
+                                 WHERE f.$in AND f.kind IN ('video','image','audio')
+                                 UNION ALL SELECT path, '', NULL, NULL, NULL FROM ($unl) ORDER BY 1"))->execute();
     $mo = $db->prepare('SELECT kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, mood, language, comp
                         FROM moments WHERE path = ? ORDER BY kind, start_s');
     $list = fn($v) => $v === null || $v === '' ? [] : explode(' · ', $v);
     $i = 0;
     while ($f = $files->fetchArray(SQLITE3_ASSOC)) {
+        if ($f['kind'] === '')                                                 // not listed by Search yet: its kind from its name
+            $f['kind'] = preg_match('/\.(jpe?g|png|heic|dng|tiff?)$/i', $f['path']) ? 'image' : (preg_match('/\.(wav|mp3|m4a|aiff?)$/i', $f['path']) ? 'audio' : 'video');
         $mo->bindValue(1, $f['path']); $r = $mo->execute(); $shots = []; $speech = []; $failed = 0;
         $rate = fps_exact($f['fps']); $mode = tc_mode($f['timecode'], $rate);
         while ($m = $r->fetchArray(SQLITE3_ASSOC)) {

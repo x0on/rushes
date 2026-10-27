@@ -3,6 +3,19 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.38 — October 2026
+
+Found by testing on the real Mac (20 stills on an external drive, with the archive share dropping):
+
+- **Describing says why it waits.** With the archive away, the descriptions have nowhere to go: describing now waits, says so on the folder's row and in the top bar ("VIDEO is not connected, and the descriptions are kept on it"), and carries on by itself when it is back. It used to start, fail at once, and say "loading the model" for half an hour. A run that stops with an error says the error on its row, and is tried again 5 minutes later instead of in a loop.
+- **Connect again**, on the Rushes app's Overview, when the archive's share has dropped: macOS opens it again with the password in its Keychain (or asks in its own window). Rushes never sees the password. Rushes does not disconnect shares; macOS does not reconnect them by itself.
+- **Photos are counted.** A folder of photos said "0 videos · 0 GB" and "describing · 0 of 0"; it says "20 photos or sound files", and no count while the model loads.
+- **Export descriptions includes files Search has not listed yet** (a folder just added): it found 0 clips in a folder of 20 described stills.
+- **Start on this one now** no longer says "its previews start" for a folder described without previews.
+- **No Dutch angle from the model's horizon.** On a third run of the stills it drew a tilted line along a cart path on a level frame. It comes back measured from the pixels.
+
+Changes the helper's code (`analyze.py`, `ingest.py`): signed again.
+
 ## 0.13.37 — October 2026
 
 - **Composition is only what is measured.** The model is no longer asked what it "sees" (silhouette, symmetry, leading lines, a low angle…): in two runs on the same 20 stills it said silhouette on 12 and leading lines on 11, and changed its answers from one run to the next. Search, a shot's Details and Export descriptions keep only the tags worked out from the marks (thirds, golden, centred, horizon, diagonals, space, negative space, fill the frame). Silhouette and symmetry can come back later, measured from the pixels.

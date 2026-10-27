@@ -2265,7 +2265,7 @@ async function listAct(action, folder, b, sure) {
       : action === 'withpreview' ? 'Asked ✓ ' + folder + ' gets its previews first again, then describing.'
       : action === 'again' ? 'Asked ✓ ' + folder + ' is described again in its place on the list: only the files described with an older version: each gets its composition (from the stills already saved, quick), and files described before moments inside long takes are described again whole; the rest are kept.'
       : action === 'first' ? 'Starting ✓ ' + folder + ' is first. ' + (r.stopped ? 'The proxies of ' + r.stopped + ' stop now (the ones finished are kept) and carry on by themselves once these are made. ' : '') +
-          'Its previews start within a minute; then describing steps aside for it between two files, and goes back to where it was after.'
+          (r.nopreview ? 'It needs no previews: describing' : 'Its previews start within a minute; then describing') + ' steps aside for it between two files, and goes back to where it was after.'
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
          up: 'Moved up ✓ ' + folder, down: 'Moved down ✓ ' + folder,
          retry: 'Trying again ✓ ' + folder + ' — in its place in the list, only what is missing: proxies not made, files not described.',
@@ -2300,7 +2300,8 @@ function drawPrepare(rows, a) {
   const ds = function (d, r) {
     const off = a.helper_fresh === false && ['queued', 'next', 'describing'].includes(d.step)
       ? ' · <span class="bad">the helper Mac is off or asleep, so this waits</span>' : '';
-    return (d.step === 'describing' ? '<span class="busy">describing · ' + n(d.n) + ' of ' + n(d.of) + '</span>' +
+    return (d.step === 'blocked' ? '<span class="bad">describing waits</span><div class="note">' + esc(d.why) + '</div>'
+      : d.step === 'describing' ? '<span class="busy">describing' + (d.of ? ' · ' + n(d.n) + ' of ' + n(d.of) : '') + '</span>' +
         '<div class="note">' + (d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' : 'looking at ') +
         (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + (r.proxies.step === 'skipped' ? ' — from the originals (no previews for this folder)</div>' : ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>')
       : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
@@ -2386,7 +2387,7 @@ function drawPrepare(rows, a) {
               return '<li>' + (c.change === 'missing' ? '<span class="bad">missing</span> ' : '<span class="ok">new</span> ') + esc(c.rel) + ' <span class="note">' + gb(c.bytes) + '</span></li>'; }).join('') + '</ul>' +
             '<span class="note">Missing: there at the reading before, not there now (moved or deleted outside Rushes, or Removed). Rushes changed nothing.</span>') + '</div></td></tr>' : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
-        n(p.videos) + ' videos · ' + gb(p.bytes) + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + readSaid + chg + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
+        (p.videos || !p.media ? n(p.videos) + ' videos · ' + gb(p.bytes) : n(p.media) + ' photos or sound files') + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + readSaid + chg + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
         '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + chgList + fails;
     }).join('') + '</table>';
   const ps = document.getElementById('pxSaid');

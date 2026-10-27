@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $c['by'] = 'first'; $c['at'] = time();
         if (!helper_control_save($c)) bail(500, 'Could not tell the helper — is the web folder writable?');
         prepare_advance();
-        out(['ok' => 'first', 'folder' => $rel, 'stopped' => $stopped]);
+        out(['ok' => 'first', 'folder' => $rel, 'stopped' => $stopped, 'nopreview' => isset(prepare_nopreview()[$rel])]);
     }
     // Describe again: a folder described with an older version of describing (before the composition, or before moments inside long takes)
     // is described again, only the files described with an older version, in its place on the list. Never by

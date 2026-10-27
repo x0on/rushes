@@ -82,18 +82,20 @@ SQL
 call SQL "$(cat "$ROOT/q.sql")" >/dev/null
 SIGNED=1 call GET '{"what":"moments"}' "{}" db/export.php >/dev/null     # makes the moments table
 call SQL "INSERT INTO moments (fp,path,kind,shot,start_s,end_s,what,tags,themes,comp) VALUES ('f1','$A/Meadow Park/a.mov','shot',0,0,60,'a picnic shelter','people · table','Parks','{\"tags\":[\"centered\"]}'),
-  ('f1','$A/Meadow Park/a.mov','shot',1,60,180,'a field',NULL,NULL,NULL),('f2','$A/Meadow Park/Shoot 1/b.mp4','speech',NULL,1.5,3,'hello',NULL,NULL,NULL)" >/dev/null
+  ('f1','$A/Meadow Park/a.mov','shot',1,60,180,'a field',NULL,NULL,NULL),('f2','$A/Meadow Park/Shoot 1/b.mp4','speech',NULL,1.5,3,'hello',NULL,NULL,NULL),
+  ('f3','$A/Meadow Park/new.jpg','shot',0,0,0,'a kite',NULL,NULL,NULL)" >/dev/null
 SIGNED=1 call GET "{\"what\":\"folder\",\"path\":\"$A/Meadow Park\"}" "{}" db/export.php > "$ROOT/x.json"
 check 'python3 - "$ROOT/x.json" "$A" <<PY
 import json,sys; d=json.load(open(sys.argv[1])); A=sys.argv[2]; f={x["path"]:x for x in d["files"]}
-assert d["clips"]==3 and sorted(f)==[A+"/Meadow Park/Shoot 1/b.mp4",A+"/Meadow Park/a.mov",A+"/Meadow Park/d.mov"], sorted(f)
+assert d["clips"]==4 and sorted(f)==[A+"/Meadow Park/Shoot 1/b.mp4",A+"/Meadow Park/a.mov",A+"/Meadow Park/d.mov",A+"/Meadow Park/new.jpg"], sorted(f)
+n=f[A+"/Meadow Park/new.jpg"]; assert n["kind"]=="image" and n["described"] and n["shots"][0]["description"]=="a kite", n
 a=f[A+"/Meadow Park/a.mov"]; s=a["shots"]
 assert a["fps"]=="60000/1001" and a["timecode_mode"]=="DF" and a["described"] and s[0]["tags"]==["people","table"], a
 assert s[0]["composition"]=={"tags":["centered"]} and "composition" not in s[1], s
 assert s[1]["start_s"]==60 and s[1]["start_tc"]=="01:00:59;56" and s[0]["start_tc"]=="01:00:00;00", s
 b=f[A+"/Meadow Park/Shoot 1/b.mp4"]; assert b["fps"]=="25/1" and b["timecode_mode"]=="NDF" and b["speech"][0]["start_tc"]=="00:00:01:13"
 assert f[A+"/Meadow Park/d.mov"]["described"] is False
-PY' 'a folder exports as JSON: its clips and folders inside, not the folder beside it; seconds, exact rate, DF timecode, not described yet marked'
+PY' 'a folder exports as JSON: its clips and folders inside, not the folder beside it; seconds, exact rate, DF timecode, not described yet marked; a described file Search has not listed yet too'
 check 'SIGNED=1 call GET "{\"what\":\"folder\",\"path\":\"/etc\"}" "{}" db/export.php | grep -q "Pick a folder"' 'and only a folder Rushes knows'
 call SQL "DELETE FROM media WHERE file_id > 900; DELETE FROM files WHERE id > 900; DELETE FROM moments" >/dev/null
 

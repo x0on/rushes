@@ -119,6 +119,18 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(got["items"][-1], {"label": "Quit Rushes", "do": "quit"})
 
 
+class ShareTests(unittest.TestCase):
+    def test_connect_again_knows_the_share_an_archive_was_on(self):
+        with tempfile.TemporaryDirectory() as home:
+            m = front("Rushes", Path(home))
+            out = ("//alex@files.example.org/Media$ on /Volumes/Media$ (smbfs, nodev, nosuid, mounted by alex)\n"
+                   "/dev/disk4s1 on /Volumes/Card (exfat, local, nodev)\n")
+            with patch.object(m.subprocess, "run", return_value=type("R", (), {"stdout": out})()):
+                self.assertEqual(m.share_of("/Volumes/Media$/VIDEOS"), "smb://alex@files.example.org/Media$")
+                self.assertEqual(m.share_of("/Volumes/Card/A"), "")         # a drive: plugged in again by hand
+                self.assertEqual(m.share_of("/Volumes/Media"), "")          # a name that only starts the same
+
+
 class InstallWindowTests(unittest.TestCase):
     def test_each_step_says_what_it_is_doing_and_all_set_knows_rushes_is_on_this_mac(self):
         m = front("Rushes", Path(tempfile.mkdtemp()))

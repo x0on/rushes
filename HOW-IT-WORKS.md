@@ -943,8 +943,8 @@ video, the cuts and the sound come from its proxy when there is one.
    the marks against the guides (thirds, phi grid, centre, diagonals, the 45° method, golden
    triangles, dynamic symmetry), within 5% of the frame's short side. A subject's centre counts left
    to right only; eyes against the points first; horizon and lines against guides of the same angle.
-   Golden counts only when closer than the thirds. Horizon: level within 2°, Dutch beyond 5° and only across at
-   least half the frame. Rule of space or short-sided from the way the subject faces and the room on
+   Golden counts only when closer than the thirds. Horizon: level within 2°; no Dutch angle (the model drew tilted lines on level
+   frames; it comes back measured from the pixels). Rule of space or short-sided from the way the subject faces and the room on
    each side, when the two differ by more than 5% of the width (a centred subject gets neither); negative space when
    the subject is under a tenth of the frame and the rest is at least 75% plain (no edges); fill the
    frame above 60%. Kept per shot as `composition`: `marks`, `tags` and `lit` (which mark
@@ -959,6 +959,18 @@ A file of version 3 only gets its composition, from the stills already saved bes
 description: the video is not opened and its description is kept. Older ones are described whole.
 Rushes never does it by itself: a folder described before keeps its descriptions, and its row says
 how many are of an older version.
+
+**When describing cannot go on, its row says why** (and the top bar: "Describing waits"), never the
+last thing it was doing:
+
+- **The archive is away** (a share that dropped): the descriptions are kept on it, so nothing can be
+  written. Describing waits ("VIDEO is not connected, and the descriptions are kept on it") and carries
+  on by itself when it is back. Before 0.13.38 it started, failed at once, and the row said "loading
+  the model" for half an hour.
+- **A run stopped with an error**: the error's own last line is said on the row, and the folder is
+  tried again 5 minutes later (not straight away, loading the model every few seconds).
+
+A folder of photos says how many ("20 photos or sound files"), not "0 videos".
 
 **What it writes:** one description per file in `_rushes/analysis/`. It is
 named by a fingerprint of the file's content (its size plus first and last 4 MB),
@@ -1644,6 +1656,8 @@ catalogue, so it takes seconds:
 - per shot: `start_s`, `end_s` (the exact values: frame = round(seconds × fps)), `start_tc`, `end_tc`
   (for reading: from the clip's own timecode, or 00:00:00:00), `description`, `tags`, `themes`,
   `text_on_screen`, `shot_size`, `people`, `mood`; per line of speech, its times, text and language.
+- a file described but not yet listed by Search (a folder just added) comes out too, from its
+  description: its kind from its name, without a duration or frame rate.
 
 The page counts the clips as they arrive ("N of M clips"), then offers a save window where the
 browser has one (Chrome, Edge), else saves to Downloads. Nothing is written on the drive.
@@ -2028,6 +2042,15 @@ off, and a backup onto the old one replaces any other (both said).
 **In the code:** `db/backup.php` (`make_archive`, `source` with `how`),
 `db/admin.php` (`mkPanel()`, `drawDrives()`), `runner.py`
 (`build_manifest(moved)`), `db/sync.php`, `ingest.py` (`follow_archive()`).
+
+### Connect again (a share that dropped)
+
+macOS does not connect a network share again by itself when it drops (the Mac asleep, Wi-Fi or a VPN
+changing, the server closing idle connections). While the archive is on a share, the Rushes app notes
+which one, from the list of mounts (`share_of()` in `rushes_helper.py`, kept in `shares.json`). When it
+is away, Overview shows **Connect again**: macOS opens the share itself (`open smb://…`), with the
+password saved in its Keychain, or asks for it in its own window. Rushes never sees a password.
+Rushes carries on by itself once the archive is back. Rushes never unmounts or ejects anything.
 
 ### Drives that come and go
 

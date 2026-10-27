@@ -111,6 +111,10 @@ check($found(['shot' => 'wide']) === 1 && $found(['shot' => 'close']) === 0 && $
       && $found(['shot' => 'wide', 'light' => 'night']) === 0 && $found(['mood' => 'calm']) === 1,
       'filters by what is in the footage: shot size, people, light and mood, with or without words');
 check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
+require_once "$root/app/db/prepare.php";
+file_put_contents(web_dir() . '/describe-status.tsv', "ts\t" . time() . "\nphase\tblocked\nsource\t/Volumes/Drive/A\nnote\tVIDEO is not connected\n");
+check((describing_blocked()['note'] ?? '') === 'VIDEO is not connected' && !describing_now(), 'describing that cannot go on says why, and is not said to be running');
+@unlink(web_dir() . '/describe-status.tsv');
 touch(web_dir() . '/describe-status.tsv', time() - 3600);    // describing ended an hour ago
 check((analysis_import()['state'] ?? '') === 'quiet', 'idle: the descriptions folder on VIDEO is not looked through');
 require_once "$root/app/db/prepare.php";

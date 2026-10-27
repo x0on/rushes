@@ -108,7 +108,6 @@ Keys:
 Mark only what you can see."""
 # ponytail: nothing is "judged" by the model (silhouette, symmetry, leading lines…): in two runs on 20 stills
 # it said them on most frames, and differently each time (0.13.37). Measure them from the pixels later.
-SPAN = 0.5           # a horizon says Dutch angle only across at least half the frame (a short one was a table edge)
 ROOM = 0.05          # rule of space or short-sided only when the room ahead and behind differ by more than this
 
 
@@ -539,7 +538,8 @@ def lens(m, W, H, plain=None, tol=TOL):
         t = abs(math.degrees(math.atan2((b["y"] - a["y"]) * H, (b["x"] - a["x"]) * W)))
         t = min(t, 180 - t)
         if t <= 2: add("level_horizon")
-        elif t > 5 and abs(b["x"] - a["x"]) >= SPAN: add("dutch_angle")
+        # ponytail: no Dutch angle from the model's line: three runs on 20 stills drew tilted lines on level
+        # frames (a cart path, a table edge). Back when the horizon is measured from the pixels.
     for l in m.get("lines", []):
         dx, dy = (l["b"]["x"] - l["a"]["x"]) * W, (l["b"]["y"] - l["a"]["y"]) * H
         deg = abs(math.degrees(math.atan2(dy, dx))) % 180; slope = 180 - deg if deg > 90 else deg
@@ -893,8 +893,7 @@ def selftest():
         (dict(subject=B(.33, .12, .62, 1), eyes=P(.44, .25)), "centered diagonal_method"),
         ({}, "")]:
         assert sorted(lens(m, 768, 432)[0]) == sorted(want.split()), (m, lens(m, 768, 432))
-    assert "dutch_angle" in lens({"horizon": H(0, .4, 1, .6)}, 768, 432)[0]
-    assert "dutch_angle" not in lens({"horizon": H(.6, .33, 1, .05)}, 768, 432)[0], "a short tilted line is not a Dutch angle"
+    assert not {"dutch_angle", "level_horizon"} & set(lens({"horizon": H(0, .4, 1, .6)}, 768, 432)[0]), "a tilted line: no Dutch angle from the model"
     assert not {"rule_of_space", "short_sided"} & set(lens({"subject": B(.418, .2, .593, 1), "facing": "right"}, 768, 432)[0]), "centred: no space tag"
     assert _anchors_from({"subject": {"what": "a few words", "box": [0, 0, 500, 500]}})["what"] == ""
     assert "{{" not in COMPOSE and "judged" not in COMPOSE, "the composition question is sent as written"

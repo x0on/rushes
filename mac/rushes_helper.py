@@ -97,6 +97,24 @@ def worklog():
 PORT = 8642
 
 
+def share_of(path):
+    """The network share a folder is on, as macOS can open it again ("smb://user@server/Share"), from the
+    list of mounts (which asks no share anything); "" for a folder on this Mac or on a drive."""
+    try:
+        out = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    best = ("", "")
+    for line in out.splitlines():           # "//user@server/Share on /Volumes/Share (smbfs, nodev, …)"
+        m = re.match(r"(//\S+) on (.+?) \((smbfs|afpfs|nfs)", line)
+        if m and (path == m.group(2) or path.startswith(m.group(2).rstrip("/") + "/")) and len(m.group(2)) > len(best[1]):
+            best = (("afp:" if m.group(3) == "afpfs" else "nfs:" if m.group(3) == "nfs" else "smb:") + m.group(1), m.group(2))
+    return best[0]
+
+
+SHARES = os.path.join(WEB, "shares.json")     # the share each archive was on, kept while it is away, for Connect again
+
+
 def log(msg):
     line = time.strftime("%Y-%m-%d %H:%M:%S  ") + msg
     print(line)
@@ -739,6 +757,20 @@ class Window:
             c["archive"] = (read_json(os.path.join(WEB, "settings.json")).get("archive") or {}).get("local") or c["archive"]
             h["local"] = {"archive": c["archive"], "others": bool(c.get("others")), "port": c.get("port") or PORT,
                           "there": os.path.isdir(c["archive"]), "name": local_name()}
+            # The share it is on, noted while it is there (once a minute at most), so that when it drops
+            # (a Mac asleep, Wi-Fi, the server) Connect again can ask macOS to open it again.
+            known = read_json(SHARES)
+            if h["local"]["there"] and time.time() - getattr(self, "_share_at", 0) > 60:
+                self._share_at = time.time()
+                url = share_of(c["archive"])
+                if url and known.get(c["archive"]) != url:
+                    known[c["archive"]] = url
+                    try:
+                        with open(SHARES, "w") as f: json.dump(known, f)
+                    except OSError:
+                        pass
+            if not h["local"]["there"] and known.get(c["archive"]):
+                h["local"]["reconnect"] = known[c["archive"]]
         try:
             with open(STOPPED) as f:
                 h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
@@ -884,6 +916,17 @@ class Window:
             self.set(step="remove")
         elif do == "remove-yes":
             remove_service(); self.set(step="removed")
+        elif do == "reconnect":
+            # macOS opens the share itself, with the password saved in the Keychain (or asks for it in its
+            # own window): Rushes never sees a password. Rushes carries on by itself once it is back.
+            url = read_json(SHARES).get((local() or {}).get("archive", ""), "")
+            if url:
+                subprocess.Popen(["open", url])
+                log(f"Connect again: asked macOS to open {url}")
+                self.set(said="Asked ✓ macOS is connecting to " + url + ". If it asks for a password, that is macOS asking, not Rushes. "
+                              "Rushes carries on by itself once the archive is there (within a minute).")
+            else:
+                self.set(said="Rushes does not know which share the archive was on: connect it in Finder (Go → Connect to Server).")
         elif do == "try-again":
             try: os.remove(STOPPED)
             except OSError: pass
@@ -1380,7 +1423,8 @@ function home(s) {
     : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work. Work turns it back on.'
     : '<span class="dot ok"></span><b>Rushes is running</b>';
-  const where = L ? 'Archive: ' + esc(base(L.archive)) + (L.there ? '' : ' — <b>not plugged in</b>: Search still shows its files, marked not plugged in')
+  const where = L ? 'Archive: ' + esc(base(L.archive)) + (L.there ? '' : ' — <b>not plugged in</b>: Search still shows its files, marked not plugged in' +
+      (L.reconnect ? '<div style="margin-top:8px">' + btn('Connect again', 'reconnect', true, !!s.busy) + '</div>' : ''))
     : 'Connected to Rushes at ' + esc(s.url);
   const now = !on ? '<span class="muted">Nothing, while Rushes is stopped.</span>'
     : s.rushes === null ? '<span class="spin"></span>Asking Rushes …'

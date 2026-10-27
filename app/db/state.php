@@ -560,6 +560,8 @@ $happening = (function () use ($WEB, $running, $running_said, $progress, $mac, $
     $d = describing_now();
     if ($d) $h[] = $one('describe', 'Describing', trim(($d['label'] ?? basename((string)($d['source'] ?? ''))) . (!empty($d['of']) ? ' · ' . (int)($d['n'] ?? 0) . ' of ' . (int)$d['of'] : '')
                      . (!empty($d['file']) ? ' · now: ' . basename((string)$d['file']) : (($d['step'] ?? '') !== '' ? ' · ' . $d['step'] : ''))), !empty($d['of']) ? (int)(100 * (int)($d['n'] ?? 0) / max(1, (int)$d['of'])) : null, '/db/admin.php#describe');
+    elseif ($b = describing_blocked())
+        $h[] = $one('describe', 'Describing waits', trim(($b['label'] ?? '') . ' · ' . ($b['note'] ?? ''), ' ·'), null, '/db/admin.php#describe');
     else {
         $q = count(array_filter(@file("$WEB/ingest-queue.tsv") ?: [], fn($l) => str_starts_with($l, "analyze\t")));
         if ($q) $h[] = $one('describe', 'Describing', $q . ' folder' . ($q === 1 ? '' : 's') . ' with previews ready · starts beside any copying', null, '/db/admin.php#describe');

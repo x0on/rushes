@@ -31,7 +31,8 @@ How it avoids reading 40 TB to answer "do we already have this?":
 Same shape as everything else: preview, look, apply, log, undo.
 """
 
-import argparse, errno, hashlib, json, os, platform, re, shutil, signal, socket, subprocess, sys, threading, time, unicodedata
+import argparse
+import collections, errno, hashlib, json, os, platform, re, shutil, signal, socket, subprocess, sys, threading, time, unicodedata
 import importlib.util, urllib.parse, urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -3245,6 +3246,20 @@ def describe_lane(every=20):
                 time.sleep(every); continue
             first = control().get("first") or ""
             todo.sort(key=lambda j: j[0] != first)      # Start on this one now (Manage → Describe): it goes first
+            # The descriptions are kept on the archive: away (a share that dropped), nothing can be written,
+            # so describing waits, says so on the folder's row, and carries on by itself when it is back.
+            try:
+                store_ok = within("describe", 30, lambda: os.path.isdir(NAS_MOUNT))
+            except Stalled:
+                store_ok = False
+            if not store_ok:
+                if said != "nostore":
+                    arch = os.path.basename(NAS_MOUNT.rstrip("/")) or NAS_MOUNT
+                    print(f"  describing waits: {arch} is not connected, and the descriptions are kept on it")
+                    status(phase="blocked", source=todo[0][0], label=os.path.basename(todo[0][0].rstrip("/")),
+                           note=f"{arch} is not connected, and the descriptions are kept on it: describing carries on by itself when it is back")
+                    said = "nostore"
+                time.sleep(every); continue
             path, asked = todo[0]; said = ""
             print(f"\n=== describing {path} (vision model and speech), beside the copies ===")
             _describing.set()
@@ -3253,6 +3268,11 @@ def describe_lane(every=20):
                 rc = describe_folder(path, asked)
                 if rc == 0:
                     _mark_done(key)
+                elif rc == 4:
+                    # It stopped with an error before finishing (said on its row): tried again in 5 minutes,
+                    # not straight away in a loop that loads the model every few seconds.
+                    tries[key] = [tries.get(key, [0, 0])[0], time.time() + 300]
+                    _describe_tries(tries)
                 elif rc == 3:
                     # Some files could not be described. Only those are tried again
                     # (the rest are kept), half an hour later, up to three times in all.
@@ -3306,6 +3326,7 @@ def describe_folder(path, asked=""):
         cmd = ["caffeinate", "-i"] + cmd
     status(phase="analysing", source=path, label=name, step="loading the model")
     t0, done, stopped = time.time(), {}, ""
+    tail = collections.deque(maxlen=30)          # its last words, to say why if it stops with an error
     last = dict(phase="analysing", source=path, label=name, step="loading the model")
     # Its own process group: caffeinate and the analysis under it are held, carried on
     # and stopped together.
@@ -3346,6 +3367,7 @@ def describe_folder(path, asked=""):
             status(**last)
         else:
             print(line.rstrip(), flush=True)
+            if line.strip(): tail.append(line.strip())
         c = control()                         # Pause describing stops it between lines; a file part-done is redone
         first = c.get("first") or ""
         first_ready = _first_waiting(path, first)
@@ -3370,6 +3392,13 @@ def describe_folder(path, asked=""):
                                   f"{done.get('older', 0)} described with an older version" if done.get("older") else "") if x))
     if rc == 0 and done:
         return 3 if done.get("failed") else 0     # 3: finished, but some files could not be described
+    if rc != 0 and not done:
+        # Stopped with an error before finishing: said on the folder's row, not "loading the model"
+        # for half an hour. The last line that names an error, in its own words.
+        why = next((l for l in reversed(tail) if "Error" in l or "error:" in l), tail[-1] if tail else f"exit code {rc}")
+        print(f"  describing stopped with an error: {why} — tried again in 5 minutes")
+        status(phase="blocked", source=path, label=name, note=f"stopped with an error: {why[:240]} — tried again in 5 minutes")
+        return 4
     return 1
 
 
@@ -3825,6 +3854,19 @@ def selftest():
         DONE.write_text(""); _first_seen[:] = [0, False]; _first_missing.add("/D/Gala")
         assert not _first_waiting("/P/Parks", "/D/Gala"), "its drive unplugged: never stepped aside for"
     DONE, _describe_jobs[:] = keep_done, keep_jobs; _first_seen[:] = [0, False]; _first_missing.clear()
+    # describing that stops with an error says why on its row (it said "loading the model" for half an hour)
+    global status, analysis_tools, history
+    keep3 = status, analysis_tools, history
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            fake = os.path.join(td, "py.sh")
+            open(fake, "w").write("#!/bin/sh\necho 'PermissionError: [Errno 13] Permission denied: /Volumes/Share'\nexit 1\n")
+            os.chmod(fake, 0o755)
+            said = []
+            status, analysis_tools, history = (lambda **k: said.append(k)), (lambda: (fake, "m", "")), (lambda *a, **k: None)
+            assert describe_folder(td) == 4 and said[-1]["phase"] == "blocked" and "PermissionError" in said[-1]["note"], said[-1:]
+    finally:
+        status, analysis_tools, history = keep3
     print("all checks pass")
 
 

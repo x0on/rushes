@@ -377,12 +377,20 @@ function describing_now(): array {
     return [];
 }
 
+// Describing that cannot go on, and why, in the helper's words (the archive away, or a run stopped with an
+// error): said on the folder's row and in the top bar, instead of the last thing it was doing.
+function describing_blocked(): array {
+    $s = [];
+    foreach (@file(web_dir() . '/describe-status.tsv') ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }
+    return (($s['phase'] ?? '') === 'blocked' && isset($s['ts']) && time() - (int)$s['ts'] < 1800) ? $s : [];
+}
+
 // Where each prepared folder stands, step by step. The one source of truth for
 // both the page and prepare_advance, so they can never disagree.
 function prepare_table(bool $look = false): array {
     require_once __DIR__ . '/folders.php';
     $h = rtrim(helper_archive(), '/');
-    $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now(); $rate = proxy_rate();
+    $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now(); $dno = describing_blocked(); $rate = proxy_rate();
     $queue = array_map('rtrim', @file(web_dir() . '/ingest-queue.tsv') ?: []);
     $rows = [];
     foreach (prepare_list() as $rel => $asked) {
@@ -413,6 +421,8 @@ function prepare_table(bool $look = false): array {
         if ($dnow && ($dnow['source'] ?? '') === $path)
             $ds = ['step' => 'describing', 'n' => (int)($dnow['n'] ?? 0), 'of' => (int)($dnow['of'] ?? 0),
                    'file' => basename((string)($dnow['file'] ?? '')), 'doing' => (string)($dnow['step'] ?? '')];
+        elseif ($dno && ($dno['source'] ?? '') === $path)
+            $ds = ['step' => 'blocked', 'why' => (string)($dno['note'] ?? '')];
         elseif ($d && $d['asked'] === $asked)            // described for this very request
             $ds = ['step' => 'done'] + $d;
         elseif ($px['step'] === 'gone')
