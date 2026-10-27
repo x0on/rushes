@@ -972,6 +972,10 @@ last thing it was doing:
 
 A folder of photos says how many ("20 photos or sound files"), not "0 videos".
 
+With the archive itself not connected, its folders on the list say so ("VIDEOS is not connected") and
+wait; nothing on the list changes. "Not here any more" is only for a folder missing from a connected
+archive.
+
 **What it writes:** one description per file in `_rushes/analysis/`. It is
 named by a fingerprint of the file's content (its size plus first and last 4 MB),
 so it survives moves and renames. Next to it is one still per shot.

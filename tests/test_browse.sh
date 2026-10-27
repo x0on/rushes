@@ -113,6 +113,11 @@ T=$(curl -s -G -d pass=rushes "$U/db/analyze.php")
 grep -qx "VIDEOS/Parks/2024/Picnic	2" "$W/prepare.tsv" || no "found again: $(cat "$W/prepare.tsv")" ; ok "a folder moved earlier is found again from the moves written down, where its files went"
 echo "$T" | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["table"] if x["folder"]=="Kite"][0]; assert r["describe"]["step"]=="gone" and len(r["describe"]["at"])==2, r' \
   && ok "never by its name: a folder no move says went anywhere is said gone, the folders of that name only as hints" || no "kite: $(echo "$T" | head -c 400)"
+mv "$A" "$A.away"                                                              # the archive's share dropped
+T=$(curl -s -G -d pass=rushes "$U/db/analyze.php"); mv "$A.away" "$A"
+echo "$T" | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["table"] if x["folder"]=="Kite"][0]; assert r["proxies"]["step"]=="away" and r["describe"]["step"]=="away", r' \
+  && grep -qx "Kite	1" "$W/prepare.tsv" \
+  && ok "the archive not connected: its folders say so and wait, never 'not here any more', and the list is left as it is" || no "away: $(echo "$T" | head -c 400)"
 mkdir -p "$A/VIDEOS/Cache/Picnic Grill"; printf x > "$A/VIDEOS/Cache/Picnic Grill/a.wav"   # a cache's folder of that name: no videos
 printf 'VIDEOS/Cache/Picnic Grill\t3\n' > "$W/prepare.tsv"; rm -f "$W/prepare-gone.json" "$W/prepare-undo-names.done"
 printf '%s\tchanged\t\tDescribe list: Picnic Grill moved to VIDEOS/Cache/Picnic Grill, and the list follows it\n' "$(date '+%Y-%m-%d %H:%M:%S')" >> "$W/activity.tsv"

@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.40 — October 2026
+
+- **A disconnected archive's folders are not "gone".** With the archive's share dropped, every folder of it on the Describe list said "not here any more … Take it off the list". They now say "VIDEOS is not connected" and wait (Connect again, on the Rushes app's Overview); nothing on the list changes, and Rushes does not go looking for where they "moved". "Not here any more" is only for a folder that is really missing from a connected archive.
+
 ## 0.13.39 — October 2026
 
 - **The descriptions are kept on this Mac too, and describing no longer needs the archive to be there.** Describing writes to the Mac's own copy, then copies to the archive's `_rushes/analysis` whenever it is connected (after each folder, and every 10 minutes when idle); once a day anything newer on the archive comes back. Newest wins both ways, and nothing is ever deleted on either side. A share that drops at midnight no longer stops a night of describing, Search keeps showing stills while the archive is away, and the AI's work has a second copy. The first time, the archive's descriptions (a few GB) are copied to the Mac before anything is described, with its progress on the folder's row; it needs 20 GB free and says so if there is not. A helper on another computer keeps writing straight to the archive.

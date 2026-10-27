@@ -2294,6 +2294,7 @@ function drawPrepare(rows, a) {
       : p.step === 'no-room' ? '<span class="bad">not enough room on the archive: about ' + gb(p.need) + ' needed, ' + gb(p.free) + ' free</span> · free some space, then Try again'
       : p.step === 'no-ffmpeg' ? '<span class="bad">this machine cannot make video yet (no ffmpeg)</span>'
       : p.step === 'unplugged' ? '<span class="dim">its drive is not plugged in: it starts when it is</span>'
+      : p.step === 'away' ? '<span class="dim">' + esc(p.name) + ' is not connected</span>'
       : p.step === 'gone' ? '<span class="bad">not here any more</span>'
       : '<span class="dim">waiting its turn</span>';
   };
@@ -2308,13 +2309,14 @@ function drawPrepare(rows, a) {
           (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: Try again describes only those</div>' : '') + (d.note && /could not|speech failed/.test(d.note) ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '').replace(/;? ?\d+ described with an older version/, '')) + '</span>' : '') +
           (d.note && /(\d+) described with an older version/.test(d.note) ? '<div class="note">' + esc(/(\d+) described with an older version/.exec(d.note)[1]) + ' described with an older version: Describe again adds the composition (and moments inside long takes where missing)</div>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
+      : d.step === 'away' ? 'waits until ' + esc(d.name) + ' is connected again (Connect again, on the Rushes app\'s Overview); nothing about it is lost'
       : d.step === 'gone' ? 'it is not here any more, and the moves Rushes wrote down do not say where it went (it may have been moved in Finder). ' + (d.at && d.at.length ? 'Folders of this name, not taken by themselves: ' + esc(d.at.join(' · ')) + '. ' : '') + 'Take it off the list and add it where it is now.'
       : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
       : d.step === 'next' ? 'starting'
       : '<span class="dim">waiting for proxies</span>') + off;
   };
   const busy = function (r) { return r.proxies.step === 'making' || r.proxies.step === 'again' || ['describing', 'queued', 'next'].includes(r.describe.step); };
-  const doneRow = function (r) { return ['done', 'skipped'].includes(r.proxies.step) && r.describe.step === 'done'; };
+  const doneRow = function (r) { return ['done', 'skipped', 'away'].includes(r.proxies.step) && r.describe.step === 'done'; };
   // the whole list: how much proxy time is left, at the speed measured on this machine
   const open = rows.filter(function (r) { return !doneRow(r); });
   // honest: the folder being made from its own pace; the others a guess from earlier folders, said as one

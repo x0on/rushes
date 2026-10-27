@@ -210,6 +210,7 @@ function prepare_rename(array $moved, string $how = 'it was moved'): void {
 // its row says it is gone, with the folders of that name as a hint only. -> [old rel => [hints]]
 function prepare_find_moved(): array {
     $A = rtrim(archive_dir(), '/'); $h = rtrim(helper_archive(), '/');
+    if (!is_dir($A)) return [];                                   // the archive not connected: nothing is gone
     $gone = array_values(array_filter(array_keys(prepare_list()), fn($r) => $r !== '' && !str_starts_with($r, '/') && !is_dir("$A/$r")));
     if (!$gone) return [];
     // asked every few seconds while Describe is open: the records are read again only when they or the list change
@@ -393,6 +394,8 @@ function prepare_table(bool $look = false): array {
     $runs = proxy_runs(); $now = proxy_now(); $desc = described_runs(); $dnow = describing_now(); $dno = describing_blocked(); $rate = proxy_rate();
     $queue = array_map('rtrim', @file(web_dir() . '/ingest-queue.tsv') ?: []);
     $rows = [];
+    // the archive itself not connected (a share that dropped): its folders are away, not gone
+    $A = rtrim(archive_dir(), '/'); $away = !is_dir($A); $aname = settings()['archive']['label'] ?? basename($A);
     foreach (prepare_list() as $rel => $asked) {
         $run = $runs[$rel] ?? null;
         $mine = $run && $run['at'] >= $asked;                      // a run since it was asked for
@@ -414,7 +417,9 @@ function prepare_table(bool $look = false): array {
 
         if (isset(prepare_nopreview()[$rel]) && $px['step'] !== 'making')
             $px = ['step' => 'skipped'];                           // Describe without previews: the originals are read
-        if (!str_starts_with($rel, '/') && !is_dir(rtrim(archive_dir(), '/') . "/$rel"))   // moved away, and not found again
+        if (!str_starts_with($rel, '/') && $away)
+            $px = ['step' => 'away', 'name' => $aname];
+        elseif (!str_starts_with($rel, '/') && !is_dir("$A/$rel"))   // moved away, and not found again
             $px = ['step' => 'gone'];
         $path = str_starts_with($rel, '/') ? $rel : "$h/$rel";     // a kept drive's folder is where it is
         $d = $desc[$path] ?? null;
@@ -427,6 +432,8 @@ function prepare_table(bool $look = false): array {
             $ds = ['step' => 'done'] + $d;
         elseif ($px['step'] === 'gone')
             $ds = ['step' => 'gone'];
+        elseif ($px['step'] === 'away')
+            $ds = ['step' => 'away', 'name' => $aname];
         elseif (in_array("analyze\t$path\t$asked", $queue, true))
             $ds = ['step' => 'queued'];
         else
