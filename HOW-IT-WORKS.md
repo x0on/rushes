@@ -976,6 +976,24 @@ A folder of photos says how many ("20 photos or sound files"), not "0 videos".
 named by a fingerprint of the file's content (its size plus first and last 4 MB),
 so it survives moves and renames. Next to it is one still per shot.
 
+**Where the descriptions are kept** (0.13.39). On a Mac with Rushes on it (the helper built in),
+two copies:
+
+- **This Mac's**, in Rushes' own folder (`analysis`, beside its `web` folder). Describing writes
+  here, so a share that drops never stops it, and it always knows what is described already. Search
+  reads it first, stills included, so they show while the archive is away.
+- **The archive's**, `_rushes/analysis`: the copy that goes with the archive (and its backups), and
+  the one a Rushes on another computer starts from.
+
+The first time, the archive's descriptions are copied to the Mac before anything is described, so
+nothing is described twice; the folder's row says how far it has got ("copying the descriptions to
+this Mac first (once): 12,500 files looked at"). It needs 20 GB free on the Mac (it is a few GB); with
+less, describing waits and says so. After that (`store_sync()` in ingest.py): after each folder, and
+every 10 minutes while nothing is being described, what was written on the Mac goes to the archive
+when it is there; once a day, anything newer on the archive comes to the Mac. Newest wins, both ways;
+a file is copied whole beside its place and then put there, never half-written; **nothing is ever
+deleted** on either side. A helper on another computer writes straight to the archive's, as before.
+
 - Every place the same footage is seen is added to its description.
 - A file already described with the same vision model and question is skipped.
 - A file that cannot be read at all, or that fails part-way, is not written.

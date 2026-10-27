@@ -58,6 +58,21 @@ function word_pattern(string $word): string {
 }
 
 function analysis_dir(): string { return archive_dir() . '/_rushes/analysis'; }
+// This Mac's own copy of the descriptions (the helper built in writes there first, and copies them to the
+// archive when it is there: ingest.py store_sync). Read first; the archive's for anything it does not have.
+function analysis_local_dir(): string { return dirname(rtrim(web_dir(), '/')) . '/analysis'; }
+function analysis_files(): array {
+    $local = is_dir(analysis_local_dir()) ? (glob(analysis_local_dir() . '/*/*.json') ?: []) : [];
+    $have = array_flip(array_map('basename', $local));
+    foreach (glob(analysis_dir() . '/*/*.json') ?: [] as $f) if (!isset($have[basename($f)])) $local[] = $f;
+    return $local;
+}
+// One shot's still: from this Mac's copy, else the archive's ('' when neither has it)
+function analysis_still(string $fp, int $shot): string {
+    $rel = '/' . substr($fp, 0, 2) . "/$fp/" . sprintf('%04d', $shot) . '.jpg';
+    foreach ([analysis_local_dir(), analysis_dir()] as $d) if (is_readable($d . $rel)) return $d . $rel;
+    return '';
+}
 
 // The helper names files as it sees them; search shows them as this machine does.
 function as_here(string $p): string {
@@ -78,7 +93,7 @@ function analysis_import(): array {
         shot_size,people,ages,light,part_of_day,mood,language,model,hay,comp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $del = $db->prepare('DELETE FROM moments WHERE fp = ?');
     $db->exec('BEGIN');
-    foreach (glob(analysis_dir() . '/*/*.json') ?: [] as $f) {
+    foreach (analysis_files() as $f) {
         $t = (int)filemtime($f);
         if ($t < $since) continue;          // the newest second again too: a file written in it is never missed
         $r = json_decode((string)@file_get_contents($f), true);

@@ -3243,16 +3243,50 @@ def describe_lane(every=20):
             if not todo:
                 if said != "idle":
                     status(phase="idle", note="nothing to describe"); said = "idle"
+                # Described while the archive was away: copied to it once it is back (looked at every 10 minutes)
+                if LOCAL_STORE and store_seeded() and time.time() - _store_mark(".copied-to-archive") > 600:
+                    try:
+                        if within("describe", 30, lambda: os.path.isdir(NAS_MOUNT)):
+                            up, dn = store_sync(down=time.time() - _store_mark(".copied-from-archive") > 86400)
+                            if up or dn:
+                                print(f"  descriptions: {up:,} files copied to {os.path.basename(NAS_MOUNT.rstrip('/'))}" + (f", {dn:,} from it" if dn else ""))
+                    except (OSError, Stalled) as e:
+                        print(f"  descriptions not copied to the archive yet ({e}) — next time it is there")
                 time.sleep(every); continue
             first = control().get("first") or ""
             todo.sort(key=lambda j: j[0] != first)      # Start on this one now (Manage → Describe): it goes first
-            # The descriptions are kept on the archive: away (a share that dropped), nothing can be written,
-            # so describing waits, says so on the folder's row, and carries on by itself when it is back.
+            # Where the descriptions go: this Mac's copy (a Mac with Rushes on it), else the archive's. With no
+            # copy here yet, the archive's descriptions are copied here first (once, with progress), so
+            # nothing is described twice. The archive away and no copy here: describing waits and says so.
             try:
-                store_ok = within("describe", 30, lambda: os.path.isdir(NAS_MOUNT))
+                nas_ok = within("describe", 30, lambda: os.path.isdir(NAS_MOUNT))
             except Stalled:
-                store_ok = False
-            if not store_ok:
+                nas_ok = False
+            if nas_ok and not store_seeded():
+                arch = os.path.basename(NAS_MOUNT.rstrip("/")) or NAS_MOUNT
+                free = shutil.disk_usage(LOCAL_STORE.parent).free
+                if free < SEED_ROOM:
+                    if said != "noroom":
+                        note = (f"this Mac has {free >> 30} GB free: copying the descriptions from {arch} needs about "
+                                f"{SEED_ROOM >> 30} GB free first. Make room, and it starts by itself")
+                        print("  describing waits: " + note)
+                        status(phase="blocked", source=todo[0][0], label=os.path.basename(todo[0][0].rstrip("/")), note=note)
+                        said = "noroom"
+                    time.sleep(60); continue
+                print(f"\n=== copying the descriptions from {arch} to this Mac (once), so describing never needs {arch} to be there ===")
+                tell = lambda **k: status(phase="blocked", source=todo[0][0], label=os.path.basename(todo[0][0].rstrip("/")),
+                                          note=f"copying the descriptions from {arch} to this Mac first (once): {k['seen']:,} files looked at, {k['copied']:,} copied")
+                tell(seen=0, copied=0)
+                LOCAL_STORE.mkdir(parents=True, exist_ok=True)
+                if not _store_mark(".copied-to-archive"):       # nothing here yet that the archive lacks
+                    _store_mark(".copied-to-archive", time.time())
+                try:
+                    up, dn = store_sync(down=True, tell=tell)
+                    print(f"  copied {dn:,} files of descriptions to this Mac, and {up:,} to {arch}")
+                except (OSError, Stalled) as e:
+                    print(f"  the copy stopped ({e}) — it carries on where it was when {arch} is back")
+                said = ""; continue
+            if not nas_ok and not (LOCAL_STORE and store_seeded()):
                 if said != "nostore":
                     arch = os.path.basename(NAS_MOUNT.rstrip("/")) or NAS_MOUNT
                     print(f"  describing waits: {arch} is not connected, and the descriptions are kept on it")
@@ -3266,6 +3300,14 @@ def describe_lane(every=20):
             key = f"analyze {path}{' ' + asked if asked else ''}"
             try:
                 rc = describe_folder(path, asked)
+                if LOCAL_STORE and store_seeded():        # what it wrote here, to the archive when it is there
+                    try:
+                        if within("describe", 30, lambda: os.path.isdir(NAS_MOUNT)):
+                            up, dn = store_sync(down=time.time() - _store_mark(".copied-from-archive") > 86400)
+                            if up or dn:
+                                print(f"  descriptions: {up:,} files copied to {os.path.basename(NAS_MOUNT.rstrip('/'))}" + (f", {dn:,} from it" if dn else ""))
+                    except (OSError, Stalled) as e:
+                        print(f"  descriptions not copied to the archive yet ({e}) — next time it is there")
                 if rc == 0:
                     _mark_done(key)
                 elif rc == 4:
@@ -3308,6 +3350,80 @@ def preview_args(path):
     return ["--archive", NAS_MOUNT, "--proxies", os.path.join(NAS_MOUNT, "PROXIES")]
 
 
+# ── the descriptions: this Mac's copy, and the archive's ───────────────────
+# HOW-IT-WORKS.md → Describing footage → Where the descriptions are kept. On a Mac with Rushes on it
+# (the helper built in), describing writes to this Mac's own copy, beside Rushes' web folder, so a share
+# that drops never stops it, and copies them to the archive's _rushes/analysis whenever it is there.
+# Both ways, newest wins, nothing is ever deleted. The first time, the archive's descriptions are
+# copied here before anything is described, so nothing is described twice.
+NAS_STORE = Path(NAS_MOUNT) / "_rushes" / "analysis"
+_web = setting("archive.web") or ""
+LOCAL_STORE = Path(_web).parent / "analysis" if BUILT_IN and sys.platform == "darwin" and _web else None
+SEED_ROOM = 20 << 30             # the first copy needs this much free on the Mac (it is a few GB)
+
+
+def _store_mark(name, value=None):
+    f = LOCAL_STORE / name
+    if value is not None:
+        f.write_text(str(value)); return value
+    try: return float(f.read_text())
+    except (OSError, ValueError): return 0.0
+
+
+def store_seeded():
+    return LOCAL_STORE is None or _store_mark(".copied-from-archive") > 0
+
+
+def _copy_newer(src, dst):
+    """src over dst when dst is missing or older (by modification time, kept by the copy). True when copied."""
+    try:
+        st = src.stat()
+        try:
+            if dst.stat().st_mtime >= st.st_mtime - 1:
+                return False
+        except FileNotFoundError:
+            pass
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + ".copying")
+        shutil.copy2(src, tmp); os.replace(tmp, dst)          # never a half file where a description should be
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def store_sync(down=False, tell=lambda **k: None):
+    """Up: the descriptions written on this Mac since the last time, to the archive. Down (the first time,
+    then once a day): every description on the archive newer than this Mac's, to this Mac.
+    Returns (copied up, copied down). Raises OSError when the archive goes away part-way (carried on next time)."""
+    if LOCAL_STORE is None:
+        return 0, 0
+    LOCAL_STORE.mkdir(parents=True, exist_ok=True)
+    up = dn = seen = 0
+    if down:
+        t0 = time.time()
+        for top in sorted(within("store", 60, lambda: os.listdir(NAS_STORE)) if NAS_STORE.is_dir() else []):
+            for dirpath, dirs, files in os.walk(NAS_STORE / top):
+                rel = Path(dirpath).relative_to(NAS_STORE)
+                for f in files:
+                    if f.startswith(".") or f.endswith((".new", ".copying")):
+                        continue
+                    dn += within("store", 60, lambda: _copy_newer(Path(dirpath) / f, LOCAL_STORE / rel / f))
+                    seen += 1
+                    if seen % 500 == 0:
+                        tell(seen=seen, copied=dn)
+        _store_mark(".copied-from-archive", t0)
+    since, t0 = _store_mark(".copied-to-archive"), time.time()
+    for dirpath, dirs, files in os.walk(LOCAL_STORE):
+        rel = Path(dirpath).relative_to(LOCAL_STORE)
+        for f in files:
+            src = Path(dirpath) / f
+            if f.startswith(".") or f.endswith((".new", ".copying")) or src.stat().st_mtime < since - 5:
+                continue
+            up += within("store", 60, lambda: _copy_newer(src, NAS_STORE / rel / f))
+    _store_mark(".copied-to-archive", t0)
+    return up, dn
+
+
 def describe_folder(path, asked=""):
     py, model, whisper = analysis_tools()
     name = os.path.basename(path.rstrip("/")) or path
@@ -3317,7 +3433,7 @@ def describe_folder(path, asked=""):
         wait(300)
         return 2
     cmd = [py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), path,
-           "--store", os.path.join(NAS_MOUNT, "_rushes", "analysis"), "--url", NAS_URL,
+           "--store", str(LOCAL_STORE or NAS_STORE), "--url", NAS_URL,
            "--model", model, "--whisper", whisper,
            *preview_args(path)]
     if path in (control().get("again") or []):        # Describe again (Manage → Describe): files described with an older version, redone
@@ -3854,6 +3970,31 @@ def selftest():
         DONE.write_text(""); _first_seen[:] = [0, False]; _first_missing.add("/D/Gala")
         assert not _first_waiting("/P/Parks", "/D/Gala"), "its drive unplugged: never stepped aside for"
     DONE, _describe_jobs[:] = keep_done, keep_jobs; _first_seen[:] = [0, False]; _first_missing.clear()
+    # the descriptions on this Mac and on the archive: newest wins both ways, nothing deleted, only what changed goes up
+    global NAS_STORE, LOCAL_STORE
+    keep4 = NAS_STORE, LOCAL_STORE
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            NAS_STORE, LOCAL_STORE = Path(td) / "nas", Path(td) / "mac"
+            (NAS_STORE / "ab" / "abc").mkdir(parents=True)
+            (NAS_STORE / "ab" / "abc.json").write_text("old"); (NAS_STORE / "ab" / "abc" / "0000.jpg").write_text("jpg")
+            os.utime(NAS_STORE / "ab" / "abc.json", (1e9, 1e9))
+            assert not store_seeded()
+            seen = []
+            assert store_sync(down=True, tell=lambda **k: seen.append(k)) == (0, 2) and store_seeded()
+            assert (LOCAL_STORE / "ab" / "abc" / "0000.jpg").read_text() == "jpg", "the first copy brings the stills too"
+            (LOCAL_STORE / "cd").mkdir(); (LOCAL_STORE / "cd" / "cde.json").write_text("new here")
+            assert store_sync() == (1, 0) and (NAS_STORE / "cd" / "cde.json").read_text() == "new here", "described here: copied up"
+            assert store_sync() == (0, 0), "nothing changed: nothing copied"
+            (NAS_STORE / "ab" / "abc.json").write_text("newer there")
+            assert store_sync(down=True)[1] == 1 and (LOCAL_STORE / "ab" / "abc.json").read_text() == "newer there"
+            (LOCAL_STORE / "cd" / "cde.json").unlink()
+            store_sync(down=True)
+            assert (NAS_STORE / "cd" / "cde.json").exists(), "nothing is ever deleted on the archive"
+            assert not list(NAS_STORE.rglob("*.copying")) and not list(LOCAL_STORE.rglob("*.copying"))
+    finally:
+        NAS_STORE, LOCAL_STORE = keep4
+
     # describing that stops with an error says why on its row (it said "loading the model" for half an hour)
     global status, analysis_tools, history
     keep3 = status, analysis_tools, history

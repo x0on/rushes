@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.39 — October 2026
+
+- **The descriptions are kept on this Mac too, and describing no longer needs the archive to be there.** Describing writes to the Mac's own copy, then copies to the archive's `_rushes/analysis` whenever it is connected (after each folder, and every 10 minutes when idle); once a day anything newer on the archive comes back. Newest wins both ways, and nothing is ever deleted on either side. A share that drops at midnight no longer stops a night of describing, Search keeps showing stills while the archive is away, and the AI's work has a second copy. The first time, the archive's descriptions (a few GB) are copied to the Mac before anything is described, with its progress on the folder's row; it needs 20 GB free and says so if there is not. A helper on another computer keeps writing straight to the archive.
+
+Changes the helper's code (`ingest.py`): signed again.
+
 ## 0.13.38 — October 2026
 
 Found by testing on the real Mac (20 stills on an external drive, with the archive share dropping):

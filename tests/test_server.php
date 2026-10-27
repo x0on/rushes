@@ -111,6 +111,19 @@ check($found(['shot' => 'wide']) === 1 && $found(['shot' => 'close']) === 0 && $
       && $found(['shot' => 'wide', 'light' => 'night']) === 0 && $found(['mood' => 'calm']) === 1,
       'filters by what is in the footage: shot size, people, light and mood, with or without words');
 check(analysis_import()['described_files'] === 1, 'importing again reads only the newest, not everything');
+// This Mac's copy of the descriptions is read first; the archive's for what it does not have
+$loc = analysis_local_dir() . '/ab'; @mkdir("$loc/$fp", 0777, true);
+file_put_contents("$loc/$fp.json", json_encode(['fingerprint' => $fp, 'file' => "$root/archive/park/loop.mp4", 'seen_at' => ["$root/archive/park/loop.mp4"],
+    'model' => 'qwen', 'shots' => [['shot' => 0, 'start' => 0, 'end' => 7.6, 'description' => 'A kite over the meadow']]]));
+file_put_contents("$loc/$fp/0000.jpg", 'still here');
+meta_set('analysis_at', '0'); touch(web_dir() . '/describe-status.tsv');
+analysis_import();
+check(analysis_search('kite meadow')['count'] === 1 && analysis_search('water park')['count'] === 0
+      && analysis_search('silhouette')['count'] === 0 && file_get_contents(analysis_still($fp, 0)) === 'still here'
+      && count(analysis_files()) === 2,
+      "this Mac's copy of a description is read before the archive's, and its stills too; the archive's others still come in");
+array_map('unlink', ["$loc/$fp/0000.jpg", "$loc/$fp.json"]); @rmdir("$loc/$fp"); @rmdir($loc); @rmdir(analysis_local_dir());
+meta_set('analysis_at', '0'); touch(web_dir() . '/describe-status.tsv'); analysis_import();
 require_once "$root/app/db/prepare.php";
 file_put_contents(web_dir() . '/describe-status.tsv', "ts\t" . time() . "\nphase\tblocked\nsource\t/Volumes/Drive/A\nnote\tVIDEO is not connected\n");
 check((describing_blocked()['note'] ?? '') === 'VIDEO is not connected' && !describing_now(), 'describing that cannot go on says why, and is not said to be running');
