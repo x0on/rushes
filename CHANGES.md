@@ -3,8 +3,9 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
-## 0.13.40 — October 2026
+## 0.13.41 — October 2026
 
+- **A share that drops is connected again by itself.** When the archive's share drops (the Mac asleep, the network, the server), Rushes asks macOS to connect it again, every minute for ten minutes and then every five, with the password saved in the Keychain; Rushes never sees it. Each try is in the log and on the Rushes app's Overview ("connecting it again by itself: tried 3 times since 23:57"), and Activity says when it is back. A drop at midnight now costs a minute, not the night. Quit Rushes to keep a share disconnected on purpose.
 - **A disconnected archive's folders are not "gone".** With the archive's share dropped, every folder of it on the Describe list said "not here any more … Take it off the list". They now say "VIDEOS is not connected" and wait (Connect again, on the Rushes app's Overview); nothing on the list changes, and Rushes does not go looking for where they "moved". "Not here any more" is only for a folder that is really missing from a connected archive.
 
 ## 0.13.39 — October 2026

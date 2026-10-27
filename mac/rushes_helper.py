@@ -771,6 +771,11 @@ class Window:
                         pass
             if not h["local"]["there"] and known.get(c["archive"]):
                 h["local"]["reconnect"] = known[c["archive"]]
+            if not h["local"]["there"]:              # the runner connecting it again by itself (runner.py reconnect)
+                rc = read_json(os.path.join(WEB, "reconnect.json"))
+                if rc.get("tries"):
+                    h["local"]["reconnecting"] = {"tries": rc["tries"], "since": time.strftime("%H:%M", time.localtime(rc.get("since", 0))),
+                                                  "last": time.strftime("%H:%M", time.localtime(rc.get("last", 0))), "why": rc.get("why", "")}
         try:
             with open(STOPPED) as f:
                 h["stopped"] = f.read().partition("\n")[2].strip() or "a share stopped answering"
@@ -1423,7 +1428,10 @@ function home(s) {
     : s.stopped ? '<span class="dot warn"></span><b>Stopped by itself</b> — ' + esc(s.stopped) + '<div style="margin-top:8px">' + btn('Try again', 'try-again', true, !!s.busy) + '</div>'
     : s.paused ? '<span class="dot warn"></span><b>Paused</b> — running, but not starting any work. Work turns it back on.'
     : '<span class="dot ok"></span><b>Rushes is running</b>';
+  const R = L && L.reconnecting;
   const where = L ? 'Archive: ' + esc(base(L.archive)) + (L.there ? '' : ' — <b>not plugged in</b>: Search still shows its files, marked not plugged in' +
+      (R ? '<div style="margin-top:6px">Rushes is connecting it again by itself: tried ' + R.tries + ' time' + (R.tries === 1 ? '' : 's') + ' since ' + esc(R.since) +
+           ' (every minute, then every 5) · last at ' + esc(R.last) + ': ' + esc(R.why) + '</div>' : '') +
       (L.reconnect ? '<div style="margin-top:8px">' + btn('Connect again', 'reconnect', true, !!s.busy) + '</div>' : ''))
     : 'Connected to Rushes at ' + esc(s.url);
   const now = !on ? '<span class="muted">Nothing, while Rushes is stopped.</span>'

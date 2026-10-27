@@ -428,6 +428,13 @@ class Runner:
         here = "1" if a and archive_ok(a, self.web) else "0"
         try: was = open(self.p("archive-here.txt")).read().strip()
         except OSError: was = ""
+        if here == "0":
+            self.reconnect()                      # a share that dropped: macOS is asked to connect it again
+            a = self.arch(); here = "1" if a else "0"     # connected again just now: this minute carries on with it
+        elif getattr(self, "_rc", None) or os.path.exists(self.p("reconnect.json")):
+            self._rc = None                        # back by itself, or connected in Finder
+            try: os.remove(self.p("reconnect.json"))
+            except OSError: pass
         if was != here:
             self.write("archive-here.txt", here + "\n")
             if was:
@@ -495,20 +502,76 @@ class Runner:
         if time.time() - getattr(self, "_mounts_at", 0) < every:
             return
         self._mounts_at = time.time()
-        kinds = {}
+        kinds, specs = {}, {}
         try:
             out = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout
             for line in out.splitlines():      # "//u@srv/Share on /Volumes/Share (smbfs, …)" or "… on /mnt/x type nfs (…)"
-                m = re.match(r".+? on (.+?) (?:\((\w+)|type (\S+))", line)
-                if m: kinds[m.group(1)] = m.group(2) or m.group(3)
+                m = re.match(r"(.+?) on (.+?) (?:\((\w+)|type (\S+))", line)
+                if m: kinds[m.group(2)] = m.group(3) or m.group(4); specs[m.group(2)] = m.group(1)
         except (OSError, subprocess.SubprocessError):
             pass
+        self.share_noted(kinds, specs)
         said = {}
         for m in mounts():
             fs = kinds.get(m, "")
             total, free = space(m, quiet=True)
             said[m] = {"fs": fs, "net": fs in NET_FS, "total": total, "free": free}
         self.write("mounts.json", json.dumps({"at": int(time.time()), "mounts": said}))
+
+    def share_noted(self, kinds, specs):
+        """The network share the archive is on, while it is there (shares.json: archive → "smb://user@server/Share"),
+        so that when it drops, Rushes can ask macOS to connect it again (reconnect)."""
+        arch = ((self.settings().get("archive") or {}).get("local") or "").rstrip("/")
+        best = ""
+        for mp, fs in kinds.items():
+            if fs in ("smbfs", "afpfs") and specs.get(mp, "").startswith("//") and (arch == mp or arch.startswith(mp.rstrip("/") + "/")) and len(mp) > len(best):
+                best = mp
+        if not best:
+            return
+        url = ("afp:" if kinds[best] == "afpfs" else "smb:") + specs[best]
+        try:
+            with open(self.p("shares.json")) as f: known = json.load(f)
+        except (OSError, ValueError):
+            known = {}
+        if known.get(arch) != url:
+            known[arch] = url
+            self.write("shares.json", json.dumps(known))
+
+    def reconnect(self):
+        """The archive's share dropped (the Mac asleep, the network, the server): ask macOS to connect it again,
+        with the password saved in its Keychain. Rushes never sees the password. Every minute for ten minutes,
+        then every five; each try said in the log, and on the Rushes app's Overview (reconnect.json)."""
+        arch = ((self.settings().get("archive") or {}).get("local") or "").rstrip("/")
+        try:
+            with open(self.p("shares.json")) as f: url = json.load(f).get(arch, "")
+        except (OSError, ValueError):
+            url = ""
+        if not arch or not url or '"' in url or "\\" in url or not shutil.which("osascript"):
+            return
+        st = getattr(self, "_rc", None) or {"since": int(time.time()), "tries": 0, "last": 0}
+        self._rc = st
+        if time.time() - st["last"] < (60 if st["tries"] < 10 else 300) - 5:
+            return
+        st["tries"] += 1; st["last"] = int(time.time())
+        name = os.path.basename(arch) or arch
+        try:
+            # mount volume: macOS's own way to connect a share, as Finder does, with the Keychain's password
+            r = subprocess.run(["osascript", "-e", f'mount volume "{url}"'], capture_output=True, text=True, timeout=60)
+            why = ((r.stderr or r.stdout).strip().splitlines() or [""])[-1] if r.returncode else ""
+        except (OSError, subprocess.SubprocessError) as e:
+            why = str(e)
+        if os.path.isdir(arch):
+            self.say(f"{name} dropped at {time.strftime('%H:%M', time.localtime(st['since']))} and is connected again ({url}, try {st['tries']})")
+            self.activity("changed", f"{name} dropped and Rushes connected it again")
+            self._rc = None
+            try: os.remove(self.p("reconnect.json"))
+            except OSError: pass
+            return
+        if not why:
+            why = f"macOS connected {url}, but the archive is still not at {arch}"
+        wait = 1 if st["tries"] < 10 else 5
+        self.say(f"{name} is not connected: connecting it again did not work ({why}) — tried again in {wait} minute{'s' if wait > 1 else ''}")
+        self.write("reconnect.json", json.dumps(dict(st, why=why, url=url, archive=arch)))
 
     def upkeep(self):
         self.stalled = False

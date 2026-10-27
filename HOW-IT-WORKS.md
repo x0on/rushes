@@ -2065,14 +2065,22 @@ off, and a backup onto the old one replaces any other (both said).
 `db/admin.php` (`mkPanel()`, `drawDrives()`), `runner.py`
 (`build_manifest(moved)`), `db/sync.php`, `ingest.py` (`follow_archive()`).
 
-### Connect again (a share that dropped)
+### A share that dropped is connected again
 
 macOS does not connect a network share again by itself when it drops (the Mac asleep, Wi-Fi or a VPN
-changing, the server closing idle connections). While the archive is on a share, the Rushes app notes
-which one, from the list of mounts (`share_of()` in `rushes_helper.py`, kept in `shares.json`). When it
-is away, Overview shows **Connect again**: macOS opens the share itself (`open smb://…`), with the
-password saved in its Keychain, or asks for it in its own window. Rushes never sees a password.
-Rushes carries on by itself once the archive is back. Rushes never unmounts or ejects anything.
+changing, the server closing idle connections). While the archive is on a share, Rushes notes which
+one, from the list of mounts (the runner every 5 minutes, `share_noted()`; the Rushes app too,
+`share_of()`), in `shares.json`.
+
+When the archive is away, **the runner asks macOS to connect it again** (`reconnect()` in runner.py:
+AppleScript's `mount volume "smb://…"`, the way Finder does), every minute for ten minutes, then every
+five, until it is back. macOS uses the password saved in its Keychain; Rushes never sees a password.
+Each try is in the technical log; the Rushes app's Overview says "Rushes is connecting it again by
+itself: tried 3 times since 23:57 … last at 23:59: <macOS's reason>"; Activity says when it is back
+("VIDEOS dropped and Rushes connected it again"). With no password in the Keychain, macOS may ask
+for it in its own window. A share disconnected on purpose is connected again too, within a minute:
+quit Rushes to keep it off. **Connect again** on Overview asks for the same thing at once.
+Rushes never unmounts or ejects anything.
 
 ### Drives that come and go
 

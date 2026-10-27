@@ -50,6 +50,26 @@ class MacJobs(unittest.TestCase):
     def log(self):
         return open(os.path.join(self.web, "job.log")).read()
 
+    def test_a_dropped_share_is_connected_again_by_macos(self):
+        b = os.path.join(self.t, "bin")
+        self.r.share_noted({self.t: "smbfs", "/Volumes/Card": "exfat"}, {self.t: "//alex@files.example.org/Media$", "/Volumes/Card": "/dev/disk4s1"})
+        self.assertEqual(json.load(open(os.path.join(self.web, "shares.json")))[self.a], "smb://alex@files.example.org/Media$")
+        # macOS cannot reach it yet: said, and tried again a minute later, not at once
+        open(os.path.join(b, "osascript"), "w").write("#!/bin/sh\necho \"$2\" >> \"$0.asked\"\necho 'execution error: There was a problem connecting to the server (-36)' >&2\nexit 1\n")
+        os.chmod(os.path.join(b, "osascript"), 0o755)
+        self.r.reconnect(); self.r.reconnect()
+        st = json.load(open(os.path.join(self.web, "reconnect.json")))
+        self.assertEqual((st["tries"], st["url"]), (1, "smb://alex@files.example.org/Media$"))
+        self.assertIn("(-36)", st["why"]); self.assertIn("tried again in 1 minute", self.log())
+        self.assertEqual(open(os.path.join(b, "osascript.asked")).read(), 'mount volume "smb://alex@files.example.org/Media$"\n')
+        # next try: macOS connects it (with the Keychain's password); said, and the note is cleared
+        open(os.path.join(b, "osascript"), "w").write(f"#!/bin/sh\nmkdir -p '{self.a}'\n")
+        self.r._rc["last"] = 0
+        self.r.reconnect()
+        self.assertTrue(os.path.isdir(self.a)); self.assertFalse(os.path.exists(os.path.join(self.web, "reconnect.json")))
+        self.assertIn("is connected again", self.log())
+        self.assertIn("dropped and Rushes connected it again", open(os.path.join(self.web, "activity.tsv")).read())
+
     def test_duplicates_scan_plan_move_check_put_back(self):
         big = os.urandom(300_000)
         kept = self.put("Parks/2026/A.mov", big)
