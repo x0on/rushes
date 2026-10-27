@@ -3,6 +3,17 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.36 — October 2026
+
+Composition, after a test on 20 real stills (13 of 20 found the right subject; four kinds of wrong tag):
+
+- **No Dutch angle from a short line.** A tilted horizon says Dutch angle only when it runs across at least half the frame; a table edge or a stage corner did it.
+- **A centred subject is neither rule of space nor short-sided.** Those tags need the room ahead and behind to differ by more than 5% of the width (a 1% difference said short-sided).
+- **"Frame within a frame" and "layering" are no longer asked.** The model said them on nearly every frame, so they found nothing.
+- **The subject's name is the model's own.** The question showed "a few words" as an example, and the model sometimes answered with exactly that; it is no longer shown, and that answer is left empty.
+
+Changes the helper's code (`analyze.py`): signed again.
+
 ## 0.13.35 — October 2026
 
 - **Composition, in Describe.** Every shot now also says how it is framed. The vision model is asked a second, separate question per shot: where the main subject is, the eyes, which way it faces, the horizon and strong lines, and what is clearly there that a measure cannot find (a frame within a frame, symmetry, a silhouette, a low angle…). It only marks where things are; the composition tags are worked out from those marks by geometry, the same rules as the Composition Lens page: rule of thirds, on a thirds intersection, golden rectangle, centred, horizon on a third or centred, level horizon or Dutch angle, the 45° method, golden triangle, dynamic symmetry, ascending or descending diagonal, rule of space or short-sided, negative space, fill the frame. Each tag keeps which mark fell on which guide and how far, so it can be checked. Searchable ("rule of thirds", "silhouette"), shown in a shot's Details, and in Export descriptions. Describing takes longer (one more question per shot).

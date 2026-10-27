@@ -937,14 +937,16 @@ video, the cuts and the sound come from its proxy when there is one.
 8. **Composition** (version 4). Each shot's still is asked a second, separate question
    (`COMPOSE`): where the main subject is (a box), the eyes, which way the subject faces, the horizon,
    up to three strong straight lines, and what is clearly there that geometry cannot measure
-   (`judged`: frame within a frame, leading lines, symmetry, silhouette, low or high angle, layering,
-   pattern, triangles, S-curve, radial, light or colour contrast). The model only marks where things
+   (`judged`: leading lines, symmetry, silhouette, low or high angle, pattern, triangles, S-curve,
+   radial, light or colour contrast; frame within a frame and layering are not asked: in a test they
+   came back on nearly every frame). The model only marks where things
    are; the tags are worked out in code (`lens()`), by the same rules as the Composition Lens page:
    the marks against the guides (thirds, phi grid, centre, diagonals, the 45° method, golden
    triangles, dynamic symmetry), within 5% of the frame's short side. A subject's centre counts left
    to right only; eyes against the points first; horizon and lines against guides of the same angle.
-   Golden counts only when closer than the thirds. Horizon: level within 2°, Dutch beyond 5°. Rule of
-   space or short-sided from the way the subject faces and the room on each side; negative space when
+   Golden counts only when closer than the thirds. Horizon: level within 2°, Dutch beyond 5° and only across at
+   least half the frame. Rule of space or short-sided from the way the subject faces and the room on
+   each side, when the two differ by more than 5% of the width (a centred subject gets neither); negative space when
    the subject is under a tenth of the frame and the rest is at least 75% plain (no edges); fill the
    frame above 60%. Kept per shot as `composition`: `marks`, `tags`, `judged` and `lit` (which mark
    fell on which guide, and how far), so every tag can be checked. Searchable in words ("rule of

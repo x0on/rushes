@@ -95,7 +95,7 @@ Coordinates are 0 to 1000 across the frame: x from the left edge, y from the top
 
 Keys:
   subject   the main subject, what the eye goes to first (a person, a group, a podium, a sign,
-            a building, the sun): {{"what": "a few words", "box": [x0, y0, x1, y1]}}, or null
+            a building, the sun): {{"what": <who or what it is, in your own words>, "box": [x0, y0, x1, y1]}}, or null
             when nothing stands out (a crowd, an empty room)
   eyes      [x, y] between the eyes of the main person, or null when the subject is not a person
             or the eyes cannot be seen
@@ -107,8 +107,11 @@ Keys:
   judged    array, any of: {judged} — only what is clearly there, [] if none
 
 Mark only what you can see."""
-JUDGED = ["frame_within_frame", "leading_lines", "symmetry", "silhouette", "low_angle", "high_angle",
-          "layering", "pattern", "triangles", "s_curve", "radial", "light_contrast", "colour_contrast"]
+# Not asked (a test of 20 stills, 0.13.36): "frame within a frame" and "layering" came back on nearly every frame
+JUDGED = ["leading_lines", "symmetry", "silhouette", "low_angle", "high_angle",
+          "pattern", "triangles", "s_curve", "radial", "light_contrast", "colour_contrast"]
+SPAN = 0.5           # a horizon says Dutch angle only across at least half the frame (a short one was a table edge)
+ROOM = 0.05          # rule of space or short-sided only when the room ahead and behind differ by more than this
 
 
 def prompt_text(themes):
@@ -387,7 +390,9 @@ def _anchors_from(got):
         try:
             x0, y0, x1, y1 = [min(1, max(0, float(v) / 1000)) for v in sub.get("box", [])[:4]]
             if x1 - x0 > 0.01 and y1 - y0 > 0.01:
-                m["subject"] = {"x0": x0, "y0": y0, "x1": x1, "y1": y1}; m["what"] = str(sub.get("what", ""))[:80]
+                m["subject"] = {"x0": x0, "y0": y0, "x1": x1, "y1": y1}
+                what = str(sub.get("what", "")).strip()
+                m["what"] = "" if what.startswith("<") or what.lower() in ("a few words", "few words") else what[:80]
         except (TypeError, ValueError):
             pass
     if got.get("eyes") is not None:
@@ -536,7 +541,7 @@ def lens(m, W, H, plain=None, tol=TOL):
         t = abs(math.degrees(math.atan2((b["y"] - a["y"]) * H, (b["x"] - a["x"]) * W)))
         t = min(t, 180 - t)
         if t <= 2: add("level_horizon")
-        elif t > 5: add("dutch_angle")
+        elif t > 5 and abs(b["x"] - a["x"]) >= SPAN: add("dutch_angle")
     for l in m.get("lines", []):
         dx, dy = (l["b"]["x"] - l["a"]["x"]) * W, (l["b"]["y"] - l["a"]["y"]) * H
         deg = abs(math.degrees(math.atan2(dy, dx))) % 180; slope = 180 - deg if deg > 90 else deg
@@ -550,7 +555,8 @@ def lens(m, W, H, plain=None, tol=TOL):
         f = m.get("facing")
         if f in ("left", "right"):
             ahead = 1 - s["x1"] if f == "right" else s["x0"]; behind = s["x0"] if f == "right" else 1 - s["x1"]
-            add("rule_of_space" if ahead > behind else "short_sided")
+            if abs(ahead - behind) > ROOM:                                     # centred: neither
+                add("rule_of_space" if ahead > behind else "short_sided")
     lit_list = [{"layer": k, "anchor": h[0], "on": h[1], "distance": round(h[2], 3)} for k in LAYERS for h in res[k]]
     return tags, lit_list
 
@@ -884,13 +890,16 @@ def selftest():
         (dict(subject=B(.2, .05, .5, 1), eyes=P(.32, .16), facing="right"), "rule_of_thirds rule_of_space"),
         (dict(subject=B(.36, .25, .55, .75), eyes=P(.46, .37)), "rule_of_thirds golden_rectangle"),
         (dict(subject=B(.07, .15, .33, 1), eyes=P(.2, .27), facing="right"), "rule_of_space"),
-        (dict(subject=B(.40, .20, .58, 1), eyes=P(.505, .29), facing="right"), "rule_of_thirds centered rule_of_space"),
+        (dict(subject=B(.40, .20, .58, 1), eyes=P(.505, .29), facing="right"), "rule_of_thirds centered"),
         (dict(subject=B(.43, .43, .53, .60)), "centered"),
         (dict(subject=B(.42, .33, .58, .62), eyes=P(.45, .38), horizon=H(0, .64, 1, .64)), "rule_of_thirds horizon_on_third golden_rectangle centered level_horizon"),
         (dict(subject=B(.33, .12, .62, 1), eyes=P(.44, .25)), "centered diagonal_method"),
         ({}, "")]:
         assert sorted(lens(m, 768, 432)[0]) == sorted(want.split()), (m, lens(m, 768, 432))
     assert "dutch_angle" in lens({"horizon": H(0, .4, 1, .6)}, 768, 432)[0]
+    assert "dutch_angle" not in lens({"horizon": H(.6, .33, 1, .05)}, 768, 432)[0], "a short tilted line is not a Dutch angle"
+    assert not {"rule_of_space", "short_sided"} & set(lens({"subject": B(.418, .2, .593, 1), "facing": "right"}, 768, 432)[0]), "centred: no space tag"
+    assert _anchors_from({"subject": {"what": "a few words", "box": [0, 0, 500, 500]}})["what"] == ""
     assert "negative_space" in lens({"subject": B(.1, .1, .2, .3)}, 768, 432, plain=.9)[0]
     assert "negative_space" not in lens({"subject": B(.1, .1, .2, .3)}, 768, 432, plain=.5)[0], "a busy frame is not negative space"
     m = _anchors_from({"subject": {"what": "a kite flyer", "box": [490, 270, 760, 680]}, "eyes": "no", "facing": "Left",
