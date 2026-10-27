@@ -89,9 +89,9 @@ check(analysis_import()['described_files'] === 2, 'descriptions in _rushes/analy
 $m = analysis_search('central park');
 check($m['count'] === 2 && $m['rows'][0]['kind'] === 'shot' && $m['rows'][0]['what'] === 'An aerial view of a water park'
       && $m['rows'][1]['kind'] === 'speech', 'words on screen find the shot, and the Spanish line saying them ("parque central") too');
-check(analysis_search('rule of thirds')['count'] === 1 && analysis_search('silhouette')['count'] === 1
+check(analysis_search('rule of thirds')['count'] === 1 && analysis_search('silhouette')['count'] === 0
       && json_decode(db()->querySingle("SELECT comp FROM moments WHERE kind = 'shot'"), true)['subject'] === 'a slide',
-      'a shot\'s composition is searchable in words ("rule of thirds", "silhouette") and kept for the export');
+      'a shot\'s composition is searchable in words ("rule of thirds"); what the model judged is not (it was unreliable)');
 check(analysis_search('parque bienvenidos')['rows'][0]['kind'] === 'speech', 'spoken words find the moment they were said');
 check(analysis_search('parks recreation')['count'] === 1 && analysis_search('nothing here')['count'] === 0, 'themes are searchable; nothing invented');
 // A video is one container: words in different moments of it still find it, once, with its best moment

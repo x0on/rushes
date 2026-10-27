@@ -936,10 +936,9 @@ video, the cuts and the sound come from its proxy when there is one.
    each (`moments()` in analyze.py). Description version 3.
 8. **Composition** (version 4). Each shot's still is asked a second, separate question
    (`COMPOSE`): where the main subject is (a box), the eyes, which way the subject faces, the horizon,
-   up to three strong straight lines, and what is clearly there that geometry cannot measure
-   (`judged`: leading lines, symmetry, silhouette, low or high angle, pattern, triangles, S-curve,
-   radial, light or colour contrast; frame within a frame and layering are not asked: in a test they
-   came back on nearly every frame). The model only marks where things
+   and up to three strong straight lines. Nothing is judged by the model (silhouette, symmetry,
+   leading lines, a low angle…): in two runs on 20 stills it said them on most frames, differently each
+   time; descriptions of 0.13.35–0.13.36 keep them in their file, unused. The model only marks where things
    are; the tags are worked out in code (`lens()`), by the same rules as the Composition Lens page:
    the marks against the guides (thirds, phi grid, centre, diagonals, the 45° method, golden
    triangles, dynamic symmetry), within 5% of the frame's short side. A subject's centre counts left
@@ -948,9 +947,9 @@ video, the cuts and the sound come from its proxy when there is one.
    least half the frame. Rule of space or short-sided from the way the subject faces and the room on
    each side, when the two differ by more than 5% of the width (a centred subject gets neither); negative space when
    the subject is under a tenth of the frame and the rest is at least 75% plain (no edges); fill the
-   frame above 60%. Kept per shot as `composition`: `marks`, `tags`, `judged` and `lit` (which mark
+   frame above 60%. Kept per shot as `composition`: `marks`, `tags` and `lit` (which mark
    fell on which guide, and how far), so every tag can be checked. Searchable in words ("rule of
-   thirds", "silhouette"), shown in a shot's Details, and in Export descriptions. A second question
+   thirds", "level horizon"), shown in a shot's Details, and in Export descriptions. A second question
    per shot: describing takes longer. The separate question leaves the description's question
    unchanged, so nothing is described again by itself.
 

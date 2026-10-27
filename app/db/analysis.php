@@ -19,7 +19,7 @@ function analysis_init(): void {
         hay TEXT              -- everything searchable, lower case
     )");
     db()->exec('CREATE INDEX IF NOT EXISTS i_moments_fp ON moments (fp)');
-    // comp: the shot's composition (describe version 4), as JSON: subject, tags, judged, marks
+    // comp: the shot's composition (describe version 4), as JSON: subject, tags, marks
     $cols = []; $r = db()->query('PRAGMA table_info(moments)'); while ($c = $r->fetchArray(SQLITE3_ASSOC)) $cols[] = $c['name'];
     if (!in_array('comp', $cols, true)) db()->exec('ALTER TABLE moments ADD COLUMN comp TEXT');
     // wmatch(hay, pattern): a whole word, as word_pattern() writes it (SQLite has no regular expressions)
@@ -100,11 +100,11 @@ function analysis_import(): array {
                 continue;
             }
             $j = fn($k) => implode(' · ', (array)($s[$k] ?? []));
-            // the composition: its tags and what the model judged, searchable as words ("rule of thirds", "silhouette")
+            // the composition: its tags, searchable as words ("rule of thirds"); what the model "judged" (0.13.35-36 only) is left out
             $c = is_array($s['composition'] ?? null) ? $s['composition'] : null;
-            $cw = $c ? str_replace('_', ' ', implode(' ', array_merge((array)($c['tags'] ?? []), (array)($c['judged'] ?? [])))) : '';
+            $cw = $c ? str_replace('_', ' ', implode(' ', (array)($c['tags'] ?? []))) : '';
             $comp = $c ? json_encode(['subject' => $c['marks']['what'] ?? '', 'tags' => array_values((array)($c['tags'] ?? [])),
-                                      'judged' => array_values((array)($c['judged'] ?? [])), 'marks' => $c['marks'] ?? (object)[]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
+                                      'marks' => $c['marks'] ?? (object)[]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
             $row([$fp, $path, 'shot', (int)$s['shot'], (float)$s['start'], (float)$s['end'],
                   (string)($s['description'] ?? ''), $j('text_on_screen'), $j('themes'), $j('tags'),
                   $s['shot_size'] ?? '', $s['people'] ?? '', $j('ages'), $s['light'] ?? '',

@@ -95,7 +95,7 @@ Coordinates are 0 to 1000 across the frame: x from the left edge, y from the top
 
 Keys:
   subject   the main subject, what the eye goes to first (a person, a group, a podium, a sign,
-            a building, the sun): {{"what": <who or what it is, in your own words>, "box": [x0, y0, x1, y1]}}, or null
+            a building, the sun): {"what": <who or what it is, in your own words>, "box": [x0, y0, x1, y1]}, or null
             when nothing stands out (a crowd, an empty room)
   eyes      [x, y] between the eyes of the main person, or null when the subject is not a person
             or the eyes cannot be seen
@@ -104,12 +104,10 @@ Keys:
             field): [[x, y], [x, y]] at its two ends, or null when there is none
   lines     up to 3 strong straight lines (a road, a rail, a roof edge, a table): each
             [[x, y], [x, y]], [] if none
-  judged    array, any of: {judged} — only what is clearly there, [] if none
 
 Mark only what you can see."""
-# Not asked (a test of 20 stills, 0.13.36): "frame within a frame" and "layering" came back on nearly every frame
-JUDGED = ["leading_lines", "symmetry", "silhouette", "low_angle", "high_angle",
-          "pattern", "triangles", "s_curve", "radial", "light_contrast", "colour_contrast"]
+# ponytail: nothing is "judged" by the model (silhouette, symmetry, leading lines…): in two runs on 20 stills
+# it said them on most frames, and differently each time (0.13.37). Measure them from the pixels later.
 SPAN = 0.5           # a horizon says Dutch angle only across at least half the frame (a short one was a table edge)
 ROOM = 0.05          # rule of space or short-sided only when the room ahead and behind differ by more than this
 
@@ -355,7 +353,7 @@ class Vision:
     def compose(self, frame):
         """Where the subject, eyes, horizon and lines are in one frame (the model's part), and the composition
         that follows from them (the lens: geometry, no model). None when the model's answer cannot be read."""
-        q = COMPOSE.format(judged=", ".join(JUDGED))
+        q = COMPOSE
         got = parse_json(self.ask([frame], question=q, tokens=300))
         if got is None:
             got = parse_json(self.ask([frame], "\n\nAnswer with the JSON only.", question=q, tokens=300))
@@ -578,7 +576,7 @@ def plainness(frame, box):
 
 
 def composition(got, frame):
-    """The model's marks -> the composition record kept on a shot: marks, tags, what lit, what the model judged."""
+    """The model's marks -> the composition record kept on a shot: marks, tags, and what lit."""
     m = _anchors_from(got)
     try:
         from PIL import Image
@@ -586,8 +584,7 @@ def composition(got, frame):
     except Exception:
         W, H = 1920, 1080
     tags, lit = lens(m, W, H, plainness(frame, m.get("subject")) if "subject" in m else None)
-    judged = [j for j in (got.get("judged") or []) if j in JUDGED]
-    return {"marks": m, "tags": tags, "judged": judged, "lit": lit}
+    return {"marks": m, "tags": tags, "lit": lit}
 
 
 def transcribe(path, model):
@@ -900,6 +897,7 @@ def selftest():
     assert "dutch_angle" not in lens({"horizon": H(.6, .33, 1, .05)}, 768, 432)[0], "a short tilted line is not a Dutch angle"
     assert not {"rule_of_space", "short_sided"} & set(lens({"subject": B(.418, .2, .593, 1), "facing": "right"}, 768, 432)[0]), "centred: no space tag"
     assert _anchors_from({"subject": {"what": "a few words", "box": [0, 0, 500, 500]}})["what"] == ""
+    assert "{{" not in COMPOSE and "judged" not in COMPOSE, "the composition question is sent as written"
     assert "negative_space" in lens({"subject": B(.1, .1, .2, .3)}, 768, 432, plain=.9)[0]
     assert "negative_space" not in lens({"subject": B(.1, .1, .2, .3)}, 768, 432, plain=.5)[0], "a busy frame is not negative space"
     m = _anchors_from({"subject": {"what": "a kite flyer", "box": [490, 270, 760, 680]}, "eyes": "no", "facing": "Left",

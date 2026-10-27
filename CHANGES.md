@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.37 — October 2026
+
+- **Composition is only what is measured.** The model is no longer asked what it "sees" (silhouette, symmetry, leading lines, a low angle…): in two runs on the same 20 stills it said silhouette on 12 and leading lines on 11, and changed its answers from one run to the next. Search, a shot's Details and Export descriptions keep only the tags worked out from the marks (thirds, golden, centred, horizon, diagonals, space, negative space, fill the frame). Silhouette and symmetry can come back later, measured from the pixels.
+
+Changes the helper's code (`analyze.py`): signed again.
+
 ## 0.13.36 — October 2026
 
 Composition, after a test on 20 real stills (13 of 20 found the right subject; four kinds of wrong tag):

@@ -113,7 +113,7 @@ if ($what === 'folder') {
     $J = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
     echo '{"folder":', json_encode($dir, $J), ',"exported":', json_encode(date('c')), ',"clips":', (int)$c,
          ',"times":"start_s and end_s (seconds from the start of the clip) are the exact values: frame = round(seconds x fps). fps is an exact fraction. start_tc and end_tc are for reading: timecode from the clip\'s own starting timecode, or from 00:00:00:00 when it has none, drop-frame (;) or not as timecode_mode says",'
-         . '"composition":"per shot, when described with version 4: subject (what the eye goes to), tags (worked out by geometry from the marks), judged (what the model saw: silhouette, symmetry, frame within a frame…), marks (subject box, eyes, horizon and lines as fractions of the frame, x from the left, y from the top; facing)",', "\n\"files\":[\n";
+         . '"composition":"per shot, when described with version 4: subject (what the eye goes to), tags (worked out by geometry from the marks), marks (subject box, eyes, horizon and lines as fractions of the frame, x from the left, y from the top; facing)",', "\n\"files\":[\n";
     $files = $bind($db->prepare("SELECT f.path, f.kind, m.duration, m.fps, m.timecode FROM files f LEFT JOIN media m ON m.file_id = f.id
                                  WHERE f.$in AND f.kind IN ('video','image','audio') ORDER BY f.path"))->execute();
     $mo = $db->prepare('SELECT kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, mood, language, comp

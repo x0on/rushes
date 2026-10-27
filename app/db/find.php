@@ -990,13 +990,12 @@ function versionsBox(r, it) {
   const n = r.versions || it.versions;
   return n > 1 ? '<div class="sec">' + n + ' versions</div><div class="vlist" data-vers="' + esc(r.vkey || it.vkey) + '"><div class="vrow"><span>Looking…</span></div></div>' : '';
 }
-// The shot's composition (described with version 4): where the eye goes, the tags the lens worked out, what the model judged
+// The shot's composition (described with version 4): where the eye goes, and the tags the lens worked out
 function composition(c) {
   try { c = JSON.parse(c || 'null'); } catch (e) { c = null; }
   if (!c) return '';
   const words = function (l) { return (l || []).map(function (t) { return t.replace(/_/g, ' '); }).join(' · '); };
-  return kv('Subject', esc(c.subject || '')) + kv('Composition', tagList(words(c.tags)) || 'nothing the guides line up with', true) +
-    kv('Also seen', tagList(words(c.judged)), true);
+  return kv('Subject', esc(c.subject || '')) + kv('Composition', tagList(words(c.tags)) || 'nothing the guides line up with', true);
 }
 // Everything else about the shot and the file: folded away, one click to open
 function details(r, cur) {
