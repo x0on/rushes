@@ -990,6 +990,14 @@ function versionsBox(r, it) {
   const n = r.versions || it.versions;
   return n > 1 ? '<div class="sec">' + n + ' versions</div><div class="vlist" data-vers="' + esc(r.vkey || it.vkey) + '"><div class="vrow"><span>Looking…</span></div></div>' : '';
 }
+// The shot's composition (described with version 4): where the eye goes, the tags the lens worked out, what the model judged
+function composition(c) {
+  try { c = JSON.parse(c || 'null'); } catch (e) { c = null; }
+  if (!c) return '';
+  const words = function (l) { return (l || []).map(function (t) { return t.replace(/_/g, ' '); }).join(' · '); };
+  return kv('Subject', esc(c.subject || '')) + kv('Composition', tagList(words(c.tags)) || 'nothing the guides line up with', true) +
+    kv('Also seen', tagList(words(c.judged)), true);
+}
 // Everything else about the shot and the file: folded away, one click to open
 function details(r, cur) {
   const shot = cur && cur.kind === 'shot' ? cur : null;
@@ -997,7 +1005,7 @@ function details(r, cur) {
     (shot ? '<div class="sec">This shot</div><div class="kv">' +
       kv('Text on screen', tagList(shot.on_screen), true) + kv('Themes', tagList(shot.themes), true) + kv('Tags', tagList(shot.tags), true) +
       kv('Shot size', esc(shot.shot_size)) + kv('People', esc(shot.people)) + kv('Light', esc(shot.light)) + kv('Mood', esc(shot.mood)) +
-      kv('Part of the day', esc(shot.part_of_day)) + '</div>' : '') +
+      kv('Part of the day', esc(shot.part_of_day)) + composition(shot.comp) + '</div>' : '') +
     '<div class="sec">The file</div><div class="kv">' +
       kv('Dimensions', r.width ? r.width + ' × ' + r.height + (aspect(r.width, r.height) ? ' · ' + aspect(r.width, r.height) : '') : '') +
       kv('File type', esc((r.ext || '').toUpperCase())) + kv('Codec', esc((r.codec || '').toUpperCase())) + kv('Length', r.duration ? clock(r.duration) : '') +

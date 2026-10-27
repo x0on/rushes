@@ -149,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         prepare_advance();
         out(['ok' => 'first', 'folder' => $rel, 'stopped' => $stopped]);
     }
-    // Describe again: a folder described with an older version of describing (before moments inside long takes)
+    // Describe again: a folder described with an older version of describing (before the composition, or before moments inside long takes)
     // is described again, only the files described with an older version, in its place on the list. Never by
     // itself: describing improves, and a person says which folders are worth the time (ingest.py, --again).
     if (($_POST['action'] ?? '') === 'again') {

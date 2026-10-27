@@ -2263,7 +2263,7 @@ async function listAct(action, folder, b, sure) {
     $('prepSaid').textContent = r.error ? 'Did not happen: ' + r.error
       : action === 'nopreview' ? 'Asked ✓ ' + folder + ' is described without previews, from its originals' + (r.error ? '' : ' — any previews being made for it stop within a minute (the finished ones are used), and describing takes it in its turn.')
       : action === 'withpreview' ? 'Asked ✓ ' + folder + ' gets its previews first again, then describing.'
-      : action === 'again' ? 'Asked ✓ ' + folder + ' is described again in its place on the list: only the files described with an older version (moments inside long takes are added); the rest are kept.'
+      : action === 'again' ? 'Asked ✓ ' + folder + ' is described again in its place on the list: only the files described with an older version: each gets its composition (from the stills already saved, quick), and files described before moments inside long takes are described again whole; the rest are kept.'
       : action === 'first' ? 'Starting ✓ ' + folder + ' is first. ' + (r.stopped ? 'The proxies of ' + r.stopped + ' stop now (the ones finished are kept) and carry on by themselves once these are made. ' : '') +
           'Its previews start within a minute; then describing steps aside for it between two files, and goes back to where it was after.'
       : {forget: 'Taken off the list ✓ ' + folder + ' — nothing was deleted: its proxies and descriptions stay.',
@@ -2305,7 +2305,7 @@ function drawPrepare(rows, a) {
         (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + (r.proxies.step === 'skipped' ? ' — from the originals (no previews for this folder)</div>' : ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>')
       : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
           (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: Try again describes only those</div>' : '') + (d.note && /could not|speech failed/.test(d.note) ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '').replace(/;? ?\d+ described with an older version/, '')) + '</span>' : '') +
-          (d.note && /(\d+) described with an older version/.test(d.note) ? '<div class="note">' + esc(/(\d+) described with an older version/.exec(d.note)[1]) + ' described with an older version: Describe again adds moments inside long takes</div>' : '')
+          (d.note && /(\d+) described with an older version/.test(d.note) ? '<div class="note">' + esc(/(\d+) described with an older version/.exec(d.note)[1]) + ' described with an older version: Describe again adds the composition (and moments inside long takes where missing)</div>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
       : d.step === 'gone' ? 'it is not here any more, and the moves Rushes wrote down do not say where it went (it may have been moved in Finder). ' + (d.at && d.at.length ? 'Folders of this name, not taken by themselves: ' + esc(d.at.join(' · ')) + '. ' : '') + 'Take it off the list and add it where it is now.'
       : d.step === 'queued' ? 'queued on the helper — it starts next, beside any copying'
@@ -2354,7 +2354,7 @@ function drawPrepare(rows, a) {
           ? '<button class="btn" data-l="first" title="Proxies being made for another folder stop (everything finished is kept), and describing steps aside between two files once this one is ready; both carry on by themselves after">Start on this one now</button>' : '') +
         (r.proxies.step === 'skipped' && r.describe.step !== 'done' ? '<button class="btn quiet" data-l="withpreview" title="Make its previews first again, then describe">Make previews too</button>'
           : ['waiting', 'stopped', 'making'].includes(r.proxies.step) && r.describe.step !== 'done' ? '<button class="btn quiet" data-l="nopreview" title="Describe it from the originals: no previews are made (the ones already made are used). Slower to describe, and it will not play in Search">Describe without previews</button>' : '') +
-        (r.describe.step === 'done' && r.describe.files ? '<button class="btn quiet" data-l="again" title="Describes again the files described with an older version of describing (moments inside long takes). Only those; the rest are kept">Describe again</button>' : '') +
+        (r.describe.step === 'done' && r.describe.files ? '<button class="btn quiet" data-l="again" title="Adds what the files described with an older version lack: the composition (read from the stills already saved) and, for the oldest, moments inside long takes. Only those; the rest are kept">Describe again</button>' : '') +
         (r.describe.step === 'done' && r.describe.files ? '<button class="btn quiet" data-x="export" title="One JSON: every clip with its duration, and each shot\'s start and end with what was described">Export descriptions</button>' : '') +
         '<button class="btn quiet" data-l="forget">Take off the list</button>';
       const fails = openFails[r.folder] && (r.failures || []).length

@@ -19,6 +19,9 @@ function analysis_init(): void {
         hay TEXT              -- everything searchable, lower case
     )");
     db()->exec('CREATE INDEX IF NOT EXISTS i_moments_fp ON moments (fp)');
+    // comp: the shot's composition (describe version 4), as JSON: subject, tags, judged, marks
+    $cols = []; $r = db()->query('PRAGMA table_info(moments)'); while ($c = $r->fetchArray(SQLITE3_ASSOC)) $cols[] = $c['name'];
+    if (!in_array('comp', $cols, true)) db()->exec('ALTER TABLE moments ADD COLUMN comp TEXT');
     // wmatch(hay, pattern): a whole word, as word_pattern() writes it (SQLite has no regular expressions)
     static $fn = false;
     if (!$fn) { db()->createFunction('wmatch', fn($hay, $re) => preg_match($re, (string)$hay) ? 1 : 0, 2, SQLITE3_DETERMINISTIC); $fn = true; }
@@ -72,7 +75,7 @@ function analysis_import(): array {
     if (time() - $said > 600 && time() - (int)meta_get('analysis_looked', '0') < 86400) return ['added' => 0, 'state' => 'quiet'];
     meta_set('analysis_looked', (string)time());
     $ins = $db->prepare('INSERT INTO moments (fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,
-        shot_size,people,ages,light,part_of_day,mood,language,model,hay) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        shot_size,people,ages,light,part_of_day,mood,language,model,hay,comp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $del = $db->prepare('DELETE FROM moments WHERE fp = ?');
     $db->exec('BEGIN');
     foreach (glob(analysis_dir() . '/*/*.json') ?: [] as $f) {
@@ -93,21 +96,26 @@ function analysis_import(): array {
         foreach ($r['shots'] ?? [] as $s) {
             if (!empty($s['parse_error'])) {                  // counted, never searchable; the raw answer stays in the file
                 $row([$fp, $path, 'failed', (int)$s['shot'], (float)($s['start'] ?? 0), (float)($s['end'] ?? 0),
-                      '', '', '', '', '', '', '', '', '', '', '', $r['model'] ?? '', '']);
+                      '', '', '', '', '', '', '', '', '', '', '', $r['model'] ?? '', '', null]);
                 continue;
             }
             $j = fn($k) => implode(' · ', (array)($s[$k] ?? []));
+            // the composition: its tags and what the model judged, searchable as words ("rule of thirds", "silhouette")
+            $c = is_array($s['composition'] ?? null) ? $s['composition'] : null;
+            $cw = $c ? str_replace('_', ' ', implode(' ', array_merge((array)($c['tags'] ?? []), (array)($c['judged'] ?? [])))) : '';
+            $comp = $c ? json_encode(['subject' => $c['marks']['what'] ?? '', 'tags' => array_values((array)($c['tags'] ?? [])),
+                                      'judged' => array_values((array)($c['judged'] ?? [])), 'marks' => $c['marks'] ?? (object)[]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
             $row([$fp, $path, 'shot', (int)$s['shot'], (float)$s['start'], (float)$s['end'],
                   (string)($s['description'] ?? ''), $j('text_on_screen'), $j('themes'), $j('tags'),
                   $s['shot_size'] ?? '', $s['people'] ?? '', $j('ages'), $s['light'] ?? '',
                   $r['part_of_day'] ?? '', $s['mood'] ?? '', '', $r['model'] ?? '',
                   mb_strtolower(implode(' ', [$s['description'] ?? '', $j('text_on_screen'), $j('themes'),
-                      $j('tags'), $s['shot_size'] ?? '', $s['mood'] ?? '', basename($path)]))]);
+                      $j('tags'), $s['shot_size'] ?? '', $s['mood'] ?? '', $cw, basename($path)])), $comp]);
         }
         foreach (($r['speech']['segments'] ?? []) as $g)
             $row([$fp, $path, 'speech', null, (float)$g['start'], (float)$g['end'], (string)$g['text'],
                   '', '', '', '', '', '', '', $r['part_of_day'] ?? '', '', $r['speech']['language'] ?? '',
-                  $r['whisper'] ?? '', mb_strtolower($g['text'] . ' ' . basename($path))]);
+                  $r['whisper'] ?? '', mb_strtolower($g['text'] . ' ' . basename($path)), null]);
     }
     $db->exec('COMMIT');
     meta_set('analysis_at', (string)$newest);
@@ -182,7 +190,7 @@ function analysis_videos(string $q, int $limit = 120, string $cond = '', array $
 // Every shot of one video, and what is said in it, in order: the video as a whole.
 function analysis_shots(string $fp): array {
     analysis_init();
-    $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,part_of_day,mood,language
+    $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,part_of_day,mood,language,comp
         FROM moments WHERE fp = ? AND kind != 'failed' ORDER BY start_s, kind");
     $st->bindValue(1, $fp); $r = $st->execute(); $rows = [];
     while ($x = $r->fetchArray(SQLITE3_ASSOC)) $rows[] = $x;

@@ -56,9 +56,9 @@ if ($what === 'files') {
 if ($what === 'moments') {
     $send("$name-described-$day.csv", 'text/csv; charset=utf-8');
     csv_out(['path', 'kind', 'shot', 'start_s', 'end_s', 'what', 'on_screen', 'themes', 'tags', 'shot_size', 'people',
-             'ages', 'light', 'part_of_day', 'mood', 'language', 'model', 'fingerprint'],
-        $db->query('SELECT path, kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, ages, light,
-                           part_of_day, mood, language, model, fp FROM moments ORDER BY path, start_s'));
+             'ages', 'light', 'part_of_day', 'mood', 'language', 'model', 'fingerprint', 'composition'],
+        $db->query("SELECT path, kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, ages, light,
+                           part_of_day, mood, language, model, fp, comp FROM moments ORDER BY path, start_s"));
     exit;
 }
 // A frame rate as its exact fraction (60000/1001, not 59.94): the catalogue keeps it rounded, so it is
@@ -112,10 +112,11 @@ if ($what === 'folder') {
     while (ob_get_level()) ob_end_flush();
     $J = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
     echo '{"folder":', json_encode($dir, $J), ',"exported":', json_encode(date('c')), ',"clips":', (int)$c,
-         ',"times":"start_s and end_s (seconds from the start of the clip) are the exact values: frame = round(seconds x fps). fps is an exact fraction. start_tc and end_tc are for reading: timecode from the clip\'s own starting timecode, or from 00:00:00:00 when it has none, drop-frame (;) or not as timecode_mode says",', "\n\"files\":[\n";
+         ',"times":"start_s and end_s (seconds from the start of the clip) are the exact values: frame = round(seconds x fps). fps is an exact fraction. start_tc and end_tc are for reading: timecode from the clip\'s own starting timecode, or from 00:00:00:00 when it has none, drop-frame (;) or not as timecode_mode says",'
+         . '"composition":"per shot, when described with version 4: subject (what the eye goes to), tags (worked out by geometry from the marks), judged (what the model saw: silhouette, symmetry, frame within a frame…), marks (subject box, eyes, horizon and lines as fractions of the frame, x from the left, y from the top; facing)",', "\n\"files\":[\n";
     $files = $bind($db->prepare("SELECT f.path, f.kind, m.duration, m.fps, m.timecode FROM files f LEFT JOIN media m ON m.file_id = f.id
                                  WHERE f.$in AND f.kind IN ('video','image','audio') ORDER BY f.path"))->execute();
-    $mo = $db->prepare('SELECT kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, mood, language
+    $mo = $db->prepare('SELECT kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, mood, language, comp
                         FROM moments WHERE path = ? ORDER BY kind, start_s');
     $list = fn($v) => $v === null || $v === '' ? [] : explode(' · ', $v);
     $i = 0;
@@ -127,7 +128,8 @@ if ($what === 'folder') {
                   'start_tc' => tc_at((float)$m['start_s'], $f['timecode'], $rate, $mode), 'end_tc' => tc_at((float)$m['end_s'], $f['timecode'], $rate, $mode)];
             if ($m['kind'] === 'shot')
                 $shots[] = ['shot' => (int)$m['shot']] + $t + ['description' => $m['what'], 'tags' => $list($m['tags']), 'themes' => $list($m['themes']),
-                    'text_on_screen' => $list($m['on_screen']), 'shot_size' => $m['shot_size'], 'people' => $m['people'], 'mood' => $m['mood']];
+                    'text_on_screen' => $list($m['on_screen']), 'shot_size' => $m['shot_size'], 'people' => $m['people'], 'mood' => $m['mood']]
+                    + ($m['comp'] ? ['composition' => json_decode($m['comp'], true)] : []);
             elseif ($m['kind'] === 'speech') $speech[] = $t + ['text' => $m['what'], 'language' => $m['language']];
             else $failed++;
         }

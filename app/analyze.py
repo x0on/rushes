@@ -40,7 +40,8 @@ no model.
 import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request
 from pathlib import Path
 
-VERSION = 3          # 3: moments inside long takes (a still every few seconds); a file described before is kept, Describe again redoes it
+VERSION = 4          # 4: composition (the lens: where the subject, eyes, horizon and lines fall); 3: moments inside long takes.
+                     # A file described before is kept; Describe again adds what it lacks (a 3 gets only its composition, from its saved stills)
 VIDEO = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".mkv", ".m2ts", ".wmv"}
 IMAGE = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp", ".dng"}
 AUDIO = {".wav", ".aif", ".aiff", ".mp3", ".m4a", ".aac", ".flac"}
@@ -85,6 +86,29 @@ Be literal. Describe only what you can see. Do not guess who people are or where
 unless it is written in the frame.
 If the frame looks like two images blended together, it is a dissolve: say so and
 describe the clearer one."""
+
+
+COMPOSE = """Look at this video frame as a camera operator and mark where things are.
+
+Return ONLY valid JSON. Every key in double quotes. No text before or after it.
+Coordinates are 0 to 1000 across the frame: x from the left edge, y from the top edge.
+
+Keys:
+  subject   the main subject, what the eye goes to first (a person, a group, a podium, a sign,
+            a building, the sun): {{"what": "a few words", "box": [x0, y0, x1, y1]}}, or null
+            when nothing stands out (a crowd, an empty room)
+  eyes      [x, y] between the eyes of the main person, or null when the subject is not a person
+            or the eyes cannot be seen
+  facing    where the subject looks or moves: left, right, camera, away, or none
+  horizon   the horizon, or the main horizontal edge (a tree line, a stage edge, the far edge of a
+            field): [[x, y], [x, y]] at its two ends, or null when there is none
+  lines     up to 3 strong straight lines (a road, a rail, a roof edge, a table): each
+            [[x, y], [x, y]], [] if none
+  judged    array, any of: {judged} — only what is clearly there, [] if none
+
+Mark only what you can see."""
+JUDGED = ["frame_within_frame", "leading_lines", "symmetry", "silhouette", "low_angle", "high_angle",
+          "layering", "pattern", "triangles", "s_curve", "radial", "light_contrast", "colour_contrast"]
 
 
 def prompt_text(themes):
@@ -301,16 +325,16 @@ class Vision:
         self.model, self.processor = load(name)
         self.config = load_config(name)
 
-    def ask(self, frames, extra=""):
+    def ask(self, frames, extra="", question=None, tokens=420):
         from mlx_vlm import generate
         from mlx_vlm.prompt_utils import apply_chat_template
-        p = apply_chat_template(self.processor, self.config, prompt_text(self.themes) + extra,
+        p = apply_chat_template(self.processor, self.config, (question or prompt_text(self.themes)) + extra,
                                 num_images=len(frames))
         try:   # a repetition penalty stops the model looping on one word
-            out = generate(self.model, self.processor, p, frames, max_tokens=420,
+            out = generate(self.model, self.processor, p, frames, max_tokens=tokens,
                            repetition_penalty=1.15, verbose=False)
         except TypeError:
-            out = generate(self.model, self.processor, p, frames, max_tokens=420, verbose=False)
+            out = generate(self.model, self.processor, p, frames, max_tokens=tokens, verbose=False)
         return out if isinstance(out, str) else getattr(out, "text", str(out))
 
     def describe(self, frames):
@@ -324,6 +348,240 @@ class Vision:
         if got is None:
             return {"description": "", "parse_error": True}, raw[:2000], False
         return tidy(got, self.themes), "", True
+
+    def compose(self, frame):
+        """Where the subject, eyes, horizon and lines are in one frame (the model's part), and the composition
+        that follows from them (the lens: geometry, no model). None when the model's answer cannot be read."""
+        q = COMPOSE.format(judged=", ".join(JUDGED))
+        got = parse_json(self.ask([frame], question=q, tokens=300))
+        if got is None:
+            got = parse_json(self.ask([frame], "\n\nAnswer with the JSON only.", question=q, tokens=300))
+        return composition(got, frame) if isinstance(got, dict) else None
+
+
+# ── composition: the lens (HOW-IT-WORKS.md → Composition) ───────────────────
+# The model marks where things are; the tags are worked out here, by geometry, the same way as the
+# Composition Lens page, so a tag can always be checked: each lit tag says which mark fell on which guide,
+# and how far from it (a fraction of the frame's short side).
+PHI = 0.381966
+TOL = 0.05
+
+
+def _anchors_from(got):
+    """The model's marks (0 to 1000) as frame fractions, kept inside the frame; anything malformed is left out."""
+    def pt(v):
+        try:
+            x, y = float(v[0]), float(v[1])
+        except (TypeError, ValueError, IndexError):
+            return None
+        return {"x": min(1, max(0, x / 1000)), "y": min(1, max(0, y / 1000))}
+    def ln(v):
+        try:
+            a, b = pt(v[0]), pt(v[1])
+        except (TypeError, IndexError):
+            return None
+        return {"a": a, "b": b} if a and b and (abs(a["x"] - b["x"]) + abs(a["y"] - b["y"])) > 0.02 else None
+    m = {}
+    sub = got.get("subject")
+    if isinstance(sub, dict):
+        try:
+            x0, y0, x1, y1 = [min(1, max(0, float(v) / 1000)) for v in sub.get("box", [])[:4]]
+            if x1 - x0 > 0.01 and y1 - y0 > 0.01:
+                m["subject"] = {"x0": x0, "y0": y0, "x1": x1, "y1": y1}; m["what"] = str(sub.get("what", ""))[:80]
+        except (TypeError, ValueError):
+            pass
+    if got.get("eyes") is not None:
+        e = pt(got["eyes"])
+        if e: m["eyes"] = e
+    if got.get("horizon"):
+        h = ln(got["horizon"])
+        if h: m["horizon"] = h
+    lines = [ln(v) for v in (got.get("lines") or [])[:3]]
+    if any(lines): m["lines"] = [l for l in lines if l]
+    f = str(got.get("facing", "none")).lower().strip()
+    m["facing"] = f if f in ("left", "right", "camera", "away") else "none"
+    return m
+
+
+def _layer(lid, W, H):
+    """One guide of the lens as lines and points, in pixels of a W x H frame."""
+    lines, points = [], []
+    L = lambda a, b, label: lines.append((a, b, label))
+    P = lambda p, label: points.append((p, label))
+    def foot(c, a, b):
+        vx, vy = b[0] - a[0], b[1] - a[1]; t = ((c[0] - a[0]) * vx + (c[1] - a[1]) * vy) / (vx * vx + vy * vy)
+        return (a[0] + t * vx, a[1] + t * vy)
+    def to_edge(c, d):
+        s = min([v for v in [(W - c[0]) / d[0] if d[0] > 1e-9 else None, -c[0] / d[0] if d[0] < -1e-9 else None,
+                             (H - c[1]) / d[1] if d[1] > 1e-9 else None, -c[1] / d[1] if d[1] < -1e-9 else None] if v is not None])
+        return (c[0] + d[0] * s, c[1] + d[1] * s)
+    def grid(f, name):
+        for i, t in enumerate((f, 1 - f)):
+            L((W * t, 0), (W * t, H), ("right" if i else "left") + " vertical " + name)
+            L((0, H * t), (W, H * t), ("lower" if i else "upper") + " horizontal " + name)
+        for i, tx in enumerate((f, 1 - f)):
+            for j, ty in enumerate((f, 1 - f)):
+                P((W * tx, H * ty), ("lower" if j else "upper") + "-" + ("right" if i else "left") + " " + name + " intersection")
+    TL, TR, BL, BR = (0, 0), (W, 0), (0, H), (W, H)
+    if lid == "thirds": grid(1 / 3, "third")
+    if lid == "phi": grid(PHI, "phi line")
+    if lid == "center":
+        L((W / 2, 0), (W / 2, H), "vertical centre line"); L((0, H / 2), (W, H / 2), "horizontal centre line"); P((W / 2, H / 2), "centre")
+    if lid == "diag":
+        L(TL, BR, "descending diagonal (top-left to bottom-right)"); L(BL, TR, "ascending diagonal (bottom-left to top-right)")
+    if lid == "diag45":
+        for c, d, n in ((TL, (1, 1), "top-left"), (TR, (-1, 1), "top-right"), (BL, (1, -1), "bottom-left"), (BR, (-1, -1), "bottom-right")):
+            L(c, to_edge(c, d), "45° line from the " + n + " corner")
+    if lid in ("gtri", "gtri2"):
+        a, b, c1, c2 = (BL, TR, TL, BR) if lid == "gtri" else (TL, BR, TR, BL)
+        L(a, b, "main diagonal")
+        for c in (c1, c2):
+            f = foot(c, a, b); L(c, f, "perpendicular from a corner"); P(f, "golden triangle point (where the perpendicular meets the diagonal)")
+    if lid == "dynsym":
+        L(TL, BR, "descending diagonal"); L(BL, TR, "ascending diagonal")
+        for c, a, b, n in ((TL, BL, TR, "top-left"), (BR, BL, TR, "bottom-right"), (TR, TL, BR, "top-right"), (BL, TL, BR, "bottom-left")):
+            f = foot(c, a, b); L(c, to_edge(c, (f[0] - c[0], f[1] - c[1])), "reciprocal from the " + n + " corner")
+            P(f, "eye where the " + n + " reciprocal meets a diagonal")
+    return lines, points
+
+
+LAYERS = ["thirds", "phi", "center", "diag", "diag45", "gtri", "gtri2", "dynsym"]
+POINT_ON_LINES = ("thirds", "phi", "center", "diag45")
+
+
+def _dist(p, q): return ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5
+def _dist_line(p, a, b):
+    vx, vy = b[0] - a[0], b[1] - a[1]; return abs(vx * (a[1] - p[1]) - vy * (a[0] - p[0])) / ((vx * vx + vy * vy) ** 0.5)
+def _dist_seg(p, a, b):
+    vx, vy = b[0] - a[0], b[1] - a[1]; t = max(0, min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (vx * vx + vy * vy)))
+    return _dist(p, (a[0] + t * vx, a[1] + t * vy))
+def _angle(a, b):
+    import math
+    d = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180; return d
+def _adiff(x, y):
+    d = abs(x - y) % 180; return min(d, 180 - d)
+
+
+def lens(m, W, H, plain=None, tol=TOL):
+    """Every mark against every guide -> (tags, lit). The same rules as the Composition Lens page:
+    a subject's centre counts left to right only (vertical lines); eyes against points first, then lines,
+    for the grids and the 45° method; horizon and lines against lines of the same angle (within 5°);
+    golden only when closer than the thirds; the 45° method for a point only when closer than both grids;
+    the spiral is never a tag (it is judged). `plain`: how much of the frame outside the subject has no edges."""
+    import math
+    T, S = tol * min(W, H), min(W, H)
+    an = []
+    if "subject" in m:
+        s = m["subject"]; an.append(("subject", "point", (W * (s["x0"] + s["x1"]) / 2, H * (s["y0"] + s["y1"]) / 2)))
+    if "eyes" in m: an.append(("eyes", "point", (W * m["eyes"]["x"], H * m["eyes"]["y"])))
+    if "horizon" in m: an.append(("horizon", "line", ((W * m["horizon"]["a"]["x"], H * m["horizon"]["a"]["y"]), (W * m["horizon"]["b"]["x"], H * m["horizon"]["b"]["y"]))))
+    for i, l in enumerate(m.get("lines", [])): an.append(("line %d" % (i + 1), "line", ((W * l["a"]["x"], H * l["a"]["y"]), (W * l["b"]["x"], H * l["b"]["y"]))))
+    res = {}
+    grids = {k: _layer(k, W, H) for k in LAYERS}
+    for lid in LAYERS:
+        lines, points = grids[lid]; hits = []
+        for what, kind, g in an:
+            if kind == "point" and what == "subject":
+                if lid in POINT_ON_LINES and lid != "diag45":
+                    for a, b, label in lines:
+                        if abs(a[0] - b[0]) <= 1 and _dist_seg(g, a, b) <= T: hits.append((what, label, _dist_seg(g, a, b) / S))
+                continue
+            if kind == "point":
+                best = min(((_dist(g, p), label) for p, label in points), default=None)
+                if best and best[0] <= T * 1.2:
+                    hits.append((what, best[1], best[0] / S)); continue
+                if lid in POINT_ON_LINES:
+                    for a, b, label in lines:
+                        d = _dist_seg(g, a, b)
+                        if d <= T: hits.append((what, label, d / S))
+            else:
+                ang = _angle(*g)
+                for a, b, label in lines:
+                    if _adiff(ang, _angle(a, b)) > 5: continue
+                    d = (_dist_line(g[0], a, b) + _dist_line(g[1], a, b)) / 2
+                    if d <= T: hits.append((what, label, d / S))
+        seen = set(); hits = [h for h in hits if not ((h[0], h[1]) in seen or seen.add((h[0], h[1])))]
+        if lid == "phi":
+            tl, tp = grids["thirds"]
+            def closer(h):
+                g = next(x[2] for x in an if x[0] == h[0])
+                if isinstance(g[0], tuple):
+                    ds = [(_dist_line(g[0], a, b) + _dist_line(g[1], a, b)) / 2 for a, b, _ in tl if _adiff(_angle(*g), _angle(a, b)) <= 5]
+                elif "intersection" in h[1]: ds = [_dist(g, p) for p, _ in tp]
+                else: ds = [_dist_seg(g, a, b) for a, b, label in tl if ("vertical" in label) == ("vertical" in h[1])]
+                return not ds or h[2] < min(ds) / S
+            hits = [h for h in hits if closer(h)]
+        if lid == "diag45":
+            gl = grids["thirds"][0] + grids["phi"][0]
+            hits = [h for h in hits if not isinstance(next(x[2] for x in an if x[0] == h[0])[0], (int, float))
+                    or h[2] < min(_dist_seg(next(x[2] for x in an if x[0] == h[0]), a, b) for a, b, _ in gl) / S]
+        res[lid] = hits
+    tags = []
+    add = lambda t: t not in tags and tags.append(t)
+    lit = lambda k: bool(res[k])
+    if lit("thirds"):
+        add("rule_of_thirds")
+        if any("intersection" in h[1] for h in res["thirds"]): add("thirds_intersection")
+        if any(h[0] == "horizon" for h in res["thirds"]): add("horizon_on_third")
+    if lit("phi"): add("golden_rectangle")
+    if lit("center"):
+        if any(h[0] != "horizon" and ("vertical" in h[1] or h[1] == "centre") for h in res["center"]): add("centered")
+        if any(h[0] == "horizon" for h in res["center"]): add("horizon_centered")
+    if lit("diag"): add("diagonals")
+    if lit("diag45"): add("diagonal_method")
+    if lit("gtri") or lit("gtri2"): add("golden_triangle")
+    if lit("dynsym"): add("dynamic_symmetry")
+    if "horizon" in m:
+        a, b = m["horizon"]["a"], m["horizon"]["b"]
+        t = abs(math.degrees(math.atan2((b["y"] - a["y"]) * H, (b["x"] - a["x"]) * W)))
+        t = min(t, 180 - t)
+        if t <= 2: add("level_horizon")
+        elif t > 5: add("dutch_angle")
+    for l in m.get("lines", []):
+        dx, dy = (l["b"]["x"] - l["a"]["x"]) * W, (l["b"]["y"] - l["a"]["y"]) * H
+        deg = abs(math.degrees(math.atan2(dy, dx))) % 180; slope = 180 - deg if deg > 90 else deg
+        if 20 <= slope <= 70:
+            rising = dx * -dy > 0
+            add("ascending_diagonal" if rising else "descending_diagonal"); add("active_diagonal" if rising else "entrance_diagonal")
+    if "subject" in m:
+        s = m["subject"]; area = abs((s["x1"] - s["x0"]) * (s["y1"] - s["y0"]))
+        if area < 0.10 and plain is not None and plain > 0.75: add("negative_space")
+        if area > 0.60: add("fill_the_frame")
+        f = m.get("facing")
+        if f in ("left", "right"):
+            ahead = 1 - s["x1"] if f == "right" else s["x0"]; behind = s["x0"] if f == "right" else 1 - s["x1"]
+            add("rule_of_space" if ahead > behind else "short_sided")
+    lit_list = [{"layer": k, "anchor": h[0], "on": h[1], "distance": round(h[2], 3)} for k in LAYERS for h in res[k]]
+    return tags, lit_list
+
+
+def plainness(frame, box):
+    """How much of the frame outside the subject has no edges (sky, a wall, water, darkness): 0 to 1, or None."""
+    try:
+        from PIL import Image
+        im = Image.open(frame).convert("L"); w = 160; h = max(2, round(160 * im.height / im.width)); im = im.resize((w, h))
+        px = im.load(); out = plain = 0
+        for y in range(1, h - 1):
+            for x in range(1, w - 1):
+                if box and box["x0"] <= x / w <= box["x1"] and box["y0"] <= y / h <= box["y1"]: continue
+                out += 1
+                if abs(px[x + 1, y] - px[x - 1, y]) + abs(px[x, y + 1] - px[x, y - 1]) <= 24: plain += 1
+        return plain / out if out else None
+    except Exception:
+        return None
+
+
+def composition(got, frame):
+    """The model's marks -> the composition record kept on a shot: marks, tags, what lit, what the model judged."""
+    m = _anchors_from(got)
+    try:
+        from PIL import Image
+        with Image.open(frame) as im: W, H = im.size
+    except Exception:
+        W, H = 1920, 1080
+    tags, lit = lens(m, W, H, plainness(frame, m.get("subject")) if "subject" in m else None)
+    judged = [j for j in (got.get("judged") or []) if j in JUDGED]
+    return {"marks": m, "tags": tags, "judged": judged, "lit": lit}
 
 
 def transcribe(path, model):
@@ -347,6 +605,8 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
     if out.exists() and not force:
         try:
             old = json.loads(out.read_text())
+            if again and old.get("version", 1) == 3 and old.get("prompt") == pid and old.get("model") == vision.name:
+                return compose_only(old, out, store / fp[:2] / fp, vision, path, n, of)
             if old.get("prompt") == pid and old.get("model") == vision.name and not (again and old.get("version", 1) < VERSION):
                 changed = False
                 pod = part_of_day(old.get("camera_clock", ""))
@@ -373,7 +633,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                 if changed:
                     out.write_text(json.dumps(old, indent=1, ensure_ascii=False))
                 if old.get("version", 1) < VERSION:                          # kept: Describe again redoes it
-                    print(f"[{n}/{of}] {path.name} — already described (an older version: no moments inside long takes)")
+                    print(f"[{n}/{of}] {path.name} — already described (an older version: Describe again adds what it lacks)")
                     return "older"
                 print(f"[{n}/{of}] {path.name} — already described")
                 return "already"
@@ -428,6 +688,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                 if not ok:
                     rec["failed_shots"] += 1
                 shot = {"shot": i, "start": round(a, 3), "end": round(b, 3), **got}
+                shot["composition"] = compose_safe(vision, frames[0])      # the still search shows is the one measured
                 if k:
                     shot.update(take=take, moment=k, of=of_take)          # one moment of a long take
                 if raw:
@@ -456,6 +717,33 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
     print(f"    {len(rec['shots'])} shots, {per:.1f}s each"
           + (f", {len(rec['speech']['segments'])} lines of speech ({rec['speech']['language']})" if rec["speech"] else "")
           + (f", {rec['failed_shots']} could not be read" if rec["failed_shots"] else ""), flush=True)
+    return "done"
+
+
+def compose_safe(vision, frame):
+    """The composition of one still, or None: a composition that cannot be read never costs the description."""
+    try:
+        return vision.compose(frame)
+    except Exception as e:
+        print(f"    composition not read ({e})")
+        return None
+
+
+def compose_only(old, out, thumbs, vision, path, n, of):
+    """Describe again on a file described with version 3: only its composition is added, from the stills
+    already saved beside its description. The video is not opened and nothing described is changed."""
+    shots = old.get("shots") or []
+    print(f"[{n}/{of}] {path.name} — composition only ({len(shots)} shots, from the stills already saved)", flush=True)
+    t0 = time.time()
+    for k, s in enumerate(shots):
+        still = thumbs / f"{s.get('shot', k):04d}.jpg"
+        if still.exists():
+            s["composition"] = compose_safe(vision, str(still))
+        say(file=path.name, n=n, of=of, shot=k + 1, shots=len(shots), step="composition",
+            per_shot=round((time.time() - t0) / (k + 1), 1), failed=0)
+    old["version"] = VERSION
+    tmp = out.with_suffix(".json.new")
+    tmp.write_text(json.dumps(old, indent=1, ensure_ascii=False)); os.replace(tmp, out)
     return "done"
 
 
@@ -576,6 +864,38 @@ def selftest():
         (arch / "PARKS" / "A001.MXF").write_bytes(b"o"); (prox / "PARKS" / "A001.mp4").write_bytes(b"p")
         assert proxy_of(arch / "PARKS" / "A001.MXF", arch, prox) == prox / "PARKS" / "A001.mp4"
         assert proxy_of(arch / "PARKS" / "B.MXF", arch, prox) is None
+    # the lens: the same tags as the Composition Lens page, on 20 stills marked by hand (768x432, frame fractions)
+    B = lambda a, b, c, d: {"x0": a, "y0": b, "x1": c, "y1": d}
+    P = lambda x, y: {"x": x, "y": y}
+    H = lambda a, b, c, d: {"a": P(a, b), "b": P(c, d)}
+    for m, want in [
+        (dict(subject=B(.79, .30, .98, 1), eyes=P(.86, .39), facing="left", horizon=H(0, .55, .6, .55)), "golden_rectangle level_horizon rule_of_space"),
+        (dict(subject=B(0, .24, .26, 1), lines=[H(.13, .12, .68, .42)]), ""),
+        (dict(subject=B(.22, .24, .56, 1), eyes=P(.39, .42), horizon=H(.6, .5, 1, .5)), "golden_rectangle horizon_centered level_horizon"),
+        (dict(subject=B(.53, .24, .62, .9), eyes=P(.565, .30), facing="left"), "rule_of_thirds rule_of_space"),
+        (dict(subject=B(.49, .27, .76, .68), horizon=H(0, .6, 1, .6)), "golden_rectangle level_horizon"),
+        (dict(subject=B(.42, .62, .58, .76), horizon=H(.12, .68, .55, .66)), "rule_of_thirds horizon_on_third centered level_horizon"),
+        (dict(subject=B(.12, .36, .27, .84), eyes=P(.205, .39)), "golden_rectangle"),
+        (dict(subject=B(.48, .20, .66, .85), horizon=H(0, .665, 1, .665)), "rule_of_thirds horizon_on_third level_horizon"),
+        (dict(subject=B(.12, .20, .55, .95), eyes=P(.32, .47)), "rule_of_thirds"),
+        (dict(subject=B(.13, .37, .27, .9), eyes=P(.18, .46), facing="right"), "rule_of_space"),
+        (dict(subject=B(.13, .25, .42, .55), eyes=P(.35, .38)), "rule_of_thirds thirds_intersection diagonal_method"),
+        (dict(subject=B(.6, .35, .8, .6)), ""),
+        (dict(subject=B(.2, .05, .5, 1), eyes=P(.32, .16), facing="right"), "rule_of_thirds rule_of_space"),
+        (dict(subject=B(.36, .25, .55, .75), eyes=P(.46, .37)), "rule_of_thirds golden_rectangle"),
+        (dict(subject=B(.07, .15, .33, 1), eyes=P(.2, .27), facing="right"), "rule_of_space"),
+        (dict(subject=B(.40, .20, .58, 1), eyes=P(.505, .29), facing="right"), "rule_of_thirds centered rule_of_space"),
+        (dict(subject=B(.43, .43, .53, .60)), "centered"),
+        (dict(subject=B(.42, .33, .58, .62), eyes=P(.45, .38), horizon=H(0, .64, 1, .64)), "rule_of_thirds horizon_on_third golden_rectangle centered level_horizon"),
+        (dict(subject=B(.33, .12, .62, 1), eyes=P(.44, .25)), "centered diagonal_method"),
+        ({}, "")]:
+        assert sorted(lens(m, 768, 432)[0]) == sorted(want.split()), (m, lens(m, 768, 432))
+    assert "dutch_angle" in lens({"horizon": H(0, .4, 1, .6)}, 768, 432)[0]
+    assert "negative_space" in lens({"subject": B(.1, .1, .2, .3)}, 768, 432, plain=.9)[0]
+    assert "negative_space" not in lens({"subject": B(.1, .1, .2, .3)}, 768, 432, plain=.5)[0], "a busy frame is not negative space"
+    m = _anchors_from({"subject": {"what": "a kite flyer", "box": [490, 270, 760, 680]}, "eyes": "no", "facing": "Left",
+                       "horizon": [[0, 600], [1000, 600]], "lines": [[[1, 2]], "x"], "judged": ["silhouette"]})
+    assert m["subject"]["x0"] == .49 and "eyes" not in m and m["facing"] == "left" and "lines" not in m and m["what"] == "a kite flyer"
     # speech that failed is tried again, speech only; the picture's description is kept
     global transcribe, say
     real, real_say = transcribe, say
@@ -600,6 +920,17 @@ def selftest():
             transcribe = boom
             assert analyse(f, store, vis, "w2", th, False, 1, 1) == "speech"           # new speech model, failed: described, speech said apart
             assert json.loads(out.read_text())["speech_failed"] == "no"
+            # version 3, Describe again: only the composition is added, from the stills already saved
+            out.write_text(json.dumps({"version": 3, "prompt": prompt_id(th), "model": "m", "whisper": "", "seen_at": [str(f)],
+                                       "shots": [{"shot": 0, "description": "kept"}, {"shot": 1, "description": "no still"}]}))
+            (store / fp[:2] / fp).mkdir(); (store / fp[:2] / fp / "0000.jpg").write_bytes(b"jpg")
+            vis.compose = lambda fr: {"tags": ["centered"], "seen": Path(fr).name}
+            assert analyse(f, store, vis, "", th, False, 1, 1) == "older", "not asked: kept, said older"
+            assert analyse(f, store, vis, "", th, False, 1, 1, again=True) == "done"
+            r = json.loads(out.read_text())
+            assert r["version"] == VERSION and r["shots"][0] == {"shot": 0, "description": "kept", "composition": {"tags": ["centered"], "seen": "0000.jpg"}}
+            assert "composition" not in r["shots"][1], r
+            assert analyse(f, store, vis, "", th, False, 1, 1, again=True) == "already"
     finally:
         transcribe, say = real, real_say
     print("analyze: all checks pass")

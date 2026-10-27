@@ -934,9 +934,28 @@ video, the cuts and the sound come from its proxy when there is one.
 7. A shot longer than 8 seconds is also looked at about every 5 seconds: each moment is its own
    entry, with its start and end, `take` (the shot it is part of), `moment` and `of`, one still
    each (`moments()` in analyze.py). Description version 3.
+8. **Composition** (version 4). Each shot's still is asked a second, separate question
+   (`COMPOSE`): where the main subject is (a box), the eyes, which way the subject faces, the horizon,
+   up to three strong straight lines, and what is clearly there that geometry cannot measure
+   (`judged`: frame within a frame, leading lines, symmetry, silhouette, low or high angle, layering,
+   pattern, triangles, S-curve, radial, light or colour contrast). The model only marks where things
+   are; the tags are worked out in code (`lens()`), by the same rules as the Composition Lens page:
+   the marks against the guides (thirds, phi grid, centre, diagonals, the 45° method, golden
+   triangles, dynamic symmetry), within 5% of the frame's short side. A subject's centre counts left
+   to right only; eyes against the points first; horizon and lines against guides of the same angle.
+   Golden counts only when closer than the thirds. Horizon: level within 2°, Dutch beyond 5°. Rule of
+   space or short-sided from the way the subject faces and the room on each side; negative space when
+   the subject is under a tenth of the frame and the rest is at least 75% plain (no edges); fill the
+   frame above 60%. Kept per shot as `composition`: `marks`, `tags`, `judged` and `lit` (which mark
+   fell on which guide, and how far), so every tag can be checked. Searchable in words ("rule of
+   thirds", "silhouette"), shown in a shot's Details, and in Export descriptions. A second question
+   per shot: describing takes longer. The separate question leaves the description's question
+   unchanged, so nothing is described again by itself.
 
 **Describe again** (a described folder's row) describes again, in its place on the list, only the
 files described with an older version (`--again`, asked through `helper-control.json` "again").
+A file of version 3 only gets its composition, from the stills already saved beside its
+description: the video is not opened and its description is kept. Older ones are described whole.
 Rushes never does it by itself: a folder described before keeps its descriptions, and its row says
 how many are of an older version.
 
