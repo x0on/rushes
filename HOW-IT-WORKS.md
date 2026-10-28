@@ -972,6 +972,11 @@ last thing it was doing:
 
 A folder of photos says how many ("20 photos or sound files"), not "0 videos".
 
+**Only at night** (Manage → Describe): from 10 pm to 7 am. At 7 am a folder being described stops,
+like Pause, between two lines of its work (a file part-done is redone; every file finished is kept),
+and carries on at 10 pm. Before 0.13.42 it was only looked at between folders, so a large folder
+(40,000 files) went on through the day.
+
 With the archive itself not connected, its folders on the list say so ("VIDEOS is not connected") and
 wait; nothing on the list changes. "Not here any more" is only for a folder missing from a connected
 archive.
@@ -2075,7 +2080,8 @@ one, from the list of mounts (the runner every 5 minutes, `share_noted()`; the R
 When the archive is away, **the runner asks macOS to connect it again** (`reconnect()` in runner.py:
 AppleScript's `mount volume "smb://…"`, the way Finder does), every minute for ten minutes, then every
 five, until it is back. macOS uses the password saved in its Keychain; Rushes never sees a password.
-Each try is in the technical log; the Rushes app's Overview says "Rushes is connecting it again by
+The share it noted is said once in the technical log ("VIDEOS is on the share smb://…"). Each try is in
+the technical log; the Rushes app's Overview says "Rushes is connecting it again by
 itself: tried 3 times since 23:57 … last at 23:59: <macOS's reason>"; Activity says when it is back
 ("VIDEOS dropped and Rushes connected it again"). With no password in the Keychain, macOS may ask
 for it in its own window. A share disconnected on purpose is connected again too, within a minute:

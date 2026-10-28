@@ -3196,6 +3196,11 @@ def _first_waiting(path, first):
     return _first_seen[1]
 
 
+def daytime_wait(c):
+    """Only at night (Manage → Describe) and it is day: describing waits, and a folder being described stops."""
+    return bool(c.get("describe_night")) and NIGHT[1] <= time.localtime().tm_hour < NIGHT[0]
+
+
 def describe_lane(every=20):
     """The describing lane: the queue's describing jobs, one folder at a time,
     beside the copies. Its own Pause (Manage, or Rushes Helper's window)."""
@@ -3218,7 +3223,7 @@ def describe_lane(every=20):
                 time.sleep(10); continue
             if stopped():                     # a share stopped answering: nothing until Try again
                 time.sleep(every); continue
-            if control().get("describe_night") and NIGHT[1] <= time.localtime().tm_hour < NIGHT[0]:
+            if daytime_wait(control()):
                 if said != "night":
                     status(phase="waiting", note="describing waits for the night (10 pm to 7 am)"); said = "night"
                 time.sleep(60); continue
@@ -3487,8 +3492,10 @@ def describe_folder(path, asked=""):
         c = control()                         # Pause describing stops it between lines; a file part-done is redone
         first = c.get("first") or ""
         first_ready = _first_waiting(path, first)
-        if c.get("describe_paused") or path in c.get("skip", []) or first_ready:
-            stopped = ("describing paused" if c.get("describe_paused") else "skipped from Manage" if path in c.get("skip", [])
+        # Only at night: 7 am stops it in the middle of a folder too, like Pause (a folder can take days)
+        if c.get("describe_paused") or daytime_wait(c) or path in c.get("skip", []) or first_ready:
+            stopped = ("describing paused" if c.get("describe_paused") else "7 am: only at night, it carries on at 10 pm" if daytime_wait(c)
+                       else "skipped from Manage" if path in c.get("skip", [])
                        else f"set aside for {os.path.basename(first)} (Start on this one now); it carries on after")
             if hasattr(os, "killpg"):
                 tell(signal.SIGCONT); tell(signal.SIGTERM)    # the whole group, held or not
@@ -4006,6 +4013,16 @@ def selftest():
             said = []
             status, analysis_tools, history = (lambda **k: said.append(k)), (lambda: (fake, "m", "")), (lambda *a, **k: None)
             assert describe_folder(td) == 4 and said[-1]["phase"] == "blocked" and "PermissionError" in said[-1]["note"], said[-1:]
+            # Only at night: 7 am stops a folder in the middle (it said "waits for 10 pm" and went on for days)
+            global daytime_wait
+            keep5 = daytime_wait
+            open(fake, "w").write("#!/bin/sh\necho '[1/9] a.mov'\nsleep 5\necho '[2/9] b.mov'\n")
+            daytime_wait = lambda c: True
+            try:
+                t0 = time.time(); said.clear()
+                assert describe_folder(td) == 1 and time.time() - t0 < 4 and "7 am" in said[-1]["note"], said[-1:]
+            finally:
+                daytime_wait = keep5
     finally:
         status, analysis_tools, history = keep3
     print("all checks pass")

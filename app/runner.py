@@ -536,6 +536,7 @@ class Runner:
         if known.get(arch) != url:
             known[arch] = url
             self.write("shares.json", json.dumps(known))
+            self.say(f"{os.path.basename(arch) or arch} is on the share {url}: if it drops, Rushes asks macOS to connect it again")
 
     def reconnect(self):
         """The archive's share dropped (the Mac asleep, the network, the server): ask macOS to connect it again,

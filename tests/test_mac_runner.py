@@ -54,6 +54,7 @@ class MacJobs(unittest.TestCase):
         b = os.path.join(self.t, "bin")
         self.r.share_noted({self.t: "smbfs", "/Volumes/Card": "exfat"}, {self.t: "//alex@files.example.org/Media$", "/Volumes/Card": "/dev/disk4s1"})
         self.assertEqual(json.load(open(os.path.join(self.web, "shares.json")))[self.a], "smb://alex@files.example.org/Media$")
+        self.assertIn("is on the share smb://alex@files.example.org/Media$", self.log())     # said once, so it can be checked
         # macOS cannot reach it yet: said, and tried again a minute later, not at once
         open(os.path.join(b, "osascript"), "w").write("#!/bin/sh\necho \"$2\" >> \"$0.asked\"\necho 'execution error: There was a problem connecting to the server (-36)' >&2\nexit 1\n")
         os.chmod(os.path.join(b, "osascript"), 0o755)

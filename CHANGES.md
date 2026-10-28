@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.42 — October 2026
+
+- **Only at night stops at 7 am, even in the middle of a folder.** It was only looked at between folders, so turning it on during a 40,000-file folder changed nothing for days, while the page said "Describing waits for 10 pm, and stops at 7 am". Now 7 am stops it like Pause (every file finished is kept) and it carries on at 10 pm.
+- The share the archive is on is said once in the technical log ("VIDEOS is on the share smb://…"), so it can be checked that a drop will be connected again.
+
+Changes the helper's code (`ingest.py`): signed again.
+
 ## 0.13.41 — October 2026
 
 - **A share that drops is connected again by itself.** When the archive's share drops (the Mac asleep, the network, the server), Rushes asks macOS to connect it again, every minute for ten minutes and then every five, with the password saved in the Keychain; Rushes never sees it. Each try is in the log and on the Rushes app's Overview ("connecting it again by itself: tried 3 times since 23:57"), and Activity says when it is back. A drop at midnight now costs a minute, not the night. Quit Rushes to keep a share disconnected on purpose.
