@@ -564,7 +564,12 @@ $happening = (function () use ($WEB, $running, $running_said, $progress, $mac, $
         $h[] = $one('describe', 'Describing waits', trim(($b['label'] ?? '') . ' · ' . ($b['note'] ?? ''), ' ·'), null, '/db/admin.php#describe');
     else {
         $q = count(array_filter(@file("$WEB/ingest-queue.tsv") ?: [], fn($l) => str_starts_with($l, "analyze\t")));
-        if ($q) $h[] = $one('describe', 'Describing', $q . ' folder' . ($q === 1 ? '' : 's') . ' with previews ready · starts beside any copying', null, '/db/admin.php#describe');
+        // never "Describing" while it is switched off, or waiting for the night: what it will do, and when
+        $c = helper_control(); $hr = (int)date('G'); $day = !empty($c['describe_night']) && $hr >= 7 && $hr < 22;
+        $fs = $q . ' folder' . ($q === 1 ? '' : 's') . ' waiting';
+        if ($q && !empty($c['describe_paused'])) $h[] = $one('describe', 'Describing is off', $fs . ' · switch Describe footage on, in Overview', null, '/db/admin.php#overview');
+        elseif ($q && $day) $h[] = $one('describe', 'Describing waits for the night', $fs . ' · starts at 10 pm', null, '/db/admin.php#describe');
+        elseif ($q) $h[] = $one('describe', 'Describing', $q . ' folder' . ($q === 1 ? '' : 's') . ' with previews ready · starts beside any copying', null, '/db/admin.php#describe');
     }
     // 4. the helper's copying and checking
     $ph = $mac && !$mac_stale ? ($mac['phase'] ?? '') : '';

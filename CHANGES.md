@@ -6,6 +6,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 ## 0.13.42 — October 2026
 
 - **Only at night stops at 7 am, even in the middle of a folder.** It was only looked at between folders, so turning it on during a 40,000-file folder changed nothing for days, while the page said "Describing waits for 10 pm, and stops at 7 am". Now 7 am stops it like Pause (every file finished is kept) and it carries on at 10 pm.
+- **The top bar no longer says "Describing" when describing is off.** Switched off on Overview, it said "Describing · 20 folders with previews ready · starts beside any copying", which nothing was going to do. It now says "Describing is off · 20 folders waiting · switch Describe footage on, in Overview", or "Describing waits for the night · starts at 10 pm".
 - The share the archive is on is said once in the technical log ("VIDEOS is on the share smb://…"), so it can be checked that a drop will be connected again.
 
 Changes the helper's code (`ingest.py`): signed again.

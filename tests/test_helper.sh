@@ -216,4 +216,10 @@ check 'python3 -c "import json,sys; d=json.load(open(sys.argv[1]))[\"duplicates\
 check 'SIGNED=1 call POST "{}" "{\"folder\":\"Library\",\"kind\":\"stopover\"}" db/dupfolders.php | grep -q "your shelf"' 'the shelf cannot be made a stopover'
 SIGNED=1 call POST "{}" "{\"folder\":\"ALL CARD\",\"kind\":\"normal\"}" db/dupfolders.php >/dev/null
 check '! grep -q "ALL CARD" "$ROOT/app/settings.json"' 'and Normal takes it off again'
+# The top bar never says "Describing" while it is switched off: what is waiting, and how to switch it on
+printf 'analyze\t/Volumes/VIDEO/Meadow Park\t1\n' > "$ROOT/app/ingest-queue.tsv"
+echo '{"describe_paused":true}' > "$ROOT/app/helper-control.json"
+check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if \"escrib\" in json.dumps(x)]; assert d and \"Describing is off\" in json.dumps(d[0]) and \"starts beside\" not in json.dumps(d[0]), d"' \
+      'paused, the top bar says describing is off, never that it starts'
+rm -f "$ROOT/app/ingest-queue.tsv" "$ROOT/app/helper-control.json"
 echo "Helper tests complete."
