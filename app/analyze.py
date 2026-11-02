@@ -220,6 +220,22 @@ def moments(cuts, long=8.0, every=5.0):
     return out
 
 
+SAME = 0.15         # a moment whose still differs from the last one described in under 15% of the frame: unchanged
+
+
+def same_picture(p1, p2, level=25):
+    """Two stills of one take show the same thing (a locked-off camera, nothing moving): under SAME of a 32x18
+    grey thumbnail differs by more than `level`. Measured on a street corner: an empty street or a car far off
+    3-9%, people walking into frame 29-81%. False when either cannot be read, so it is described."""
+    try:
+        from PIL import Image, ImageChops
+        a, b = (Image.open(x).convert("L").resize((32, 18), Image.BILINEAR) for x in (p1, p2))
+        d = ImageChops.difference(a, b).histogram()
+        return sum(d[level + 1:]) / (32 * 18) < SAME
+    except Exception:
+        return False
+
+
 def sample_times(a, b):
     """Where in a shot to look. Never its first frames: the camera is still
     settling — moving, out of focus, exposure hunting — and a recording's very
@@ -663,6 +679,7 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
     if ext in IMAGE or (ext not in AUDIO and has_video):
         cuts = [(0.0, 0.0)] if ext in IMAGE else shots_of(src, duration)
         pics = {"original": 0, "proxy": 0}
+        kept, kept_still, joined = None, None, 0        # the last moment described of a long take, and its still
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             for i, (a, b, take, k, of_take) in enumerate(moments(cuts)):
@@ -686,6 +703,14 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                             pics["proxy"] += 1; frames.append(str(f))
                 if not frames:
                     continue
+                # A long take where nothing changed since the last moment described (a locked-off camera on an
+                # empty street): that moment just lasts longer. Not described again, so Search does not list
+                # the same picture twelve times, and the AI's time goes to moments where something happens.
+                if k > 1 and kept is not None and kept.get("take") == take and same_picture(kept_still, frames[0]):
+                    kept["end"] = round(b, 3); joined += 1
+                    say(file=path.name, n=n, of=of, shot=i + 1, shots=len(moments(cuts)),
+                        per_shot=round((time.time() - t0) / (i + 1), 1), failed=rec["failed_shots"])
+                    continue
                 shutil.copyfile(frames[0], thumbs / f"{i:04d}.jpg")          # the picture search shows
                 got, raw, ok = vision.describe(frames)
                 if not ok:
@@ -694,12 +719,17 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
                 shot["composition"] = compose_safe(vision, frames[0])      # the still search shows is the one measured
                 if k:
                     shot.update(take=take, moment=k, of=of_take)          # one moment of a long take
+                    kept, kept_still = shot, thumbs / f"{i:04d}.jpg"
+                else:
+                    kept = None
                 if raw:
                     shot["raw"] = raw
                 rec["shots"].append(shot)
                 say(file=path.name, n=n, of=of, shot=i + 1, shots=len(moments(cuts)),
                     per_shot=round((time.time() - t0) / (i + 1), 1), failed=rec["failed_shots"])
         rec["pictures_from"] = {k: v for k, v in pics.items() if v}     # which file each still came from
+        if joined:
+            rec["moments_unchanged"] = joined                             # joined to the moment before them
         for s in rec["shots"]:        # one title read by two frames, merged
             s["text_on_screen"] = merge_text([s.get("text_on_screen", [])])
 
@@ -719,7 +749,8 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
     per = (time.time() - t0) / max(len(rec["shots"]), 1)
     print(f"    {len(rec['shots'])} shots, {per:.1f}s each"
           + (f", {len(rec['speech']['segments'])} lines of speech ({rec['speech']['language']})" if rec["speech"] else "")
-          + (f", {rec['failed_shots']} could not be read" if rec["failed_shots"] else ""), flush=True)
+          + (f", {rec['failed_shots']} could not be read" if rec["failed_shots"] else "")
+          + (f", {rec['moments_unchanged']} moments of long takes unchanged (joined to the one before, not described again)" if rec.get("moments_unchanged") else ""), flush=True)
     return "done"
 
 
@@ -902,6 +933,16 @@ def selftest():
     m = _anchors_from({"subject": {"what": "a kite flyer", "box": [490, 270, 760, 680]}, "eyes": "no", "facing": "Left",
                        "horizon": [[0, 600], [1000, 600]], "lines": [[[1, 2]], "x"], "judged": ["silhouette"]})
     assert m["subject"]["x0"] == .49 and "eyes" not in m and m["facing"] == "left" and "lines" not in m and m["what"] == "a kite flyer"
+    # a long take's moment that shows the same picture is not described again; one where people walked in is
+    with tempfile.TemporaryDirectory() as td:
+        from PIL import Image, ImageDraw
+        street = Image.new("RGB", (768, 432), (120, 130, 140)); ImageDraw.Draw(street).rectangle((500, 150, 700, 380), fill=(220, 210, 160))
+        car = street.copy(); ImageDraw.Draw(car).rectangle((60, 220, 110, 250), fill=(40, 40, 40))           # a car far off
+        people = street.copy(); ImageDraw.Draw(people).rectangle((150, 40, 450, 432), fill=(30, 30, 30))      # people in front
+        for name, im in (("a", street), ("b", car), ("c", people)): im.save(f"{td}/{name}.jpg")
+        assert same_picture(f"{td}/a.jpg", f"{td}/b.jpg"), "a car far off: unchanged"
+        assert not same_picture(f"{td}/a.jpg", f"{td}/c.jpg"), "people walking in: described"
+        assert not same_picture(f"{td}/a.jpg", f"{td}/missing.jpg"), "a still that cannot be read: described"
     # speech that failed is tried again, speech only; the picture's description is kept
     global transcribe, say
     real, real_say = transcribe, say
@@ -939,6 +980,28 @@ def selftest():
             assert analyse(f, store, vis, "", th, False, 1, 1, again=True) == "already"
     finally:
         transcribe, say = real, real_say
+    # through the whole loop: a 30 s take, empty street for 15 s, then people: 2 moments described, 4 joined
+    global probe, shots_of, frame
+    with tempfile.TemporaryDirectory() as td:
+        from PIL import Image, ImageDraw
+        street = Image.new("RGB", (768, 432), (120, 130, 140)); street.save(f"{td}/a.jpg")
+        people = street.copy(); ImageDraw.Draw(people).rectangle((150, 40, 450, 432), fill=(30, 30, 30)); people.save(f"{td}/c.jpg")
+        keep = probe, shots_of, frame, say
+        try:
+            probe = lambda p: (30.0, False, True, "")
+            shots_of = lambda p, d: [(0.0, 30.0)]
+            frame = lambda p, at, out: shutil.copyfile(f"{td}/{'a' if at < 15 else 'c'}.jpg", out) or True
+            say = lambda **k: None
+            asked = []
+            vis = type("V", (), {"name": "m", "describe": lambda self, fr: (asked.append(1) or ({"description": "x"}, "", True)),
+                                 "compose": lambda self, fr: None})()
+            f = Path(td) / "take.mov"; f.write_bytes(b"v" * 100); store = Path(td) / "store"
+            assert analyse(f, store, vis, "", th, False, 1, 1) == "done"
+            r = json.loads((store / fingerprint(f)[:2] / f"{fingerprint(f)}.json").read_text())
+            assert [(s["start"], s["end"]) for s in r["shots"]] == [(0.0, 15.0), (15.0, 30.0)] and len(asked) == 2, r["shots"]
+            assert r["moments_unchanged"] == 4, r.get("moments_unchanged")
+        finally:
+            probe, shots_of, frame, say = keep
     print("analyze: all checks pass")
     return 0
 

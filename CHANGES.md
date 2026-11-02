@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.43 — November 2026
+
+- **A long take is no longer described again and again when nothing changes.** A locked-off camera on a street corner was described every 5 seconds, so one picture ("a yellow convertible parked on a residential street…") came twelve times, each taking the AI 13 to 30 seconds. Now a moment whose still is the same as the last one described (under 15% of the frame changed) is joined to it ("1:55 → 2:15"), and only the moments where something happens (people walking in, the camera moving) are described. Faster describing, and Search shows the picture once. Descriptions made before keep their repeated moments.
+
+Changes the helper's code (`analyze.py`): signed again.
+
 ## 0.13.42 — October 2026
 
 - **Only at night stops at 7 am, even in the middle of a folder.** It was only looked at between folders, so turning it on during a 40,000-file folder changed nothing for days, while the page said "Describing waits for 10 pm, and stops at 7 am". Now 7 am stops it like Pause (every file finished is kept) and it carries on at 10 pm.

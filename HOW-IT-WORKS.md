@@ -933,7 +933,13 @@ video, the cuts and the sound come from its proxy when there is one.
    the model (midnight to 5 am is night).
 7. A shot longer than 8 seconds is also looked at about every 5 seconds: each moment is its own
    entry, with its start and end, `take` (the shot it is part of), `moment` and `of`, one still
-   each (`moments()` in analyze.py). Description version 3.
+   each (`moments()` in analyze.py). Description version 3. **A moment that shows the same picture as
+   the last one described** (a locked-off camera on an empty street; under 15% of a small grey copy of
+   the still changed, `same_picture()`) is not described again: the moment before it just lasts longer
+   ("1:55 → 2:15"), so Search does not list one picture twelve times, and the AI's time goes to the
+   moments where something happens. Measured on a street corner: an empty street or a car far off
+   changed 3–9% of the frame, people walking in 29–81%. The description says how many were joined
+   (`moments_unchanged`). Descriptions made before 0.13.43 keep their repeated moments.
 8. **Composition** (version 4). Each shot's still is asked a second, separate question
    (`COMPOSE`): where the main subject is (a box), the eyes, which way the subject faces, the horizon,
    and up to three strong straight lines. Nothing is judged by the model (silhouette, symmetry,
