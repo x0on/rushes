@@ -124,6 +124,22 @@ check(analysis_search('kite meadow')['count'] === 1 && analysis_search('water pa
       "this Mac's copy of a description is read before the archive's, and its stills too; the archive's others still come in");
 array_map('unlink', ["$loc/$fp/0000.jpg", "$loc/$fp.json"]); @rmdir("$loc/$fp"); @rmdir($loc); @rmdir(analysis_local_dir());
 meta_set('analysis_at', '0'); touch(web_dir() . '/describe-status.tsv'); analysis_import();
+// An image sequence described as one clip: its frames, described one by one before, leave Search; other files stay
+@mkdir("$root/archive/_rushes/analysis/ee", 0777, true);
+$rec = fn($fp, $file, $what, $extra = []) => file_put_contents("$root/archive/_rushes/analysis/ee/$fp.json", json_encode($extra + ['fingerprint' => $fp,
+    'file' => $file, 'seen_at' => [$file], 'model' => 'qwen', 'shots' => [['shot' => 0, 'start' => 0, 'end' => 0, 'description' => $what]]]));
+$R = "$root/archive/Render";
+$rec(str_repeat('e1', 12), "$R/Titles_0001.png", 'a title frame');
+$rec(str_repeat('e2', 12), "$R/Titles_0002.png", 'a title frame');
+$rec(str_repeat('e3', 12), "$R/Titles_poster.png", 'a title poster');
+$rec(str_repeat('e4', 12), "$R/Titles_0001.png", 'an animated title', ['kind' => 'sequence', 'frames' => 2,
+    'frame_pattern' => ['dir' => $R, 'prefix' => 'Titles_', 'ext' => '.png', 'digits' => 4, 'first' => 1, 'last' => 2]]);
+meta_set('analysis_at', '0'); touch(web_dir() . '/describe-status.tsv'); analysis_import();
+$t = analysis_search('title');
+check($t['count'] === 2 && !in_array('a title frame', array_column($t['rows'], 'what'), true)
+      && in_array('an animated title', array_column($t['rows'], 'what'), true) && in_array('a title poster', array_column($t['rows'], 'what'), true),
+      'an image sequence is found once: its frames described one by one leave Search, a file beside them stays');
+foreach (['e1', 'e2', 'e3', 'e4'] as $x) @unlink("$root/archive/_rushes/analysis/ee/" . str_repeat($x, 12) . '.json');
 require_once "$root/app/db/prepare.php";
 file_put_contents(web_dir() . '/describe-status.tsv', "ts\t" . time() . "\nphase\tblocked\nsource\t/Volumes/Drive/A\nnote\tVIDEO is not connected\n");
 check((describing_blocked()['note'] ?? '') === 'VIDEO is not connected' && !describing_now(), 'describing that cannot go on says why, and is not said to be running');

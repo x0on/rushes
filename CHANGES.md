@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.44 — November 2026
+
+- **An image sequence is described once, as one clip.** A render written one PNG per frame ("Titles_05475.png" …) was described frame by frame: thousands of AI questions for one animation, and thousands of entries in Search. Now frames with the same name and a running number in one folder (PNG, TIFF, DPX or EXR; at least 24; never camera photos) are one clip: described from its first, middle and last frames, tagged "image sequence", found once in Search. The frames already described one by one leave Search when their sequence is described (the next time its folder is described; nothing is deleted).
+- **Transparent images are no longer black squares.** A render of titles or silhouettes with a transparent background is shown to the AI on grey, so what is in it can be seen.
+
+Changes the helper's code (`analyze.py`): signed again.
+
 ## 0.13.43 — November 2026
 
 - **A long take is no longer described again and again when nothing changes.** A locked-off camera on a street corner was described every 5 seconds, so one picture ("a yellow convertible parked on a residential street…") came twelve times, each taking the AI 13 to 30 seconds. Now a moment whose still is the same as the last one described (under 15% of the frame changed) is joined to it ("1:55 → 2:15"), and only the moments where something happens (people walking in, the camera moving) are described. Faster describing, and Search shows the picture once. Descriptions made before keep their repeated moments.

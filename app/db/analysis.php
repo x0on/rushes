@@ -22,6 +22,8 @@ function analysis_init(): void {
     // comp: the shot's composition (describe version 4), as JSON: subject, tags, marks
     $cols = []; $r = db()->query('PRAGMA table_info(moments)'); while ($c = $r->fetchArray(SQLITE3_ASSOC)) $cols[] = $c['name'];
     if (!in_array('comp', $cols, true)) db()->exec('ALTER TABLE moments ADD COLUMN comp TEXT');
+    // image sequences described as one clip (describe 0.13.44): their frames, described one by one before, are not listed
+    db()->exec('CREATE TABLE IF NOT EXISTS sequences (fp TEXT PRIMARY KEY, dir TEXT, prefix TEXT, ext TEXT, digits INTEGER)');
     // wmatch(hay, pattern): a whole word, as word_pattern() writes it (SQLite has no regular expressions)
     static $fn = false;
     if (!$fn) { db()->createFunction('wmatch', fn($hay, $re) => preg_match($re, (string)$hay) ? 1 : 0, 2, SQLITE3_DETERMINISTIC); $fn = true; }
@@ -108,6 +110,12 @@ function analysis_import(): array {
             foreach (array_values($v) as $i => $x) $ins->bindValue($i + 1, $x);
             $ins->execute(); $ins->reset();
         };
+        if (($r['kind'] ?? '') === 'sequence' && is_array($r['frame_pattern'] ?? null)) {
+            $q = $db->prepare('INSERT OR REPLACE INTO sequences (fp, dir, prefix, ext, digits) VALUES (?, ?, ?, ?, ?)');
+            $fpat = $r['frame_pattern'];
+            foreach ([$fp, as_here((string)$fpat['dir']), (string)$fpat['prefix'], (string)$fpat['ext'], (int)$fpat['digits']] as $i => $x) $q->bindValue($i + 1, $x);
+            $q->execute();
+        }
         foreach ($r['shots'] ?? [] as $s) {
             if (!empty($s['parse_error'])) {                  // counted, never searchable; the raw answer stays in the file
                 $row([$fp, $path, 'failed', (int)$s['shot'], (float)($s['start'] ?? 0), (float)($s['end'] ?? 0),
@@ -133,8 +141,27 @@ function analysis_import(): array {
                   $r['whisper'] ?? '', mb_strtolower($g['text'] . ' ' . basename($path)), null]);
     }
     $db->exec('COMMIT');
+    analysis_hide_frames();
     meta_set('analysis_at', (string)$newest);
     return ['described_files' => $n];
+}
+
+// A sequence's frames described one by one (before it was known to be one clip) are taken out of Search:
+// the sequence stands for them. Only Search's rows; every description file stays as it is.
+function analysis_hide_frames(): int {
+    $db = db(); $n = 0;
+    $seqs = $db->query('SELECT fp, dir, prefix, ext, digits FROM sequences');
+    while ($q = $seqs->fetchArray(SQLITE3_ASSOC)) {
+        $start = rtrim($q['dir'], '/') . '/' . $q['prefix'];
+        $re = '/^' . preg_quote($start, '/') . '\d{' . (int)$q['digits'] . '}' . preg_quote($q['ext'], '/') . '$/iu';
+        $st = $db->prepare("SELECT DISTINCT fp, path FROM moments WHERE path >= ? AND path < ? AND fp != ?");
+        $st->bindValue(1, $start); $st->bindValue(2, $start . "\u{10FFFF}"); $st->bindValue(3, $q['fp']);
+        $r = $st->execute(); $gone = [];
+        while ($x = $r->fetchArray(SQLITE3_NUM)) if (preg_match($re, $x[1])) $gone[$x[0]] = true;
+        $r->finalize();
+        foreach (array_keys($gone) as $f) { $d = $db->prepare('DELETE FROM moments WHERE fp = ?'); $d->bindValue(1, $f); $d->execute(); $n++; }
+    }
+    return $n;
 }
 
 // Moments matching every word: shots before speech, then by file and time.

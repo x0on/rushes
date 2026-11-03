@@ -940,6 +940,16 @@ video, the cuts and the sound come from its proxy when there is one.
    moments where something happens. Measured on a street corner: an empty street or a car far off
    changed 3–9% of the frame, people walking in 29–81%. The description says how many were joined
    (`moments_unchanged`). Descriptions made before 0.13.43 keep their repeated moments.
+9. **Image sequences** (0.13.44): a render written one picture per frame ("Titles_0001.png",
+   "…_0002.png" …) is one clip, not thousands of photos. In one folder, the same name with a running
+   number of 3 digits or more, PNG, TIFF, DPX or EXR (never camera JPG, HEIC or DNG, whose numbered
+   names are separate photos), at least 24 frames, numbered with few gaps (`split_sequences()`). It is
+   described once, from its first, middle and last frames, tagged "image sequence", with how many frames
+   (`kind: sequence`, `frames`, `frame_pattern`). Frames described one by one before are taken out of
+   Search once their sequence is described (`analysis_hide_frames()`; their description files stay).
+   Search's list of files by name still has every frame.
+10. **Transparent images** (a render of titles or silhouettes) are shown to the model on mid grey; they
+   came out as black squares before 0.13.44.
 8. **Composition** (version 4). Each shot's still is asked a second, separate question
    (`COMPOSE`): where the main subject is (a box), the eyes, which way the subject faces, the horizon,
    and up to three strong straight lines. Nothing is judged by the model (silhouette, symmetry,
