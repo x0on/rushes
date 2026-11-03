@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.46 — November 2026
+
+- **Measure fingerprints (a test)**, on the Describe card. Before describing changes to "fingerprint every frame, pile what looks alike, write one sentence per pile", this measures it on this Mac: how fast its graphics chip turns stills into fingerprints, and how many piles the long takes already described fall into (up to 500 stills). Describing steps aside for it and carries on after; nothing is changed. The first time it installs PyTorch (about 300 MB) and downloads the model (about 800 MB, SigLIP, Apache 2.0); a blocked download is said as such. The result stays in Activity.
+
+Changes the helper's code (`analyze.py`, `ingest.py`): signed again.
+
 ## 0.13.45 — November 2026
 
 - **Describing leaves still images out: video and sound only.** Photos, graphics and the frames of renders (a lens-flare render exported as hundreds of JPGs slipped past 0.13.44, which only grouped PNG, TIFF, DPX and EXR sequences) took hours of the AI for black frames and flares. A folder's count of files to describe leaves them out too, so it never says images are "not described yet". Image descriptions made before stay searchable.

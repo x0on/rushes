@@ -800,6 +800,75 @@ def compose_only(old, out, thumbs, vision, path, n, of):
     return "done"
 
 
+# ── fingerprints: a test (Manage → Describe → Measure fingerprints) ─────────
+# A small model turns each still into a fingerprint (768 numbers); stills that look alike get fingerprints close
+# together, so a long take's moments fall into a few piles, and words can be searched by look. This only measures,
+# on stills already described: how fast on this Mac, and how many piles the long takes make. Nothing is changed.
+FP_MODEL = "google/siglip-base-patch16-224"     # Apache 2.0; PyTorch (BSD) and transformers (Apache 2.0), not GPL
+FP_PILE = 0.85                                  # a still joins the pile when this alike to its first still
+
+
+def piles_of(vectors, alike=FP_PILE):
+    """Stills of one clip in time order, as fingerprints (unit vectors) -> how many piles: a still joins the
+    current pile when it is at least `alike` to the pile's first still, else it starts a new one."""
+    n, head = 0, None
+    for v in vectors:
+        if head is None or float(sum(a * b for a, b in zip(head, v))) < alike:
+            n, head = n + 1, v
+    return n
+
+
+def measure_fingerprints(store, limit=500):
+    t0 = time.time()
+    try:
+        import torch, transformers  # noqa: F401
+    except ImportError:
+        print("installing PyTorch and transformers for the test (about 300 MB, once) …", flush=True)
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "torch", "transformers",
+                            "sentencepiece", "protobuf"], capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError("PyTorch could not be installed: " + ((r.stderr or r.stdout).strip().splitlines() or ["?"])[-1][:200])
+    import torch
+    from transformers import AutoModel, AutoProcessor
+    from PIL import Image
+    dev = "mps" if torch.backends.mps.is_available() else "cpu"
+    print(f"loading the fingerprint model {FP_MODEL} (downloaded once, about 800 MB) …", flush=True)
+    try:
+        model = AutoModel.from_pretrained(FP_MODEL).eval().to(dev); proc = AutoProcessor.from_pretrained(FP_MODEL)
+    except Exception as e:
+        raise RuntimeError(f"the model could not be downloaded from huggingface.co ({str(e)[:160]}): a firewall may block it")
+    clips = {}
+    for d in Path(store).glob("*/*"):
+        if d.is_dir():
+            st = sorted(d.glob("[0-9][0-9][0-9][0-9].jpg"))
+            if st: clips[d.name] = st
+    picked, n = [], 0
+    for fp, st in sorted(clips.items(), key=lambda x: -len(x[1])):      # long takes first: where piles matter
+        if n >= limit: break
+        st = st[:limit - n]; picked.append((fp, st)); n += len(st)
+    if not n:
+        raise RuntimeError("no stills to measure on: nothing is described on this Mac yet")
+    # every still in one line, stacked 32 at a time into one tensor (32 x 3 x 224 x 224): one pass of the model each
+    flat = [(fp, x) for fp, st in picked for x in st]
+    vecs, t1 = {}, time.time()
+    with torch.no_grad():
+        for i in range(0, len(flat), 32):
+            part = flat[i:i + 32]
+            v = model.get_image_features(**proc(images=[Image.open(x).convert("RGB") for _, x in part], return_tensors="pt").to(dev))
+            v = torch.nn.functional.normalize(getattr(v, "pooler_output", v), dim=-1).cpu().tolist()
+            for (fp, _), vec in zip(part, v):
+                vecs.setdefault(fp, []).append(vec)
+            print(f"fingerprinted {i + len(part)} of {n} stills", flush=True)
+    secs = time.time() - t1
+    long = {fp: v for fp, v in vecs.items() if len(v) >= 3}
+    res = {"model": FP_MODEL, "device": "the graphics chip" if dev == "mps" else "the processor", "stills": n,
+           "seconds": round(secs, 1), "per_second": round(n / secs, 1) if secs else 0, "clips": len(vecs),
+           "long_takes": len(long), "moments": sum(len(v) for v in long.values()), "piles": sum(piles_of(v) for v in long.values()),
+           "total_seconds": round(time.time() - t0)}
+    print("RESULT " + json.dumps(res), flush=True)
+    return res
+
+
 def proxy_of(path, archive, proxies):
     """The proxy made for an original, if there is one: same path under the
     proxies folder, as .mp4. Reading it is several times faster than reading
@@ -847,9 +916,17 @@ def main():
     ap.add_argument("--archive", default="", help="the archive root, to find each file's proxy")
     ap.add_argument("--proxies", default="", help="where the proxies are (same paths, as .mp4)")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--measure-fingerprints", action="store_true", help="a test: fingerprint stills already described (--store)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.measure_fingerprints:
+        try:
+            measure_fingerprints(a.store)
+            return 0
+        except Exception as e:
+            print(f"FAILED {e}", flush=True)
+            return 1
     if not a.target or not a.store:
         ap.error("a folder or file, and --store, are needed")
     files = media_under(a.target)
@@ -1009,6 +1086,8 @@ def selftest():
         from PIL import Image
         Image.new("RGBA", (40, 20), (0, 0, 0, 0)).save(f"{td}/t.png")
         assert image_still(f"{td}/t.png", f"{td}/t.jpg") and Image.open(f"{td}/t.jpg").convert("L").getpixel((5, 5)) > 100
+    # piles: a still joins the pile while it is alike to the pile's first still
+    assert piles_of([[1, 0], [0.99, 0.141], [0, 1], [0.1, 0.995], [1, 0]]) == 3 and piles_of([]) == 0
     # through the whole loop: a 30 s take, empty street for 15 s, then people: 2 moments described, 4 joined
     global probe, shots_of, frame
     with tempfile.TemporaryDirectory() as td:

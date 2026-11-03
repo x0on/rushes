@@ -222,4 +222,12 @@ echo '{"describe_paused":true}' > "$ROOT/app/helper-control.json"
 check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if \"escrib\" in json.dumps(x)]; assert d and \"Describing is off\" in json.dumps(d[0]) and \"starts beside\" not in json.dumps(d[0]), d"' \
       'paused, the top bar says describing is off, never that it starts'
 rm -f "$ROOT/app/ingest-queue.tsv" "$ROOT/app/helper-control.json"
+# The fingerprint test: the top bar says it is running (never "Describing"), and Activity keeps its result
+printf 'ts\t%s\nphase\tmeasuring\nnote\tfingerprinted 64 of 500 stills\n' "$(date +%s)" > "$ROOT/app/describe-status.tsv"
+check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if x[\"lane\"]==\"describe\"]; assert d and d[0][\"what\"]==\"Fingerprint test\" and \"64 of 500\" in d[0][\"detail\"], d"' \
+      'the fingerprint test running: the top bar says so, not describing'
+printf 'ts\t%s\nphase\tanalysing\nsource\t/x\n' "$(date +%s)" > "$ROOT/app/describe-status.tsv"
+check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if x[\"lane\"]==\"describe\"]; assert d and d[0][\"what\"]==\"Describing\", d"' \
+      'and describing again once it is done'
+rm -f "$ROOT/app/describe-status.tsv"
 echo "Helper tests complete."

@@ -381,6 +381,11 @@ function describing_now(): array {
 
 // Describing that cannot go on, and why, in the helper's words (the archive away, or a run stopped with an
 // error): said on the folder's row and in the top bar, instead of the last thing it was doing.
+function describe_status(): array {
+    $s = [];
+    foreach (@file(web_dir() . '/describe-status.tsv') ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }
+    return isset($s['ts']) && time() - (int)$s['ts'] < 1800 ? $s : [];
+}
 function describing_blocked(): array {
     $s = [];
     foreach (@file(web_dir() . '/describe-status.tsv') ?: [] as $l) { $f = explode("\t", rtrim($l, "\n"), 2); $s[$f[0]] = $f[1] ?? ''; }

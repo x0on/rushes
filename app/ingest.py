@@ -3158,6 +3158,49 @@ def install_ai():
     status(phase="installed", note="", done=" | ".join(done))
 
 
+def _fp_asked():
+    """Measure fingerprints (Manage → Describe): asked after the last one done here."""
+    try: done = float((HOME / "fp-asked").read_text())
+    except (OSError, ValueError): done = 0.0
+    return float(control().get("fp_measure") or 0) > done
+
+
+def measure_fp():
+    """The fingerprint test (analyze.py --measure-fingerprints), on the stills already described on this Mac:
+    how fast here, and how many piles the long takes make. Each step said in Describe; nothing is changed."""
+    (HOME / "fp-asked").write_text(str(float(control().get("fp_measure") or 0)))
+    py = analysis_tools()[0]
+    if not py:
+        status(phase="measure-failed", note="the fingerprint test needs the AI installed first (Install the AI, above)"); return
+    print("\n=== measuring fingerprints (a test: nothing is changed) ===")
+    status(phase="measuring", note="starting the fingerprint test …")
+    p = subprocess.Popen([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"),
+                          "--measure-fingerprints", "--store", str(LOCAL_STORE or NAS_STORE)],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    res, why, last = None, "", time.time()
+    for line in p.stdout:
+        line = line.rstrip()
+        if line.startswith("RESULT "):
+            res = json.loads(line[7:])
+        elif line.startswith("FAILED "):
+            why = line[7:]
+        elif line and not line.lower().startswith(("warning", "[transformers]", "loading weights")):
+            print("  " + line, flush=True)
+            if time.time() - last > 2: status(phase="measuring", note=line); last = time.time()
+    p.wait()
+    if not res:
+        note = why or f"it stopped ({p.returncode})"
+        print(f"  the fingerprint test did not finish: {note}")
+        history("measured", "fingerprints", 0, 0, 0, "the fingerprint test did not finish: " + note)
+        status(phase="measure-failed", note="the fingerprint test did not finish: " + note); return
+    note = (f"Fingerprint test: {res['stills']:,} stills in {res['seconds']} s on {res['device']} ({res['per_second']} a second; "
+            f"Qwen takes 13–30 s for one). Long takes: {res['moments']:,} moments in {res['long_takes']} take"
+            f"{'s' if res['long_takes'] != 1 else ''} fall into {res['piles']:,} piles.")
+    print("  " + note)
+    history("measured", "fingerprints", res["stills"], 0, res["seconds"], note)      # kept in Activity
+    status(phase="measured", note=note)
+
+
 def _asked_install():
     """When Install the AI was last pressed and done here: pressed once, done once (not again at each start)."""
     try: return float((HOME / "ai-asked").read_text())
@@ -3217,6 +3260,11 @@ def describe_lane(every=20):
                     print(f"  ! the AI was not installed: {e}")
                     status(phase="install-failed", note=str(e))
                 said = ""; continue
+            if _fp_asked():                   # Measure fingerprints (a test), asked in Manage → Describe
+                try: measure_fp()
+                except Exception as e:
+                    print(f"  ! the fingerprint test stopped: {e}"); status(phase="measure-failed", note=str(e)[:240])
+                said = "measured"; continue
             if control().get("describe_paused"):
                 if said != "paused":
                     status(phase="paused", note="describing paused — Resume describing carries on"); said = "paused"
@@ -3493,8 +3541,9 @@ def describe_folder(path, asked=""):
         first = c.get("first") or ""
         first_ready = _first_waiting(path, first)
         # Only at night: 7 am stops it in the middle of a folder too, like Pause (a folder can take days)
-        if c.get("describe_paused") or daytime_wait(c) or path in c.get("skip", []) or first_ready:
+        if c.get("describe_paused") or daytime_wait(c) or path in c.get("skip", []) or first_ready or _fp_asked():
             stopped = ("describing paused" if c.get("describe_paused") else "7 am: only at night, it carries on at 10 pm" if daytime_wait(c)
+                       else "set aside for the fingerprint test; it carries on after" if _fp_asked()
                        else "skipped from Manage" if path in c.get("skip", [])
                        else f"set aside for {os.path.basename(first)} (Start on this one now); it carries on after")
             if hasattr(os, "killpg"):
@@ -4023,6 +4072,23 @@ def selftest():
                 assert describe_folder(td) == 1 and time.time() - t0 < 4 and "7 am" in said[-1]["note"], said[-1:]
             finally:
                 daytime_wait = keep5
+            # the fingerprint test: describing steps aside for it; its result is said and kept in history
+            global _fp_asked, control, HOME
+            keep6 = _fp_asked, control, HOME
+            try:
+                HOME = Path(td)
+                _fp_asked = lambda: True; said.clear()
+                assert describe_folder(td) == 1 and "fingerprint test" in said[-1]["note"], said[-1:]
+                open(fake, "w").write('#!/bin/sh\necho "fingerprinted 32 of 44 stills"\n'
+                                      'echo \'RESULT {"model": "m", "device": "the graphics chip", "stills": 44, "seconds": 2.0, '
+                                      '"per_second": 22.0, "clips": 22, "long_takes": 2, "moments": 24, "piles": 8, "total_seconds": 9}\'\n')
+                kept = []
+                history = lambda *a, **k: kept.append(a); control = lambda: {"fp_measure": 5}; said.clear()
+                measure_fp()
+                assert said[-1]["phase"] == "measured" and "24 moments in 2 takes fall into 8 piles" in said[-1]["note"], said[-1:]
+                assert kept and kept[-1][0] == "measured" and float((HOME / "fp-asked").read_text()) == 5.0
+            finally:
+                _fp_asked, control, HOME = keep6
     finally:
         status, analysis_tools, history = keep3
     print("all checks pass")

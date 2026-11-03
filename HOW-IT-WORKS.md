@@ -971,6 +971,18 @@ description: the video is not opened and its description is kept. Older ones are
 Rushes never does it by itself: a folder described before keeps its descriptions, and its row says
 how many are of an older version.
 
+**Measure fingerprints (a test)** (Manage → Describe, 0.13.46). A small model (SigLIP, Apache 2.0, run with
+PyTorch and transformers, not GPL) turns a still into a fingerprint: 768 numbers, close together for stills
+that look alike. The test measures, on up to 500 stills already described on this Mac (long takes first),
+how fast this Mac makes them (stacked 32 at a time into one tensor), and how many piles the long takes'
+moments fall into (a still joins the pile while it is at least 0.85 alike to the pile's first still,
+`piles_of()`). Describing steps aside for it between two files and carries on after. The first time it
+installs PyTorch (about 300 MB) and downloads the model (about 800 MB); a download a firewall blocks is said
+as such. Its progress is on the Describe card and in the top bar ("Fingerprint test"); the result stays in
+Activity. Nothing is changed. On 44 test frames (a street corner, a lens-flare render, gala stills), 24
+moments of the two long takes made 8 piles, and searching by words found the right stills for places
+and things, less often for actions.
+
 **When describing cannot go on, its row says why** (and the top bar: "Describing waits"), never the
 last thing it was doing:
 
