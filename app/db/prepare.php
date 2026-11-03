@@ -102,12 +102,13 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
         while ($x = $ff->fetchArray(SQLITE3_NUM)) $rows[] = ["$dir/$x[0]", (int)$x[1], isset($asis["$dir/$x[0]"]) ? '1' : null];
     } else while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) $rows[] = $x;
     // counted from what is there, not from the last run: every video that plays (its preview, or as it is), and
-    // every file the AI describes (videos, photos, sound), so a folder's row says "40 of 40", never "25 made"
+    // every file the AI describes (videos and sound; still images are left out since 0.13.45), so a folder's row says
+    // "40 of 40", never "25 made"
     $p = ['videos' => 0, 'have' => 0, 'previews' => 0, 'asis' => 0, 'media' => 0, 'bytes' => 0, 'to_read' => 0, 'at' => time(), 'failures' => [],
           'from' => $read && (int)$read['at'] > 0 ? 'disk' : 'search'];
     foreach ($rows as $x) {
         if (preg_match('/\/\._[^\/]*$/', $x[0])) continue;                                 // macOS leftovers
-        if (preg_match('/\.(jpe?g|png|heic|dng|tiff?|wav|mp3|m4a|aiff?)$/i', $x[0])) { $p['media']++; continue; }
+        if (preg_match('/\.(wav|mp3|m4a|aiff?|aac|flac)$/i', $x[0])) { $p['media']++; continue; }
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
         $p['videos']++; $p['media']++; $p['bytes'] += (int)$x[1];
         if ($x[2] === '1') { $p['have']++; $p['asis']++; }                                    // light enough to play as it is

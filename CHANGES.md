@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.45 — November 2026
+
+- **Describing leaves still images out: video and sound only.** Photos, graphics and the frames of renders (a lens-flare render exported as hundreds of JPGs slipped past 0.13.44, which only grouped PNG, TIFF, DPX and EXR sequences) took hours of the AI for black frames and flares. A folder's count of files to describe leaves them out too, so it never says images are "not described yet". Image descriptions made before stay searchable.
+- **The Rushes app's Overview says everything that is happening.** "Doing now" only looked at copying, so it said "Waiting · nothing queued" in the middle of describing. It now lists what the menu and the pages' top bar list ("Describing · Parks & Recreation · 8,192 of 20,891").
+
+Changes the helper's code (`analyze.py`): signed again.
+
 ## 0.13.44 — November 2026
 
 - **An image sequence is described once, as one clip.** A render written one PNG per frame ("Titles_05475.png" …) was described frame by frame: thousands of AI questions for one animation, and thousands of entries in Search. Now frames with the same name and a running number in one folder (PNG, TIFF, DPX or EXR; at least 24; never camera photos) are one clip: described from its first, middle and last frames, tagged "image sequence", found once in Search. The frames already described one by one leave Search when their sequence is described (the next time its folder is described; nothing is deleted).

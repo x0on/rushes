@@ -940,16 +940,11 @@ video, the cuts and the sound come from its proxy when there is one.
    moments where something happens. Measured on a street corner: an empty street or a car far off
    changed 3–9% of the frame, people walking in 29–81%. The description says how many were joined
    (`moments_unchanged`). Descriptions made before 0.13.43 keep their repeated moments.
-9. **Image sequences** (0.13.44): a render written one picture per frame ("Titles_0001.png",
-   "…_0002.png" …) is one clip, not thousands of photos. In one folder, the same name with a running
-   number of 3 digits or more, PNG, TIFF, DPX or EXR (never camera JPG, HEIC or DNG, whose numbered
-   names are separate photos), at least 24 frames, numbered with few gaps (`split_sequences()`). It is
-   described once, from its first, middle and last frames, tagged "image sequence", with how many frames
-   (`kind: sequence`, `frames`, `frame_pattern`). Frames described one by one before are taken out of
-   Search once their sequence is described (`analysis_hide_frames()`; their description files stay).
-   Search's list of files by name still has every frame.
-10. **Transparent images** (a render of titles or silhouettes) are shown to the model on mid grey; they
-   came out as black squares before 0.13.44.
+9. **Still images are not described** (0.13.45): photos, graphics and the frames of renders (thousands
+   of JPG and PNG files, often black or a lens flare) took hours of the AI for nothing worth finding.
+   Image sequences described once as one clip by 0.13.44 keep their single entry, and the frames they
+   stand for stay out of Search (`analysis_hide_frames()`). Descriptions of still images made before
+   stay searchable.
 8. **Composition** (version 4). Each shot's still is asked a second, separate question
    (`COMPOSE`): where the main subject is (a box), the eyes, which way the subject faces, the horizon,
    and up to three strong straight lines. Nothing is judged by the model (silhouette, symmetry,
@@ -986,7 +981,9 @@ last thing it was doing:
 - **A run stopped with an error**: the error's own last line is said on the row, and the folder is
   tried again 5 minutes later (not straight away, loading the model every few seconds).
 
-A folder of photos says how many ("20 photos or sound files"), not "0 videos".
+Since 0.13.45 describing is for video and sound only: still images (photos, graphics, the frames of
+renders) are left out, and a folder's count of files to describe leaves them out too. A folder with
+only sound says how many ("20 sound files"), not "0 videos".
 
 **Only at night** (Manage → Describe): from 10 pm to 7 am. At 7 am a folder being described stops,
 like Pause, between two lines of its work (a file part-done is redone; every file finished is kept),

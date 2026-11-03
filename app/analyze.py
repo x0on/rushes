@@ -257,90 +257,6 @@ def image_still(path, out, width=768):
         return Path(out).exists()
 
 
-# ── image sequences: a render written one picture per frame ─────────────────
-# "Titles 003_05475.png", "…_05476.png" … in one folder are one clip, not thousands of photos: described once,
-# from its first, middle and last frames, and found once in Search. Only the kinds renders and VFX use (never camera
-# JPG, HEIC or DNG, whose numbered names are separate photos), at least SEQ_MIN frames, numbered with few gaps.
-SEQ_EXT = {".png", ".tif", ".tiff", ".dpx", ".exr"}
-SEQ_MIN = 24
-_SEQ_NAME = re.compile(r"^(.*?)(\d{3,})$")
-
-
-def split_sequences(files):
-    """-> (single files, [frames of one sequence, in order], …)."""
-    groups, singles = {}, []
-    for f in files:
-        m = _SEQ_NAME.match(f.stem) if f.suffix.lower() in SEQ_EXT else None
-        if m:
-            groups.setdefault((str(f.parent), m.group(1), f.suffix.lower(), len(m.group(2))), []).append((int(m.group(2)), f))
-        else:
-            singles.append(f)
-    seqs = []
-    for key, fr in groups.items():
-        fr.sort()
-        nums = [x for x, _ in fr]
-        if len(fr) >= SEQ_MIN and nums[-1] - nums[0] + 1 <= len(fr) * 1.1:
-            seqs.append([f for _, f in fr])
-        else:
-            singles += [f for _, f in fr]
-    return sorted(singles), sorted(seqs, key=lambda q: q[0])
-
-
-def sequence_pattern(frames):
-    m = _SEQ_NAME.match(frames[0].stem)
-    return {"dir": str(frames[0].parent), "prefix": m.group(1), "ext": frames[0].suffix, "digits": len(m.group(2)),
-            "first": int(m.group(2)), "last": int(_SEQ_NAME.match(frames[-1].stem).group(2))}
-
-
-def analyse_sequence(frames, store, vision, themes, force, n, of):
-    """One image sequence, described once from its first, middle and last frames (one question, one entry in Search).
-    Named by its first and last frames and how many there are, so it is found again after a move."""
-    first, last = frames[0], frames[-1]
-    fp = hashlib.sha256(f"{fingerprint(first)}|{fingerprint(last)}|{len(frames)}".encode()).hexdigest()[:24]
-    out = store / fp[:2] / f"{fp}.json"
-    pid = prompt_id(themes)
-    pat = sequence_pattern(frames)
-    label = f"{pat['prefix'].rstrip(' _-.') or first.stem} ({len(frames):,} frames, {first.suffix.lstrip('.').upper()})"
-    if out.exists() and not force:
-        try:
-            old = json.loads(out.read_text())
-            if old.get("prompt") == pid and old.get("model") == vision.name:
-                print(f"[{n}/{of}] {label} — image sequence, already described")
-                return "already"
-        except (OSError, ValueError):
-            pass
-    print(f"[{n}/{of}] {label} — image sequence: described once, from its first, middle and last frames", flush=True)
-    say(file=label, n=n, of=of, shot=1, shots=1)
-    thumbs = store / fp[:2] / fp
-    thumbs.mkdir(parents=True, exist_ok=True)
-    rec = {"version": VERSION, "fingerprint": fp, "file": str(first), "seen_at": [str(first)], "kind": "sequence",
-           "frames": len(frames), "frame_pattern": pat, "duration": 0, "camera_clock": "", "part_of_day": "",
-           "model": vision.name, "prompt": pid, "whisper": "", "analysed": "", "shots": [], "speech": None,
-           "failed_shots": 0, "read_from": "original"}
-    with tempfile.TemporaryDirectory() as td:
-        stills = []
-        for j, f in enumerate((first, frames[len(frames) // 2], last)):
-            o = Path(td) / f"s{j}.jpg"
-            if image_still(f, o):
-                stills.append(str(o))
-        if not stills:
-            raise RuntimeError("none of its frames could be read")
-        mid = stills[len(stills) // 2]
-        shutil.copyfile(mid, thumbs / "0000.jpg")
-        got, raw, ok = vision.describe(stills)
-        if not ok:
-            rec["failed_shots"] = 1
-        got["tags"] = uniq(list(got.get("tags") or []) + ["image sequence"])
-        shot = {"shot": 0, "start": 0.0, "end": 0.0, **got, "composition": compose_safe(vision, mid)}
-        if raw:
-            shot["raw"] = raw
-        rec["shots"].append(shot)
-    rec["analysed"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    tmp = out.with_suffix(".json.new")
-    tmp.write_text(json.dumps(rec, indent=1, ensure_ascii=False)); os.replace(tmp, out)
-    return "done"
-
-
 def sample_times(a, b):
     """Where in a shot to look. Never its first frames: the camera is still
     settling — moving, out of focus, exposure hunting — and a recording's very
@@ -945,14 +861,15 @@ def main():
     print(f"{len(files)} file(s) · model {a.model} · speech {a.whisper or 'off'} · question {prompt_id(themes)}")
     vision = Vision(a.model, themes)
     counts = {"done": 0, "already": 0, "older": 0, "speech": 0, "failed": 0}
-    singles, seqs = split_sequences(files)
-    if seqs:
-        print(f"{len(seqs)} image sequence(s), {sum(len(q) for q in seqs):,} frames: each described once, as one clip")
-    items = sorted([(f, None) for f in singles] + [(q[0], q) for q in seqs], key=lambda x: str(x[0]))
-    for n, (f, seq) in enumerate(items, 1):
+    # Video and sound only (0.13.45): photos, graphics and the frames of renders (thousands of JPG and PNG
+    # files, often black or a lens flare) took hours of the AI for nothing worth finding.
+    stills = [f for f in files if f.suffix.lower() in IMAGE]
+    files = [f for f in files if f.suffix.lower() not in IMAGE]
+    if stills:
+        print(f"{len(stills):,} still image(s) left out (photos, graphics, frames of renders): describing is for video and sound")
+    for n, f in enumerate(files, 1):
         try:
-            counts[analyse_sequence(seq, store, vision, themes, a.force, n, len(items)) if seq else
-                   analyse(f, store, vision, a.whisper, themes, a.force, n, len(items),
+            counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
                            proxy_of(f, a.archive, a.proxies), a.again)] += 1
         except Exception as e:                       # one bad file never stops the folder
             counts["failed"] += 1
@@ -1088,16 +1005,6 @@ def selftest():
             assert analyse(f, store, vis, "", th, False, 1, 1, again=True) == "already"
     finally:
         transcribe, say = real, real_say
-    # image sequences: a render's frames are one clip; camera photos and short runs stay separate files
-    P = lambda *n: [Path("/a/Render") / x for x in n]
-    frames = P(*[f"Kite Titles 003_{i:05d}.png" for i in range(5475, 5575)])
-    photos = P(*[f"IMG_{i:04d}.JPG" for i in range(1, 60)])
-    few = P(*[f"logo_{i:03d}.png" for i in range(1, 5)])
-    gappy = P(*[f"still_{i:04d}.tif" for i in range(0, 3000, 50)])
-    singles, seqs = split_sequences(frames + photos + few + gappy + P("poster.png"))
-    assert len(seqs) == 1 and len(seqs[0]) == 100 and seqs[0][0].name == "Kite Titles 003_05475.png", seqs
-    assert len(singles) == 59 + 4 + 60 + 1, "camera photos, a few logos and numbered stills far apart stay separate"
-    assert sequence_pattern(seqs[0]) == {"dir": "/a/Render", "prefix": "Kite Titles 003_", "ext": ".png", "digits": 5, "first": 5475, "last": 5574}
     with tempfile.TemporaryDirectory() as td:                   # a transparent render: on grey, not black
         from PIL import Image
         Image.new("RGBA", (40, 20), (0, 0, 0, 0)).save(f"{td}/t.png")
@@ -1122,18 +1029,6 @@ def selftest():
             r = json.loads((store / fingerprint(f)[:2] / f"{fingerprint(f)}.json").read_text())
             assert [(s["start"], s["end"]) for s in r["shots"]] == [(0.0, 15.0), (15.0, 30.0)] and len(asked) == 2, r["shots"]
             assert r["moments_unchanged"] == 4, r.get("moments_unchanged")
-            # one image sequence: one question about 3 frames, one entry, tagged, with how many frames
-            from PIL import Image
-            seqdir = Path(td) / "Render"; seqdir.mkdir()
-            for i in range(30):
-                Image.new("RGBA", (64, 36), (200, 50, i * 8, 255 if i % 2 else 0)).save(seqdir / f"Titles_{i:04d}.png")
-            asked.clear(); seen = []
-            vis.describe = lambda fr: (asked.append(1) or seen.append(len(fr)) or ({"description": "titles", "tags": ["text"]}, "", True))
-            q = split_sequences(media_under(seqdir))[1][0]
-            assert analyse_sequence(q, store, vis, th, False, 1, 1) == "done" and asked == [1] and seen == [3]
-            assert analyse_sequence(q, store, vis, th, False, 1, 1) == "already" and asked == [1]
-            r = [json.loads(x.read_text()) for x in store.rglob("*.json") if json.loads(x.read_text()).get("kind") == "sequence"][0]
-            assert r["frames"] == 30 and r["frame_pattern"]["prefix"] == "Titles_" and r["shots"][0]["tags"] == ["text", "image sequence"], r
         finally:
             probe, shots_of, frame, say = keep
     print("analyze: all checks pass")

@@ -1437,6 +1437,8 @@ function home(s) {
   const now = !on ? '<span class="muted">Nothing, while Rushes is stopped.</span>'
     : s.rushes === null ? '<span class="spin"></span>Asking Rushes …'
     : !s.rushes ? '<span class="muted">Rushes cannot be reached right now (' + esc(s.rushes_why) + '). Activity\'s technical log still shows this Mac\'s work.</span>'
+    // the one list of what is happening (state.php), as the menu and the pages' top bar say it: every lane, not only copying
+    : (s.happening || []).length ? s.happening.map(function (x) { return '<div><b>' + esc(x.what || '') + '</b>' + (x.detail ? ' · ' + esc(x.detail) : '') + '</div>'; }).join('')
     : n.phase ? '<b>' + esc(PHASE[n.phase] || n.phase) + '</b>' + (n.source ? ' · ' + esc(base(n.source)) : '') +
         (n.note ? '<div class="muted">' + esc(n.note) + '</div>' : '') + (n.file ? '<div class="muted">now: ' + esc(base(n.file)) + '</div>' : '')
     : '<span class="muted">Nothing to do right now.</span>';

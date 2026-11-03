@@ -2389,7 +2389,7 @@ function drawPrepare(rows, a) {
               return '<li>' + (c.change === 'missing' ? '<span class="bad">missing</span> ' : '<span class="ok">new</span> ') + esc(c.rel) + ' <span class="note">' + gb(c.bytes) + '</span></li>'; }).join('') + '</ul>' +
             '<span class="note">Missing: there at the reading before, not there now (moved or deleted outside Rushes, or Removed). Rushes changed nothing.</span>') + '</div></td></tr>' : '';
       return '<tr data-f="' + esc(r.folder) + '"><td>' + where + '</td><td><b>' + esc(r.folder) + '</b></td><td>' +
-        (p.videos || !p.media ? n(p.videos) + ' videos · ' + gb(p.bytes) : n(p.media) + ' photos or sound files') + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + readSaid + chg + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
+        (p.videos || !p.media ? n(p.videos) + ' videos · ' + gb(p.bytes) : n(p.media) + ' sound files') + (r.left_how === 'measured' ? ' · <b>about ' + hm(r.left) + ' left</b>' : r.left_how === 'working' ? ' · <span class="dim">working out the time left</span>' : r.left_how === 'guess' && r.left ? ' · <span class="dim">perhaps ' + hm(r.left) + ' (a guess)</span>' : '') + readSaid + chg + '</td><td>' + px(r) + '</td><td>' + ds(r.describe, r) + '</td>' +
         '<td style="text-align:right;white-space:nowrap" class="ltools">' + tools + '</td></tr>' + chgList + fails;
     }).join('') + '</table>';
   const ps = document.getElementById('pxSaid');
