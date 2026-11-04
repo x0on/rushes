@@ -818,16 +818,25 @@ def piles_of(vectors, alike=FP_PILE):
     return n
 
 
+def _has_module(name):
+    import importlib.util
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def measure_fingerprints(store, limit=500):
     t0 = time.time()
-    try:
-        import torch, transformers  # noqa: F401
-    except ImportError:
-        print("installing PyTorch and transformers for the test (about 300 MB, once) …", flush=True)
-        r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "torch", "transformers",
-                            "sentencepiece", "protobuf"], capture_output=True, text=True)
+    # Each piece it needs, checked one by one: transformers is already there for describing (mlx-vlm uses it),
+    # so checking only torch and transformers left out protobuf and sentencepiece, and the model would not load.
+    need = [pkg for mod, pkg in (("torch", "torch"), ("transformers", "transformers"), ("sentencepiece", "sentencepiece"),
+                                 ("google.protobuf", "protobuf")) if not _has_module(mod)]
+    if need:
+        print(f"installing what the test needs: {', '.join(need)} (once{', about 300 MB' if 'torch' in need else ''}) …", flush=True)
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *need], capture_output=True, text=True)
         if r.returncode:
-            raise RuntimeError("PyTorch could not be installed: " + ((r.stderr or r.stdout).strip().splitlines() or ["?"])[-1][:200])
+            raise RuntimeError(f"{', '.join(need)} could not be installed: " + ((r.stderr or r.stdout).strip().splitlines() or ["?"])[-1][:200])
     import torch
     from transformers import AutoModel, AutoProcessor
     from PIL import Image
@@ -835,8 +844,10 @@ def measure_fingerprints(store, limit=500):
     print(f"loading the fingerprint model {FP_MODEL} (downloaded once, about 800 MB) …", flush=True)
     try:
         model = AutoModel.from_pretrained(FP_MODEL).eval().to(dev); proc = AutoProcessor.from_pretrained(FP_MODEL)
-    except Exception as e:
-        raise RuntimeError(f"the model could not be downloaded from huggingface.co ({str(e)[:160]}): a firewall may block it")
+    except OSError as e:                    # what transformers raises when it cannot reach huggingface.co or find the files
+        raise RuntimeError(f"the model could not be downloaded from huggingface.co ({str(e)[:200]}): the network may block it")
+    except Exception as e:                  # anything else is said as it is, never blamed on the network
+        raise RuntimeError(f"the model could not be loaded: {type(e).__name__}: {str(e)[:200]}")
     clips = {}
     for d in Path(store).glob("*/*"):
         if d.is_dir():
@@ -1088,6 +1099,7 @@ def selftest():
         assert image_still(f"{td}/t.png", f"{td}/t.jpg") and Image.open(f"{td}/t.jpg").convert("L").getpixel((5, 5)) > 100
     # piles: a still joins the pile while it is alike to the pile's first still
     assert piles_of([[1, 0], [0.99, 0.141], [0, 1], [0.1, 0.995], [1, 0]]) == 3 and piles_of([]) == 0
+    assert _has_module("json") and not _has_module("no_such_module_here") and not _has_module("google.no_such")
     # through the whole loop: a 30 s take, empty street for 15 s, then people: 2 moments described, 4 joined
     global probe, shots_of, frame
     with tempfile.TemporaryDirectory() as td:

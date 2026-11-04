@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.47 — November 2026
+
+- **The fingerprint test runs.** On the first real Mac it failed with "the model could not be downloaded from huggingface.co", which was wrong twice over: the site was reachable, and the real error was a missing piece (protobuf). The test checked only for PyTorch and transformers, and transformers is already installed for describing, so it never installed protobuf and sentencepiece. It now checks each piece on its own and installs what is missing; and it blames the network only for a network error, saying any other error as it is.
+
+Changes the helper's code (`analyze.py`): signed again.
+
 ## 0.13.46 — November 2026
 
 - **Measure fingerprints (a test)**, on the Describe card. Before describing changes to "fingerprint every frame, pile what looks alike, write one sentence per pile", this measures it on this Mac: how fast its graphics chip turns stills into fingerprints, and how many piles the long takes already described fall into (up to 500 stills). Describing steps aside for it and carries on after; nothing is changed. The first time it installs PyTorch (about 300 MB) and downloads the model (about 800 MB, SigLIP, Apache 2.0); a blocked download is said as such. The result stays in Activity.
