@@ -375,7 +375,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
       <section id="pane-describe" hidden>
         <!-- 1 the AI: is it here, and when it runs -->
         <div class="panel" style="margin-top:8px">
-          <header><b>AI</b> <span class="note">· describes every shot and writes down what is said, on the helper Mac; nothing is sent anywhere</span></header>
+          <header><b>AI</b> <span class="note">· describes every shot, on the helper Mac; nothing is sent anywhere</span></header>
           <div style="padding:14px">
             <div id="anTools"></div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
@@ -2152,7 +2152,7 @@ function drawDescribeTools(h) {
     : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
     : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
       '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +
-      '<span class="infotip" tabindex="0" data-tip="A vision model that says what each shot shows, and a speech model that writes down what is said. About 8 GB, downloaded once, and run on that Mac itself: nothing is sent anywhere.">i</span></div>' +
+      '<span class="infotip" tabindex="0" data-tip="A vision model that says what each shot shows (and a speech model for what is said, kept off for now). About 8 GB, downloaded once, and run on that Mac itself: nothing is sent anywhere.">i</span></div>' +
       '<div style="margin-top:10px">' + ask('ai-install', d.phase === 'install-failed' ? 'Try again' : 'Install the AI (about 8 GB)') + '</div>';
   $('anTools').querySelectorAll('[data-an]').forEach(function (b) {
     b.onclick = async function () {
@@ -2177,9 +2177,9 @@ async function loadAnalysis() {
   try {
     const a = await (await fetch('analyze.php?t=' + Date.now())).json();
     const st = a.stats || {};
-    $('anTiles').innerHTML = [[st.files, 'files described'], [st.shots, 'shots'], [st.speech, 'lines of speech'],
+    $('anTiles').innerHTML = [[st.files, 'files described'], [st.shots, 'shots'], st.speech_on ? [st.speech, 'lines of speech'] : ['off', 'speech (what is said) is not written down'],
                               [st.failed, 'shots it could not read']].map(function (t) {
-      return '<div class="tile"><div class="big">' + (t[0] || 0).toLocaleString() + '</div><div class="sub">' + t[1] + '</div></div>'; }).join('');
+      return '<div class="tile"><div class="big">' + (typeof t[0] === 'string' ? t[0] : (t[0] || 0).toLocaleString()) + '</div><div class="sub">' + t[1] + '</div></div>'; }).join('');
     $('anLatest').innerHTML = (a.latest || []).length ? a.latest.map(function (m) {
       const speech = m.kind === 'speech';
       const ons = (m.on_screen ? m.on_screen.split(' · ').map(function (t) { return '<span class="txt">' + esc(t) + '</span>'; }) : [])
@@ -2315,7 +2315,7 @@ function drawPrepare(rows, a) {
         (d.doing === 'loading the model' || /^(installing|loading the fingerprint)/.test(d.doing || '') ? '' : esc(d.file || 'a file')) + (r.proxies.step === 'skipped' ? ' — from the originals (no previews for this folder)</div>' : ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>')
       : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media && d.files <= r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
           (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: Try again describes only those</div>' : '') + (d.note && /could not|speech failed/.test(d.note) ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '').replace(/;? ?\d+ described with an older version/, '')) + '</span>' : '') +
-          (d.note && /(\d+) described with an older version/.test(d.note) ? '<div class="note">' + esc(/(\d+) described with an older version/.exec(d.note)[1]) + ' described with an older version: Describe again adds the composition (and moments inside long takes where missing)</div>' : '')
+          (d.note && /(\d+) described with an older version/.test(d.note) ? '<div class="note">' + esc(/(\d+) described with an older version/.exec(d.note)[1]) + ' described with an older version: Describe again redoes them the newest way: one description per stretch that looks alike (piles), with the composition</div>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'
       : d.step === 'away' ? 'waits until ' + esc(d.name) + ' is connected again (Connect again, on the Rushes app\'s Overview); nothing about it is lost'
       : d.step === 'gone' ? 'it is not here any more, and the moves Rushes wrote down do not say where it went (it may have been moved in Finder). ' + (d.at && d.at.length ? 'Folders of this name, not taken by themselves: ' + esc(d.at.join(' · ')) + '. ' : '') + 'Take it off the list and add it where it is now.'

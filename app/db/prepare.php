@@ -86,6 +86,10 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     // counts may be up to 10 minutes old
     if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600)))   // (one counted before 0.13.22 is counted again)
         return ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel];
+    // ponytail: the archive's previews answer through the share, which drops now and then; counted while it is away,
+    // every preview would read as missing and "0 previews" would stay up, so the last count stands until it is back
+    if (isset($cache[$rel]['media']) && !is_dir(rtrim(archive_dir(), '/') . '/PROXIES'))
+        return ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel];
     require_once __DIR__ . '/folders.php';
     $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it

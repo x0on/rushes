@@ -217,6 +217,9 @@ check($guess['videos'] === 2 && $guess['have'] === 0 && !is_file(web_dir() . '/p
 $plan = prepare_plan('PARKS', true);
 check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 300 && $plan['to_read'] === 200,
       'a folder is planned at once from the catalogue: its videos, the ones with a proxy, what is left to read');
+rename("$root/archive/PROXIES", "$root/archive/PROXIES.away");           // the share stops answering
+check(prepare_plan('PARKS', true)['have'] === 1, 'while the previews cannot be reached, the last count stands (no "0 previews")');
+rename("$root/archive/PROXIES.away", "$root/archive/PROXIES");
 file_put_contents("$root/app/proxy-speed.tsv", "100000000\t10\tvideo chip\n300000000\t10\tvideo chip\n5\t0\tsoftware\n");
 check(abs(proxy_rate() - 20000000) < 1, 'the speed is measured from the proxies really made (bytes per second)');
 file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n");

@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.49 — November 2026
+
+- **A folder's previews are not counted while the archive is away.** When the share stopped answering during a count, every preview read as missing and a folder's row said "0 previews" (and "245 of 2,184 play") until the next count; nothing was lost. Now the last count stands until the archive answers again.
+- **Speech is said as off.** Writing down what is said has been off on purpose (searching what is said is kept apart from what is seen), but Describe still said the AI "writes down what is said" and showed "0 lines of speech". It now says speech is off until it is turned on (settings `analysis.speech`).
+- **Files described with an older version** say what Describe again does now: one description per stretch that looks alike (piles), with the composition.
+
 ## 0.13.48 — November 2026
 
 - **Describing by piles (description version 5).** A video is looked at every 5 seconds; each look becomes a fingerprint on the graphics chip (about 66 a second on this Mac); looks that look alike in a row make a pile, and the AI writes one description per pile, from its clearest look at full quality. A 2-hour meeting at one table is 1,440 looks in about 20 seconds and a handful of descriptions, where it was 1,440 descriptions (5 to 12 hours of AI). It replaces the shot detector, moments inside long takes and joining unchanged moments, so shaky night footage is no longer cut into 1-second "shots" each described. Each pile keeps its fingerprint for searching by look later. If the fingerprint model cannot be had, describing goes on the older way and says why. Files described before stay as they are, said as an older version; Describe again redoes them only when asked. To describe the older way on purpose: settings `analysis.piles: false`.

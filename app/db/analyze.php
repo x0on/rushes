@@ -247,7 +247,8 @@ $one = fn(string $sql) => (int)($db->querySingle($sql) ?? 0);
 $stats = ['files' => $one("SELECT COUNT(DISTINCT fp) FROM moments"),
           'shots' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'shot'"),
           'speech' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'speech'"),
-          'failed' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'failed'")];
+          'failed' => $one("SELECT COUNT(*) FROM moments WHERE kind = 'failed'"),
+          'speech_on' => !empty(settings()['analysis']['speech'])];     // off unless turned on (ingest.py → analysis_tools)
 $latest = []; $r = $db->query("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,light,
     language FROM moments WHERE kind != 'failed' ORDER BY rowid DESC LIMIT 24");
 while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $latest[] = $x;
