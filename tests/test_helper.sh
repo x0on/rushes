@@ -230,4 +230,10 @@ printf 'ts\t%s\nphase\tanalysing\nsource\t/x\n' "$(date +%s)" > "$ROOT/app/descr
 check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if x[\"lane\"]==\"describe\"]; assert d and d[0][\"what\"]==\"Describing\", d"' \
       'and describing again once it is done'
 rm -f "$ROOT/app/describe-status.tsv"
+# The top bar counts folders really waiting, not the queue's old lines for folders already described
+printf 'analyze\t/Volumes/VIDEO/Meadow Park\t5\nanalyze\t/Volumes/VIDEO/Picnic Shelter\t6\nanalyze\t/Volumes/VIDEO/Picnic Shelter\t6\n' > "$ROOT/app/ingest-queue.tsv"
+printf '2026-11-04 10:00\tanalysed\t/Volumes/VIDEO/Meadow Park\t40\t0\t60\tasked=5\n' >> "$ROOT/app/ingest-history.tsv"
+check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if x[\"lane\"]==\"describe\"]; assert d and d[0][\"detail\"].startswith(\"1 folder \"), d"' \
+      'the top bar counts the folders really waiting: one described already, one waiting (listed twice) is one'
+rm -f "$ROOT/app/ingest-queue.tsv"
 echo "Helper tests complete."

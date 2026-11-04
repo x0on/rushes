@@ -40,7 +40,7 @@ no model.
 import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request
 from pathlib import Path
 
-VERSION = 4          # 4: composition (the lens: where the subject, eyes, horizon and lines fall); 3: moments inside long takes.
+VERSION = 5          # 5: piles (a look every 5 s, fingerprints, one description per pile of looks alike); 4: composition (the lens: where the subject, eyes, horizon and lines fall); 3: moments inside long takes.
                      # A file described before is kept; Describe again adds what it lacks (a 3 gets only its composition, from its saved stills)
 VIDEO = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".mkv", ".m2ts", ".wmv"}
 IMAGE = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp", ".dng"}
@@ -638,14 +638,14 @@ def transcribe(path, model):
 
 
 # ── one file ────────────────────────────────────────────────────────────────
-def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None, again=False):
+def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None, again=False, looker=None):
     fp = fingerprint(path)                  # always the original: that is what search finds
     out = store / fp[:2] / f"{fp}.json"
     pid = prompt_id(themes)
     if out.exists() and not force:
         try:
             old = json.loads(out.read_text())
-            if again and old.get("version", 1) == 3 and old.get("prompt") == pid and old.get("model") == vision.name:
+            if again and old.get("version", 1) == 3 and old.get("prompt") == pid and old.get("model") == vision.name and looker is None:
                 return compose_only(old, out, store / fp[:2] / fp, vision, path, n, of)
             if old.get("prompt") == pid and old.get("model") == vision.name and not (again and old.get("version", 1) < VERSION):
                 changed = False
@@ -697,7 +697,9 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
            "shots": [], "speech": None, "failed_shots": 0, "read_from": "proxy" if proxy else "original"}
     print(f"[{n}/{of}] {path.name}", flush=True)
 
-    if ext in IMAGE or (ext not in AUDIO and has_video):
+    if ext not in IMAGE and ext not in AUDIO and has_video and looker is not None and duration > 0 and looker.ready():
+        describe_piles(path, proxy, duration, rec, thumbs, vision, looker, n, of, t0)
+    elif ext in IMAGE or (ext not in AUDIO and has_video):
         cuts = [(0.0, 0.0)] if ext in IMAGE else shots_of(src, duration)
         pics = {"original": 0, "proxy": 0}
         kept, kept_still, joined = None, None, 0        # the last moment described of a long take, and its still
@@ -773,6 +775,58 @@ def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None
     return "done"
 
 
+def describe_piles(path, proxy, duration, rec, thumbs, vision, looker, n, of, t0):
+    """Version 5. A look every 5 seconds (from the preview when there is one: small, quick to read), each made a
+    fingerprint; looks alike in a row make a pile; one description per pile, from its middle look, read at full
+    quality from the original. A 2-hour meeting at one table: 1,440 looks in seconds, a handful of piles, a
+    handful of descriptions. No shot detector, no moments: piles do both (and shaky night footage is not cut
+    into 1-second "shots")."""
+    src = proxy or path
+    pics = {"original": 0, "proxy": 0}
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        times, looks = look_times(duration), []
+        for j, t in enumerate(times):
+            f = td / f"l{j:05d}.jpg"
+            if frame(src, t, f, width=384) or (proxy and frame(path, t, f, width=384)):
+                looks.append((t, str(f)))
+            if j % 20 == 0:
+                say(file=path.name, n=n, of=of, step="looking", shot=j + 1, shots=len(times))
+        if not looks:
+            raise RuntimeError("no picture could be read from it")
+        groups = pile_groups(looker.vectors([f for _, f in looks]))
+        rec.update(piles=True, looked_every=LOOK_EVERY, looks=len(looks))
+        for i, g in enumerate(groups):
+            # a pile runs from halfway between it and the pile before to halfway to the pile after
+            a = 0.0 if i == 0 else (looks[g[0] - 1][0] + looks[g[0]][0]) / 2
+            b = duration if i == len(groups) - 1 else (looks[g[-1]][0] + looks[g[-1] + 1][0]) / 2
+            frames = []
+            for k, at in enumerate([looks[g[len(g) // 2]][0]] + ([looks[g[0]][0]] if len(g) >= 3 else [])):
+                f = td / f"p{i}_{k}.jpg"
+                if frame(path, at, f):
+                    pics["original"] += 1; frames.append(str(f))
+                elif proxy and frame(proxy, at, f):
+                    pics["proxy"] += 1; frames.append(str(f))
+            if not frames:
+                continue
+            shutil.copyfile(frames[0], thumbs / f"{i:04d}.jpg")          # the picture search shows
+            got, raw, ok = vision.describe(frames)
+            if not ok:
+                rec["failed_shots"] += 1
+            shot = {"shot": i, "start": round(a, 3), "end": round(b, 3), **got, "looks": len(g)}
+            shot["composition"] = compose_safe(vision, frames[0])
+            shot["look_vector"] = pack_vector(looker.vectors([looks[x][1] for x in g]) if len(g) <= 64 else
+                                              looker.vectors([looks[x][1] for x in g[::max(1, len(g) // 64)]]))
+            if raw:
+                shot["raw"] = raw
+            shot["text_on_screen"] = merge_text([shot.get("text_on_screen", [])])
+            rec["shots"].append(shot)
+            say(file=path.name, n=n, of=of, shot=i + 1, shots=len(groups),
+                per_shot=round((time.time() - t0) / (i + 1), 1), failed=rec["failed_shots"])
+    rec["pictures_from"] = {k: v for k, v in pics.items() if v}
+    print(f"    {len(looks):,} looks every {LOOK_EVERY:g} s, {len(groups):,} piles", flush=True)
+
+
 def compose_safe(vision, frame):
     """The composition of one still, or None: a composition that cannot be read never costs the description."""
     try:
@@ -794,7 +848,7 @@ def compose_only(old, out, thumbs, vision, path, n, of):
             s["composition"] = compose_safe(vision, str(still))
         say(file=path.name, n=n, of=of, shot=k + 1, shots=len(shots), step="composition",
             per_shot=round((time.time() - t0) / (k + 1), 1), failed=0)
-    old["version"] = VERSION
+    old["version"] = 4                                    # composition added; piles come only from Describe again
     tmp = out.with_suffix(".json.new")
     tmp.write_text(json.dumps(old, indent=1, ensure_ascii=False)); os.replace(tmp, out)
     return "done"
@@ -826,17 +880,96 @@ def _has_module(name):
         return False
 
 
-def measure_fingerprints(store, limit=500):
-    t0 = time.time()
-    # Each piece it needs, checked one by one: transformers is already there for describing (mlx-vlm uses it),
-    # so checking only torch and transformers left out protobuf and sentencepiece, and the model would not load.
+LOOK_EVERY = 5.0                                # piles: one look every 5 seconds (enough to find footage; cheap on a 2-hour take)
+
+
+def fp_ready(tell=print):
+    """What fingerprints need, installed once, each piece checked on its own (transformers is already there for
+    describing, so checking only it left out protobuf and sentencepiece). Says what it installs."""
     need = [pkg for mod, pkg in (("torch", "torch"), ("transformers", "transformers"), ("sentencepiece", "sentencepiece"),
                                  ("google.protobuf", "protobuf")) if not _has_module(mod)]
     if need:
-        print(f"installing what the test needs: {', '.join(need)} (once{', about 300 MB' if 'torch' in need else ''}) …", flush=True)
+        tell(f"installing what fingerprints need: {', '.join(need)} (once{', about 300 MB' if 'torch' in need else ''}) …")
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *need], capture_output=True, text=True)
         if r.returncode:
             raise RuntimeError(f"{', '.join(need)} could not be installed: " + ((r.stderr or r.stdout).strip().splitlines() or ["?"])[-1][:200])
+
+
+class Looker:
+    """The fingerprint model, loaded once per run. ready() False (said once) when it cannot be: describing then
+    goes on the older way (shots and moments), never stops for it."""
+    def __init__(self, tell=print):
+        self.tell, self.model, self.why = tell, None, ""
+
+    def ready(self):
+        if self.model is None and not self.why:
+            try:
+                fp_ready(self.tell)
+                import torch
+                from transformers import AutoModel, AutoProcessor
+                self.tell(f"loading the fingerprint model {FP_MODEL} (downloaded once, about 800 MB) …")
+                self.dev = "mps" if torch.backends.mps.is_available() else "cpu"
+                try:
+                    self.model = AutoModel.from_pretrained(FP_MODEL).eval().to(self.dev); self.proc = AutoProcessor.from_pretrained(FP_MODEL)
+                except OSError as e:
+                    raise RuntimeError(f"the model could not be downloaded from huggingface.co ({str(e)[:200]}): the network may block it")
+            except Exception as e:
+                self.why = str(e)[:240]
+                print(f"    piles not available ({self.why}): described the older way, shot by shot", flush=True)
+        return self.model is not None
+
+    def vectors(self, paths):
+        """Stills -> fingerprints (unit vectors, a list per still), 32 stacked into one tensor at a time."""
+        import torch
+        from PIL import Image
+        out = []
+        with torch.no_grad():
+            for i in range(0, len(paths), 32):
+                v = self.model.get_image_features(**self.proc(images=[Image.open(x).convert("RGB") for x in paths[i:i + 32]],
+                                                            return_tensors="pt").to(self.dev))
+                out += torch.nn.functional.normalize(getattr(v, "pooler_output", v), dim=-1).cpu().tolist()
+        return out
+
+
+def look_times(duration, every=LOOK_EVERY):
+    """When to look: from 2 s in (never the start of a recording), then every 5 s; a clip under 4 s, its middle."""
+    if duration < 4:
+        return [round(max(duration, 0) / 2, 3)]
+    t, out = min(2.0, duration / 4), []
+    while t < duration:
+        out.append(round(t, 3)); t += every
+    return out
+
+
+def pile_groups(vectors, alike=FP_PILE):
+    """Looks in time order -> piles (lists of their indexes): a look joins the current pile when it is at least
+    `alike` to the pile's first look, else it starts a new pile."""
+    groups, head = [], None
+    for i, v in enumerate(vectors):
+        if head is None or float(sum(a * b for a, b in zip(head, v))) < alike:
+            groups.append([i]); head = v
+        else:
+            groups[-1].append(i)
+    return groups
+
+
+def pack_vector(vectors):
+    """A pile's fingerprint, kept with its description: the mean of its looks, as half-precision floats in base64
+    (about 2 KB), for searching by look and grouping takes later."""
+    import base64, struct
+    n = len(vectors); m = [sum(v[k] for v in vectors) / n for k in range(len(vectors[0]))]
+    norm = sum(x * x for x in m) ** 0.5 or 1.0
+    return base64.b64encode(struct.pack(f"<{len(m)}e", *[x / norm for x in m])).decode()
+
+
+def unpack_vector(text):
+    import base64, struct
+    b = base64.b64decode(text); return list(struct.unpack(f"<{len(b) // 2}e", b))
+
+
+def measure_fingerprints(store, limit=500):
+    t0 = time.time()
+    fp_ready(lambda line: print(line, flush=True))
     import torch
     from transformers import AutoModel, AutoProcessor
     from PIL import Image
@@ -928,6 +1061,7 @@ def main():
     ap.add_argument("--proxies", default="", help="where the proxies are (same paths, as .mp4)")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--measure-fingerprints", action="store_true", help="a test: fingerprint stills already described (--store)")
+    ap.add_argument("--no-piles", action="store_true", help="describe the older way: shots and moments, no fingerprints")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -948,6 +1082,7 @@ def main():
     store = Path(a.store); store.mkdir(parents=True, exist_ok=True)
     print(f"{len(files)} file(s) · model {a.model} · speech {a.whisper or 'off'} · question {prompt_id(themes)}")
     vision = Vision(a.model, themes)
+    looker = None if a.no_piles else Looker(lambda line: (print(line, flush=True), say(step=line)))
     counts = {"done": 0, "already": 0, "older": 0, "speech": 0, "failed": 0}
     # Video and sound only (0.13.45): photos, graphics and the frames of renders (thousands of JPG and PNG
     # files, often black or a lens flare) took hours of the AI for nothing worth finding.
@@ -958,7 +1093,7 @@ def main():
     for n, f in enumerate(files, 1):
         try:
             counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
-                           proxy_of(f, a.archive, a.proxies), a.again)] += 1
+                           proxy_of(f, a.archive, a.proxies), a.again, looker)] += 1
         except Exception as e:                       # one bad file never stops the folder
             counts["failed"] += 1
             print(f"    could not describe {f.name}: {e}", flush=True)
@@ -1088,9 +1223,9 @@ def selftest():
             assert analyse(f, store, vis, "", th, False, 1, 1) == "older", "not asked: kept, said older"
             assert analyse(f, store, vis, "", th, False, 1, 1, again=True) == "done"
             r = json.loads(out.read_text())
-            assert r["version"] == VERSION and r["shots"][0] == {"shot": 0, "description": "kept", "composition": {"tags": ["centered"], "seen": "0000.jpg"}}
+            assert r["version"] == 4 and r["shots"][0] == {"shot": 0, "description": "kept", "composition": {"tags": ["centered"], "seen": "0000.jpg"}}
             assert "composition" not in r["shots"][1], r
-            assert analyse(f, store, vis, "", th, False, 1, 1, again=True) == "already"
+            assert analyse(f, store, vis, "", th, False, 1, 1) == "older", "composition added; still older than piles"
     finally:
         transcribe, say = real, real_say
     with tempfile.TemporaryDirectory() as td:                   # a transparent render: on grey, not black
@@ -1100,6 +1235,12 @@ def selftest():
     # piles: a still joins the pile while it is alike to the pile's first still
     assert piles_of([[1, 0], [0.99, 0.141], [0, 1], [0.1, 0.995], [1, 0]]) == 3 and piles_of([]) == 0
     assert _has_module("json") and not _has_module("no_such_module_here") and not _has_module("google.no_such")
+    # piles: when to look, how looks pile, and a pile's fingerprint kept small
+    assert look_times(2.0) == [1.0] and look_times(10.0) == [2.0, 7.0], "a 10 s clip: two looks, never the first frame"
+    assert len(look_times(7200.0)) == 1440, "a 2-hour take: 1,440 looks"
+    assert pile_groups([[1, 0], [0.99, 0.141], [0, 1], [0.1, 0.995], [1, 0]]) == [[0, 1], [2, 3], [4]]
+    v = unpack_vector(pack_vector([[1.0, 0.0, 0.0], [0.8, 0.6, 0.0]]))
+    assert len(v) == 3 and abs(sum(x * x for x in v) - 1) < 1e-3 and len(pack_vector([[0.5] * 768])) < 2100
     # through the whole loop: a 30 s take, empty street for 15 s, then people: 2 moments described, 4 joined
     global probe, shots_of, frame
     with tempfile.TemporaryDirectory() as td:
@@ -1122,6 +1263,42 @@ def selftest():
             assert r["moments_unchanged"] == 4, r.get("moments_unchanged")
         finally:
             probe, shots_of, frame, say = keep
+    # piles through the whole loop: 30 s, empty street then people; looks every 5 s pile into 2, one question each
+    with tempfile.TemporaryDirectory() as td:
+        from PIL import Image, ImageDraw
+        Image.new("RGB", (768, 432), (120, 130, 140)).save(f"{td}/a.jpg")
+        Image.new("RGB", (768, 432), (30, 30, 30)).save(f"{td}/c.jpg")
+        keep = probe, frame, say
+        try:
+            probe = lambda p: (30.0, False, True, "")
+            frame = lambda p, at, out, width=768: shutil.copyfile(f"{td}/{'a' if at < 15 else 'c'}.jpg", out) or True
+            say = lambda **k: None
+            asked = []
+            vis = type("V", (), {"name": "m", "describe": lambda self, fr: (asked.append(len(fr)) or ({"description": "x"}, "", True)),
+                                 "compose": lambda self, fr: None})()
+            class FakeLooker:
+                def ready(self): return True
+                def vectors(self, paths): return [[1.0, 0.0] if Image.open(p).getpixel((0, 0))[0] > 100 else [0.0, 1.0] for p in paths]
+            f = Path(td) / "meeting.mov"; f.write_bytes(b"m" * 100); store = Path(td) / "store"
+            assert analyse(f, store, vis, "", th, False, 1, 1, looker=FakeLooker()) == "done"
+            r = json.loads((store / fingerprint(f)[:2] / f"{fingerprint(f)}.json").read_text())
+            assert r["version"] == VERSION and r["piles"] and r["looks"] == 6, r
+            assert [(s["start"], s["end"], s["looks"]) for s in r["shots"]] == [(0.0, 14.5, 3), (14.5, 30.0, 3)], r["shots"]
+            assert asked == [2, 2], "one question per pile, about its middle look and its first"
+            assert unpack_vector(r["shots"][1]["look_vector"])[1] > 0.99
+            class NoLooker:
+                def ready(self): return False
+            f2 = Path(td) / "old.mov"; f2.write_bytes(b"o" * 100)
+            keep2 = shots_of
+            shots_of = lambda p, d: [(0.0, 30.0)]
+            try:
+                assert analyse(f2, store, vis, "", th, False, 1, 1, looker=NoLooker()) == "done"
+                r = json.loads((store / fingerprint(f2)[:2] / f"{fingerprint(f2)}.json").read_text())
+                assert not r.get("piles") and r["shots"], "no fingerprint model: described the older way, never stopped"
+            finally:
+                shots_of = keep2
+        finally:
+            probe, frame, say = keep
     print("analyze: all checks pass")
     return 0
 

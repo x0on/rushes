@@ -963,6 +963,22 @@ video, the cuts and the sound come from its proxy when there is one.
    thirds", "level horizon"), shown in a shot's Details, and in Export descriptions. A second question
    per shot: describing takes longer. The separate question leaves the description's question
    unchanged, so nothing is described again by itself.
+10. **Piles** (description version 5, 0.13.48). A video is looked at every 5 seconds (from its preview when
+   there is one: small, quick to read; `look_times()`), from 2 s in; a clip under 4 s, at its middle. Each
+   look is made a fingerprint (SigLIP on the graphics chip, 32 at a time: about 66 a second on an M1 Max).
+   Looks alike in a row (0.85, as the first look of the pile) make a pile (`pile_groups()`); each pile is
+   one entry in Search, from halfway to the pile before to halfway to the pile after, described once by
+   the vision model from its middle look (and its first, when it has 3 looks or more), read at full
+   quality from the original. Its fingerprint (the mean of its looks, half precision, about 2 KB) is
+   kept with it (`look_vector`), for searching by look and grouping takes later. This replaces the shot
+   detector, the moments inside long takes and joining unchanged moments: a 2-hour meeting at one table
+   is 1,440 looks in seconds and a handful of descriptions, and shaky night footage is no longer cut into
+   1-second "shots". When the fingerprint model cannot be had (not installed, not downloaded), a file is
+   described the older way, and the log says why; describing never stops for it. Settings
+   `analysis.piles: false` describes the older way on purpose. Descriptions of version 4 and before are
+   kept, said as older on their folder's row; only Describe again redoes them.
+   On a 155 s test video of 31 different stills (a street corner, a lens-flare render, gala scenes),
+   31 looks made 11 piles, their edges where the picture changed.
 
 **Describe again** (a described folder's row) describes again, in its place on the list, only the
 files described with an older version (`--again`, asked through `helper-control.json` "again").

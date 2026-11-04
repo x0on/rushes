@@ -2309,9 +2309,11 @@ function drawPrepare(rows, a) {
       ? ' · <span class="bad">the helper Mac is off or asleep, so this waits</span>' : '';
     return (d.step === 'blocked' ? '<span class="bad">describing waits</span><div class="note">' + esc(d.why) + '</div>'
       : d.step === 'describing' ? '<span class="busy">describing' + (d.of ? ' · ' + n(d.n) + ' of ' + n(d.of) : '') + '</span>' +
-        '<div class="note">' + (d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' : 'looking at ') +
-        (d.doing === 'loading the model' ? '' : esc(d.file || 'a file')) + (r.proxies.step === 'skipped' ? ' — from the originals (no previews for this folder)</div>' : ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>')
-      : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
+        '<div class="note">' + (/^(installing|loading the fingerprint)/.test(d.doing || '') ? esc(d.doing) + ' ' :
+          d.doing === 'speech' ? 'listening to ' : d.doing === 'loading the model' ? 'loading the model' :
+          d.doing === 'looking' ? 'looking every 5 seconds at ' : 'looking at ') +
+        (d.doing === 'loading the model' || /^(installing|loading the fingerprint)/.test(d.doing || '') ? '' : esc(d.file || 'a file')) + (r.proxies.step === 'skipped' ? ' — from the originals (no previews for this folder)</div>' : ' — from these proxies (cuts, sound) and the originals (pictures), so the proxies stay until it is done</div>')
+      : d.step === 'done' ? '<span class="' + (!r.plan || !r.plan.media || d.files >= r.plan.media ? 'ok">✓ ' : 'busy">') + n(d.files) + (r.plan && r.plan.media && d.files <= r.plan.media ? ' of ' + n(r.plan.media) : '') + ' files described</span>' +
           (r.plan && r.plan.media && d.files < r.plan.media ? '<div class="note">' + n(r.plan.media - d.files) + ' not described yet: Try again describes only those</div>' : '') + (d.note && /could not|speech failed/.test(d.note) ? ' · <span class="bad">' + esc(d.note.replace(/asked=\d+;? ?/, '').replace(/;? ?\d+ described with an older version/, '')) + '</span>' : '') +
           (d.note && /(\d+) described with an older version/.test(d.note) ? '<div class="note">' + esc(/(\d+) described with an older version/.exec(d.note)[1]) + ' described with an older version: Describe again adds the composition (and moments inside long takes where missing)</div>' : '')
       : descPaused && ['queued', 'next'].includes(d.step) ? '<b>paused</b> — Resume describing above to carry on'

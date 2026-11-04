@@ -565,7 +565,12 @@ $happening = (function () use ($WEB, $running, $running_said, $progress, $mac, $
     elseif ($b = describing_blocked())
         $h[] = $one('describe', 'Describing waits', trim(($b['label'] ?? '') . ' · ' . ($b['note'] ?? ''), ' ·'), null, '/db/admin.php#describe');
     else {
-        $q = count(array_filter(@file("$WEB/ingest-queue.tsv") ?: [], fn($l) => str_starts_with($l, "analyze\t")));
+        require_once __DIR__ . '/prepare.php';
+        $runs = described_runs();                  // a line for a folder already described for that very request is done
+        $q = count(array_unique(array_filter(array_map(function ($l) use ($runs) {
+            $f = explode("\t", rtrim($l, "\n"));
+            return ($f[0] ?? '') === 'analyze' && !(($runs[$f[1] ?? '']['asked'] ?? -1) === (int)($f[2] ?? 0)) ? ($f[1] ?? '') : '';
+        }, @file("$WEB/ingest-queue.tsv") ?: []))));
         // never "Describing" while it is switched off, or waiting for the night: what it will do, and when
         $c = helper_control(); $hr = (int)date('G'); $day = !empty($c['describe_night']) && $hr >= 7 && $hr < 22;
         $fs = $q . ' folder' . ($q === 1 ? '' : 's') . ' waiting';

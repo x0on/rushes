@@ -3186,7 +3186,8 @@ def measure_fp():
             why = line[7:]
         elif line and not line.lower().startswith(("warning", "[transformers]", "loading weights")):
             print("  " + line, flush=True)
-            if time.time() - last > 2: status(phase="measuring", note=line); last = time.time()
+            if not line.startswith("fingerprinted") or time.time() - last > 2:     # installing, loading: said at once
+                status(phase="measuring", note=line); last = time.time()
     p.wait()
     if not res:
         note = why or f"it stopped ({p.returncode})"
@@ -3300,7 +3301,7 @@ def describe_lane(every=20):
                 if LOCAL_STORE and store_seeded() and time.time() - _store_mark(".copied-to-archive") > 600:
                     try:
                         if within("describe", 30, lambda: os.path.isdir(NAS_MOUNT)):
-                            up, dn = store_sync(down=time.time() - _store_mark(".copied-from-archive") > 86400)
+                            up, dn = store_sync(down=time.time() - _store_mark(".copied-from-archive") > 86400, tell=_daily_tell(""))
                             if up or dn:
                                 print(f"  descriptions: {up:,} files copied to {os.path.basename(NAS_MOUNT.rstrip('/'))}" + (f", {dn:,} from it" if dn else ""))
                     except (OSError, Stalled) as e:
@@ -3356,7 +3357,7 @@ def describe_lane(every=20):
                 if LOCAL_STORE and store_seeded():        # what it wrote here, to the archive when it is there
                     try:
                         if within("describe", 30, lambda: os.path.isdir(NAS_MOUNT)):
-                            up, dn = store_sync(down=time.time() - _store_mark(".copied-from-archive") > 86400)
+                            up, dn = store_sync(down=time.time() - _store_mark(".copied-from-archive") > 86400, tell=_daily_tell(path))
                             if up or dn:
                                 print(f"  descriptions: {up:,} files copied to {os.path.basename(NAS_MOUNT.rstrip('/'))}" + (f", {dn:,} from it" if dn else ""))
                     except (OSError, Stalled) as e:
@@ -3477,6 +3478,14 @@ def store_sync(down=False, tell=lambda **k: None):
     return up, dn
 
 
+def _daily_tell(path):
+    """The once-a-day copy of descriptions from the archive, said while it runs (it was silent for minutes)."""
+    arch = os.path.basename(NAS_MOUNT.rstrip("/")) or NAS_MOUNT
+    return lambda **k: status(phase="blocked", source=path, label=os.path.basename(path.rstrip("/")) if path else "",
+                              note=f"copying new descriptions from {arch} to this Mac (once a day): {k['seen']:,} files looked at, "
+                                   f"{k['copied']:,} copied; describing carries on after")
+
+
 def describe_folder(path, asked=""):
     py, model, whisper = analysis_tools()
     name = os.path.basename(path.rstrip("/")) or path
@@ -3488,7 +3497,7 @@ def describe_folder(path, asked=""):
     cmd = [py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), path,
            "--store", str(LOCAL_STORE or NAS_STORE), "--url", NAS_URL,
            "--model", model, "--whisper", whisper,
-           *preview_args(path)]
+           *preview_args(path), *(["--no-piles"] if (SETTINGS.get("analysis") or {}).get("piles") is False else [])]
     if path in (control().get("again") or []):        # Describe again (Manage → Describe): files described with an older version, redone
         cmd.append("--again")
     if sys.platform == "darwin" and shutil.which("caffeinate"):
