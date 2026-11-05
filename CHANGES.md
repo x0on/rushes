@@ -3,6 +3,16 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.52 — November 2026
+
+Fixes from a review of 0.13.50–0.13.51, done by a second reader who had not written the code.
+
+- **The composition pass no longer loads the AI when there is nothing to do.** It looked for waiting files only after loading the model (several GB), so an idle Mac loaded it every hour to find nothing, and the top bar said "Composition · loading the model" each time. It now looks first.
+- **The composition pass and the tests really stop within seconds.** The helper only checked for Pause, a folder to describe or 7 am when the AI printed a line, which on a long take could be minutes, or the whole model load. It now checks every 2 seconds whatever the AI is doing. The tests stop on Pause too, and after 2 hours at most.
+- **A shot whose composition failed is tried again**, on a later pass, up to 3 times, instead of being marked done with none (an error, or the Mac short of graphics memory).
+- **A describing test that crashes says so under its own button**, not under Measure fingerprints; it never fails with "division by zero" when no clip could be read; and it never makes a folder where the archive mounts when the archive has dropped.
+- **A folder's kept preview count lasts an hour from when the zero first appeared** (it could be minutes), and the share is asked again every 10 minutes rather than every minute while it misbehaves.
+
 ## 0.13.51 — November 2026
 
 - **The composition is a pass of its own, after describing.** 0.13.50's test showed that the composition (a second AI question for every pile, about 4 seconds each) was nearly half of describing's time, while reading pictures from the originals costs almost nothing (0.4 s). Describing now writes what is in each shot and leaves the composition for later: about 40% faster, so footage is findable sooner. Whenever there is nothing to describe, the helper adds the composition to every file waiting for it, from the still kept beside each pile (the same picture the description came from; the video is not opened again). Findable first, judged after. It shows in the top bar ("Composition · 3 of 12 files") and on the Describe card, Activity keeps how many it did, and it stops at once for a folder to describe, Pause, 7 am in night mode, or a test; each file is written whole, so a stop loses nothing.

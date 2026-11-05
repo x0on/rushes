@@ -3161,6 +3161,8 @@ def install_ai():
 TESTS = {"fp": ("fp_measure", "fp-asked", "the fingerprint test"),
          "ways": ("ways_measure", "ways-asked", "the describing test")}
 
+_test_running = ["the fingerprint test"]
+
 def _fp_asked():
     """A test asked in Manage → Describe (Measure fingerprints, Compare ways of describing) after the last one
     of its kind done here: "fp" or "ways", or "" when none."""
@@ -3172,6 +3174,39 @@ def _fp_asked():
     return ""
 
 
+def _run_child(cmd, on_line, should_stop, every=2.0):
+    """Runs one of analyze.py's passes and hands each line it prints to on_line, while asking should_stop()
+    every couple of seconds whatever the child is doing (loading the model, reading the store, a long take):
+    a child that says nothing for minutes can still be stopped at once. Returns why it was stopped, or ""."""
+    import queue
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
+    lines = queue.Queue()
+    reader = threading.Thread(target=lambda: ([lines.put(l) for l in p.stdout], lines.put(None)), daemon=True)
+    reader.start()
+    why = ""
+    try:
+        while True:
+            try: line = lines.get(timeout=every)
+            except queue.Empty: line = ""
+            if line is None:
+                break
+            if line:
+                on_line(line.rstrip())
+            why = should_stop() or ""
+            if why:
+                break
+    finally:
+        if p.poll() is None:                      # stopped, or on_line/should_stop raised: never leave it running
+            try: os.killpg(p.pid, signal.SIGTERM)
+            except (OSError, AttributeError): p.terminate()
+            try: p.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                try: os.killpg(p.pid, signal.SIGKILL)
+                except (OSError, AttributeError): p.kill()
+        p.wait()
+    return why, p.returncode
+
+
 def measure_fp():
     """A test asked in Manage → Describe, on footage already described here; each step said in Describe, the
     result kept in Activity, nothing changed. The fingerprint test (analyze.py --measure-fingerprints): how fast
@@ -3179,6 +3214,7 @@ def measure_fp():
     three ways, timed, the descriptions side by side in _rushes/tests on the archive."""
     kind = _fp_asked() or "fp"
     key, done_file, name = TESTS[kind]
+    _test_running[0] = name                                       # a crash is said under this test's own button
     (HOME / done_file).write_text(str(float(control().get(key) or 0)))
     py, model, _ = analysis_tools()
     if not py:
@@ -3188,22 +3224,27 @@ def measure_fp():
     args = (["--measure-fingerprints", "--store", str(LOCAL_STORE or NAS_STORE)] if kind == "fp" else
             ["--compare-ways", str(Path(NAS_MOUNT) / "_rushes" / "tests"), "--store", str(LOCAL_STORE or NAS_STORE),
              "--model", model, "--url", NAS_URL, *preview_args(NAS_MOUNT)])
-    p = subprocess.Popen([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), *args],
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    res, why, last = None, "", time.time()
-    for line in p.stdout:
-        line = line.rstrip()
+    got = {"res": None, "why": "", "last": 0.0}
+    def on_line(line):
         if line.startswith("RESULT "):
-            res = json.loads(line[7:])
+            got["res"] = json.loads(line[7:])
         elif line.startswith("FAILED "):
-            why = line[7:]
+            got["why"] = line[7:]
         elif line and not line.lower().startswith(("warning", "[transformers]", "loading weights")):
             print("  " + line, flush=True)
-            if not line.startswith("fingerprinted") or time.time() - last > 2:     # installing, loading: said at once
-                status(phase="measuring", test=name, note=line); last = time.time()
-    p.wait()
+            if not line.startswith("fingerprinted") or time.time() - got["last"] > 2:   # installing, loading: said at once
+                status(phase="measuring", test=name, note=line); got["last"] = time.time()
+    t0 = time.time()
+    stop = lambda: ("describing was paused" if control().get("describe_paused")
+                    else "it ran past 2 hours" if time.time() - t0 > 7200 else "")
+    try:
+        stopped, code = _run_child([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), *args],
+                                   on_line, stop)
+    except Exception as e:                                       # said under its own button, never the other test's
+        stopped, code = f"it stopped: {e}", -1
+    res, why = got["res"], got["why"] or stopped
     if not res:
-        note = why or f"it stopped ({p.returncode})"
+        note = why or f"it stopped ({code})"
         print(f"  {name} did not finish: {note}")
         history("measured", "fingerprints" if kind == "fp" else "ways", 0, 0, 0, f"{name} did not finish: " + note)
         status(phase="measure-failed", test=name, note=f"{name} did not finish: " + note); return
@@ -3217,7 +3258,7 @@ def measure_fp():
             f"{'s' if res['long_takes'] != 1 else ''} fall into {res['piles']:,} piles.")
     print("  " + note)
     history("measured", "fingerprints", res["stills"], 0, res["seconds"], note)      # kept in Activity
-    status(phase="measured", note=note)
+    status(phase="measured", test=name, note=note)
 
 
 def compose_pass_due():
@@ -3230,36 +3271,38 @@ def compose_pass_due():
 
 def compose_pass(more_to_describe):
     """Adds the composition to files described without it, from the stills kept beside them (the video is not
-    opened). Said in Describe and the top bar as it goes; stopped at once for a folder to describe, Pause, the
-    night's end, or a test (each file is written whole, so a stop loses nothing)."""
+    opened). Said in Describe and the top bar as it goes; stopped within seconds for a folder to describe, Pause,
+    the night's end, or a test, even mid-file or while the model loads (each file is written whole, so a stop
+    loses at most the file it was on)."""
     py, model, _ = analysis_tools()
     looked_now = lambda: (HOME / "compose-checked").write_text(str(time.time()))
     if not py:
         looked_now(); return                  # nothing can compose here: not tried again for an hour (never a busy loop)
     status(phase="composing", note="looking for files waiting for their composition …")
-    p = subprocess.Popen([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), "--compose-pass",
-                          "--store", str(LOCAL_STORE or NAS_STORE), "--model", model, "--url", NAS_URL],
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
-    done, why, t0, looked = 0, "", time.time(), 0.0
-    for line in p.stdout:
-        line = line.rstrip()
+    got = {"done": 0, "looked": 0.0}
+    def on_line(line):
         m = re.match(r"\[(\d+)/(\d+)\] (.*) — composition", line)
+        k = re.match(r"\[(\d+)/(\d+)\] (.*) — pile (\d+) of (\d+)", line)
         if m:
-            done = int(m.group(1))
-            status(phase="composing", n=m.group(1), of=m.group(2), file=m.group(3),
-                   note=f"adding the composition: {int(m.group(1)):,} of {int(m.group(2)):,} files (judging the shots, after describing)")
+            got["done"] = int(m.group(1))
+        if m or k:
+            g = m or k
+            status(phase="composing", n=g.group(1), of=g.group(2), file=g.group(3),
+                   note=f"adding the composition: {int(g.group(1)):,} of {int(g.group(2)):,} files (judging the shots, after describing)")
         elif line.startswith("loading the vision model"):
             status(phase="composing", note="adding the composition: loading the model …")
+    def stop():
         c = control()
         why = ("describing paused" if c.get("describe_paused") else "7 am" if daytime_wait(c) else "a test" if _fp_asked() else "")
-        if not why and time.time() - looked > 30:
-            looked = time.time(); why = "a folder to describe" if more_to_describe() else ""
-        if why:
-            print(f"  composition stopped for {why}; it carries on when describing is idle again")
-            try: os.killpg(p.pid, signal.SIGTERM)
-            except (OSError, AttributeError): p.terminate()
-            break
-    p.wait()
+        if not why and time.time() - got["looked"] > 30:
+            got["looked"] = time.time(); why = "a folder to describe" if more_to_describe() else ""
+        return why
+    t0 = time.time()
+    why, _ = _run_child([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), "--compose-pass",
+                         "--store", str(LOCAL_STORE or NAS_STORE), "--model", model, "--url", NAS_URL], on_line, stop)
+    done = got["done"]
+    if why:
+        print(f"  composition stopped for {why}; it carries on when describing is idle again")
     if not why:
         looked_now()                          # it ran to its end (all done, or it could not run): looked again in an hour
     if done:
@@ -3328,7 +3371,7 @@ def describe_lane(every=20):
             if _fp_asked():                   # a test (Measure fingerprints, Compare ways of describing), asked in Manage → Describe
                 try: measure_fp()
                 except Exception as e:
-                    print(f"  ! the test stopped: {e}"); status(phase="measure-failed", note=str(e)[:240])
+                    print(f"  ! the test stopped: {e}"); status(phase="measure-failed", test=_test_running[0], note=str(e)[:240])
                 said = "measured"; continue
             if control().get("describe_paused"):
                 if said != "paused":
@@ -4159,7 +4202,7 @@ def selftest():
             finally:
                 daytime_wait = keep5
             # the fingerprint test: describing steps aside for it; its result is said and kept in history
-            global _fp_asked, control, HOME
+            global _fp_asked, control, HOME, _run_child
             keep6 = _fp_asked, control, HOME
             try:
                 HOME = Path(td)
@@ -4204,6 +4247,30 @@ def selftest():
                 compose_pass(lambda: False)
                 assert time.time() - t0 < 5 and not kept, "paused: stopped at once (each file is written whole)"
                 assert compose_pass_due(), "stopped part-way: it carries on when describing is idle again"
+                # a child that says nothing (loading the model, a long take) is still stopped within seconds
+                (HOME / "compose-checked").unlink(missing_ok=True)
+                open(fake, "w").write('#!/bin/sh\nsleep 60\n')
+                hold = {"paused": False}; control = lambda: {"describe_paused": hold["paused"]}
+                threading.Timer(1.0, lambda: hold.update(paused=True)).start(); t0 = time.time()
+                compose_pass(lambda: False)
+                assert time.time() - t0 < 6, f"a silent pass stopped in {time.time() - t0:.0f} s"
+                # pile by pile, the place it is at is said
+                open(fake, "w").write('#!/bin/sh\necho "[1/4] long.mxf — pile 3 of 30"\nsleep 60\n')
+                hold["paused"] = False; said.clear()
+                threading.Timer(1.5, lambda: hold.update(paused=True)).start()
+                compose_pass(lambda: False)
+                assert any(x.get("file") == "long.mxf" and x.get("n") == "1" for x in said), said
+                # a test: Pause stops it too, said under its own button; a crash too
+                open(fake, "w").write('#!/bin/sh\necho "clip 1 of 10: a.mov (30 s)"\nsleep 60\n')
+                control = lambda: {"ways_measure": 11, "describe_paused": True}; _fp_asked = lambda: "ways"; said.clear(); t0 = time.time()
+                measure_fp()
+                assert time.time() - t0 < 6 and said[-1]["phase"] == "measure-failed" and said[-1]["test"] == "the describing test" \
+                       and "paused" in said[-1]["note"], said[-1:]
+                keep8 = _run_child
+                def _run_child(*a, **k): raise OSError("no such file")
+                control = lambda: {"ways_measure": 12}; said.clear()
+                measure_fp(); _run_child = keep8
+                assert said[-1]["phase"] == "measure-failed" and said[-1]["test"] == "the describing test" and "no such file" in said[-1]["note"]
             finally:
                 _fp_asked, control, HOME = keep6
     finally:

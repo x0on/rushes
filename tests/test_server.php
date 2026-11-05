@@ -221,8 +221,14 @@ rename("$root/archive/PROXIES", "$root/archive/PROXIES.away");           // the 
 check(prepare_plan('PARKS', true)['have'] === 1, 'while the previews cannot be reached, the last count stands (no "0 previews")');
 rename("$root/archive/PROXIES.away", "$root/archive/PROXIES");
 rename("$root/archive/PROXIES/PARKS", "$root/archive/PROXIES/PARKS.x");  // the folder answers, its files do not
+$c = json_decode(file_get_contents(web_dir() . '/prepare-plan.json'), true); $c['PARKS']['at'] -= 3500;   // a good count 58 min ago
+file_put_contents(web_dir() . '/prepare-plan.json', json_encode($c));
 check(prepare_plan('PARKS', true)['have'] === 1, 'a folder that had previews and suddenly has none keeps its last count');
-$c = json_decode(file_get_contents(web_dir() . '/prepare-plan.json'), true); $c['PARKS']['at'] -= 3700;
+$c = json_decode(file_get_contents(web_dir() . '/prepare-plan.json'), true);
+check(!empty($c['PARKS']['zero_since']) && time() - $c['PARKS']['at'] < 5, 'the kept count is saved: the share is asked again in 10 minutes, not every minute');
+$c['PARKS']['at'] -= 700; file_put_contents(web_dir() . '/prepare-plan.json', json_encode($c));
+check(prepare_plan('PARKS', true)['have'] === 1, 'the hour runs from the first zero, not from the last good count');
+$c = json_decode(file_get_contents(web_dir() . '/prepare-plan.json'), true); $c['PARKS']['zero_since'] -= 3700; $c['PARKS']['at'] -= 700;
 file_put_contents(web_dir() . '/prepare-plan.json', json_encode($c));
 check(prepare_plan('PARKS', true)['have'] === 0, 'but not for more than an hour: previews really removed are said');
 rename("$root/archive/PROXIES/PARKS.x", "$root/archive/PROXIES/PARKS");

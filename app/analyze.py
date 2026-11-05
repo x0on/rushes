@@ -860,7 +860,13 @@ def compose_only(old, out, thumbs, vision, path, n, of):
 # Describing (piles) leaves it for later: it is a second question per pile and was nearly half of describing's
 # time. Once there is nothing to describe, the helper runs this over every file waiting for it, from the still kept
 # beside each pile (the same still the description was made from): the video is not opened again.
-def compose_pass(store, vision):
+COMPOSE_TRIES = 3
+
+def compose_pass(store, make_vision):
+    """Looks for the files waiting first, and loads the model (several GB) only if there are any. Each pile said
+    as it goes, so the helper can stop it mid-file. A pile whose answer failed (the AI erred, out of memory) keeps
+    the file waiting, tried again on a later pass, up to COMPOSE_TRIES times; a pile whose still is missing has
+    nothing to retry from."""
     todo = []
     for f in Path(store).glob("*/*.json"):
         try:
@@ -868,20 +874,39 @@ def compose_pass(store, vision):
         except (OSError, ValueError):
             continue
     print(f"{len(todo):,} file(s) waiting for their composition", flush=True)
+    if not todo:
+        print(f"RESULT {json.dumps({'files': 0})}", flush=True)
+        return 0
+    vision = make_vision()
     done = 0
     for n, f in enumerate(todo, 1):
         try: r = json.loads(f.read_text())
         except (OSError, ValueError): continue
+        if not r.get("composition_later"):
+            continue                                              # done meanwhile (a Describe again)
         shots, thumbs = r.get("shots") or [], f.with_suffix("")
+        name, tries, failed = Path(r.get("file", f.name)).name, int(r.get("composition_tries", 0)) + 1, 0
         for k, sh in enumerate(shots):
-            if "composition" not in sh:
-                still = thumbs / f"{sh.get('shot', k):04d}.jpg"
-                sh["composition"] = compose_safe(vision, str(still)) if still.exists() else None
-        r.pop("composition_later", None)
+            if sh.get("composition") is not None:
+                continue
+            print(f"[{n}/{len(todo)}] {name} — pile {k + 1} of {len(shots)}", flush=True)
+            still = thumbs / f"{sh.get('shot', k):04d}.jpg"
+            if not still.exists():
+                sh["composition"] = None; continue
+            got = compose_safe(vision, str(still))
+            if got is None and tries < COMPOSE_TRIES:
+                failed += 1; sh.pop("composition", None)          # left waiting: tried again on a later pass
+            else:
+                sh["composition"] = got
+        if failed:
+            r["composition_tries"] = tries
+        else:
+            r.pop("composition_later", None); r.pop("composition_tries", None)
         tmp = f.with_suffix(".json.new")
         tmp.write_text(json.dumps(r, indent=1, ensure_ascii=False)); os.replace(tmp, f)
         done += 1
-        print(f"[{n}/{len(todo)}] {Path(r.get('file', f.name)).name} — composition of {len(shots)} pile(s)", flush=True)
+        print(f"[{n}/{len(todo)}] {name} — composition of {len(shots)} pile(s)"
+              + (f", {failed} to try again later" if failed else ""), flush=True)
     print(f"RESULT {json.dumps({'files': done})}", flush=True)
     return done
 
@@ -1115,7 +1140,7 @@ def compare_ways(store, out_dir, model, archive, proxies, themes, per_clip=3):
                 print("  no picture could be read from its preview: left out", flush=True); continue
             groups, c["steps"]["fingerprints"] = _timed(lambda: pile_groups(looker.vectors([f for _, f in looks])))
             c["looks"], c["pile_count"] = len(looks), len(groups)
-            picked = groups if len(groups) <= per_clip else [groups[round(i * (len(groups) - 1) / (per_clip - 1))] for i in range(per_clip)]
+            picked = groups if len(groups) <= per_clip else [groups[round(i * (len(groups) - 1) / max(1, per_clip - 1))] for i in range(per_clip)]
             for i, g in enumerate(picked):
                 at = looks[g[len(g) // 2]][0]; pile = {"at": round(at, 1)}
                 fo, fp_ = td / f"o{i}.jpg", td / f"p{i}.jpg"
@@ -1150,6 +1175,8 @@ def compare_ways(store, out_dir, model, archive, proxies, themes, per_clip=3):
                 if w in p: ways[w]["calls"] += 1; ways[w]["answer_chars"] += p[w]["answer_chars"]
         clips_out.append(c)
     n = len(clips_out)
+    if not n:
+        raise RuntimeError("no picture could be read from the previews of the clips picked")
     per = {w: round(v["seconds"] / n, 1) for w, v in ways.items()}
     part = lambda key: round(sum(p.get(key, 0) for c in clips_out for p in c["piles"]) / max(1, sum(len(c["piles"]) for c in clips_out)), 1)
     res = {"clips": n, "per_file": per, "picture_original": part("picture_original"), "picture_preview": part("picture_preview"),
@@ -1158,7 +1185,10 @@ def compare_ways(store, out_dir, model, archive, proxies, themes, per_clip=3):
     res["note"] = (f"Describing test on {n} clips, seconds per file: now {per['now']}, from the preview {per['preview']}, "
                    f"preview + shorter answer {per['short']}. A picture from the original takes {res['picture_original']} s, "
                    f"from the preview {res['picture_preview']} s; the composition call {res['composition']} s per pile.")
-    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(out_dir)
+    if not out_dir.parent.is_dir():           # the archive dropped: never make a folder where the share mounts
+        raise RuntimeError(f"{out_dir.parent} cannot be reached, so the result could not be written")
+    out_dir.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M")
     (out_dir / f"ways-{stamp}.json").write_text(json.dumps({"result": res, "clips": clips_out}, indent=1, ensure_ascii=False))
     md = [f"# Describing test, {time.strftime('%Y-%m-%d %H:%M')}", "", res["note"], ""]
@@ -1240,7 +1270,7 @@ def main():
             print(f"FAILED {e}", flush=True)
             return 1
     if a.compose_pass:
-        compose_pass(a.store, Vision(a.model, themes_from(a.url)))
+        compose_pass(a.store, lambda: Vision(a.model, themes_from(a.url)))
         return 0
     if a.compare_ways:
         try:
@@ -1465,12 +1495,27 @@ def selftest():
             assert unpack_vector(r["shots"][1]["look_vector"])[1] > 0.99
             assert r["composition_later"] and "composition" not in r["shots"][0], "describing leaves the composition for its own pass"
             seen = []
-            vis.compose = lambda fr: seen.append(fr) or {"tags": ["rule of thirds"]}
+            rp = store / fingerprint(f)[:2] / f"{fingerprint(f)}.json"
+            # an answer that fails keeps the file waiting, tried again later, given up after COMPOSE_TRIES
+            def boom(self, fr): raise RuntimeError("out of memory")
+            type(vis).compose = boom
+            for t in range(1, COMPOSE_TRIES):
+                assert compose_pass(store, lambda: vis) == 1
+                r = json.loads(rp.read_text())
+                assert r["composition_later"] and r["composition_tries"] == t and "composition" not in r["shots"][0], r
             type(vis).compose = lambda self, fr: seen.append(fr) or {"tags": ["rule of thirds"]}
-            assert compose_pass(store, vis) == 1 and len(seen) == 2 and all(x.endswith((".jpg")) for x in seen)
-            r = json.loads((store / fingerprint(f)[:2] / f"{fingerprint(f)}.json").read_text())
-            assert not r.get("composition_later") and r["shots"][1]["composition"] == {"tags": ["rule of thirds"]}
-            assert compose_pass(store, vis) == 0, "done once"
+            assert compose_pass(store, lambda: vis) == 1 and len(seen) == 2 and all(x.endswith((".jpg")) for x in seen)
+            r = json.loads(rp.read_text())
+            assert not r.get("composition_later") and not r.get("composition_tries") and r["shots"][1]["composition"] == {"tags": ["rule of thirds"]}
+            loaded = []
+            assert compose_pass(store, lambda: loaded.append(1) or vis) == 0 and not loaded, "nothing waiting: the model is not loaded"
+            # given up after the last try: said as none, not tried forever
+            r["composition_later"], r["composition_tries"] = True, COMPOSE_TRIES - 1
+            for sh in r["shots"]: sh.pop("composition", None)
+            rp.write_text(json.dumps(r)); type(vis).compose = boom
+            assert compose_pass(store, lambda: vis) == 1
+            r = json.loads(rp.read_text())
+            assert not r.get("composition_later") and r["shots"][0]["composition"] is None
             class NoLooker:
                 def ready(self): return False
             f2 = Path(td) / "old.mov"; f2.write_bytes(b"o" * 100)
