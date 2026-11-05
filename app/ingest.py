@@ -3179,15 +3179,26 @@ def _run_child(cmd, on_line, should_stop, every=2.0):
     every couple of seconds whatever the child is doing (loading the model, reading the store, a long take):
     a child that says nothing for minutes can still be stopped at once. Returns why it was stopped, or ""."""
     import queue
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                         bufsize=1, start_new_session=True)
     lines = queue.Queue()
-    reader = threading.Thread(target=lambda: ([lines.put(l) for l in p.stdout], lines.put(None)), daemon=True)
-    reader.start()
+    def read():
+        try:
+            for l in p.stdout: lines.put(l)
+        except (OSError, ValueError):
+            pass
+        finally:
+            lines.put(None)                       # the end is always said, even if reading failed
+    threading.Thread(target=read, daemon=True).start()
     why = ""
     try:
         while True:
             try: line = lines.get(timeout=every)
-            except queue.Empty: line = ""
+            except queue.Empty:
+                line = ""
+                if p.poll() is not None and lines.empty():
+                    try: line = lines.get(timeout=every)         # it ended: what is left, then the end
+                    except queue.Empty: break
             if line is None:
                 break
             if line:
@@ -3204,6 +3215,12 @@ def _run_child(cmd, on_line, should_stop, every=2.0):
                 try: os.killpg(p.pid, signal.SIGKILL)
                 except (OSError, AttributeError): p.kill()
         p.wait()
+    while True:                                   # lines printed before it stopped (a file already written)
+        try: line = lines.get(timeout=2)
+        except queue.Empty: break
+        if line is None: break
+        try: on_line(line.rstrip())
+        except Exception: pass
     return why, p.returncode
 
 
@@ -3283,8 +3300,8 @@ def compose_pass(more_to_describe):
     def on_line(line):
         m = re.match(r"\[(\d+)/(\d+)\] (.*) — composition", line)
         k = re.match(r"\[(\d+)/(\d+)\] (.*) — pile (\d+) of (\d+)", line)
-        if m:
-            got["done"] = int(m.group(1))
+        if m and "to try again later" not in line:
+            got["done"] += 1                      # a file written with its composition (not one left to retry)
         if m or k:
             g = m or k
             status(phase="composing", n=g.group(1), of=g.group(2), file=g.group(3),
@@ -3413,7 +3430,9 @@ def describe_lane(every=20):
                         try: return bool(ready) and within("describe", 10, lambda: any(os.path.exists(p) for p in ready))
                         except Stalled: return False
                     try: compose_pass(more)
-                    except Exception as e: print(f"  ! the composition pass stopped: {e}")
+                    except Exception as e:            # looked again in an hour, never restarted at once
+                        print(f"  ! the composition pass stopped: {e}")
+                        (HOME / "compose-checked").write_text(str(time.time()))
                     said = ""; continue
                 if said != "idle":
                     status(phase="idle", note="nothing to describe"); said = "idle"
@@ -4235,6 +4254,12 @@ def selftest():
                 compose_pass(lambda: False)
                 assert said[-1]["phase"] == "composing" and said[-1]["of"] == "2" and "2 of 2 files" in said[-1]["note"], said[-1:]
                 assert kept[-1][0] == "composed" and kept[-1][2] == 2
+                (HOME / "compose-checked").unlink()
+                open(fake, "w").write('#!/bin/sh\necho "[1/3] a.mov — composition of 2 pile(s), 1 to try again later"\n'
+                                      'echo "[3/3] c.mov — composition of 1 pile(s)"\nprintf "\\377\\376 bad bytes\\n"\n')
+                kept.clear(); compose_pass(lambda: False)
+                assert kept[-1][2] == 1, "only files given their composition are counted (not skipped, not left to retry)"
+                assert not compose_pass_due(), "a line that is not text does not stop the end being seen"
                 assert not compose_pass_due(), "it ran to its end: not looked for again for an hour"
                 (HOME / "compose-checked").unlink()
                 keep7 = analysis_tools; analysis_tools = lambda: ("", "m", "")
@@ -4245,7 +4270,7 @@ def selftest():
                                       'echo "[1/9] a.mov — composition of 3 pile(s)"\nsleep 30\necho "[2/9] b.mov — composition"\n')
                 control = lambda: {"describe_paused": True}; kept.clear(); t0 = time.time()
                 compose_pass(lambda: False)
-                assert time.time() - t0 < 5 and not kept, "paused: stopped at once (each file is written whole)"
+                assert time.time() - t0 < 6 and kept and kept[-1][2] == 1, "paused: stopped at once, and the file it had written is counted"
                 assert compose_pass_due(), "stopped part-way: it carries on when describing is idle again"
                 # a child that says nothing (loading the model, a long take) is still stopped within seconds
                 (HOME / "compose-checked").unlink(missing_ok=True)
@@ -4269,7 +4294,8 @@ def selftest():
                 keep8 = _run_child
                 def _run_child(*a, **k): raise OSError("no such file")
                 control = lambda: {"ways_measure": 12}; said.clear()
-                measure_fp(); _run_child = keep8
+                try: measure_fp()
+                finally: _run_child = keep8
                 assert said[-1]["phase"] == "measure-failed" and said[-1]["test"] == "the describing test" and "no such file" in said[-1]["note"]
             finally:
                 _fp_asked, control, HOME = keep6

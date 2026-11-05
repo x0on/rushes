@@ -11,6 +11,7 @@ Fixes from a review of 0.13.50–0.13.51, done by a second reader who had not wr
 - **The composition pass and the tests really stop within seconds.** The helper only checked for Pause, a folder to describe or 7 am when the AI printed a line, which on a long take could be minutes, or the whole model load. It now checks every 2 seconds whatever the AI is doing. The tests stop on Pause too, and after 2 hours at most.
 - **A shot whose composition failed is tried again**, on a later pass, up to 3 times, instead of being marked done with none (an error, or the Mac short of graphics memory).
 - **A describing test that crashes says so under its own button**, not under Measure fingerprints; it never fails with "division by zero" when no clip could be read; and it never makes a folder where the archive mounts when the archive has dropped.
+- **Activity counts the composition truly**: only files given it (not ones skipped or left to retry), including the one finished just before a stop.
 - **A folder's kept preview count lasts an hour from when the zero first appeared** (it could be minutes), and the share is asked again every 10 minutes rather than every minute while it misbehaves.
 
 ## 0.13.51 — November 2026

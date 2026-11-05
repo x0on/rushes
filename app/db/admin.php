@@ -2156,7 +2156,7 @@ function drawDescribeTools(h) {
       testRow('fp-measure', 'the fingerprint test', 'Measure fingerprints (a test)',
         'How fast this Mac turns stills into fingerprints, and how many piles the long takes make, on up to 500 stills already described. Describing steps aside for it, then carries on; nothing is changed. The result stays in Activity.') +
       testRow('ways-measure', 'the describing test', 'Compare ways of describing (a test)',
-        'About 10 clips already described (short ones and long takes), described three ways and timed: as now (pictures from the original, plus the composition), with pictures from the preview, and from the preview with a shorter answer. About 30 to 60 minutes; describing steps aside, then carries on. The descriptions go side by side in _rushes/tests on the archive, to judge by eye; nothing described is changed.')
+        'About 10 clips already described (short ones and long takes), described three ways and timed: as now (pictures from the original, plus the composition), with pictures from the preview, and from the preview with a shorter answer. About 10 to 60 minutes; describing steps aside, then carries on. Pause stops the test (press it again after). The descriptions go side by side in _rushes/tests on the archive, to judge by eye; nothing described is changed.')
     : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
     : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
       '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +
