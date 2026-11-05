@@ -132,14 +132,23 @@ class Known:
     read 8 MB of every file already described, over the share, to recognise it (8,861 files: about 70 GB, half an
     hour); with this it reads none. A file changed (another size or time) is fingerprinted again."""
     def __init__(self, store):
-        self.path, self.m = Path(store) / ".known.tsv", {}
+        self.path, self.m, lines = Path(store) / ".known.tsv", {}, 0
         try:
-            for ln in self.path.read_text(errors="replace").splitlines():
-                p = ln.split("\t")
-                if len(p) == 4:
+            # only whole lines (a crash or a full disk can leave the last one cut short) and only a whole
+            # fingerprint: anything else is left out, and that file is simply read again
+            for ln in self.path.read_text(errors="replace").split("\n")[:-1]:
+                p = ln.split("\t"); lines += 1
+                if len(p) == 4 and p[1].isdigit() and p[2].isdigit() and re.fullmatch(r"[0-9a-f]{24}", p[3]):
                     self.m[p[0]] = (p[1], p[2], p[3])
         except OSError:
             pass
+        if lines > 2 * len(self.m) + 1000:          # files changed or moved since: written again, once, without them
+            try:
+                tmp = self.path.with_name(".known.tsv.new")
+                tmp.write_text("".join(f"{k}\t{a}\t{b}\t{c}\n" for k, (a, b, c) in self.m.items()))
+                os.replace(tmp, self.path)
+            except OSError:
+                pass
 
     def fingerprint(self, path):
         st, key = os.stat(path), None
@@ -148,12 +157,12 @@ class Known:
         if got and got[:2] == key:
             return got[2]
         fp = fingerprint(path)
-        if "\t" not in str(path) and "\n" not in str(path):
+        if not re.search(r"[\t\n\r]", str(path)):
             self.m[str(path)] = key + (fp,)
             try:
-                with open(self.path, "a") as f:
+                with open(self.path, "a", encoding="utf-8", errors="replace") as f:
                     f.write(f"{path}\t{key[0]}\t{key[1]}\t{fp}\n")
-            except OSError:
+            except (OSError, ValueError):
                 pass
         return fp
 
@@ -1159,6 +1168,7 @@ def compare_ways(store, out_dir, model, archive, proxies, themes, per_clip=3):
         raise RuntimeError("no clips to test on: none described here still has its original and its preview")
     print(f"testing on {len(clips)} clips ({sum(1 for c in clips if c[2] <= 60)} short, {sum(1 for c in clips if c[2] > 60)} long)", flush=True)
     vision = Vision(model, themes); looker = Looker(lambda line: print(line, flush=True))
+    vision.load()                     # before the clock starts: loading is not describing
     if not looker.ready():
         raise RuntimeError("the fingerprint model is not ready, so piles cannot be made")
     full_q, short_q = prompt_text(themes), short_prompt(themes)
@@ -1351,7 +1361,7 @@ def main():
             got = analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
                           proxy_of(f, a.archive, a.proxies), a.again, looker, known)
             counts[got] += 1
-            if got == "already" and time.time() - said > 2:      # walking past what is done: said, not silent
+            if got in ("already", "older") and time.time() - said > 2:      # walking past what is done: said, not silent
                 said = time.time(); say(n=n, of=len(files), step="checking the files already described")
         except Exception as e:                       # one bad file never stops the folder
             counts["failed"] += 1
@@ -1597,6 +1607,13 @@ def selftest():
             Known(td).fingerprint(odd); assert all(len(l.split("\t")) == 4 for l in (Path(td) / ".known.tsv").read_text().splitlines())
         finally:
             globals()["fingerprint"] = real
+        kt = Path(td) / ".known.tsv"; good = kt.read_text()
+        kt.write_text(good + f"{v}\t120\t1\t0a74a8a")                     # a crash cut the last line short
+        assert Known(td).m[str(v)][2] != "0a74a8a", "a cut line is not believed"
+        kt.write_text(good + f"{v}\t120\t1\t0a74a8a\n")                   # a whole line, a cut fingerprint
+        assert Known(td).m[str(v)][2] != "0a74a8a"
+        kt.write_text(good * 2000); Known(td)
+        assert len(kt.read_text().splitlines()) == len(Known(td).m), "written again without the repeats"
         heard = []
         for i in range(1001): (Path(td) / f"f{i}.mp4").write_bytes(b"")
         assert len(media_under(td, heard.append)) == 1003 and heard == [500, 1000], heard
@@ -1640,6 +1657,7 @@ def selftest():
             frame = lambda p, at, out, width=768: shutil.copyfile(f"{td}/a.jpg", out) or True
             class V:
                 def __init__(self, *a): self.name = "m"
+                def load(self): pass
                 def ask(self, frames, extra="", question=None, tokens=420): return '{"description": "a park", "text_on_screen": ["OPEN"]}'
                 def compose(self, f): return None
             class L:

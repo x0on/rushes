@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.53 — November 2026
+
+- **Describing picks up again in minutes, not half an hour.** Each time describing restarted part-way through a big folder (an update, Pause, a test, the share dropping), it listed the whole folder over the share, loaded the AI, then read 8 MB of every file it had already described to recognise it: for a folder like 12,000 files, about 70 GB over the network before any new work, while the page said "loading the model". Now this Mac remembers each file it has recognised (its name, size and time, in a list kept on this Mac only), so a restart walks past them without reading them; a file that changed is read again. The AI loads only when a file actually needs describing.
+- **Each step is said.** The describing row and the top bar say "listing the folder: 8,500 files so far …", then "checking the files already described" with the count, instead of "loading the model" the whole time.
+- **The describing test no longer counts loading the AI as describing time** (its first clip read slow).
+
 ## 0.13.52 — November 2026
 
 Fixes from a review of 0.13.50–0.13.51, done by a second reader who had not written the code.
