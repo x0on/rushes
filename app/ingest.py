@@ -3190,7 +3190,7 @@ def _run_child(cmd, on_line, should_stop, every=2.0):
         finally:
             lines.put(None)                       # the end is always said, even if reading failed
     threading.Thread(target=read, daemon=True).start()
-    why = ""
+    why, ended = "", False
     try:
         while True:
             try: line = lines.get(timeout=every)
@@ -3200,7 +3200,7 @@ def _run_child(cmd, on_line, should_stop, every=2.0):
                     try: line = lines.get(timeout=every)         # it ended: what is left, then the end
                     except queue.Empty: break
             if line is None:
-                break
+                ended = True; break
             if line:
                 on_line(line.rstrip())
             why = should_stop() or ""
@@ -3215,7 +3215,7 @@ def _run_child(cmd, on_line, should_stop, every=2.0):
                 try: os.killpg(p.pid, signal.SIGKILL)
                 except (OSError, AttributeError): p.kill()
         p.wait()
-    while True:                                   # lines printed before it stopped (a file already written)
+    while not ended:                              # lines printed before it stopped (a file already written)
         try: line = lines.get(timeout=2)
         except queue.Empty: break
         if line is None: break
