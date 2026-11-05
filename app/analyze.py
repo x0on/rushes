@@ -132,11 +132,13 @@ class Known:
     read 8 MB of every file already described, over the share, to recognise it (8,861 files: about 70 GB, half an
     hour); with this it reads none. A file changed (another size or time) is fingerprinted again."""
     def __init__(self, store):
-        self.path, self.m, lines = Path(store) / ".known.tsv", {}, 0
+        self.path, self.m, lines, self.ends_whole = Path(store) / ".known.tsv", {}, 0, True
         try:
             # only whole lines (a crash or a full disk can leave the last one cut short) and only a whole
             # fingerprint: anything else is left out, and that file is simply read again
-            for ln in self.path.read_text(errors="replace").split("\n")[:-1]:
+            raw = self.path.read_text(encoding="utf-8", errors="replace")
+            self.ends_whole = raw.endswith("\n") or not raw
+            for ln in raw.split("\n")[:-1]:
                 p = ln.split("\t"); lines += 1
                 if len(p) == 4 and p[1].isdigit() and p[2].isdigit() and re.fullmatch(r"[0-9a-f]{24}", p[3]):
                     self.m[p[0]] = (p[1], p[2], p[3])
@@ -145,9 +147,10 @@ class Known:
         if lines > 2 * len(self.m) + 1000:          # files changed or moved since: written again, once, without them
             try:
                 tmp = self.path.with_name(".known.tsv.new")
-                tmp.write_text("".join(f"{k}\t{a}\t{b}\t{c}\n" for k, (a, b, c) in self.m.items()))
-                os.replace(tmp, self.path)
-            except OSError:
+                tmp.write_text("".join(f"{k}\t{a}\t{b}\t{c}\n" for k, (a, b, c) in self.m.items()),
+                               encoding="utf-8", errors="replace")
+                os.replace(tmp, self.path); self.ends_whole = True
+            except (OSError, ValueError):
                 pass
 
     def fingerprint(self, path):
@@ -161,7 +164,8 @@ class Known:
             self.m[str(path)] = key + (fp,)
             try:
                 with open(self.path, "a", encoding="utf-8", errors="replace") as f:
-                    f.write(f"{path}\t{key[0]}\t{key[1]}\t{fp}\n")
+                    f.write(("" if self.ends_whole else "\n") + f"{path}\t{key[0]}\t{key[1]}\t{fp}\n")
+                self.ends_whole = True              # after a cut line, its own line: never joined onto it
             except (OSError, ValueError):
                 pass
         return fp
@@ -1612,11 +1616,14 @@ def selftest():
         assert Known(td).m[str(v)][2] != "0a74a8a", "a cut line is not believed"
         kt.write_text(good + f"{v}\t120\t1\t0a74a8a\n")                   # a whole line, a cut fingerprint
         assert Known(td).m[str(v)][2] != "0a74a8a"
+        kt.write_text(good + f"{v}\t1\t1\t0a7")                           # a cut line, then a new file
+        nw = Path(td) / "new.mov"; nw.write_bytes(b"n"); Known(td).fingerprint(nw)
+        assert str(nw) in Known(td).m, "the entry after a cut line is kept"
         kt.write_text(good * 2000); Known(td)
         assert len(kt.read_text().splitlines()) == len(Known(td).m), "written again without the repeats"
         heard = []
         for i in range(1001): (Path(td) / f"f{i}.mp4").write_bytes(b"")
-        assert len(media_under(td, heard.append)) == 1003 and heard == [500, 1000], heard
+        assert len(media_under(td, heard.append)) == 1004 and heard == [500, 1000], heard
     assert globals()["Vision"]("not-a-model", th).model is None, "the model loads only when first asked"
     # end to end: a restart over a folder already described lists it, walks past, never loads a model
     with tempfile.TemporaryDirectory() as td:
