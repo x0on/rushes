@@ -2118,6 +2118,14 @@ function drawDescribeTools(h) {
   // away (it sees it when it is back).
   $('anPause').hidden = true;                     // the main switch, in the card, starts and pauses it
   const an = (h && h.analysis) || {}, d = (h && h.describe) || {};
+  // a test's row: its button, and under it what it is doing or found (said only under the test it is about)
+  const testRow = function (act, name, label, about) {
+    const mine = (d.test || 'the fingerprint test') === name;
+    return '<div class="airow" style="align-items:flex-start">' + ask(act, mine && d.phase === 'measuring' ? 'Measuring…' : label, true) +
+      '<div class="t">' + (mine && d.phase === 'measured' ? '<span class="ok">' + esc(d.note) + '</span>'
+        : mine && d.phase === 'measure-failed' ? '<span class="bad">' + esc(d.note) + '</span>'
+        : '<small>' + about + '</small>') + '</div></div>';
+  };
   const steps = function () {        // Install the AI, step by step: each a ✓, the one under way turning
     return (d.done ? d.done.split(' | ').map(function (x) { return '<div class="ok">✓ ' + esc(x) + '</div>'; }).join('') : '') +
       (d.note ? '<div><span class="spin"></span>' + esc(d.note) + '</div>' : '');
@@ -2135,7 +2143,7 @@ function drawDescribeTools(h) {
         '<div class="t"><b>' + (descPaused ? 'Paused' : 'Describing') + '</b><small>' + esc(
           descPaused ? 'Nothing more is described until it is switched on again, on Overview. What is done is kept; copying carries on.'
           : d.phase === 'analysing' ? 'Now: ' + (d.label || d.source || '') + (d.of ? ' · ' + d.n + ' of ' + d.of : '') + ' — switching off stops after the file it is on'
-          : d.phase === 'measuring' ? 'The fingerprint test is running: ' + (d.note || '') + ' — describing carries on after it'
+          : d.phase === 'measuring' ? (d.test ? d.test.charAt(0).toUpperCase() + d.test.slice(1) : 'The fingerprint test') + ' is running: ' + (d.note || '') + ' — describing carries on after it'
           : d.note ? d.note.charAt(0).toUpperCase() + d.note.slice(1)
           : 'On: folders on the list below are described as soon as their proxies are made') + '</small></div>' +
         '<a class="btn quiet" href="#overview" data-go-overview>On/off is on Overview →</a>' +
@@ -2145,10 +2153,10 @@ function drawDescribeTools(h) {
           '" aria-label="Only at night" data-an="' + (h.describe_night ? 'describe-anytime' : 'describe-night') + '"></button>' +
         '<div class="t">Only at night<small>' + (h.describe_night ? '10 pm to 7 am: the Mac is free during the day'
           : 'Off: any time there is something to describe') + '</small></div></div>' +
-      '<div class="airow" style="align-items:flex-start">' + ask('fp-measure', d.phase === 'measuring' ? 'Measuring…' : 'Measure fingerprints (a test)', true) +
-        '<div class="t">' + (d.phase === 'measured' ? '<span class="ok">' + esc(d.note) + '</span>'
-          : d.phase === 'measure-failed' ? '<span class="bad">' + esc(d.note) + '</span>'
-          : '<small>How fast this Mac turns stills into fingerprints, and how many piles the long takes make, on up to 500 stills already described. Describing steps aside for it, then carries on; nothing is changed. The result stays in Activity.</small>') + '</div></div>'
+      testRow('fp-measure', 'the fingerprint test', 'Measure fingerprints (a test)',
+        'How fast this Mac turns stills into fingerprints, and how many piles the long takes make, on up to 500 stills already described. Describing steps aside for it, then carries on; nothing is changed. The result stays in Activity.') +
+      testRow('ways-measure', 'the describing test', 'Compare ways of describing (a test)',
+        'About 10 clips already described (short ones and long takes), described three ways and timed: as now (pictures from the original, plus the composition), with pictures from the preview, and from the preview with a shorter answer. About 30 to 60 minutes; describing steps aside, then carries on. The descriptions go side by side in _rushes/tests on the archive, to judge by eye; nothing described is changed.')
     : an.nochip ? 'Describing needs a Mac with an Apple chip; <b>' + esc(h.label) + '</b> has an Intel one.'
     : (d.phase === 'install-failed' ? '<span class="warnline" style="display:block">The AI was not installed: ' + esc(d.note) + '</span>' : '') +
       '<div style="margin-top:6px">The AI that describes footage is not on <b>' + esc(h.label) + '</b> yet.' +
@@ -2162,7 +2170,7 @@ function drawDescribeTools(h) {
         const r = await (await fetch('helper.php', { method: 'POST', body: new URLSearchParams({ action: act }) })).json();
         $('anPauseSaid').textContent = r.error ? 'Did not happen: ' + r.error
           : act === 'ai-install' ? 'Asked ✓ The helper starts within a minute; each step shows here.'
-          : act === 'fp-measure' ? 'Asked ✓ The helper starts the test within a minute (after the file it is on); its progress shows here.'
+          : act === 'fp-measure' || act === 'ways-measure' ? 'Asked ✓ The helper starts the test within a minute (after the file it is on); its progress shows here.'
           : act === 'describe-night' ? 'Only at night ✓ Describing waits for 10 pm, and stops at 7 am.'
           : act === 'describe-anytime' ? 'Any time ✓ Describing carries on whenever there is something to describe.'
           : act === 'describe-pause' ? 'Paused ✓ It stops after the file it is on; what is done is kept. Copying carries on.'

@@ -37,7 +37,7 @@ Runs in the analysis Python (mlx-vlm, mlx-whisper, scenedetect installed), not
 the helper's own; the helper starts it. --selftest checks the parts that need
 no model.
 """
-import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request
+import argparse, hashlib, json, os, random, re, shutil, subprocess, sys, tempfile, time, urllib.request
 from pathlib import Path
 
 VERSION = 5          # 5: piles (a look every 5 s, fingerprints, one description per pile of looks alike); 4: composition (the lens: where the subject, eyes, horizon and lines fall); 3: moments inside long takes.
@@ -1013,6 +1013,139 @@ def measure_fingerprints(store, limit=500):
     return res
 
 
+# ── ways of describing: a test (Manage → Describe → Compare ways of describing) ─────────────────────────
+# The same clips described three ways, each step timed, and the descriptions kept side by side to judge by eye:
+#   now       pictures from the original (5K/4K over the network), the full answer, plus the composition (a 2nd call)
+#   preview   pictures from the 720p preview, the full answer, no composition
+#   short     pictures from the preview, a shorter answer (no ages, setting, mood; fewer tags), no composition
+# Written to a folder of its own (tests/ on the archive), never to the descriptions: nothing is changed.
+SHORT_DROP = ("  ages ", "  setting ", "  mood ")
+
+def short_prompt(themes):
+    lines, skip = [], False
+    for ln in prompt_text(themes).split("\n"):
+        if ln.startswith("  ") and not ln.startswith("    "):          # a key's first line
+            skip = ln.startswith(SHORT_DROP)
+        elif not ln.startswith("    "):
+            skip = False
+        if not skip:
+            lines.append(ln.replace("array of 3-8 short", "array of 3-5 short"))
+    return "\n".join(lines)
+
+
+def _timed(fn, *a, **k):
+    t = time.time(); r = fn(*a, **k); return r, time.time() - t
+
+
+def test_clips(store, archive, proxies, short=5, long=5):
+    """Clips already described on this Mac that still have their original and preview: short ones (10 s to 1 min)
+    and long takes (3 min or more), picked from different folders."""
+    got = {"short": [], "long": []}; folders = set()
+    recs = list(Path(store).glob("*/*.json")); random.Random(7).shuffle(recs)
+    for f in recs:
+        if len(got["short"]) >= short and len(got["long"]) >= long: break
+        try: r = json.loads(f.read_text())
+        except (OSError, ValueError): continue
+        if r.get("kind") != "video": continue
+        d, path = float(r.get("duration") or 0), Path(r.get("file") or "")
+        kind = "short" if 10 <= d <= 60 else "long" if d >= 180 else ""
+        if not kind or len(got[kind]) >= (short if kind == "short" else long) or path.parent in folders: continue
+        px = proxy_of(path, archive, proxies)
+        if px is None or not path.exists(): continue
+        folders.add(path.parent); got[kind].append((path, px, d))
+    return got["short"] + got["long"]
+
+
+def compare_ways(store, out_dir, model, archive, proxies, themes, per_clip=3):
+    t_all = time.time()
+    clips = test_clips(store, archive, proxies)
+    if not clips:
+        raise RuntimeError("no clips to test on: none described here still has its original and its preview")
+    print(f"testing on {len(clips)} clips ({sum(1 for c in clips if c[2] <= 60)} short, {sum(1 for c in clips if c[2] > 60)} long)", flush=True)
+    vision = Vision(model, themes); looker = Looker(lambda line: print(line, flush=True))
+    if not looker.ready():
+        raise RuntimeError("the fingerprint model is not ready, so piles cannot be made")
+    full_q, short_q = prompt_text(themes), short_prompt(themes)
+    ways = {w: {"seconds": 0.0, "calls": 0, "answer_chars": 0} for w in ("now", "preview", "short")}
+    clips_out = []
+    for n, (path, px, dur) in enumerate(clips, 1):
+        print(f"clip {n} of {len(clips)}: {path.name} ({dur:.0f} s)", flush=True)
+        c = {"file": str(path), "duration": round(dur, 1), "steps": {}, "piles": []}
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            _, c["steps"]["open"] = _timed(lambda: (fingerprint(path), probe(px), probe(path)))     # what every file costs first
+            looks, t0 = [], time.time()
+            for j, t in enumerate(look_times(dur)):
+                f = td / f"l{j:05d}.jpg"
+                if frame(px, t, f, width=384): looks.append((t, str(f)))
+            c["steps"]["looks"] = time.time() - t0
+            if not looks:
+                print("  no picture could be read from its preview: left out", flush=True); continue
+            groups, c["steps"]["fingerprints"] = _timed(lambda: pile_groups(looker.vectors([f for _, f in looks])))
+            c["looks"], c["pile_count"] = len(looks), len(groups)
+            picked = groups if len(groups) <= per_clip else [groups[round(i * (len(groups) - 1) / (per_clip - 1))] for i in range(per_clip)]
+            for i, g in enumerate(picked):
+                at = looks[g[len(g) // 2]][0]; pile = {"at": round(at, 1)}
+                fo, fp_ = td / f"o{i}.jpg", td / f"p{i}.jpg"
+                _, pile["picture_original"] = _timed(frame, path, at, fo)
+                _, pile["picture_preview"] = _timed(frame, px, at, fp_)
+                for way, pic, q, toks in (("now", fo, full_q, 420), ("preview", fp_, full_q, 420), ("short", fp_, short_q, 260)):
+                    if not pic.exists(): continue
+                    raw, secs = _timed(vision.ask, [str(pic)], question=q, tokens=toks)
+                    got = parse_json(raw)
+                    pile[way] = {"seconds": round(secs, 1), "answer_chars": len(raw),
+                                 "description": (got or {}).get("description", "") if isinstance(got, dict) else "",
+                                 "text_on_screen": (got or {}).get("text_on_screen", []) if isinstance(got, dict) else [],
+                                 "read": isinstance(got, dict)}
+                if fo.exists():
+                    _, pile["composition"] = _timed(compose_safe, vision, str(fo))
+                c["piles"].append(pile)
+                print(f"  pile {i + 1} of {len(picked)} at {at:.0f} s: now {pile.get('now', {}).get('seconds', '?')} s, "
+                      f"preview {pile.get('preview', {}).get('seconds', '?')} s, short {pile.get('short', {}).get('seconds', '?')} s", flush=True)
+        # one file, each way, as describing would really do it: opening, looks and fingerprints once, then every pile
+        k = c["pile_count"] / max(1, len(c["piles"]))
+        avg = lambda key: sum(p.get(key, 0) for p in c["piles"]) * k
+        avgw = lambda way: sum(p.get(way, {}).get("seconds", 0) for p in c["piles"]) * k
+        base = c["steps"]["open"] + c["steps"]["looks"] + c["steps"]["fingerprints"]
+        c["per_way"] = {"now": base + avg("picture_original") + avgw("now") + avg("composition"),
+                        "preview": base + avg("picture_preview") + avgw("preview"),
+                        "short": base + avg("picture_preview") + avgw("short")}
+        c["steps"] = {k_: round(v, 1) for k_, v in c["steps"].items()}
+        c["per_way"] = {k_: round(v, 1) for k_, v in c["per_way"].items()}
+        for w in ways:
+            ways[w]["seconds"] += c["per_way"][w]
+            for p in c["piles"]:
+                if w in p: ways[w]["calls"] += 1; ways[w]["answer_chars"] += p[w]["answer_chars"]
+        clips_out.append(c)
+    n = len(clips_out)
+    per = {w: round(v["seconds"] / n, 1) for w, v in ways.items()}
+    part = lambda key: round(sum(p.get(key, 0) for c in clips_out for p in c["piles"]) / max(1, sum(len(c["piles"]) for c in clips_out)), 1)
+    res = {"clips": n, "per_file": per, "picture_original": part("picture_original"), "picture_preview": part("picture_preview"),
+           "composition": part("composition"), "open": round(sum(c["steps"]["open"] for c in clips_out) / n, 1),
+           "minutes": round((time.time() - t_all) / 60)}
+    res["note"] = (f"Describing test on {n} clips, seconds per file: now {per['now']}, from the preview {per['preview']}, "
+                   f"preview + shorter answer {per['short']}. A picture from the original takes {res['picture_original']} s, "
+                   f"from the preview {res['picture_preview']} s; the composition call {res['composition']} s per pile.")
+    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M")
+    (out_dir / f"ways-{stamp}.json").write_text(json.dumps({"result": res, "clips": clips_out}, indent=1, ensure_ascii=False))
+    md = [f"# Describing test, {time.strftime('%Y-%m-%d %H:%M')}", "", res["note"], ""]
+    for c in clips_out:
+        md += [f"## {Path(c['file']).name} ({c['duration']:.0f} s, {c['pile_count']} piles)", "",
+               f"Seconds for the whole file: now {c['per_way']['now']} · preview {c['per_way']['preview']} · short {c['per_way']['short']}", ""]
+        for p in c["piles"]:
+            md.append(f"**At {p['at']:.0f} s**")
+            for w in ("now", "preview", "short"):
+                if w in p:
+                    md.append(f"- {w} ({p[w]['seconds']} s): {p[w]['description'] or '(not read)'}"
+                              + (f" · on screen: {' / '.join(p[w]['text_on_screen'])}" if p[w]['text_on_screen'] else ""))
+            md.append("")
+    (out_dir / f"ways-{stamp}.md").write_text("\n".join(md))
+    res["report"] = str(out_dir / f"ways-{stamp}.md")
+    print("RESULT " + json.dumps(res), flush=True)
+    return res
+
+
 def proxy_of(path, archive, proxies):
     """The proxy made for an original, if there is one: same path under the
     proxies folder, as .mp4. Reading it is several times faster than reading
@@ -1062,12 +1195,20 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--measure-fingerprints", action="store_true", help="a test: fingerprint stills already described (--store)")
     ap.add_argument("--no-piles", action="store_true", help="describe the older way: shots and moments, no fingerprints")
+    ap.add_argument("--compare-ways", default="", help="a test: describe a few clips three ways, timed, written to this folder")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     if a.measure_fingerprints:
         try:
             measure_fingerprints(a.store)
+            return 0
+        except Exception as e:
+            print(f"FAILED {e}", flush=True)
+            return 1
+    if a.compare_ways:
+        try:
+            compare_ways(a.store, a.compare_ways, a.model, a.archive, a.proxies, themes_from(a.url))
             return 0
         except Exception as e:
             print(f"FAILED {e}", flush=True)
@@ -1299,6 +1440,39 @@ def selftest():
                 shots_of = keep2
         finally:
             probe, frame, say = keep
+    # the test of ways of describing: short question, clips picked, every way timed, a report beside, nothing described
+    q = short_prompt(th)
+    assert "  ages " not in q and "  mood " not in q and "  setting " not in q and "  description " in q and "3-5 short" in q and "  themes " in q
+    global Vision, Looker
+    with tempfile.TemporaryDirectory() as td:
+        from PIL import Image
+        Image.new("RGB", (64, 36), (120, 130, 140)).save(f"{td}/a.jpg")
+        arch, pxs, store = Path(td) / "arch", Path(td) / "px", Path(td) / "store"
+        for name, dur in (("Park/a.mov", 30), ("Hall/b.mov", 400), ("Pool/c.mov", 5)):
+            o = arch / name; o.parent.mkdir(parents=True, exist_ok=True); o.write_bytes(b"x" * 10)
+            pp = (pxs / name).with_suffix(".mp4"); pp.parent.mkdir(parents=True, exist_ok=True); pp.write_bytes(b"p")
+            (store / "ab").mkdir(parents=True, exist_ok=True)
+            (store / "ab" / f"{o.stem}.json").write_text(json.dumps({"kind": "video", "duration": dur, "file": str(o)}))
+        keep = probe, frame, Vision, Looker
+        try:
+            probe = lambda p: (30.0, False, True, "")
+            frame = lambda p, at, out, width=768: shutil.copyfile(f"{td}/a.jpg", out) or True
+            class V:
+                def __init__(self, *a): self.name = "m"
+                def ask(self, frames, extra="", question=None, tokens=420): return '{"description": "a park", "text_on_screen": ["OPEN"]}'
+                def compose(self, f): return None
+            class L:
+                def __init__(self, tell): pass
+                def ready(self): return True
+                def vectors(self, paths): return [[1.0, 0.0] for _ in paths]
+            Vision, Looker = V, L
+            res = compare_ways(store, Path(td) / "tests", "m", arch, pxs, th)
+            assert res["clips"] == 2 and set(res["per_file"]) == {"now", "preview", "short"}, res      # the 5 s clip is left out
+            md = Path(res["report"]).read_text()
+            assert "a park" in md and "on screen: OPEN" in md and "## b.mov" in md
+            assert not list(store.glob("*/*/*.jpg")), "nothing written beside the descriptions"
+        finally:
+            probe, frame, Vision, Looker = keep
     print("analyze: all checks pass")
     return 0
 

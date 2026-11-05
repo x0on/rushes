@@ -121,6 +121,12 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     }
     $p['failures'] = array_slice(proxy_failures($rel), 0, 100);
     if (!$look) return $p;
+    // ponytail: the share can answer for the folder while its files do not (just after the Mac wakes, or a drop it has
+    // not noticed): every preview reads as missing at once. Previews never all vanish between two counts, so a folder
+    // that had them and now has none keeps its last count for up to an hour; a real removal shows after that
+    $old = $cache[$rel] ?? null;
+    if ($old && (int)($old['previews'] ?? 0) > 0 && $p['previews'] === 0 && $p['videos'] > 0 && time() - (int)$old['at'] < 3600)
+        return ['failures' => $p['failures']] + $old;
     $cache[$rel] = $p;
     @file_put_contents("$f.new", json_encode($cache)) && @rename("$f.new", $f);
     return $p;

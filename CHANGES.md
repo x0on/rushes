@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.50 — November 2026
+
+- **Compare ways of describing (a test)**, in Manage → Describe. Since piles, the AI is no longer most of a file's time, so this measures what is: about 10 clips already described, short ones and long takes, described three ways with every step timed — as now (pictures from the original, plus the composition, a second AI call per pile), with pictures from the 720p preview, and from the preview with a shorter answer. The descriptions go side by side in `_rushes/tests` on the archive, to judge the quality by eye before anything changes. About 30 to 60 minutes; describing steps aside and carries on after. Nothing described is changed.
+- **A folder's previews are not lost to a half-answering share.** The share can answer for a folder while its files do not (this happened just after the Mac woke): every finished folder read "0 previews" for a few minutes. A folder that had previews and suddenly counts none now keeps its last count, for up to an hour; previews really removed are said after that.
+
 ## 0.13.49 — November 2026
 
 - **A folder's previews are not counted while the archive is away.** When the share stopped answering during a count, every preview read as missing and a folder's row said "0 previews" (and "245 of 2,184 play") until the next count; nothing was lost. Now the last count stands until the archive answers again.

@@ -999,6 +999,16 @@ Activity. Nothing is changed. On 44 test frames (a street corner, a lens-flare r
 moments of the two long takes made 8 piles, and searching by words found the right stills for places
 and things, less often for actions.
 
+**Compare ways of describing (a test)** (Manage → Describe, 0.13.50). Since piles, Qwen is no longer most of a
+file's time: opening it, reading pictures from 4K/5K originals over the share, and a second Qwen call per pile
+for the composition add up. The test takes about 10 clips already described on this Mac that still have their
+original and preview (5 of 10 s to 1 min, 5 long takes of 3 min or more, from different folders), and for up to
+3 piles each describes the same picture three ways, timing every step: **now** (picture from the original, the
+full answer, plus the composition call), **preview** (picture from the 720p preview, the full answer) and
+**short** (the preview, without ages, setting and mood, 3 to 5 tags: `short_prompt()`). Each way is summed to
+what one whole file would cost. The descriptions go side by side in `_rushes/tests/ways-<date>.md` on the archive
+(and `.json`), to judge by eye; the result line stays in Activity. It writes nothing beside the descriptions.
+
 **When describing cannot go on, its row says why** (and the top bar: "Describing waits"), never the
 last thing it was doing:
 

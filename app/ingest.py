@@ -3158,24 +3158,37 @@ def install_ai():
     status(phase="installed", note="", done=" | ".join(done))
 
 
+TESTS = {"fp": ("fp_measure", "fp-asked", "the fingerprint test"),
+         "ways": ("ways_measure", "ways-asked", "the describing test")}
+
 def _fp_asked():
-    """Measure fingerprints (Manage → Describe): asked after the last one done here."""
-    try: done = float((HOME / "fp-asked").read_text())
-    except (OSError, ValueError): done = 0.0
-    return float(control().get("fp_measure") or 0) > done
+    """A test asked in Manage → Describe (Measure fingerprints, Compare ways of describing) after the last one
+    of its kind done here: "fp" or "ways", or "" when none."""
+    for kind, (key, done_file, _) in TESTS.items():
+        try: done = float((HOME / done_file).read_text())
+        except (OSError, ValueError): done = 0.0
+        if float(control().get(key) or 0) > done:
+            return kind
+    return ""
 
 
 def measure_fp():
-    """The fingerprint test (analyze.py --measure-fingerprints), on the stills already described on this Mac:
-    how fast here, and how many piles the long takes make. Each step said in Describe; nothing is changed."""
-    (HOME / "fp-asked").write_text(str(float(control().get("fp_measure") or 0)))
-    py = analysis_tools()[0]
+    """A test asked in Manage → Describe, on footage already described here; each step said in Describe, the
+    result kept in Activity, nothing changed. The fingerprint test (analyze.py --measure-fingerprints): how fast
+    here, and how many piles the long takes make. The describing test (--compare-ways): a few clips described
+    three ways, timed, the descriptions side by side in _rushes/tests on the archive."""
+    kind = _fp_asked() or "fp"
+    key, done_file, name = TESTS[kind]
+    (HOME / done_file).write_text(str(float(control().get(key) or 0)))
+    py, model, _ = analysis_tools()
     if not py:
-        status(phase="measure-failed", note="the fingerprint test needs the AI installed first (Install the AI, above)"); return
-    print("\n=== measuring fingerprints (a test: nothing is changed) ===")
-    status(phase="measuring", note="starting the fingerprint test …")
-    p = subprocess.Popen([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"),
-                          "--measure-fingerprints", "--store", str(LOCAL_STORE or NAS_STORE)],
+        status(phase="measure-failed", test=name, note=f"{name} needs the AI installed first (Install the AI, above)"); return
+    print(f"\n=== {name} (it measures: nothing is changed) ===")
+    status(phase="measuring", test=name, note=f"starting {name} …")
+    args = (["--measure-fingerprints", "--store", str(LOCAL_STORE or NAS_STORE)] if kind == "fp" else
+            ["--compare-ways", str(Path(NAS_MOUNT) / "_rushes" / "tests"), "--store", str(LOCAL_STORE or NAS_STORE),
+             "--model", model, "--url", NAS_URL, *preview_args(NAS_MOUNT)])
+    p = subprocess.Popen([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), *args],
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     res, why, last = None, "", time.time()
     for line in p.stdout:
@@ -3187,13 +3200,18 @@ def measure_fp():
         elif line and not line.lower().startswith(("warning", "[transformers]", "loading weights")):
             print("  " + line, flush=True)
             if not line.startswith("fingerprinted") or time.time() - last > 2:     # installing, loading: said at once
-                status(phase="measuring", note=line); last = time.time()
+                status(phase="measuring", test=name, note=line); last = time.time()
     p.wait()
     if not res:
         note = why or f"it stopped ({p.returncode})"
-        print(f"  the fingerprint test did not finish: {note}")
-        history("measured", "fingerprints", 0, 0, 0, "the fingerprint test did not finish: " + note)
-        status(phase="measure-failed", note="the fingerprint test did not finish: " + note); return
+        print(f"  {name} did not finish: {note}")
+        history("measured", "fingerprints" if kind == "fp" else "ways", 0, 0, 0, f"{name} did not finish: " + note)
+        status(phase="measure-failed", test=name, note=f"{name} did not finish: " + note); return
+    if kind == "ways":
+        note = res["note"] + " Side by side: _rushes/tests on the archive."
+        print("  " + note)
+        history("measured", "ways", res["clips"], 0, res["minutes"] * 60, note)
+        status(phase="measured", test=name, note=note); return
     note = (f"Fingerprint test: {res['stills']:,} stills in {res['seconds']} s on {res['device']} ({res['per_second']} a second; "
             f"Qwen takes 13–30 s for one). Long takes: {res['moments']:,} moments in {res['long_takes']} take"
             f"{'s' if res['long_takes'] != 1 else ''} fall into {res['piles']:,} piles.")
@@ -3261,10 +3279,10 @@ def describe_lane(every=20):
                     print(f"  ! the AI was not installed: {e}")
                     status(phase="install-failed", note=str(e))
                 said = ""; continue
-            if _fp_asked():                   # Measure fingerprints (a test), asked in Manage → Describe
+            if _fp_asked():                   # a test (Measure fingerprints, Compare ways of describing), asked in Manage → Describe
                 try: measure_fp()
                 except Exception as e:
-                    print(f"  ! the fingerprint test stopped: {e}"); status(phase="measure-failed", note=str(e)[:240])
+                    print(f"  ! the test stopped: {e}"); status(phase="measure-failed", note=str(e)[:240])
                 said = "measured"; continue
             if control().get("describe_paused"):
                 if said != "paused":
@@ -3552,7 +3570,7 @@ def describe_folder(path, asked=""):
         # Only at night: 7 am stops it in the middle of a folder too, like Pause (a folder can take days)
         if c.get("describe_paused") or daytime_wait(c) or path in c.get("skip", []) or first_ready or _fp_asked():
             stopped = ("describing paused" if c.get("describe_paused") else "7 am: only at night, it carries on at 10 pm" if daytime_wait(c)
-                       else "set aside for the fingerprint test; it carries on after" if _fp_asked()
+                       else f"set aside for {TESTS[_fp_asked()][2]}; it carries on after" if _fp_asked()
                        else "skipped from Manage" if path in c.get("skip", [])
                        else f"set aside for {os.path.basename(first)} (Start on this one now); it carries on after")
             if hasattr(os, "killpg"):
@@ -4086,7 +4104,7 @@ def selftest():
             keep6 = _fp_asked, control, HOME
             try:
                 HOME = Path(td)
-                _fp_asked = lambda: True; said.clear()
+                _fp_asked = lambda: "fp"; said.clear()
                 assert describe_folder(td) == 1 and "fingerprint test" in said[-1]["note"], said[-1:]
                 open(fake, "w").write('#!/bin/sh\necho "fingerprinted 32 of 44 stills"\n'
                                       'echo \'RESULT {"model": "m", "device": "the graphics chip", "stills": 44, "seconds": 2.0, '
@@ -4096,6 +4114,17 @@ def selftest():
                 measure_fp()
                 assert said[-1]["phase"] == "measured" and "24 moments in 2 takes fall into 8 piles" in said[-1]["note"], said[-1:]
                 assert kept and kept[-1][0] == "measured" and float((HOME / "fp-asked").read_text()) == 5.0
+                # the describing test: the same way, its own button and its own "done"
+                open(fake, "w").write('#!/bin/sh\necho "clip 1 of 2: a.mov (30 s)"\n'
+                                      'echo \'RESULT {"clips": 2, "minutes": 3, "note": "Describing test on 2 clips, seconds per file: now 40.0"}\'\n')
+                _fp_asked = lambda: "ways"; control = lambda: {"ways_measure": 7}; said.clear(); kept.clear()
+                measure_fp()
+                assert said[-1]["phase"] == "measured" and said[-1]["test"] == "the describing test" and "now 40.0" in said[-1]["note"], said[-1:]
+                assert kept[-1][1] == "ways" and float((HOME / "ways-asked").read_text()) == 7.0
+                _fp_asked = keep6[0]; control = lambda: {"ways_measure": 7}
+                assert _fp_asked() == "", "done once: not asked again"
+                control = lambda: {"ways_measure": 9}
+                assert _fp_asked() == "ways"
             finally:
                 _fp_asked, control, HOME = keep6
     finally:

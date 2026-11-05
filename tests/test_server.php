@@ -220,6 +220,12 @@ check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 300 && 
 rename("$root/archive/PROXIES", "$root/archive/PROXIES.away");           // the share stops answering
 check(prepare_plan('PARKS', true)['have'] === 1, 'while the previews cannot be reached, the last count stands (no "0 previews")');
 rename("$root/archive/PROXIES.away", "$root/archive/PROXIES");
+rename("$root/archive/PROXIES/PARKS", "$root/archive/PROXIES/PARKS.x");  // the folder answers, its files do not
+check(prepare_plan('PARKS', true)['have'] === 1, 'a folder that had previews and suddenly has none keeps its last count');
+$c = json_decode(file_get_contents(web_dir() . '/prepare-plan.json'), true); $c['PARKS']['at'] -= 3700;
+file_put_contents(web_dir() . '/prepare-plan.json', json_encode($c));
+check(prepare_plan('PARKS', true)['have'] === 0, 'but not for more than an hour: previews really removed are said');
+rename("$root/archive/PROXIES/PARKS.x", "$root/archive/PROXIES/PARKS");
 file_put_contents("$root/app/proxy-speed.tsv", "100000000\t10\tvideo chip\n300000000\t10\tvideo chip\n5\t0\tsoftware\n");
 check(abs(proxy_rate() - 20000000) < 1, 'the speed is measured from the proxies really made (bytes per second)');
 file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n");

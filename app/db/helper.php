@@ -155,7 +155,7 @@ if ($act === 'inbox-done') {
     out(['ok' => !is_dir($dir)]);
 }
 $switch = in_array($act, ['pause', 'resume', 'describe-pause', 'describe-resume', 'reconnect-off', 'reconnect-on', 'check-pause', 'check-resume', 'nudge',
-                           'ai-install', 'describe-night', 'describe-anytime', 'fp-measure'], true);
+                           'ai-install', 'describe-night', 'describe-anytime', 'fp-measure', 'ways-measure'], true);
 if (!may_act((string)($_POST['pass'] ?? '')) && !($switch && helper_pairing() !== 'other'))
     bail(403, $switch ? 'sign in first, or press it in the paired Rushes Helper' : 'sign in first');
 // Look for new versions of Rushes' own files in _rushes (the runner, next minute)
@@ -180,6 +180,8 @@ if ($act === 'pause' || $act === 'resume') {
     $c['ai_install'] = time();                         // the helper installs the AI for describing, once, saying each step
 } elseif ($act === 'fp-measure') {
     $c['fp_measure'] = time();                         // the fingerprint test, once (a test: nothing is changed)
+} elseif ($act === 'ways-measure') {
+    $c['ways_measure'] = time();                       // the describing test, once (a test: nothing described is changed)
 } elseif ($act === 'describe-night' || $act === 'describe-anytime') {
     $c['describe_night'] = $act === 'describe-night';  // describing waits for 10 pm to 7 am
 } elseif ($act === 'reconnect-off' || $act === 'reconnect-on') {
@@ -220,6 +222,7 @@ $c['by'] = $act; $c['at'] = time();
 if (!helper_control_save($c)) bail(500, 'Could not save — is the web folder writable?');
 $said = ['pause' => 'Paused copying', 'resume' => 'Let copying carry on', 'describe-pause' => 'Paused describing footage', 'ai-install' => 'Asked the helper to install the AI for describing',
          'fp-measure' => 'Asked for the fingerprint test (it measures only)',
+         'ways-measure' => 'Asked for the describing test (it measures only)',
          'describe-night' => 'Describing only at night', 'describe-anytime' => 'Describing at any time',
          'describe-resume' => 'Let describing footage carry on', 'check-pause' => 'Paused checking copies', 'check-resume' => 'Let checking copies carry on',
          'reconnect-off' => 'Turned off reconnecting network drives by itself', 'reconnect-on' => 'Turned on reconnecting network drives by itself',
