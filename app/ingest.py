@@ -3220,6 +3220,52 @@ def measure_fp():
     status(phase="measured", note=note)
 
 
+def compose_pass_due():
+    """The composition pass (analyze.py --compose-pass) when describing has nothing to do: looked for again an hour
+    after it last found nothing (a new folder described since adds more)."""
+    try: last = float((HOME / "compose-checked").read_text())
+    except (OSError, ValueError): last = 0.0
+    return time.time() - last > 3600
+
+
+def compose_pass(more_to_describe):
+    """Adds the composition to files described without it, from the stills kept beside them (the video is not
+    opened). Said in Describe and the top bar as it goes; stopped at once for a folder to describe, Pause, the
+    night's end, or a test (each file is written whole, so a stop loses nothing)."""
+    py, model, _ = analysis_tools()
+    looked_now = lambda: (HOME / "compose-checked").write_text(str(time.time()))
+    if not py:
+        looked_now(); return                  # nothing can compose here: not tried again for an hour (never a busy loop)
+    status(phase="composing", note="looking for files waiting for their composition …")
+    p = subprocess.Popen([py, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py"), "--compose-pass",
+                          "--store", str(LOCAL_STORE or NAS_STORE), "--model", model, "--url", NAS_URL],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
+    done, why, t0, looked = 0, "", time.time(), 0.0
+    for line in p.stdout:
+        line = line.rstrip()
+        m = re.match(r"\[(\d+)/(\d+)\] (.*) — composition", line)
+        if m:
+            done = int(m.group(1))
+            status(phase="composing", n=m.group(1), of=m.group(2), file=m.group(3),
+                   note=f"adding the composition: {int(m.group(1)):,} of {int(m.group(2)):,} files (judging the shots, after describing)")
+        elif line.startswith("loading the vision model"):
+            status(phase="composing", note="adding the composition: loading the model …")
+        c = control()
+        why = ("describing paused" if c.get("describe_paused") else "7 am" if daytime_wait(c) else "a test" if _fp_asked() else "")
+        if not why and time.time() - looked > 30:
+            looked = time.time(); why = "a folder to describe" if more_to_describe() else ""
+        if why:
+            print(f"  composition stopped for {why}; it carries on when describing is idle again")
+            try: os.killpg(p.pid, signal.SIGTERM)
+            except (OSError, AttributeError): p.terminate()
+            break
+    p.wait()
+    if not why:
+        looked_now()                          # it ran to its end (all done, or it could not run): looked again in an hour
+    if done:
+        history("composed", "composition", done, 0, int(time.time() - t0), f"added the composition to {done:,} described file(s)")
+
+
 def _asked_install():
     """When Install the AI was last pressed and done here: pressed once, done once (not again at each start)."""
     try: return float((HOME / "ai-asked").read_text())
@@ -3313,6 +3359,19 @@ def describe_lane(every=20):
             except Stalled:
                 stall("the archive share (describing)"); time.sleep(every); continue
             if not todo:
+                if compose_pass_due() and not _copying.is_set():     # judged after: the composition pass
+                    def more():           # the same rule as the queue above: a folder that would be described now
+                        with _io:
+                            js = list(_describe_jobs)
+                            dn = set(DONE.read_text().splitlines()) if DONE.exists() else set()
+                        sk, tr = set(control().get("skip", [])), _describe_tries()
+                        ready = [p for p, a in js if f"analyze {p}{' ' + a if a else ''}" not in dn and p not in sk
+                                 and tr.get(f"analyze {p}{' ' + a if a else ''}", [0, 0])[1] <= time.time()]
+                        try: return bool(ready) and within("describe", 10, lambda: any(os.path.exists(p) for p in ready))
+                        except Stalled: return False
+                    try: compose_pass(more)
+                    except Exception as e: print(f"  ! the composition pass stopped: {e}")
+                    said = ""; continue
                 if said != "idle":
                     status(phase="idle", note="nothing to describe"); said = "idle"
                 # Described while the archive was away: copied to it once it is back (looked at every 10 minutes)
@@ -4125,6 +4184,26 @@ def selftest():
                 assert _fp_asked() == "", "done once: not asked again"
                 control = lambda: {"ways_measure": 9}
                 assert _fp_asked() == "ways"
+                # the composition pass: progress said, kept in Activity; stopped at once by Pause
+                _fp_asked = lambda: ""
+                open(fake, "w").write('#!/bin/sh\necho "2 file(s) waiting for their composition"\n'
+                                      'echo "[1/2] a.mov — composition of 3 pile(s)"\necho "[2/2] b.mov — composition of 1 pile(s)"\n')
+                control = lambda: {}; said.clear(); kept.clear()
+                compose_pass(lambda: False)
+                assert said[-1]["phase"] == "composing" and said[-1]["of"] == "2" and "2 of 2 files" in said[-1]["note"], said[-1:]
+                assert kept[-1][0] == "composed" and kept[-1][2] == 2
+                assert not compose_pass_due(), "it ran to its end: not looked for again for an hour"
+                (HOME / "compose-checked").unlink()
+                keep7 = analysis_tools; analysis_tools = lambda: ("", "m", "")
+                compose_pass(lambda: False); analysis_tools = keep7
+                assert not compose_pass_due(), "it cannot run here: not tried again for an hour (never a busy loop)"
+                (HOME / "compose-checked").unlink()
+                open(fake, "w").write('#!/bin/sh\necho "9 file(s) waiting for their composition"\n'
+                                      'echo "[1/9] a.mov — composition of 3 pile(s)"\nsleep 30\necho "[2/9] b.mov — composition"\n')
+                control = lambda: {"describe_paused": True}; kept.clear(); t0 = time.time()
+                compose_pass(lambda: False)
+                assert time.time() - t0 < 5 and not kept, "paused: stopped at once (each file is written whole)"
+                assert compose_pass_due(), "stopped part-way: it carries on when describing is idle again"
             finally:
                 _fp_asked, control, HOME = keep6
     finally:

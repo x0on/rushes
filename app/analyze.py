@@ -814,7 +814,9 @@ def describe_piles(path, proxy, duration, rec, thumbs, vision, looker, n, of, t0
             if not ok:
                 rec["failed_shots"] += 1
             shot = {"shot": i, "start": round(a, 3), "end": round(b, 3), **got, "looks": len(g)}
-            shot["composition"] = compose_safe(vision, frames[0])
+            # the composition (a second question per pile, nearly half the time: 0.13.50's test) is a pass of its own,
+            # after describing, from this same still (compose_pass): findable first, judged after
+            rec["composition_later"] = True
             shot["look_vector"] = pack_vector(looker.vectors([looks[x][1] for x in g]) if len(g) <= 64 else
                                               looker.vectors([looks[x][1] for x in g[::max(1, len(g) // 64)]]))
             if raw:
@@ -852,6 +854,36 @@ def compose_only(old, out, thumbs, vision, path, n, of):
     tmp = out.with_suffix(".json.new")
     tmp.write_text(json.dumps(old, indent=1, ensure_ascii=False)); os.replace(tmp, out)
     return "done"
+
+
+# ── the composition, a pass of its own (0.13.51) ────────────────────────────
+# Describing (piles) leaves it for later: it is a second question per pile and was nearly half of describing's
+# time. Once there is nothing to describe, the helper runs this over every file waiting for it, from the still kept
+# beside each pile (the same still the description was made from): the video is not opened again.
+def compose_pass(store, vision):
+    todo = []
+    for f in Path(store).glob("*/*.json"):
+        try:
+            if json.loads(f.read_text()).get("composition_later"): todo.append(f)
+        except (OSError, ValueError):
+            continue
+    print(f"{len(todo):,} file(s) waiting for their composition", flush=True)
+    done = 0
+    for n, f in enumerate(todo, 1):
+        try: r = json.loads(f.read_text())
+        except (OSError, ValueError): continue
+        shots, thumbs = r.get("shots") or [], f.with_suffix("")
+        for k, sh in enumerate(shots):
+            if "composition" not in sh:
+                still = thumbs / f"{sh.get('shot', k):04d}.jpg"
+                sh["composition"] = compose_safe(vision, str(still)) if still.exists() else None
+        r.pop("composition_later", None)
+        tmp = f.with_suffix(".json.new")
+        tmp.write_text(json.dumps(r, indent=1, ensure_ascii=False)); os.replace(tmp, f)
+        done += 1
+        print(f"[{n}/{len(todo)}] {Path(r.get('file', f.name)).name} — composition of {len(shots)} pile(s)", flush=True)
+    print(f"RESULT {json.dumps({'files': done})}", flush=True)
+    return done
 
 
 # ── fingerprints: a test (Manage → Describe → Measure fingerprints) ─────────
@@ -1195,6 +1227,7 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--measure-fingerprints", action="store_true", help="a test: fingerprint stills already described (--store)")
     ap.add_argument("--no-piles", action="store_true", help="describe the older way: shots and moments, no fingerprints")
+    ap.add_argument("--compose-pass", action="store_true", help="add the composition to files described without it (--store)")
     ap.add_argument("--compare-ways", default="", help="a test: describe a few clips three ways, timed, written to this folder")
     a = ap.parse_args()
     if a.selftest:
@@ -1206,6 +1239,9 @@ def main():
         except Exception as e:
             print(f"FAILED {e}", flush=True)
             return 1
+    if a.compose_pass:
+        compose_pass(a.store, Vision(a.model, themes_from(a.url)))
+        return 0
     if a.compare_ways:
         try:
             compare_ways(a.store, a.compare_ways, a.model, a.archive, a.proxies, themes_from(a.url))
@@ -1427,6 +1463,14 @@ def selftest():
             assert [(s["start"], s["end"], s["looks"]) for s in r["shots"]] == [(0.0, 14.5, 3), (14.5, 30.0, 3)], r["shots"]
             assert asked == [2, 2], "one question per pile, about its middle look and its first"
             assert unpack_vector(r["shots"][1]["look_vector"])[1] > 0.99
+            assert r["composition_later"] and "composition" not in r["shots"][0], "describing leaves the composition for its own pass"
+            seen = []
+            vis.compose = lambda fr: seen.append(fr) or {"tags": ["rule of thirds"]}
+            type(vis).compose = lambda self, fr: seen.append(fr) or {"tags": ["rule of thirds"]}
+            assert compose_pass(store, vis) == 1 and len(seen) == 2 and all(x.endswith((".jpg")) for x in seen)
+            r = json.loads((store / fingerprint(f)[:2] / f"{fingerprint(f)}.json").read_text())
+            assert not r.get("composition_later") and r["shots"][1]["composition"] == {"tags": ["rule of thirds"]}
+            assert compose_pass(store, vis) == 0, "done once"
             class NoLooker:
                 def ready(self): return False
             f2 = Path(td) / "old.mov"; f2.write_bytes(b"o" * 100)

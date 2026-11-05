@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.51 — November 2026
+
+- **The composition is a pass of its own, after describing.** 0.13.50's test showed that the composition (a second AI question for every pile, about 4 seconds each) was nearly half of describing's time, while reading pictures from the originals costs almost nothing (0.4 s). Describing now writes what is in each shot and leaves the composition for later: about 40% faster, so footage is findable sooner. Whenever there is nothing to describe, the helper adds the composition to every file waiting for it, from the still kept beside each pile (the same picture the description came from; the video is not opened again). Findable first, judged after. It shows in the top bar ("Composition · 3 of 12 files") and on the Describe card, Activity keeps how many it did, and it stops at once for a folder to describe, Pause, 7 am in night mode, or a test; each file is written whole, so a stop loses nothing.
+
 ## 0.13.50 — November 2026
 
 - **Compare ways of describing (a test)**, in Manage → Describe. Since piles, the AI is no longer most of a file's time, so this measures what is: about 10 clips already described, short ones and long takes, described three ways with every step timed — as now (pictures from the original, plus the composition, a second AI call per pile), with pictures from the 720p preview, and from the preview with a shorter answer. The descriptions go side by side in `_rushes/tests` on the archive, to judge the quality by eye before anything changes. About 30 to 60 minutes; describing steps aside and carries on after. Nothing described is changed.

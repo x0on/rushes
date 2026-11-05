@@ -1009,6 +1009,16 @@ full answer, plus the composition call), **preview** (picture from the 720p prev
 what one whole file would cost. The descriptions go side by side in `_rushes/tests/ways-<date>.md` on the archive
 (and `.json`), to judge by eye; the result line stays in Activity. It writes nothing beside the descriptions.
 
+**The composition, a pass of its own** (0.13.51). The first run of that test (10 clips): 39 s per file as it was,
+24 s with the picture from the preview and no composition; a picture from the original 0.4 s, from the preview
+0.1 s, a description about 5 s, the composition 4.3 s per pile. So describing (`describe_piles`) no longer asks
+for the composition: it marks the file `composition_later`, and when the describing lane has nothing to do,
+`compose_pass()` (analyze.py --compose-pass) adds it to every file so marked, from the still kept beside each pile
+(`<fingerprint>/0000.jpg` …, the one the description was made from). It is looked for again an hour after it last
+found nothing. It stops for a folder to describe (the queue's own rule), Pause, the night's end or a test, and a
+file is written whole, so a stop loses nothing. Pictures stay read from the originals: nearly free, and sharper
+for text on screen.
+
 **When describing cannot go on, its row says why** (and the top bar: "Describing waits"), never the
 last thing it was doing:
 

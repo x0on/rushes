@@ -560,7 +560,9 @@ $happening = (function () use ($WEB, $running, $running_said, $progress, $mac, $
     $d = describing_now();
     if ($d) $h[] = $one('describe', 'Describing', trim(($d['label'] ?? basename((string)($d['source'] ?? ''))) . (!empty($d['of']) ? ' · ' . (int)($d['n'] ?? 0) . ' of ' . (int)$d['of'] : '')
                      . (!empty($d['file']) ? ' · now: ' . basename((string)$d['file']) : (($d['step'] ?? '') !== '' ? ' · ' . $d['step'] : ''))), !empty($d['of']) ? (int)(100 * (int)($d['n'] ?? 0) / max(1, (int)$d['of'])) : null, '/db/admin.php#describe');
-    elseif ((($m = describe_status())['phase'] ?? '') === 'measuring')
+    elseif ((($m = describe_status())['phase'] ?? '') === 'composing')
+        $h[] = $one('describe', 'Composition', (string)($m['note'] ?? ''), !empty($m['of']) ? (int)(100 * (int)($m['n'] ?? 0) / max(1, (int)$m['of'])) : null, '/db/admin.php#describe');
+    elseif (($m['phase'] ?? '') === 'measuring')
         $h[] = $one('describe', ucfirst(preg_replace('/^the /', '', (string)($m['test'] ?? 'the fingerprint test'))), (string)($m['note'] ?? ''), null, '/db/admin.php#describe');
     elseif ($b = describing_blocked())
         $h[] = $one('describe', 'Describing waits', trim(($b['label'] ?? '') . ' · ' . ($b['note'] ?? ''), ' ·'), null, '/db/admin.php#describe');

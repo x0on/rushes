@@ -83,6 +83,7 @@ function activity_from_history(array $f, array $editors): ?array {
         case 'interrupted': $kind = 'problem'; $text = "Copying $name stopped part-way after $files" . ($note ? ": $note" : '') . '. It carries on from there.'; break;
         case 'dropped':  $kind = 'problem'; $text = "$name dropped off the network" . ($note ? " ($note)" : '') . ', back after ' . max(1, round($secs / 60)) . ' min'; break;
         case 'measured': $kind = str_contains($note, 'did not finish') ? 'problem' : 'check'; $text = $note ?: ($src === 'ways' ? 'The describing test ran' : 'The fingerprint test ran'); break;
+        case 'composed': $kind = 'changed'; $text = $note ? ucfirst($note) . ', from the stills kept beside them (the shots judged, after describing)' : 'Added the composition'; break;
         case 'refused':  $kind = 'problem'; $text = "Did not do $src" . ($note ? ": $note" : ''); break;
         default: return null;                                      // looked (a plan only) and anything newer: not said
     }
