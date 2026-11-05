@@ -3641,10 +3641,12 @@ def describe_folder(path, asked=""):
         cmd.append("--again")
     if sys.platform == "darwin" and shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i"] + cmd
-    status(phase="analysing", source=path, label=name, step="loading the model")
+    # its first step (0.13.53: the model loads only when a file needs describing; this said "loading the model"
+    # for the half hour a restart spent listing the folder and walking past the files already described)
+    status(phase="analysing", source=path, label=name, step="listing the folder …")
     t0, done, stopped = time.time(), {}, ""
     tail = collections.deque(maxlen=30)          # its last words, to say why if it stops with an error
-    last = dict(phase="analysing", source=path, label=name, step="loading the model")
+    last = dict(phase="analysing", source=path, label=name, step="listing the folder …")
     # Its own process group: caffeinate and the analysis under it are held, carried on
     # and stopped together.
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,

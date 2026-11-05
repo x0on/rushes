@@ -126,6 +126,38 @@ def say(**kw):
 
 
 # ── the file itself ─────────────────────────────────────────────────────────
+class Known:
+    """Files already fingerprinted on this Mac: path, size and modification time -> fingerprint, in
+    <store>/.known.tsv (a dot file: kept here, never copied to the archive). A restart part-way through a big folder
+    read 8 MB of every file already described, over the share, to recognise it (8,861 files: about 70 GB, half an
+    hour); with this it reads none. A file changed (another size or time) is fingerprinted again."""
+    def __init__(self, store):
+        self.path, self.m = Path(store) / ".known.tsv", {}
+        try:
+            for ln in self.path.read_text(errors="replace").splitlines():
+                p = ln.split("\t")
+                if len(p) == 4:
+                    self.m[p[0]] = (p[1], p[2], p[3])
+        except OSError:
+            pass
+
+    def fingerprint(self, path):
+        st, key = os.stat(path), None
+        key = (str(st.st_size), str(st.st_mtime_ns))
+        got = self.m.get(str(path))
+        if got and got[:2] == key:
+            return got[2]
+        fp = fingerprint(path)
+        if "\t" not in str(path) and "\n" not in str(path):
+            self.m[str(path)] = key + (fp,)
+            try:
+                with open(self.path, "a") as f:
+                    f.write(f"{path}\t{key[0]}\t{key[1]}\t{fp}\n")
+            except OSError:
+                pass
+        return fp
+
+
 def fingerprint(path, chunk=4 << 20):
     """Size plus the first and last 4 MB: stable when a file moves or is renamed,
     different for different footage. Read in seconds even over a network."""
@@ -354,15 +386,22 @@ def merge_text(records):
 
 # ── the models ──────────────────────────────────────────────────────────────
 class Vision:
-    def __init__(self, name, themes):
-        from mlx_vlm import load
-        from mlx_vlm.utils import load_config
-        self.name, self.themes = name, themes
-        print(f"loading the vision model {name} …", flush=True)
-        self.model, self.processor = load(name)
-        self.config = load_config(name)
+    """Loaded when it is first asked (0.13.53): a run that finds every file already described (a restart part-way
+    through a big folder) does not spend minutes loading several GB for nothing."""
+    def __init__(self, name, themes, tell=None):
+        self.name, self.themes, self.model = name, themes, None
+        self.tell = tell or (lambda line: print(line, flush=True))
+
+    def load(self):
+        if self.model is None:
+            from mlx_vlm import load
+            from mlx_vlm.utils import load_config
+            self.tell(f"loading the vision model {self.name} …")
+            self.model, self.processor = load(self.name)
+            self.config = load_config(self.name)
 
     def ask(self, frames, extra="", question=None, tokens=420):
+        self.load()
         from mlx_vlm import generate
         from mlx_vlm.prompt_utils import apply_chat_template
         p = apply_chat_template(self.processor, self.config, (question or prompt_text(self.themes)) + extra,
@@ -638,8 +677,8 @@ def transcribe(path, model):
 
 
 # ── one file ────────────────────────────────────────────────────────────────
-def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None, again=False, looker=None):
-    fp = fingerprint(path)                  # always the original: that is what search finds
+def analyse(path, store, vision, whisper_model, themes, force, n, of, proxy=None, again=False, looker=None, known=None):
+    fp = known.fingerprint(path) if known else fingerprint(path)       # always the original: that is what search finds
     out = store / fp[:2] / f"{fp}.json"
     pid = prompt_id(themes)
     if out.exists() and not force:
@@ -1221,13 +1260,20 @@ def proxy_of(path, archive, proxies):
     return cand if cand.exists() and cand.stat().st_size > 0 else None
 
 
-def media_under(target):
+def media_under(target, tell=None):
+    """Every video, sound and picture under target. A big folder over the share takes minutes to list: tell
+    (if given) hears how many so far, every 500."""
     t = Path(target)
     if t.is_file():
         return [t]
-    return sorted(p for p in t.rglob("*")
-                  if p.suffix.lower() in VIDEO | IMAGE | AUDIO and not p.name.startswith(("._", "."))
-                  and not any(s in str(p) + "/" for s in SKIP_PARTS))
+    out = []
+    for p in t.rglob("*"):
+        if p.suffix.lower() in VIDEO | IMAGE | AUDIO and not p.name.startswith(("._", ".")) \
+                and not any(s in str(p) + "/" for s in SKIP_PARTS):
+            out.append(p)
+            if tell and len(out) % 500 == 0:
+                tell(len(out))
+    return sorted(out)
 
 
 def themes_from(url):
@@ -1281,15 +1327,17 @@ def main():
             return 1
     if not a.target or not a.store:
         ap.error("a folder or file, and --store, are needed")
-    files = media_under(a.target)
+    say(step="listing the folder …")
+    files = media_under(a.target, lambda k: say(step=f"listing the folder: {k:,} files so far …"))
     if not files:
         print(f"nothing to describe under {a.target}")
         return 0
     themes = themes_from(a.url)
     store = Path(a.store); store.mkdir(parents=True, exist_ok=True)
     print(f"{len(files)} file(s) · model {a.model} · speech {a.whisper or 'off'} · question {prompt_id(themes)}")
-    vision = Vision(a.model, themes)
+    vision = Vision(a.model, themes, lambda line: (print(line, flush=True), say(step=line)))     # loaded when first needed
     looker = None if a.no_piles else Looker(lambda line: (print(line, flush=True), say(step=line)))
+    known = Known(store)
     counts = {"done": 0, "already": 0, "older": 0, "speech": 0, "failed": 0}
     # Video and sound only (0.13.45): photos, graphics and the frames of renders (thousands of JPG and PNG
     # files, often black or a lens flare) took hours of the AI for nothing worth finding.
@@ -1297,10 +1345,14 @@ def main():
     files = [f for f in files if f.suffix.lower() not in IMAGE]
     if stills:
         print(f"{len(stills):,} still image(s) left out (photos, graphics, frames of renders): describing is for video and sound")
+    said = 0.0
     for n, f in enumerate(files, 1):
         try:
-            counts[analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
-                           proxy_of(f, a.archive, a.proxies), a.again, looker)] += 1
+            got = analyse(f, store, vision, a.whisper, themes, a.force, n, len(files),
+                          proxy_of(f, a.archive, a.proxies), a.again, looker, known)
+            counts[got] += 1
+            if got == "already" and time.time() - said > 2:      # walking past what is done: said, not silent
+                said = time.time(); say(n=n, of=len(files), step="checking the files already described")
         except Exception as e:                       # one bad file never stops the folder
             counts["failed"] += 1
             print(f"    could not describe {f.name}: {e}", flush=True)
@@ -1529,6 +1581,46 @@ def selftest():
                 shots_of = keep2
         finally:
             probe, frame, say = keep
+    # a restart walks past the files already described without reading them again (0.13.53)
+    with tempfile.TemporaryDirectory() as td:
+        v = Path(td) / "clip.mov"; v.write_bytes(b"a" * 100)
+        reads, real = [], fingerprint
+        globals()["fingerprint"] = lambda p: reads.append(p) or real(p)
+        try:
+            k = Known(td); one = k.fingerprint(v)
+            assert one == real(v) and len(reads) == 1
+            assert k.fingerprint(v) == one and len(reads) == 1, "known: not read again"
+            assert Known(td).fingerprint(v) == one and len(reads) == 1, "remembered across a restart"
+            v.write_bytes(b"b" * 120)
+            assert Known(td).fingerprint(v) == real(v) != one and len(reads) == 2, "a changed file is read again"
+            odd = Path(td) / "a\tb.mov"; odd.write_bytes(b"c")
+            Known(td).fingerprint(odd); assert all(len(l.split("\t")) == 4 for l in (Path(td) / ".known.tsv").read_text().splitlines())
+        finally:
+            globals()["fingerprint"] = real
+        heard = []
+        for i in range(1001): (Path(td) / f"f{i}.mp4").write_bytes(b"")
+        assert len(media_under(td, heard.append)) == 1003 and heard == [500, 1000], heard
+    assert globals()["Vision"]("not-a-model", th).model is None, "the model loads only when first asked"
+    # end to end: a restart over a folder already described lists it, walks past, never loads a model
+    with tempfile.TemporaryDirectory() as td:
+        src, store = Path(td) / "src", Path(td) / "store"; src.mkdir()
+        for i in range(3):
+            v = src / f"c{i}.mov"; v.write_bytes(bytes([i]) * 50)
+            fp = fingerprint(v); (store / fp[:2]).mkdir(parents=True, exist_ok=True)
+            (store / fp[:2] / f"{fp}.json").write_text(json.dumps({"version": VERSION, "prompt": prompt_id(themes_from("")),
+                "model": "m", "file": str(v), "seen_at": [str(v)], "camera_clock": "", "part_of_day": part_of_day("")}))
+        import io, contextlib
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["analyze.py", str(src), "--store", str(store), "--model", "m", "--whisper", "", "--no-piles"]
+        try:
+            with contextlib.redirect_stdout(out): main()
+        finally:
+            sys.argv = argv
+        o = out.getvalue()
+        assert '"step": "listing the folder' in o and '"checking the files already described"' in o, o
+        assert "loading the vision model" not in o and '"already": 3' in o, o
+        assert len((store / ".known.tsv").read_text().splitlines()) == 3
+
     # the test of ways of describing: short question, clips picked, every way timed, a report beside, nothing described
     q = short_prompt(th)
     assert "  ages " not in q and "  mood " not in q and "  setting " not in q and "  description " in q and "3-5 short" in q and "  themes " in q
