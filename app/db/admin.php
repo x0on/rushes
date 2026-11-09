@@ -391,14 +391,14 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <div style="padding:14px">
             <p class="note" style="margin:0 0 10px">Rushes makes a light copy of each video to play in Search, then the AI describes it.</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button class="btn" id="prepChoose" type="button">Choose folder…</button>
-              <input id="prepPick" type="file" webkitdirectory hidden>
-              <input id="prepPath" placeholder="or type a folder in the archive"
+              <input id="prepPath" list="prepFolders" autocomplete="off" placeholder="type a folder, e.g. VIDEOS/Police Department — the archive's folders are offered as you type"
                      style="flex:1;min-width:220px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
               <button class="btn quiet" id="prepGo" type="button">+ Add</button>
               <button class="btn quiet" data-px="proxy-stop" id="pxStop" type="button" hidden>Stop</button>
             </div>
+            <datalist id="prepFolders"></datalist>
+            <p class="note" id="prepMissing" style="margin:8px 0 0"></p>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
             <div id="pxState" class="note" style="margin-top:6px"></div>
             <div id="prepTable" style="margin-top:12px"></div>
@@ -2205,31 +2205,32 @@ async function loadAnalysis() {
     drawPrepare(a.table, a);
   } catch (e) { $('prepTable').textContent = 'Could not read the list: ' + e.message; }
 }
-// Choose folder: the archive's, or a drive's kept where it is, picked in the Mac's own window. The browser
-// hands over the names inside it, never where it is, so Rushes looks those names
-// up in the archive to know which folder it is. Nothing is uploaded.
-$('prepChoose').onclick = function () { $('prepPick').value = ''; $('prepPick').click(); };
-$('prepPick').onchange = async function () {
-  const files = Array.from(this.files || []).filter(function (f) { return !/(^|\/)[._]/.test(f.webkitRelativePath); });
-  const said = $('prepSaid');
-  if (!files.length) { said.textContent = 'That folder has no footage in it that Rushes could see. Pick another.'; return; }
-  const top = files[0].webkitRelativePath.split('/')[0];
-  said.textContent = 'Finding “' + top + '” in the archive…';
-  const q = new URLSearchParams();
-  files.slice(0, 5).forEach(function (f) { q.append('locate[]', f.webkitRelativePath); });
+// The folders that can be described, offered in the box as you type (from the search catalogue: instant), each
+// with its videos and whether it is on the list; and under the box, the archive's departments not on it yet.
+// (0.13.54: this replaces "Choose folder…", the Mac's own window, which read every file of a folder over the
+// network before the page heard anything: a big folder never arrived.)
+async function prepFolders() {
   try {
-    const r = await (await fetch('analyze.php?' + q)).json();
-    const f = r.folders || [];
-    if (f.length === 1) { $('prepPath').value = f[0]; planOf(f[0]); }
-    else if (f.length > 1) {
-      said.innerHTML = 'There are ' + f.length + ' folders like that in the archive — which one? ' +
-        f.map(function (p) { return '<button class="btn quiet" data-pick="' + esc(p) + '" type="button">' + esc(p) + '</button>'; }).join(' ');
-      said.querySelectorAll('[data-pick]').forEach(function (b) {
-        b.onclick = function () { $('prepPath').value = b.dataset.pick; planOf(b.dataset.pick); };
-      });
-    } else said.textContent = '“' + top + '” is not in the archive or on a drive added to Rushes (or its listing is not finished yet). A drive not added yet: Drives → Add to Rushes, then pick the folder again.';
-  } catch (e) { said.textContent = 'Could not reach the archive: ' + e.message; }
-};
+    const r = await (await fetch('analyze.php?folders=1')).json(), f = r.folders || [];
+    $('prepFolders').innerHTML = f.map(function (x) {
+      return '<option value="' + esc(x.folder) + '" label="' + esc((+x.videos).toLocaleString() + ' videos' +
+        (x.on === 'yes' ? ' · on the list' : x.on === 'part' ? ' · partly on the list' : '')) + '"></option>';
+    }).join('');
+    // departments: the archive's second level (VIDEOS/Police Department), or its first when that is all there is
+    const depth = function (x) { return x.folder.startsWith('/') ? 99 : x.folder.split('/').length; };
+    const two = f.filter(function (x) { return depth(x) === 2; }), tops = two.length ? two : f.filter(function (x) { return depth(x) === 1; });
+    const miss = tops.filter(function (x) { return !x.on; });
+    $('prepMissing').innerHTML = !tops.length ? '' : !miss.length ? '✓ Every folder of the archive is on the list.'
+      : 'Not on the list yet: ' + miss.map(function (x) {
+          return '<button class="btn quiet" data-miss="' + esc(x.folder) + '" type="button" style="margin:2px 4px 2px 0">' +
+            esc(x.folder.split('/').pop()) + ' <span class="dim">' + (+x.videos).toLocaleString() + '</span></button>';
+        }).join('');
+    $('prepMissing').querySelectorAll('[data-miss]').forEach(function (b) {
+      b.onclick = function () { $('prepPath').value = b.dataset.miss; planOf(b.dataset.miss); };
+    });
+  } catch (e) { $('prepMissing').textContent = ''; }
+}
+prepFolders();
 
 // What a folder holds, the moment it is chosen or typed: from the search
 // catalogue, so it is instant and starts no job.
@@ -2262,7 +2263,7 @@ $('prepGo').onclick = async function () {
       : 'Added ✓ ' + path + ' — it is on the list below; it starts as soon as the folders before it are done.';
     if (!r.error) $('prepPath').value = '';
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
-  b.disabled = false; b.textContent = '+ Add to the list'; loadAnalysis();
+  b.disabled = false; b.textContent = '+ Add to the list'; loadAnalysis(); prepFolders();
 };
 // The list's buttons: each asks once more on the button itself, then acts.
 let listArmed = {key: '', until: 0}, openFails = {}, openChg = {}, saidOpen = false;
@@ -2286,7 +2287,7 @@ async function listAct(action, folder, b, sure) {
          start: 'Asked ✓ The archive machine starts the proxies for ' + folder + ' at its next turn, within a minute.',
          remake: 'Asked ✓ Within a minute the archive machine throws away the proxies of ' + folder + ' and makes them again with the setting in use. The footage is not touched.'}[action];
   } catch (e) { $('prepSaid').textContent = 'Could not reach the archive: ' + e.message; }
-  loadAnalysis();
+  loadAnalysis(); if (action === 'forget') prepFolders();
 }
 const hm = function (secs) {
   secs = Math.max(60, +secs || 0); const h = Math.floor(secs / 3600), m = Math.round(secs % 3600 / 60);

@@ -1096,8 +1096,12 @@ otherwise.
    (finished ones kept) and carry on by themselves after (`prepare-resume.json`); describing steps
    aside for it between two files once it is queued (`helper-control.json` "first", read by
    `ingest.py`), and goes back after. A folder whose drive is unplugged is never stepped aside for.
-4. **Choose folder…** finds the folder picked in the Mac's window in the archive, or on a drive
-   added to Rushes: from Search, or, for a drive not listed yet, on the drive itself.
+4. **The folder box** offers the archive's folders (three deep: `VIDEOS/Department/2024`) and those of
+   drives kept where they are (by their full path) as you type, each with its videos and whether it is on
+   the list, and names the departments not on it yet as buttons (`analyze.php?folders`, from Search,
+   cached 10 minutes). It replaced **Choose folder…** (0.13.54): the Mac's folder window made the browser
+   read every file of the folder over the network before the page heard anything, so a big folder (22,000
+   videos) never arrived.
 
 The page shows the time left and why any proxy failed. While a folder's proxies are being made, its
 time left comes from its own pace (the runner writes `run_t0`, `run_bytes`, `run_files` in

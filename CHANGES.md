@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.54 — November 2026
+
+- **Choose folder… is gone; the folder box offers the archive's folders instead.** Picking a folder in the Mac's window made the browser read every file inside it over the network before the page heard anything: a big folder (22,000 videos) never arrived, so the button seemed to do nothing. Now the box offers the archive's folders as you type (and those of drives kept where they are), each with how many videos it holds and whether it is on the list already, and under it the departments not on the list yet are buttons: one click fills the box. From Search, so it is instant; nothing is walked over the share.
+
 ## 0.13.53 — November 2026
 
 - **Describing picks up again in minutes, not half an hour.** Each time describing restarted part-way through a big folder (an update, Pause, a test, the share dropping), it listed the whole folder over the share, loaded the AI, then read 8 MB of every file it had already described to recognise it: for a folder like 12,000 files, about 70 GB over the network before any new work, while the page said "loading the model". Now this Mac remembers each file it has recognised (its name, size and time, in a list kept on this Mac only), so a restart walks past them without reading them; a file that changed is read again. The AI loads only when a file actually needs describing.

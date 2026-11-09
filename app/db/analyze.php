@@ -23,6 +23,60 @@ function drive_folder(string $raw): string {
 $root = rtrim(archive_dir(), '/');
 $helperRoot = rtrim(helper_archive(), '/');
 
+// The folders that can be described, from the search catalogue (instant: nothing is walked over the share),
+// each with how many videos it holds and whether it is on the list already. The Folders to describe box offers
+// them as you type (0.13.54: the Mac's "Choose folder" window walked every file of the folder over the network
+// before the page heard anything, so a big folder never arrived).
+//   GET ?folders  ->  {folders: [{folder, videos, on: "yes"|"part"|""}]}
+// The archive's folders three deep (VIDEOS/Department/2024), a drive kept where it is two deep below its top;
+// Rushes' own folders (PROXIES, _rushes, anything starting with _ or .) left out.
+function folders_offered(): array {
+    $root = rtrim(archive_dir(), '/');
+    $cache = web_dir() . '/folders-offered.json';
+    $c = @json_decode((string)@file_get_contents($cache), true);
+    if (is_array($c) && time() - (int)($c['at'] ?? 0) < 600) return $c['folders'];
+    require_once __DIR__ . '/schema.php';
+    $n = [];
+    $drives = array_values(array_filter(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen())));   // read once
+    $r = db()->query("SELECT path FROM files WHERE kind = 'video'");
+    while ($x = $r->fetchArray(SQLITE3_NUM)) {
+        $p = (string)$x[0]; $dr = '';
+        if (str_starts_with($p, "$root/")) { $base = ''; $parts = explode('/', substr($p, strlen($root) + 1)); $deep = 3; }
+        else {
+            foreach ($drives as $d) if (str_starts_with($p, "$d/")) { $dr = $d; break; }
+            if ($dr === '') continue;
+            $base = $dr; $parts = explode('/', substr($p, strlen($dr) + 1)); $deep = 2;
+        }
+        array_pop($parts);                                         // the file's own name
+        if (!$parts || $parts[0] === 'PROXIES' || $parts[0][0] === '_' || $parts[0][0] === '.') continue;
+        $f = $base;
+        foreach (array_slice($parts, 0, $deep) as $part) {
+            if ($part === '' || $part[0] === '.') break;
+            $f = $f === '' ? $part : "$f/$part";
+            $n[$f] = ($n[$f] ?? 0) + 1;
+        }
+    }
+    ksort($n, SORT_NATURAL | SORT_FLAG_CASE);
+    $out = [];
+    foreach ($n as $f => $k) $out[] = ['folder' => (string)$f, 'videos' => $k];
+    @file_put_contents($cache, json_encode(['at' => time(), 'folders' => $out], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    return $out;
+}
+if (isset($_GET['folders'])) {
+    require_once __DIR__ . '/prepare.php';
+    $listed = array_map('strval', array_keys(prepare_list()));
+    $out = [];
+    foreach (folders_offered() as $f) {
+        $on = '';
+        foreach ($listed as $l) {
+            if ($l === $f['folder'] || str_starts_with($f['folder'], "$l/")) { $on = 'yes'; break; }
+            if (str_starts_with($l, $f['folder'] . '/')) $on = 'part';
+        }
+        $out[] = $f + ['on' => $on];
+    }
+    out(['folders' => $out]);
+}
+
 // A folder picked in Finder: a browser only ever tells a page the names inside
 // it ("PARK COLLECTION/2019/a.mov"), never where it is. Those names are enough:
 // the archive file whose path ends in one of them is in that folder.
