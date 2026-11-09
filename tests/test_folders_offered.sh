@@ -56,7 +56,7 @@ var prepFolders_;
   const mine = JSON.parse(process.argv[3]).folders;
   const r1 = await row(mine);
   if (!/Harbor Office/.test(r1) || !/Picnic Shelter/.test(r1) || /Meadow Park/.test(r1) || /\|VIDEOS \|/.test(r1)) throw new Error('row: ' + r1);
-  const flat = [ {folder: 'Police', videos: 9, on: 'part'}, {folder: 'Police/2023', videos: 4, on: ''}, {folder: 'Police/2024', videos: 5, on: 'yes'},
+  const flat = [ {folder: 'Harbor', videos: 9, on: 'part'}, {folder: 'Harbor/2023', videos: 4, on: ''}, {folder: 'Harbor/2024', videos: 5, on: 'yes'},
                  {folder: 'Parks', videos: 3, on: ''}, {folder: 'Parks/2024', videos: 3, on: ''} ];
   const r2 = await row(flat);
   if (r2 !== 'Not on the list yet: |2023 |Parks |') throw new Error('flat row: ' + r2);

@@ -391,7 +391,7 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <div style="padding:14px">
             <p class="note" style="margin:0 0 10px">Rushes makes a light copy of each video to play in Search, then the AI describes it.</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <input id="prepPath" list="prepFolders" autocomplete="off" placeholder="type a folder, e.g. VIDEOS/Police Department — the archive's folders are offered as you type"
+              <input id="prepPath" list="prepFolders" autocomplete="off" placeholder="type a folder, e.g. VIDEOS/Harbor Office — the archive's folders are offered as you type"
                      style="flex:1;min-width:220px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
               <button class="btn quiet" id="prepGo" type="button">+ Add</button>
@@ -2218,7 +2218,7 @@ async function prepFolders() {
     }).join('');
     // what is not on the list yet, from the archive's top: a folder not on it at all is named whole; one partly on
     // it (VIDEOS, when some departments are) is looked into, its folders named the same way. Named from below the
-    // top folder (Police Department, Police Department/2024), whatever the archive's layout.
+    // top folder (Harbor Office, Harbor Office/2024), whatever the archive's layout.
     const arch = f.filter(function (x) { return !x.folder.startsWith('/'); });
     const kids = function (p) { return arch.filter(function (x) { const i = x.folder.lastIndexOf('/'); return (i < 0 ? '' : x.folder.slice(0, i)) === p; }); };
     const miss = [];
