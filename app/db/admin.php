@@ -2216,14 +2216,18 @@ async function prepFolders() {
       return '<option value="' + esc(x.folder) + '" label="' + esc((+x.videos).toLocaleString() + ' videos' +
         (x.on === 'yes' ? ' · on the list' : x.on === 'part' ? ' · partly on the list' : '')) + '"></option>';
     }).join('');
-    // departments: the archive's second level (VIDEOS/Police Department), or its first when that is all there is
-    const depth = function (x) { return x.folder.startsWith('/') ? 99 : x.folder.split('/').length; };
-    const two = f.filter(function (x) { return depth(x) === 2; }), tops = two.length ? two : f.filter(function (x) { return depth(x) === 1; });
-    const miss = tops.filter(function (x) { return !x.on; });
-    $('prepMissing').innerHTML = !tops.length ? '' : !miss.length ? '✓ Every folder of the archive is on the list.'
+    // what is not on the list yet, from the archive's top: a folder not on it at all is named whole; one partly on
+    // it (VIDEOS, when some departments are) is looked into, its folders named the same way. Named from below the
+    // top folder (Police Department, Police Department/2024), whatever the archive's layout.
+    const arch = f.filter(function (x) { return !x.folder.startsWith('/'); });
+    const kids = function (p) { return arch.filter(function (x) { const i = x.folder.lastIndexOf('/'); return (i < 0 ? '' : x.folder.slice(0, i)) === p; }); };
+    const miss = [];
+    (function walk(p) { kids(p).forEach(function (x) { if (x.on === 'part') walk(x.folder); else if (!x.on) miss.push(x); }); })('');
+    const name = function (x) { const parts = x.folder.split('/'); return parts.length > 1 ? parts.slice(1).join('/') : parts[0]; };
+    $('prepMissing').innerHTML = !arch.length ? '' : !miss.length ? '✓ Every folder of the archive is on the list.'
       : 'Not on the list yet: ' + miss.map(function (x) {
-          return '<button class="btn quiet" data-miss="' + esc(x.folder) + '" type="button" style="margin:2px 4px 2px 0">' +
-            esc(x.folder.split('/').pop()) + ' <span class="dim">' + (+x.videos).toLocaleString() + '</span></button>';
+          return '<button class="btn quiet" data-miss="' + esc(x.folder) + '" title="' + esc(x.folder) + '" type="button" style="margin:2px 4px 2px 0">' +
+            esc(name(x)) + ' <span class="dim">' + (+x.videos).toLocaleString() + '</span></button>';
         }).join('');
     $('prepMissing').querySelectorAll('[data-miss]').forEach(function (b) {
       b.onclick = function () { $('prepPath').value = b.dataset.miss; planOf(b.dataset.miss); };

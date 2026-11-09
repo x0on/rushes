@@ -39,3 +39,31 @@ assert f[d + "/Gala"]["videos"] == 1 and f[d + "/Gala/Cam A"]["on"] == "", "a ke
 ' && ok "the folders offered: counted from Search, marked on the list or not, Rushes' own left out" || no "folders: $F"
 P=$(cat "$W/db/admin.php")
 case "$P" in *prepChoose*|*webkitdirectory*) no "the Mac's folder window is gone" ;; *'list="prepFolders"'*) ok "the box offers them as you type; the Choose folder window is gone" ;; *) no "admin box" ;; esac
+# The "not on the list yet" row: the page's own code, run on two layouts (this archive, and one with no VIDEOS level)
+cat > "$R/row.js" <<'JS'
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const a = src.indexOf('async function prepFolders()'), b = src.indexOf('\nprepFolders();', a);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+async function row(folders) {
+  const el = {}; const $ = id => (el[id] = el[id] || { innerHTML: '', textContent: '', querySelectorAll: () => [] });
+  const fetch = async () => ({ json: async () => ({ folders }) });
+  eval(src.slice(a, b) + '\n; prepFolders_ = prepFolders;'); await prepFolders_();
+  return el.prepMissing.innerHTML.replace(/<span class="dim">[^<]*<\/span>/g, '').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+}
+var prepFolders_;
+(async () => {
+  const mine = JSON.parse(process.argv[3]).folders;
+  const r1 = await row(mine);
+  if (!/Harbor Office/.test(r1) || !/Picnic Shelter/.test(r1) || /Meadow Park/.test(r1) || /\|VIDEOS \|/.test(r1)) throw new Error('row: ' + r1);
+  const flat = [ {folder: 'Police', videos: 9, on: 'part'}, {folder: 'Police/2023', videos: 4, on: ''}, {folder: 'Police/2024', videos: 5, on: 'yes'},
+                 {folder: 'Parks', videos: 3, on: ''}, {folder: 'Parks/2024', videos: 3, on: ''} ];
+  const r2 = await row(flat);
+  if (r2 !== 'Not on the list yet: |2023 |Parks |') throw new Error('flat row: ' + r2);
+  const r3 = await row(flat.map(x => Object.assign({}, x, { on: 'yes' })));
+  if (!/Every folder/.test(r3)) throw new Error('all: ' + r3);
+  console.log('ok');
+})().catch(e => { console.error(e.message); process.exit(1); });
+JS
+O=$(node "$R/row.js" "$W/db/admin.php" "$F" 2>&1)
+[ "$O" = ok ] && ok "the not-on-the-list row: a partly listed folder looked into, never a row of 2024s, all listed said" || no "row: $O"

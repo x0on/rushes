@@ -37,7 +37,8 @@ function folders_offered(): array {
     if (is_array($c) && time() - (int)($c['at'] ?? 0) < 600) return $c['folders'];
     require_once __DIR__ . '/schema.php';
     $n = [];
-    $drives = array_values(array_filter(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen())));   // read once
+    // read once; a drive's folders only where they can be added (previews of a drive are made by the Rushes app on a Mac)
+    $drives = can_preview_drives() ? array_values(array_filter(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()))) : [];
     $r = db()->query("SELECT path FROM files WHERE kind = 'video'");
     while ($x = $r->fetchArray(SQLITE3_NUM)) {
         $p = (string)$x[0]; $dr = '';
@@ -48,10 +49,11 @@ function folders_offered(): array {
             $base = $dr; $parts = explode('/', substr($p, strlen($dr) + 1)); $deep = 2;
         }
         array_pop($parts);                                         // the file's own name
-        if (!$parts || $parts[0] === 'PROXIES' || $parts[0][0] === '_' || $parts[0][0] === '.') continue;
+        if (!$parts || $parts[0] === '' || $parts[0] === 'PROXIES' || $parts[0][0] === '_' || $parts[0][0] === '.') continue;
         $f = $base;
         foreach (array_slice($parts, 0, $deep) as $part) {
-            if ($part === '' || $part[0] === '.') break;
+            // a name the list would refuse (analyze.php, action prepare) is not offered, nor anything inside it
+            if ($part === '' || $part[0] === '.' || $part === '..' || preg_match('/[\x00-\x1f\\\\`$]/', $part)) break;
             $f = $f === '' ? $part : "$f/$part";
             $n[$f] = ($n[$f] ?? 0) + 1;
         }
