@@ -206,17 +206,17 @@ function analysis_videos(string $q, int $limit = 120, string $cond = '', array $
         : '0';
     $all = implode(' AND ', array_fill(0, count($likes), 'SUM(wmatch(hay, ?)) > 0'));
     $bind = function (SQLite3Stmt $s, array $vals) { foreach ($vals as $i => $v) $s->bindValue($i + 1, $v); };
-    $st = $likes
-        ? db()->prepare("SELECT fp FROM moments WHERE kind != 'failed'" . ($shot ? " AND fp IN (SELECT fp FROM moments WHERE $shot)" : '') . " GROUP BY fp HAVING $all")
-        : db()->prepare("SELECT DISTINCT fp FROM moments WHERE $shot LIMIT 2000");
-    $bind($st, $likes ? ($shot ? array_merge($cargs, $likes) : $likes) : $cargs); $r = $st->execute(); $fps = [];
-    while ($x = $r->fetchArray(SQLITE3_NUM)) $fps[] = $x[0];
-    if (!$fps) return ['count' => 0, 'moments' => 0, 'rows' => []];
-    $in = implode(',', array_fill(0, count($fps), '?'));
+    // The videos (every word somewhere in the video, and a shot the filters ask for), then their moments that
+    // match, in one question: the videos are a list inside it, never thousands of names handed back in
+    // (a search that found more videos than SQLite takes names for, 999 on an older one, failed), and never cut short.
+    $which = $likes
+        ? "SELECT fp FROM moments WHERE kind != 'failed'" . ($shot ? " AND fp IN (SELECT fp FROM moments WHERE $shot)" : '') . " GROUP BY fp HAVING $all"
+        : "SELECT DISTINCT fp FROM moments WHERE $shot";
     $st = db()->prepare("SELECT fp,path,kind,shot,start_s,end_s,what,on_screen,themes,tags,shot_size,people,
         light,part_of_day,mood,language, ($any) AS hits FROM moments
-        WHERE kind != 'failed' AND fp IN ($in) AND " . ($shot ?: "($any) > 0") . " ORDER BY fp, hits DESC, kind, start_s");
-    $bind($st, array_merge($likes, $fps, $shot ? $cargs : $likes)); $r = $st->execute();
+        WHERE kind != 'failed' AND fp IN ($which) AND " . ($shot ?: "($any) > 0") . " ORDER BY fp, hits DESC, kind, start_s");
+    // in the order the question marks come: the hits, the videos (a shot's filters, then the words), the moments
+    $bind($st, array_merge($likes, $likes ? ($shot ? array_merge($cargs, $likes) : $likes) : $cargs, $shot ? $cargs : $likes)); $r = $st->execute();
     $videos = []; $n = 0;
     while ($m = $r->fetchArray(SQLITE3_ASSOC)) {
         $n++;

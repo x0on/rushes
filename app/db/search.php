@@ -86,7 +86,7 @@ if ($years = array_filter(explode(',', (string)($_GET['year'] ?? '')), fn($y) =>
     $where[] = 'files.year IN (' . implode(',', array_fill(0, count($years), '?')) . ')'; array_push($args, ...$years);
 }
 if (($ai = (string)($_GET['ai'] ?? '')) === 'only' || $ai === 'none')
-    $where[] = 'files.path ' . ($ai === 'none' ? 'NOT ' : '') . "IN (SELECT path FROM labels WHERE label = 'ai')";
+    $where[] = ($ai === 'none' ? 'NOT ' : '') . "EXISTS (SELECT 1 FROM labels l WHERE l.path = files.path AND l.label = 'ai')";   // by the file's path (indexed), as the cache check
 // what is in the footage, from the descriptions: a shot that is all of these
 $cond = []; $cargs = [];
 foreach ([
@@ -101,26 +101,27 @@ if ($moods = array_filter(explode(',', strtolower((string)($_GET['mood'] ?? ''))
     foreach ($moods as $m) $cargs[] = "%$m%";
 }
 $cond = implode(' AND ', $cond);
-if ($cond !== '') { $where[] = "files.path IN (SELECT path FROM moments WHERE kind = 'shot' AND $cond)"; array_push($args, ...$cargs); }
+$condAt = -1; $condArg = 0;                                  // where that filter sits, so the videos' own check can leave it out
+if ($cond !== '') { $condAt = count($where); $condArg = count($args); $where[] = "files.path IN (SELECT path FROM moments WHERE kind = 'shot' AND $cond)"; array_push($args, ...$cargs); }
 // What each file is (labels.php): Deliverables, the stock library and its parts, AI-generated,
 // Photos, Design … from names, folders and sizes, wherever the files are; nothing is moved.
 // p=<path>: that one file (the panel, for a video found by what it shows)
 if (($one = (string)($_GET['p'] ?? '')) !== '') { $where[] = 'files.path = ?'; $args[] = $one; }
 // v=<key>: every version of one piece (labels.php version_of), for the panel beside the results
-if (($v = (string)($_GET['v'] ?? '')) !== '') { $where[] = 'files.path IN (SELECT path FROM labels WHERE vkey = ?)'; $args[] = $v; }
-$in = (string)($_GET['in'] ?? '');
+if (($v = (string)($_GET['v'] ?? '')) !== '') { $where[] = 'EXISTS (SELECT 1 FROM labels l WHERE l.path = files.path AND l.vkey = ?)'; $args[] = $v; }
+$in = (string)($_GET['in'] ?? ''); $inAt = -1;
 if ($in !== '') {
     if (!isset(LABEL_SHOWN[$in])) { echo json_encode(['error' => 'unknown section: ' . $in]); exit; }
     labels_refresh();                                       // files new since the last look get theirs first
     $want = LABEL_SHOWN[$in];
-    $where[] = 'files.path IN (SELECT path FROM labels WHERE label IN (' . implode(',', array_fill(0, count($want), '?')) . '))';
+    $inAt = count($where);                                   // where the section's filter sits (the videos' check asks it per file)
+    $where[] = 'files.path IN (SELECT path FROM labels WHERE label IN (' . implode(',', array_fill(0, count($want), '?')) . '))';   // a list made once: a section is often opened with no words, and asking per file was slower then
     array_push($args, ...$want);
 }
 
 $nothing = $where === [];
-// A cache (an app's previews and renders, rebuilt by itself: labels.php) is never what anyone looks
-// for: left out unless the Filters panel asks for it (cache=1)
-if (($_GET['cache'] ?? '') !== '1' && !$nothing) $where[] = "NOT EXISTS (SELECT 1 FROM labels c WHERE c.path = files.path AND c.label = 'cache')";   // asked per file by its path (indexed): NOT IN made the whole list of cache files again each time it ran
+// A cache (an app's previews and renders, rebuilt by itself: labels.php) is not footage: never part of Search
+if (!$nothing) $where[] = "NOT EXISTS (SELECT 1 FROM labels c WHERE c.path = files.path AND c.label = 'cache')";   // asked per file by its path (indexed): NOT IN made the whole list of cache files again each time it ran
 $sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 // Sort by: as found (the folder order for files, best match first for videos), newest, oldest, largest, longest, name
 $sort  = (string)($_GET['sort'] ?? '');
@@ -142,77 +143,99 @@ if ($nothing) {
     exit;
 }
 
-// the rows
-$st = $db->prepare("SELECT files.path, name, ext, kind, bytes, year, event, dept,
-                           width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera, asis,
-                           (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
-                           (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still,
-                           lb.vkey, lb.vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = lb.vkey) AS versions
-                    FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$sql ORDER BY $order LIMIT ? OFFSET ?");
-$bind($st, $args);
-$st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
-$st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
-$res = $st->execute();
-if ($res === false) { echo json_encode(['error' => 'rows query: ' . $db->lastErrorMsg()]); exit; }
-$rows = [];
-// On a Mac, the archive itself is a drive that can be unplugged
-$arch_away = on_mac() && !is_dir(archive_dir());
-while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
-    // a file on a drive kept where it is: which drive, and whether it is plugged in now
-    if ($d = drive_of($r['path'])) { $r['drive'] = (string)$d['name']; $r['away'] = empty($d['connected']); }
-    elseif ($arch_away && str_starts_with($r['path'], archive_dir() . '/')) { $r['drive'] = basename(archive_dir()); $r['away'] = true; }
-    $rows[] = $r;
+// only=videos: the next page of videos found by what they show (the files are on the page already);
+// only=files: the next page of files (the videos are). Each asks for its own part alone.
+$only = (string)($_GET['only'] ?? '');
+$rows = []; $counts = ['all' => 0]; $bytes = 0;
+if ($only !== 'videos') {
+    // the rows
+    $st = $db->prepare("SELECT files.path, name, ext, kind, bytes, year, event, dept,
+                               width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera, asis,
+                               (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
+                               (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still,
+                               lb.vkey, lb.vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = lb.vkey) AS versions
+                        FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$sql ORDER BY $order LIMIT ? OFFSET ?");
+    $bind($st, $args);
+    $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
+    $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
+    $res = $st->execute();
+    if ($res === false) { echo json_encode(['error' => 'rows query: ' . $db->lastErrorMsg()]); exit; }
+    // On a Mac, the archive itself is a drive that can be unplugged
+    $arch_away = on_mac() && !is_dir(archive_dir());
+    while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
+        // a file on a drive kept where it is: which drive, and whether it is plugged in now
+        if ($d = drive_of($r['path'])) { $r['drive'] = (string)$d['name']; $r['away'] = empty($d['connected']); }
+        elseif ($arch_away && str_starts_with($r['path'], archive_dir() . '/')) { $r['drive'] = basename(archive_dir()); $r['away'] = true; }
+        $rows[] = $r;
+    }
+
+    // true totals, and per-kind counts for the chips — one scan, not five
+    $cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$sql GROUP BY +kind");   // +kind: read the files in their own order; by the kind index, each row was fetched out of order (four times slower)
+    $bind($cs, $args);
+    $cr = $cs->execute();
+    if ($cr === false) { echo json_encode(['error' => 'counts query: ' . $db->lastErrorMsg()]); exit; }
+    while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
+        $counts[$r['kind']] = (int)$r['c'];
+        $counts['all'] += (int)$r['c'];
+        $bytes += (int)$r['b'];
+    }
+
 }
 
-// true totals, and per-kind counts for the chips — one scan, not five
-$counts = ['all' => 0];
-$cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$sql GROUP BY +kind");   // +kind: read the files in their own order; by the kind index, each row was fetched out of order (four times slower)
-$bind($cs, $args);
-$cr = $cs->execute();
-if ($cr === false) { echo json_encode(['error' => 'counts query: ' . $db->lastErrorMsg()]); exit; }
-$bytes = 0;
-while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
-    $counts[$r['kind']] = (int)$r['c'];
-    $counts['all'] += (int)$r['c'];
-    $bytes += (int)$r['b'];
-}
-
-// What the footage shows and what was said, when it has been described.
-$moments = ['count' => 0, 'rows' => []];
-if (($q !== '' || $cond !== '') && ($kind === '' || $kind === 'all' || $kind === 'video')) {
+// What the footage shows and what was said, when it has been described. Every video found is counted and
+// can be reached: a page of VPAGE at a time (voffset), best match first or in the order asked for. Nothing
+// found is left out: a count that stopped at the first page read as "only 119 videos show police".
+// ponytail: every video found is listed and checked again for each page (about a second for 16,000 videos);
+// kept between pages if a search ever finds so many that it shows.
+const VPAGE = 120;
+$voffset = max((int)($_GET['voffset'] ?? 0), 0);
+$moments = ['count' => 0, 'moments' => 0, 'rows' => [], 'offset' => $voffset, 'page' => VPAGE];
+if ($only !== 'files' && ($q !== '' || $cond !== '') && ($kind === '' || $kind === 'all' || $kind === 'video')) {
     try {
-        $moments = analysis_videos($q, 120, $cond, $cargs);
-        // which piece each moment's file is a version of, so a shot found in v2 and v3 shows once
-        $vs = $db->prepare('SELECT vkey, vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = labels.vkey) n FROM labels WHERE path = ?');
-        $ff = $db->prepare('SELECT files.year, files.bytes, media.duration, media.width, media.height, media.recorded, media.proxy_at
-                            FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path = ?');
-        foreach ($moments['rows'] as &$m) {
-            $vs->bindValue(1, $m['path']); $r = $vs->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $vs->reset();
-            $m['vkey'] = $r['vkey'] ?? null; $m['vrank'] = (int)($r['vrank'] ?? 0); $m['versions'] = (int)($r['n'] ?? 0);
-            // the file it is: its length (the tile says it), shape, size and dates (to sort by)
-            $ff->bindValue(1, $m['path']); $f = $ff->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $ff->reset();
-            $m += ['name' => basename($m['path'])] + $f;
+        $found = analysis_videos($q, PHP_INT_MAX, $cond, $cargs)['rows'];
+        // the file each video is (its length, shape, size and dates: the tile says them, and they sort), and the
+        // filters that are on (where, what it is, never a cache file): asked for 500 videos at a time, once
+        // (not "what is in the footage" again: the videos were found by it already, and its list was made anew for every 500)
+        $fw = $where; $fa = $args;
+        if ($inAt >= 0) $fw[$inAt] = 'EXISTS (SELECT 1 FROM labels l WHERE l.path = files.path AND l.label IN (' . implode(',', array_fill(0, count(LABEL_SHOWN[$in]), '?')) . '))';
+        if ($condAt >= 0) { array_splice($fw, $condAt, 1); array_splice($fa, $condArg, count($cargs)); }
+        $fw = array_slice($fw, $words); $fa = array_slice($fa, $wargs); $file = [];
+        foreach (array_chunk(array_values(array_unique(array_column($found, 'path'))), 500) as $some) {
+            $st = $db->prepare('SELECT files.path, files.year, files.bytes, media.duration, media.width, media.height, media.recorded, media.proxy_at
+                FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path IN (' . implode(',', array_fill(0, count($some), '?')) . ')'
+                . ($fw ? ' AND ' . implode(' AND ', $fw) : ''));
+            $bind($st, array_merge($some, $fa));
+            $r = $st->execute();
+            while ($r && ($x = $r->fetchArray(SQLITE3_ASSOC))) $file[$x['path']] = $x;
         }
-        unset($m);
+        $vrows = [];
+        foreach ($found as $m) if (isset($file[$m['path']])) $vrows[] = $m + ['name' => basename($m['path'])] + $file[$m['path']];
+        $moments['count'] = count($vrows);
+        $moments['moments'] = array_sum(array_map(fn($m) => count($m['found']), $vrows));
         $by = ['new' => fn($m) => [-(int)($m['year'] ?? 0), $m['recorded'] ?? ''], 'old' => fn($m) => [(int)($m['year'] ?? 9999), $m['recorded'] ?? ''],
                'big' => fn($m) => -(int)($m['bytes'] ?? 0), 'long' => fn($m) => -(float)($m['duration'] ?? 0), 'name' => fn($m) => strtolower($m['name'])][$sort] ?? null;
-        if ($by) usort($moments['rows'], fn($a, $b) => $by($a) <=> $by($b));
-        // Filters on (a kind, where, what it is): only moments of files that pass them
-        $fw = array_slice($where, $words); $fa = array_slice($args, $wargs);
-        if ($fw) {
-            // one question for all of them (at most 120): asked once per video, each filter's list was made again every time
-            $paths = array_values(array_unique(array_column($moments['rows'], 'path'))); $pass = [];
-            if ($paths) {
-                $ok = $db->prepare('SELECT files.path FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path IN ('
-                    . implode(',', array_fill(0, count($paths), '?')) . ') AND ' . implode(' AND ', $fw));
-                $bind($ok, array_merge($paths, $fa));
-                $r = $ok->execute();
-                while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) $pass[$x[0]] = true;
-            }
-            $moments['rows'] = array_values(array_filter($moments['rows'], fn($m) => isset($pass[$m['path']])));
-            $moments['count'] = count($moments['rows']);
-            $moments['moments'] = array_sum(array_map(fn($m) => count($m['found']), $moments['rows']));
+        if ($by) usort($vrows, fn($a, $b) => $by($a) <=> $by($b));
+        // Words to narrow it with: the tags and themes these videos have most, not the words already typed.
+        // Only offered; a click adds the word to the search, and taking it out of the box widens it again.
+        if ($voffset === 0) {
+            $typed = array_flip(preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY)); $n = [];
+            foreach ($vrows as $m)
+                foreach (array_unique(preg_split('/\s*[·,]\s*/u', mb_strtolower($m['tags'] . ' · ' . $m['themes']), -1, PREG_SPLIT_NO_EMPTY)) as $w)
+                    if (!isset($typed[$w]) && mb_strlen($w) > 2) $n[$w] = ($n[$w] ?? 0) + 1;
+            arsort($n);
+            // a word every video has narrows nothing; one only a single video has is not a direction
+            $n = array_filter($n, fn($c) => $c > 1 && $c < count($vrows));
+            $moments['suggest'] = array_map(fn($w, $c) => [(string)$w, $c], array_keys(array_slice($n, 0, 12, true)), array_slice($n, 0, 12));
         }
+        $page = array_slice($vrows, $voffset, VPAGE);
+        // which piece each video is a version of, so a shot found in v2 and v3 shows once (this page's only)
+        $vs = $db->prepare('SELECT vkey, vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = labels.vkey) n FROM labels WHERE path = ?');
+        foreach ($page as &$m) {
+            $vs->bindValue(1, $m['path']); $r = $vs->execute()->fetchArray(SQLITE3_ASSOC) ?: []; $vs->reset();
+            $m['vkey'] = $r['vkey'] ?? null; $m['vrank'] = (int)($r['vrank'] ?? 0); $m['versions'] = (int)($r['n'] ?? 0);
+        }
+        unset($m);
+        $moments['rows'] = $page;
     } catch (Throwable $e) { $moments['error'] = $e->getMessage(); }
 }
 

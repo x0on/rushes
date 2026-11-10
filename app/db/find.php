@@ -115,6 +115,8 @@ require __DIR__ . '/config.php';
   .fchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 10px; font: 12px var(--font);
            background: var(--sel-bg); color: var(--sel-fg); border: 0; cursor: pointer }
   .fchip b { font-weight: 400; opacity: .6; font-size: 13px }
+  .sugg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 12px; color: var(--muted) }
+  .sugg .fchip { padding-right: 10px }
   #selbar[hidden] { display: none }
   #selbar { display: flex; gap: 8px; align-items: center; color: var(--fg) }
   .said { color: var(--ok) }
@@ -406,6 +408,7 @@ async function getJSON(params) {
 // ── what is being looked for ───────────────────────────────────────────────
 // kind: the search bar's menu. Everything else: the Filters panel, F below.
 let kind = 'all';
+let asked = '';                         // the search as it was asked, for its next page of videos (moreVideos)
 let asking = null;                      // the search being waited for (run)
 let rows = [], total = 0, seq = 0, timer = null, videos = { count: 0, moments: 0, rows: [] };
 let view = store('view') === 'list' ? 'list' : 'wall';
@@ -429,7 +432,6 @@ const FILTERS = [
   { k: 'people', t: 'People', many: [['none', 'No people'], ['one', 'One person'], ['two', 'Two'], ['few', 'A group']] },
   { k: 'light', t: 'Light', many: [['day', 'Daylight'], ['artificial', 'Artificial light'], ['golden', 'Sunrise or sunset'], ['night', 'Dusk or night']] },
   { k: 'mood', t: 'Mood', many: [], closed: 1 },
-  { k: 'cache', t: 'Cache files', one: [['', 'Hidden'], ['1', 'Shown']], closed: 1 },
 ];
 const F = {};
 function resetF() { FILTERS.forEach(function (f) { if (f.one) F[f.k] = ''; if (f.many) F[f.k] = []; }); }
@@ -522,6 +524,7 @@ async function run(more) {
   }
   const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset });
   FILTERS.forEach(function (f) { const v = Array.isArray(F[f.k]) ? F[f.k].join(',') : F[f.k]; if (v) p.set(f.k, v); });
+  if (more) p.set('only', 'files'); else asked = p.toString();     // more files: the videos are on the page already
   $('stat').textContent = 'searching…';
 
   let raw;
@@ -540,7 +543,7 @@ async function run(more) {
   d.rows.forEach(function (r) { KNOWN[r.path] = r; });
   if (!more) videos = d.moments || { count: 0, moments: 0, rows: [] };
   // Videos found by what they show count too: "0 files" above a page of them read as a bug
-  const vc = pieces(videos.rows).length;
+  const vc = videos.count || 0;                  // every video found by what it shows, however many are on the page
   $('stat').textContent =
     (vc ? vc.toLocaleString() + ' video' + (vc === 1 ? '' : 's') + ' · ' + (videos.moments || 0).toLocaleString() + ' moment' + (videos.moments === 1 ? '' : 's') + ' in the footage · ' : '') +
     (total ? total.toLocaleString() + ' file' + (total === 1 ? '' : 's') + (d.bytes ? ' · ' + tb(d.bytes) : '')
@@ -548,6 +551,21 @@ async function run(more) {
   if (!more) clearSel();
   draw();
   remember(words);
+}
+
+// The next page of videos found by what they show: every one found can be reached, a page at a time.
+async function moreVideos(b) {
+  const my = seq, was = b.textContent;
+  b.disabled = true; b.textContent = 'loading…';
+  const p = new URLSearchParams(asked); p.set('only', 'videos'); p.set('voffset', videos.rows.length); p.delete('offset');
+  try {
+    const d = await (await fetch('search.php?' + p)).json();
+    if (my !== seq) return;                         // another search was made meanwhile
+    if (d.error || (d.moments || {}).error) throw new Error(d.error || d.moments.error);
+    if (!d.moments.rows.length) throw new Error('no more came');
+    videos.rows = videos.rows.concat(d.moments.rows); videos.count = d.moments.count;
+    draw();
+  } catch (e) { b.disabled = false; b.textContent = 'Could not load more (' + e.message + '): press to try again'; b.title = was; }
 }
 
 function fail(what, detail) {
@@ -712,9 +730,15 @@ function draw() {
   let html = '';
   // Videos found by what they show come first, as pictures, in both views
   const shown = {};
+  // Words to narrow it with: what these videos have most (search.php). A click adds the word to the search;
+  // taking it out of the box widens it again. Offered, never applied by itself.
+  if ((videos.suggest || []).length) html += '<div class="sugg">Narrow it: ' + videos.suggest.map(function (x) {
+    return '<button class="fchip" data-sugg="' + esc(x[0]) + '" title="' + x[1].toLocaleString() + ' of these videos">' + esc(x[0]) + '</button>'; }).join('') + '</div>';
   if (vshow.length) {
     vshow.forEach(function (x) { shown[x[0].vkey || x[0].path] = 1; });
     html += view === 'list' ? videoRows(vshow) : '<div class="wall">' + vshow.map(function (x) { return videoTile(x[0], x[1]); }).join('') + '</div>';
+    const vleft = (videos.count || 0) - videos.rows.length;
+    if (vleft > 0) html += '<button class="more" id="moreV">show ' + Math.min(videos.page || 120, vleft) + ' more videos (' + vleft.toLocaleString() + ' left)</button>';
   }
   if (view === 'wall') {
     // footage and pictures as tiles (not again when the video is already shown); the rest as a list
@@ -726,6 +750,10 @@ function draw() {
   if (rows.length < total) html += '<button class="more" id="more">show 200 more (' + (total - rows.length).toLocaleString() + ' left)</button>';
   $('out').innerHTML = html;
   const m = $('more'); if (m) m.onclick = function () { run(true); };
+  const mv = $('moreV'); if (mv) mv.onclick = function () { moreVideos(mv); };
+  $('out').querySelectorAll('[data-sugg]').forEach(function (b) {
+    b.onclick = function () { $('q').value = ($('q').value.trim() + ' ' + b.dataset.sugg).trim(); run(); };
+  });
   if (!SEL.size) hint();
   drawSel();
 }
