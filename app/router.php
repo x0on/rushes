@@ -42,6 +42,13 @@ if ($path === '' || $path[0] !== '/' || str_contains($path, "\0") || preg_match(
     return refuse(404, 'Not found.');
 if (preg_match('/^(\.adminpass|\.pull-.*|rushes\.sqlite.*|db-copy\.sqlite.*|ingest-queue\.tsv|helper-refused\.tsv|activity\.tsv)$/', $base))
     return refuse(403, 'Private.');
+// What other people send in (uploads from phones, editors' deliveries: the inbox) is never handed out and never
+// run: the helper fetches it through db/helper.php. And PHP runs only where Rushes' own pages are, the top and
+// db/: a file named clip.php that someone uploaded is footage's neighbour, not a page. Any case (a Mac's drive
+// does not tell INBOX from inbox), a folder too (its index.php), and a script named in the middle of a path.
+$low = strtolower($path);
+if (preg_match('#^/(inbox|watchers)(/|$)#', $low)) return refuse(404, 'Not found.');
+if (preg_match('#\.php(/|$)#', $low) && !preg_match('#^/(db/)?[^/]+\.php$#', $low)) return refuse(404, 'Not found.');
 $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
 if (!is_dir($_SERVER['DOCUMENT_ROOT'] . $path) && !in_array($ext, ['php', 'html', 'css', 'js', 'png', 'ico', 'svg', 'jpg', 'webp'], true)
     && !in_array($path, ['/settings.json', '/rules.json', '/manifest.tsv'], true) && !preg_match('#^/tidy-\d{8}-\d{6}\.tsv$#', $path))

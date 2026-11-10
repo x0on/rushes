@@ -24,6 +24,15 @@ U=http://127.0.0.1:18642
 for f in job.log .htaccess runner.sh ingest.py ingest-history.tsv 'x/../job.log' db/settings.json; do
     [ "$(code "$U/$f")" = 404 ] || no "$f was handed out"
 done; ok "logs, lists, hidden files and code are never handed out"
+# What is sent in (a phone's upload, an editor's delivery) is never run and never handed out, whatever it is called
+B="$R/web/inbox/phone/20261110000000-abcdef12/files"; mkdir -p "$B" "$R/web/sub"
+for n in clip.php index.php page.html; do echo '<?php echo "RAN";' > "$B/$n"; done; echo '<?php echo "RAN";' > "$R/web/sub/x.php"
+for f in inbox/phone/20261110000000-abcdef12/files/clip.php INBOX/phone/20261110000000-abcdef12/files/clip.php \
+         inbox/phone/20261110000000-abcdef12/files/ inbox/phone/20261110000000-abcdef12/files/page.html \
+         inbox/phone/20261110000000-abcdef12/files/clip.php/x.css sub/x.php db/state.php/x.css; do
+    [ "$(code "$U/$f")" = 404 ] || no "$f was answered"
+    case "$(curl -s --noproxy '*' "$U/$f")" in *RAN*) no "$f was run" ;; esac
+done; ok "an uploaded file is never run or handed out; PHP runs only at the top and in db/"
 [ "$(code -H 'Host: rushes.example.com:18642' $U/db/state.php)" = 403 ] && [ "$(code -H 'Host: rushes.example.com' -d x=1 $U/run.php)" = 403 ] \
     && ok "from this Mac, a request addressed to another name is refused (DNS rebinding)" || no "another name let in from this Mac"
 [ "$(code -H 'Host: localhost:18642' $U/db/state.php)" = 200 ] && [ "$(code -H 'Host: LOCALHOST' $U/db/state.php)" = 200 ] && [ "$(code -H 'Host: [::1]:18642' $U/db/state.php)" = 200 ] \
