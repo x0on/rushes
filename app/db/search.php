@@ -56,12 +56,15 @@ $where = []; $args = [];
 // a search for "50%" or "a_b" looks for those characters rather than acting
 // as a wildcard.
 foreach (preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) as $word) {
-    $where[] = "(files.path LIKE ? ESCAPE '\\' OR media.camera LIKE ? ESCAPE '\\' OR media.reel LIKE ? ESCAPE '\\')";
+    // the camera and reel are looked up once in the media ledger (a small table), not joined to every file:
+    // with "OR media.camera LIKE" in the same condition, each of the catalogue's rows waited for its media row
+    $where[] = "(files.path LIKE ? ESCAPE '\\' OR files.id IN (SELECT file_id FROM media WHERE camera LIKE ? ESCAPE '\\' OR reel LIKE ? ESCAPE '\\'))";
     $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $word) . '%';
     array_push($args, $like, $like, $like);
 }
 $words = count($where); $wargs = count($args);     // the conditions after these are filters: moments obey them too
-if ($kind !== '' && $kind !== 'all') { $where[] = 'kind = ?'; $args[] = $kind; }
+// +kind: not by the kind index (a quarter of the catalogue fetched out of order is slower than reading it through)
+if ($kind !== '' && $kind !== 'all') { $where[] = '+kind = ?'; $args[] = $kind; }
 // where=ARCHIVE: only under a folder of that name (the Filters panel's Where)
 if (($place = (string)($_GET['where'] ?? '')) !== '') {
     $where[] = "files.path LIKE ? ESCAPE '\\'"; $args[] = '%/' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $place) . '/%';
@@ -117,7 +120,7 @@ if ($in !== '') {
 $nothing = $where === [];
 // A cache (an app's previews and renders, rebuilt by itself: labels.php) is never what anyone looks
 // for: left out unless the Filters panel asks for it (cache=1)
-if (($_GET['cache'] ?? '') !== '1' && !$nothing) $where[] = "files.path NOT IN (SELECT path FROM labels WHERE label = 'cache')";
+if (($_GET['cache'] ?? '') !== '1' && !$nothing) $where[] = "NOT EXISTS (SELECT 1 FROM labels c WHERE c.path = files.path AND c.label = 'cache')";   // asked per file by its path (indexed): NOT IN made the whole list of cache files again each time it ran
 $sql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 // Sort by: as found (the folder order for files, best match first for videos), newest, oldest, largest, longest, name
 $sort  = (string)($_GET['sort'] ?? '');
@@ -163,7 +166,7 @@ while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
 
 // true totals, and per-kind counts for the chips — one scan, not five
 $counts = ['all' => 0];
-$cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$sql GROUP BY kind");
+$cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$sql GROUP BY +kind");   // +kind: read the files in their own order; by the kind index, each row was fetched out of order (four times slower)
 $bind($cs, $args);
 $cr = $cs->execute();
 if ($cr === false) { echo json_encode(['error' => 'counts query: ' . $db->lastErrorMsg()]); exit; }
@@ -197,11 +200,16 @@ if (($q !== '' || $cond !== '') && ($kind === '' || $kind === 'all' || $kind ===
         // Filters on (a kind, where, what it is): only moments of files that pass them
         $fw = array_slice($where, $words); $fa = array_slice($args, $wargs);
         if ($fw) {
-            $ok = $db->prepare('SELECT 1 FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path = ? AND ' . implode(' AND ', $fw));
-            $moments['rows'] = array_values(array_filter($moments['rows'], function ($m) use ($ok, $fa) {
-                $ok->bindValue(1, $m['path']); foreach ($fa as $i => $v) $ok->bindValue($i + 2, $v);
-                $r = $ok->execute()->fetchArray(); $ok->reset(); return (bool)$r;
-            }));
+            // one question for all of them (at most 120): asked once per video, each filter's list was made again every time
+            $paths = array_values(array_unique(array_column($moments['rows'], 'path'))); $pass = [];
+            if ($paths) {
+                $ok = $db->prepare('SELECT files.path FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path IN ('
+                    . implode(',', array_fill(0, count($paths), '?')) . ') AND ' . implode(' AND ', $fw));
+                $bind($ok, array_merge($paths, $fa));
+                $r = $ok->execute();
+                while ($r && ($x = $r->fetchArray(SQLITE3_NUM))) $pass[$x[0]] = true;
+            }
+            $moments['rows'] = array_values(array_filter($moments['rows'], fn($m) => isset($pass[$m['path']])));
             $moments['count'] = count($moments['rows']);
             $moments['moments'] = array_sum(array_map(fn($m) => count($m['found']), $moments['rows']));
         }

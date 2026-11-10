@@ -406,6 +406,7 @@ async function getJSON(params) {
 // ── what is being looked for ───────────────────────────────────────────────
 // kind: the search bar's menu. Everything else: the Filters panel, F below.
 let kind = 'all';
+let asking = null;                      // the search being waited for (run)
 let rows = [], total = 0, seq = 0, timer = null, videos = { count: 0, moments: 0, rows: [] };
 let view = store('view') === 'list' ? 'list' : 'wall';
 const KNOWN = {};          // every file row seen, by path: the panel and the big view find versions here too
@@ -524,8 +525,11 @@ async function run(more) {
   $('stat').textContent = 'searching…';
 
   let raw;
-  try { raw = await (await fetch('search.php?' + p)).text(); }
-  catch (e) { return fail('Could not reach the archive.', e.message); }
+  // the search before this one is let go: its answer would not be shown, and the browser stops waiting for it
+  if (asking) asking.abort();
+  asking = new AbortController();
+  try { raw = await (await fetch('search.php?' + p, { signal: asking.signal })).text(); }
+  catch (e) { if (my !== seq || e.name === 'AbortError') return; return fail('Could not reach the archive.', e.message); }
   let d;
   try { d = JSON.parse(raw); }
   catch (e) { return fail('The archive answered, but not with a result.', raw.slice(0, 400)); }
