@@ -220,8 +220,10 @@ if ($only !== 'files' && ($q !== '' || $cond !== '') && ($kind === '' || $kind =
         if ($voffset === 0) {
             $typed = array_flip(preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY)); $n = [];
             foreach ($vrows as $m)
-                foreach (array_unique(preg_split('/\s*[·,]\s*/u', mb_strtolower($m['tags'] . ' · ' . $m['themes']), -1, PREG_SPLIT_NO_EMPTY)) as $w)
-                    if (!isset($typed[$w]) && mb_strlen($w) > 2) $n[$w] = ($n[$w] ?? 0) + 1;
+                // single words only ("parks & recreation" offers parks, and recreation): a chip adds one word to the search,
+                // and a sign like & is not a word anything contains
+                foreach (array_unique(preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($m['tags'] . ' ' . $m['themes']), -1, PREG_SPLIT_NO_EMPTY)) as $w)
+                    if (!isset($typed[$w]) && mb_strlen($w) > 2 && !in_array($w, ['and', 'the', 'for', 'with'], true)) $n[$w] = ($n[$w] ?? 0) + 1;
             arsort($n);
             // a word every video has narrows nothing; one only a single video has is not a direction
             $n = array_filter($n, fn($c) => $c > 1 && $c < count($vrows));

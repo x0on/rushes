@@ -281,7 +281,8 @@ over the page.
 first (or in the order chosen), says how many there are in all, and **show 120 more videos** brings the
 next page (`search.php?only=videos&voffset=N`), until all of them are on the page. Search never keeps
 part of what it found to itself: the order is only an order. Above them, **Narrow it:** offers the tags
-and themes those videos have most (not a word every one of them has, nor one only a single video has);
+and themes those videos have most, as single words ("parks & recreation" offers *parks* and *recreation*;
+not a word every one of them has, nor one only a single video has);
 a click adds the word to the box, and taking it out widens the search again.
 
 How it stays quick on a large catalogue (measured on 885,000 files, 300,000 described shots; a search

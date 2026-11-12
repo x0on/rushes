@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.56 — November 2026
+
+- **The words offered under "Narrow it:" are single words.** A theme like "parks & recreation" was offered whole, and a click added the "&" to the search as if it were a word: almost nothing matched. It offers *parks* and *recreation* now, each on its own.
+
 ## 0.13.55 — November 2026
 
 - **Search answers in about a second or two, not half a minute.** On a large catalogue (885,000 files, 300,000 described shots) a search took 25 to 80 seconds: whether each video found was a cache file was asked with a list that was made again for every one of them, up to 120 times a search. It is asked per file by its path now; the camera and reel are looked up once, not joined to every file; the counts read the catalogue in its own order; and the page lets go of the search before when a new one starts. The same answers as before, with no change to the database.
