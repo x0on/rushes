@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.55 — November 2026
+
+- **Search answers in about a second or two, not half a minute.** On a large catalogue (885,000 files, 300,000 described shots) a search took 25 to 80 seconds: whether each video found was a cache file was asked with a list that was made again for every one of them, up to 120 times a search. It is asked per file by its path now; the camera and reel are looked up once, not joined to every file; the counts read the catalogue in its own order; and the page lets go of the search before when a new one starts. The same answers as before, with no change to the database.
+- **Every video found by what it shows can be reached.** The page showed the best 120 and counted only those ("119 videos" when thousands showed it). Now it says how many there are in all, and **show 120 more videos** brings the next page until all are there. Footage filters with no words stopped at 2,000 videos, and a search that found more described videos than the database takes names for (999 on an older one) failed: both are gone.
+- **Narrow it:** above the videos, the tags and themes they have most are offered as chips. A click adds the word to the search; taking it out of the box widens it again.
+- **Cache files are never part of Search.** The filter that could show an editing app's preview renders and peak files is gone; Manage → Cache is where they are looked at.
+- **A file sent in is never run.** A file uploaded from a phone (or delivered by an editor's Watcher) with a name ending in `.php` could be opened by its address, and ran as code on the Mac. Everything in the inbox is refused now, and PHP runs only where Rushes' own pages are.
+
 ## 0.13.54 — November 2026
 
 - **Choose folder… is gone; the folder box offers the archive's folders instead.** Picking a folder in the Mac's window made the browser read every file inside it over the network before the page heard anything: a big folder (22,000 videos) never arrived, so the button seemed to do nothing. Now the box offers the archive's folders as you type (and those of drives kept where they are), each with how many videos it holds and whether it is on the list already, and under it the departments not on the list yet are buttons: one click fills the box. From Search, so it is instant; nothing is walked over the share.

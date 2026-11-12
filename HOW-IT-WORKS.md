@@ -265,6 +265,9 @@ remember footage.
 
 - Narrow by kind: video, photos, audio, projects, sidecar files, other.
 - **Show 200 more** loads the next results.
+- **Cache files are never part of Search.** What an editing app makes for itself and can make again
+  (its preview renders, peak files: `labels.php`) is not footage. There is no filter to show them;
+  Manage → Cache is where they are looked at.
 - Files sitting in Recently Removed show as "moved aside".
 - Links work: `?q=` opens a search, and `?pull=` makes a pull the current one.
 
@@ -273,6 +276,19 @@ matching moments: shots whose description, on-screen text, themes or tags
 match, with the still the model looked at, and lines that were spoken, with
 their time. Click one and its file's proxy plays from that moment, in a window
 over the page.
+
+**Every video found is counted and can be reached** (0.13.55). The page shows the first 120, best match
+first (or in the order chosen), says how many there are in all, and **show 120 more videos** brings the
+next page (`search.php?only=videos&voffset=N`), until all of them are on the page. Search never keeps
+part of what it found to itself: the order is only an order. Above them, **Narrow it:** offers the tags
+and themes those videos have most (not a word every one of them has, nor one only a single video has);
+a click adds the word to the box, and taking it out widens the search again.
+
+How it stays quick on a large catalogue (measured on 885,000 files, 300,000 described shots; a search
+that took 25 to 80 seconds answers in 1 to 3): whether a file is a cache file is asked per file by its
+path, not as a list made again for every video found; the camera and reel are looked up in the media
+ledger once; the counts read the catalogue in its own order; and the page lets go of the search before
+when a new one starts.
 
 Click a file to see what it is:
 
@@ -2004,6 +2020,12 @@ and Rushes stops with it: Rushes runs while Run in the background is on.
   scripts, pictures), with the files the helper reads (`settings.json`,
   `rules.json`, the file list `manifest.tsv` and a tidy-up's plan
   `tidy-….tsv`); never the database, the other lists, the logs or code.
+  **What people send in is never run or handed out** (0.13.55): everything under `inbox/` (a phone's
+  upload, an editor's delivery) and `watchers/` is refused, and PHP runs only where Rushes' own pages are,
+  the top and `db/`. Before, a file uploaded with a name ending in `.php` could be opened by its address
+  and ran as code on the Mac. The check holds in any case of letters, for a folder (its `index.php`) and
+  for a script named in the middle of an address (`tests/test_router.sh`). On a NAS the web server's own
+  `.htaccess` in the inbox does this.
   PHP's errors go to `php-errors.log` in the web folder;
 - starts it again within 10 s if it stops, and when other devices are turned on
   or off;
