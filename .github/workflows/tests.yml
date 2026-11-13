@@ -12,6 +12,7 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq php-cli php-sqlite3 php-mbstring ffmpeg busybox original-awk
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
+      - run: pip install -q pillow        # analyze.py --selftest reads pictures
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - name: Every check
