@@ -91,6 +91,13 @@ function s_path(string $key, string $fallback = ''): string {
     return is_string($s) ? rtrim($s, '/') : $fallback;
 }
 
+// What is not footage: editing caches, the packages of a code project, and TypeScript's .d.mts files (which only
+// share a camera's extension). One rule, said the same in runner.py, analyze.py and proxy.sh (tests/test_agree.py
+// fails when they differ): such a file is labelled cache, gets no preview and no description, and is not counted.
+const NOT_FOOTAGE = '#/(adobe premiere pro (audio|video) previews|cache|peak files|proxies|node_modules)/|\\.prv/|\\.d\\.mts$#';
+const EMPTY_VIDEO = 4096;      // a "video" smaller than this holds no picture (runner.py: EMPTY)
+function not_footage(string $path): bool { return (bool)preg_match(NOT_FOOTAGE, strtolower($path)); }
+
 function web_dir(): string     { return s_path('archive.web',   '/share/Web'); }
 // Rushes inside the Rushes app, on the Mac whose drive is the archive (HOW-IT-WORKS.md → Rushes on this Mac)
 function on_mac(): bool        { return (settings()['archive']['runs_on'] ?? '') === 'mac'; }

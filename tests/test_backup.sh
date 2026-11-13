@@ -12,7 +12,7 @@ mkdir -p "$W" "$A"
 cp -r "$HERE/app/." "$W/"
 printf '{"name":"Rushes","archive":{"local":"%s","web":"%s","runs_on":"mac","label":"Archive"},"helper":{"mode":"built_in"}}\n' "$A" "$W" > "$W/settings.json"
 printf 'at\t%s\nvol\t/Volumes/Spare\tSpare\t8000\t6000\t0\t0\t0\t0\nvol\t%s\tArchive\t8000\t100\t0\t1\t0\t0\nvol\t/Volumes/EOS\tEOS\t64\t10\t1\t0\t0\t0\nvol\t/Volumes/RAID 2\tRAID 2\t9000\t300\t0\t0\t0\t0\n' "$(date +%s)" "$A" > "$W/helper-volumes.tsv"
-(cd "$R" && "$PHP" -S 127.0.0.1:18681 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18681 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18681
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }

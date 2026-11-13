@@ -18,7 +18,7 @@ mkdir -p "$A/PROXIES/VIDEOS/Parks/2025/Kite"; printf p > "$A/PROXIES/VIDEOS/Park
 printf x > "$D/Old/e.mov"
 find "$A/VIDEOS" "$D" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18665 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18665 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18665
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; tail -5 "$R/srv.log" "$W/php-errors.log" 2>/dev/null; exit 1; }
@@ -123,7 +123,7 @@ printf 'VIDEOS/Cache/Picnic Grill\t3\n' > "$W/prepare.tsv"; rm -f "$W/prepare-go
 printf '%s\tchanged\t\tDescribe list: Picnic Grill moved to VIDEOS/Cache/Picnic Grill, and the list follows it\n' "$(date '+%Y-%m-%d %H:%M:%S')" >> "$W/activity.tsv"
 curl -s -G -d pass=rushes "$U/db/analyze.php" > /dev/null
 grep -qx "Picnic Grill	3" "$W/prepare.tsv" && ok "a folder 0.13.18 took by its name alone, with no videos there, goes back to be found from the moves" || no "undo: $(cat "$W/prepare.tsv")"
-mkdir -p "$A/VIDEOS/Parks/2023/Gala"; printf v > "$A/VIDEOS/Parks/2023/Gala/bad.mov"; printf 'VIDEOS/Parks/2023/Gala\t5\n' > "$W/prepare.tsv"
+mkdir -p "$A/VIDEOS/Parks/2023/Gala"; head -c 5000 /dev/zero > "$A/VIDEOS/Parks/2023/Gala/bad.mov"; printf 'VIDEOS/Parks/2023/Gala\t5\n' > "$W/prepare.tsv"
 printf '%s\t1\tInvalid data found when processing input\n' "$A/VIDEOS/Parks/2023/Gala/bad.mov" > "$W/proxy-failed.tsv"
 F() { curl -s -G -d pass=rushes "$U/db/analyze.php" | python3 -c 'import json,sys; print(len([x for x in json.load(sys.stdin)["table"] if x["folder"]=="VIDEOS/Parks/2023/Gala"][0]["plan"]["failures"]))'; }
 [ "$(F)" = 1 ] || no "listed: $(F)"

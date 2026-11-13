@@ -27,7 +27,7 @@ touch -t 201604150000 "$A/$Q/AERIALS/City Hall/f.mov"; touch -t 202604150000 "$A
 touch -t 202303150000 "$A/$Q/COUNCIL EVENTS/Gala/d.mov" "$A/$Q/COUNCIL EVENTS/Gala/inner/e.mov"
 find "$A" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18662 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18662 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18662
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }

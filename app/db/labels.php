@@ -77,7 +77,7 @@ function label_of(string $path, int $bytes, array $outputs): array {
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     $dirs = strtolower(dirname($path)) . '/';
     if (str_starts_with($name, '._') || in_array($ext, ['cube', '3dl', 'look'], true)) return ['', 'ignored: a macOS leftover or a LUT'];
-    if (preg_match('#/(adobe premiere pro (audio|video) previews|cache|peak files|proxies)/|\.prv/#', $dirs)
+    if (not_footage($path)
         || in_array($ext, ['pek', 'pkf', 'cfa', 'lrf', 'ims'], true)) return ['cache', 'a cache, rebuilt by itself'];
     // Only an Output folder says "finished": a render beside it is a part made for the edit
     if (preg_match('#/outputs?/#', $dirs)) return ['deliverable', 'in an Output folder'];

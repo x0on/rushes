@@ -25,7 +25,7 @@ f "top.mov"
 touch -t 201806150000 "$A/Old server/Misc stuff/x.mov"           # its year, from the clip's date
 (cd "$A" && find "$A" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done) > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18660 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18660 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18660
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }

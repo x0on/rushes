@@ -187,7 +187,7 @@ if ($only !== 'videos') {
 // found is left out: a count that stopped at the first page read as "only 119 videos show police".
 // ponytail: every video found is listed and checked again for each page (about a second for 16,000 videos);
 // kept between pages if a search ever finds so many that it shows.
-const VPAGE = 120;
+defined('VPAGE') || define('VPAGE', 120);
 $voffset = max((int)($_GET['voffset'] ?? 0), 0);
 $moments = ['count' => 0, 'moments' => 0, 'rows' => [], 'offset' => $voffset, 'page' => VPAGE];
 if ($only !== 'files' && ($q !== '' || $cond !== '') && ($kind === '' || $kind === 'all' || $kind === 'video')) {

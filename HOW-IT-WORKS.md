@@ -824,6 +824,10 @@ says where any original's proxy is.
     tried once, stays listed under "could not", and is tried again only when it
     changes.
   - A proxy is never bigger than its original.
+  - If the archive goes away while proxies are made (a share that dropped), the
+    run waits up to 15 minutes for it and carries on. If it stays away, the run
+    stops and says why; nothing is counted as failed, and the folder is not
+    called done. Try again carries on from there.
   - Before starting, Rushes checks there is room for 5% of the originals plus
     2 GB.
   - A build stops at once on "Permission denied" or "No space left".

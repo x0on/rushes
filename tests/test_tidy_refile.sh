@@ -19,7 +19,7 @@ f "Parks & Recreation/2020/Kite/d.mov"
 f "VIDEO from an old server/x.mov"
 find "$A" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18663 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18663 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18663
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; cat "$R/srv.log" "$W/php-errors.log" 2>/dev/null | tail -5; exit 1; }

@@ -13,7 +13,7 @@ printf '{"name":"Rushes","archive":{"local":"%s","web":"%s"},"helper":{"mode":"b
 printf '' > "$A/VIDEOS/Card/C1.MP4"; printf 'x' > "$A/VIDEOS/Card/C2.MP4"
 printf '%s\t0\tempty: zero bytes\t/Volumes/Old/Card/C1.MP4\t/Volumes/Old/Card/C1.MP4\t200000\t0\t1\n%s\t70000\tnot a clip\t\t\t0\t0\t0\n' "$A/VIDEOS/Card/C1.MP4" "$A/VIDEOS/Card/C2.MP4" > "$W/rescue-found.tsv"
 printf '%s\t5\n' "$(date +%s)" > "$W/rescue-looked.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18666 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18666 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18666
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; tail -5 "$R/srv.log" "$W/php-errors.log" 2>/dev/null; exit 1; }

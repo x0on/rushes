@@ -390,15 +390,17 @@ $tip = fn($t) => '<span class="infotip" tabindex="0" data-tip="' . htmlspecialch
           <header><b>Folders to describe</b><?= $tip('Two steps for each folder, in order. 1 · Proxies, on the archive machine: a small, light copy of each video (H.264) that plays in any browser, kept in their own folder, PROXIES, with the same paths as the originals; made at low priority, and a file that arrived in the last two hours waits, so nothing still being copied is touched. 2 · Descriptions, on the helper: every shot, a sentence, the text on screen, shot size, people, light, themes and tags, and everything said, in its language; the cuts and sound from the proxy, the pictures from the original at full quality. Kept in _rushes/analysis; nothing in the archive changes. Folders run one at a time, top to bottom; nothing is done twice, so adding a folder again only does what is new.') ?></header>
           <div style="padding:14px">
             <p class="note" style="margin:0 0 10px">Rushes makes a light copy of each video to play in Search, then the AI describes it.</p>
+            <p class="note" id="prepMissing" style="margin:0 0 8px"></p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <input id="prepPath" list="prepFolders" autocomplete="off" placeholder="type a folder, e.g. VIDEOS/Harbor Office — the archive's folders are offered as you type"
+              <button class="btn" id="prepChoose" type="button" aria-expanded="false" aria-controls="prepBrowse">Choose folder…</button>
+              <input id="prepPath" list="prepFolders" autocomplete="off" placeholder="or type a folder, e.g. VIDEOS/Harbor Office"
                      style="flex:1;min-width:220px;padding:8px 10px;font:13.5px var(--font);border:1px solid var(--line);
                             border-radius:var(--radius-sm);background:var(--bg);color:var(--fg)">
               <button class="btn quiet" id="prepGo" type="button">+ Add</button>
               <button class="btn quiet" data-px="proxy-stop" id="pxStop" type="button" hidden>Stop</button>
             </div>
             <datalist id="prepFolders"></datalist>
-            <p class="note" id="prepMissing" style="margin:8px 0 0"></p>
+            <div id="prepBrowse" hidden style="margin-top:8px;border:1px solid var(--line);border-radius:var(--radius-sm);max-height:340px;overflow:auto"></div>
             <p class="note" id="prepSaid" style="margin:10px 0 0"></p>
             <div id="pxState" class="note" style="margin-top:6px"></div>
             <div id="prepTable" style="margin-top:12px"></div>
@@ -2232,8 +2234,38 @@ async function prepFolders() {
     $('prepMissing').querySelectorAll('[data-miss]').forEach(function (b) {
       b.onclick = function () { $('prepPath').value = b.dataset.miss; planOf(b.dataset.miss); };
     });
+    prepTree = f; if (!$('prepBrowse').hidden) drawBrowse(browseAt);
   } catch (e) { $('prepMissing').textContent = ''; }
 }
+// Choose folder…: the same folders, walked by clicking (0.13.58). From the search catalogue, like the box: it opens
+// at once and never reads the share (the Mac's own window, before 0.13.54, read every file of a folder first).
+// ponytail: as deep as the list offers (three folders into the archive, two into a drive); deeper is typed
+let prepTree = [], browseAt = '';
+function drawBrowse(at) {
+  browseAt = at;
+  const has = {}; prepTree.forEach(function (x) { has[x.folder] = x; });
+  const up = function (p) { const i = p.lastIndexOf('/'); return i <= 0 ? '' : p.slice(0, i); };
+  // the top: every folder whose own parent is not offered (the archive's first folders, and each drive's)
+  const rows = prepTree.filter(function (x) { return at === '' ? !has[up(x.folder)] : up(x.folder) === at; });
+  const inside = function (p) { return prepTree.some(function (x) { return up(x.folder) === p; }); };
+  const crumbs = []; for (let p = at; p && has[p]; p = up(p)) crumbs.unshift(p);
+  $('prepBrowse').innerHTML =
+    '<div class="note" style="padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)">' +
+      '<a href="#" data-go="">All folders</a>' + crumbs.map(function (p) { return ' / <a href="#" data-go="' + esc(p) + '">' + esc(p.split('/').pop()) + '</a>'; }).join('') + '</div>' +
+    (rows.length ? rows.map(function (x) {
+      const name = at === '' ? x.folder : x.folder.split('/').pop();
+      return '<div style="display:flex;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line)">' +
+        (inside(x.folder) ? '<a href="#" data-go="' + esc(x.folder) + '" style="flex:1" title="Open ' + esc(x.folder) + '">▸ ' + esc(name) + '</a>' : '<span style="flex:1">' + esc(name) + '</span>') +
+        '<span class="dim">' + (+x.videos).toLocaleString() + ' videos' + (x.on === 'yes' ? ' · on the list' : x.on === 'part' ? ' · partly on the list' : '') + '</span>' +
+        (x.on === 'yes' ? '' : '<button class="btn quiet" type="button" data-pick="' + esc(x.folder) + '">Choose</button>') + '</div>';
+    }).join('') : '<div class="note" style="padding:10px">' + (prepTree.length ? 'No folders with videos inside this one.' : 'No folders with videos in Search yet.') + '</div>');
+  $('prepBrowse').querySelectorAll('[data-go]').forEach(function (l) { l.onclick = function (e) { e.preventDefault(); drawBrowse(l.dataset.go); }; });
+  $('prepBrowse').querySelectorAll('[data-pick]').forEach(function (b) {
+    b.onclick = function () { $('prepPath').value = b.dataset.pick; planOf(b.dataset.pick); browseShow(false); };
+  });
+}
+function browseShow(on) { $('prepBrowse').hidden = !on; $('prepChoose').setAttribute('aria-expanded', on ? 'true' : 'false'); if (on) drawBrowse(browseAt); }
+$('prepChoose').onclick = function () { browseShow($('prepBrowse').hidden); };
 prepFolders();
 
 // What a folder holds, the moment it is chosen or typed: from the search
@@ -2301,9 +2333,13 @@ function drawPrepare(rows, a) {
   const n = function (x) { return (+x || 0).toLocaleString(); };
   a = a || {};
   if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is on the list yet.</div>'; return; }
+  // videos that neither play nor are listed as could-not, nor are still arriving: a "done" that is not
+  const short = function (r) { const p = r.plan || {}; return p.videos ? Math.max(0, p.videos - p.have - (p.fails || (r.failures || []).length) - (+r.proxies.later || 0)) : 0; };
   const px = function (r) {
-    const p = r.proxies, f = (r.failures || []).length;
-    const fails = f ? ' · <a href="#" class="bad" data-fails="' + esc(r.folder) + '">' + n(f) + ' could not be made — see why</a>' : '';
+    const p = r.proxies, f = (r.plan && r.plan.fails) || (r.failures || []).length;
+    const fails = (f ? ' · <a href="#" class="bad" data-fails="' + esc(r.folder) + '">' + n(f) + ' could not be made — see why</a>' : '') +
+      // honest: videos with no preview that no run failed on (a run the share dropped under called them done)
+      (p.step === 'done' && short(r) ? '<div class="note"><span class="bad">' + n(short(r)) + ' not made yet</span>: Try again makes only those</div>' : '');
     return p.step === 'skipped' ? '<span class="dim">no previews: described from the originals</span>'
       : p.step === 'making' ? '<span class="busy">making · ' + n(p.done) + ' of ' + n(p.total) + '</span>' + fails
       : p.step === 'done' ? (r.plan && r.plan.videos ? '<span class="' + (r.plan.have >= r.plan.videos ? 'ok' : 'busy') + '">' + (r.plan.have >= r.plan.videos ? '✓ ' : '') + n(r.plan.have) + ' of ' + n(r.plan.videos) + ' play</span>' +
@@ -2337,7 +2373,7 @@ function drawPrepare(rows, a) {
       : '<span class="dim">waiting for proxies</span>') + off;
   };
   const busy = function (r) { return r.proxies.step === 'making' || r.proxies.step === 'again' || ['describing', 'queued', 'next'].includes(r.describe.step); };
-  const doneRow = function (r) { return ['done', 'skipped', 'away'].includes(r.proxies.step) && r.describe.step === 'done'; };
+  const doneRow = function (r) { return ['done', 'skipped', 'away'].includes(r.proxies.step) && r.describe.step === 'done' && !(r.proxies.step === 'done' && short(r)); };
   // the whole list: how much proxy time is left, at the speed measured on this machine
   const open = rows.filter(function (r) { return !doneRow(r); });
   // honest: the folder being made from its own pace; the others a guess from earlier folders, said as one
@@ -2364,7 +2400,7 @@ function drawPrepare(rows, a) {
       const p = r.plan || {};
       const tools = (i > 0 ? '<button class="btn quiet" data-l="up" title="Move up">↑</button>' : '') +
         (i < rows.length - 1 ? '<button class="btn quiet" data-l="down" title="Move down">↓</button>' : '') +
-        ((['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0))
+        ((['done', 'stopped', 'no-room'].includes(r.proxies.step) && (r.failures || []).length + (r.proxies.step !== 'done' ? 1 : 0) + short(r))
           || (r.describe.step === 'done' && r.plan && r.plan.media && r.describe.files < r.plan.media)
           ? '<button class="btn quiet" data-l="retry">Try again</button>' : '') +
         // the first folder's start button says what is happening, and cannot start anything twice

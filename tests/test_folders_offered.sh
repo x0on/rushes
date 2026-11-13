@@ -1,7 +1,8 @@
 #!/bin/sh
 # Folders to describe: the box offers the archive's folders (and a kept drive's) from the search catalogue, each
-# with its videos and whether it is on the list; Rushes' own folders are never offered. (0.13.54: this replaced
-# "Choose folder…", which read every file of a big folder over the network before the page heard anything.)
+# with its videos and whether it is on the list; Rushes' own folders are never offered. Choose folder… walks the
+# same list by clicking. (0.13.54 dropped the Mac's own folder window, which read every file of a big folder over
+# the network before the page heard anything; it took the button with it, which 0.13.58 put back.)
 # Run: sh tests/test_folders_offered.sh (PHPBIN=…)
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
@@ -18,7 +19,7 @@ for f in "$A/VIDEOS/Meadow Park/2024/a.mov" "$A/VIDEOS/Meadow Park/2024/b.mov" "
   printf 'x' > "$f"; printf '%s\t%s\n' 1 "$f" >> "$W/manifest.tsv"
 done
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18671 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18671 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18671
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; tail -5 "$R/srv.log" "$W/php-errors.log" 2>/dev/null; exit 1; }
@@ -38,7 +39,12 @@ assert not any(k.startswith(("PROXIES", "_rushes")) for k in f), "Rushes own fol
 assert f[d + "/Gala"]["videos"] == 1 and f[d + "/Gala/Cam A"]["on"] == "", "a kept drive: by its full path"
 ' && ok "the folders offered: counted from Search, marked on the list or not, Rushes' own left out" || no "folders: $F"
 P=$(cat "$W/db/admin.php")
-case "$P" in *prepChoose*|*webkitdirectory*) no "the Mac's folder window is gone" ;; *'list="prepFolders"'*) ok "the box offers them as you type; the Choose folder window is gone" ;; *) no "admin box" ;; esac
+# A folder is added by clicking, never only by typing (0.13.58: the button came back, walking the same list; what
+# went for good is the Mac's own folder window, which read a whole folder over the network first)
+case "$P" in *webkitdirectory*) no "the Mac's folder window is gone" ;; *'id="prepChoose"'*data-pick*) ok "Choose folder… walks the offered folders by clicking, without the Mac's window" ;; *) no "no way to add a folder by clicking" ;; esac
+case "$P" in *'list="prepFolders"'*) ok "and the box still offers them as you type" ;; *) no "admin box" ;; esac
+# the buttons for folders not on the list sit above the box, where the box's own suggestions cannot cover them
+[ "$(printf '%s' "$P" | grep -n 'id="prepMissing"' | cut -d: -f1 | head -1)" -lt "$(printf '%s' "$P" | grep -n 'id="prepPath"' | cut -d: -f1 | head -1)" ] && ok "Not on the list yet: above the box" || no "prepMissing is under the box"
 # The "not on the list yet" row: the page's own code, run on two layouts (this archive, and one with no VIDEOS level)
 cat > "$R/row.js" <<'JS'
 const fs = require('fs');

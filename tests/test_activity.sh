@@ -19,7 +19,7 @@ cat > "$W/ingest-history.tsv" <<'EOF'
 2026-10-05 10:00	checked	/Volumes/Drive/Parks	300	1000	60	2 differ from their fingerprint (a.mov …)
 2026-10-05 11:00	uploaded	phone/x1	3	3000000	9	by Sam into Parks/2026
 EOF
-(cd "$R" && "$PHP" -S 127.0.0.1:18670 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18670 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18670
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }

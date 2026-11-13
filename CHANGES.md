@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.58 — November 2026
+
+- **Choose folder… is back on Describe.** 0.13.54 took the button away with the Mac's own folder window (which read a whole folder over the network before the page heard anything). The button was never the fault. It opens a list inside the page now, from Search's catalogue: click into a folder, press Choose. It opens at once and never reads the share. Typing still works, and the buttons for folders not on the list sit above the box, where the box's own suggestions cannot cover them.
+- **A share that drops while previews are made is waited for.** The runner used to walk on down the list, counting every file it could not reach as failed, a second each, and then call the folder done: one folder showed "done" with 189 of 5,195 videos playing. It waits up to 15 minutes for the archive to come back and carries on; if it stays away, the run stops and says why, and Try again carries on from there. No file is called failed for it.
+- **A folder is not called done while videos are still to be made.** Its row says how many are not made yet, and Try again makes only those.
+- **One count of what could not be made.** The page listed files the runner had stopped trying (code files, Premiere's renders, empty files): 100 on one line, 35 on another. The page uses the runner's rule now.
+- **Every check runs by itself.** `sh tests/all.sh` runs all of them; GitHub runs it on every push, and the build makes no app from a commit that did not pass. `PROMISES.md` lists what Rushes always or never does, each with the check that holds it to it. Search (every result reachable, no cache files, single-word suggestions) had no check of its own until now.
+
 ## 0.13.57 — November 2026
 
 - **Previews and describing pass by what is not footage.** Premiere's preview renders, cache folders, and the packages of a code project (whose `.d.mts` files only share a camera's extension) were given previews and descriptions, or tried and failed, at every run. They are left alone now, and not counted among a folder's videos. The same rule as the *cache* label.

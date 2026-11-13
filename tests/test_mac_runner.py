@@ -663,6 +663,40 @@ class MacProxies(MacJobs):
             self.assertEqual(open(os.path.join(self.web, "proxy-failed.tsv")).read(), fails)
             self.assertIn("1 broken files not tried again", open(os.path.join(self.web, "proxy.log")).read())
 
+    def test_an_archive_that_goes_away_is_waited_for_and_never_called_done(self):
+        """A share that drops mid-run: the build waits for it and carries on; one that stays away stops the build,
+        saying why. Never thousands of files counted failed in a second each, and the folder called done."""
+        import subprocess, time, threading
+        clips = [os.path.join(self.a, "Drop", n) for n in ("A.mov", "B.mov", "C.mov")]; os.makedirs(os.path.dirname(clips[0]))
+        for c in clips:
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=640x360:d=1", "-c:v", "mpeg4", c], check=True)
+            old = time.time() - 3 * 3600; os.utime(c, (old, old))
+        status = lambda: dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+        real, away = self.r.probe, self.a + ".away"
+        def drop(back_after):
+            def probe(ff, src):
+                if src.endswith("B.mov") and os.path.isdir(self.a):          # the share drops as B is opened
+                    os.rename(self.a, away)
+                    if back_after is not None: threading.Timer(back_after, lambda: os.rename(away, self.a)).start()
+                return real(ff, src)
+            return probe
+        with unittest.mock.patch.object(self.r, "ffmpeg", return_value=shutil.which("ffmpeg")), \
+             unittest.mock.patch.object(self.r, "media_engine", return_value=(False, "test")), \
+             unittest.mock.patch.object(runner, "AWAY_POLL", 0.2), unittest.mock.patch.object(runner, "AWAY_WAIT", 1.5):
+            with unittest.mock.patch.object(self.r, "probe", drop(None)):      # it stays away
+                self.r.job("proxy-build", {"QUERY": "Drop"}); self.r.busy["proxies"].join(60)
+            st = status()
+            self.assertEqual((st["state"], st["ok"], st["failed"]), ("stopped", "1", "0"), "stopped, nothing called failed")
+            self.assertIn("went away", st["why"])
+            self.assertFalse(os.path.exists(os.path.join(self.web, "proxy-failed.tsv")), "not the files' fault: none listed")
+            os.rename(away, self.a)
+            with unittest.mock.patch.object(self.r, "probe", drop(0.6)):       # it comes back in a moment
+                self.r.job("proxy-build", {"QUERY": "Drop"}); self.r.busy["proxies"].join(60)
+            st = status()
+            self.assertEqual((st["state"], st["ok"], st["failed"], st["later"]), ("done", "1", "0", "1"), "C made after the wait; B left for the next run")
+            self.r.job("proxy-build", {"QUERY": "Drop"}); self.r.busy["proxies"].join(60)
+            self.assertEqual(sorted(os.listdir(os.path.join(self.a, "PROXIES", "Drop"))), ["A.mp4", "B.mp4", "C.mp4"])
+
     def test_one_file_that_breaks_never_stops_the_build(self):
         """A file whose report cannot be read (metadata in another encoding) is said and skipped; the next is made."""
         import subprocess, time

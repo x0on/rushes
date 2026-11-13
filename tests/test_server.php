@@ -206,16 +206,19 @@ check(db()->querySingle("SELECT path FROM moments WHERE fp='ff'") === "$root/arc
 db()->exec("DELETE FROM moments WHERE fp='ff'");
 // A folder's plan comes from the catalogue at once: videos, what already has a proxy, what is left to read.
 @mkdir("$root/archive/PARKS/day1", 0777, true); @mkdir("$root/archive/PROXIES/PARKS/day1", 0777, true);
-foreach (['a.MOV' => 100, 'b.mxf' => 200, 'notes.txt' => 5] as $n => $size) {
+// (and what is not footage is not counted: a Premiere render, a code project's .d.mts, an empty file — config.php)
+@mkdir("$root/archive/PARKS/day1/Adobe Premiere Pro Video Previews/P.PRV", 0777, true); @mkdir("$root/archive/PARKS/app/node_modules/pkg", 0777, true);
+foreach (['a.MOV' => 5000, 'b.mxf' => 6000, 'notes.txt' => 5, 'empty.mp4' => 24, 'Adobe Premiere Pro Video Previews/P.PRV/Rendered.mov' => 7000] as $n => $size) {
     file_put_contents("$root/archive/PARKS/day1/$n", str_repeat('x', $size)); landed("$root/archive/PARKS/day1/$n", $size);
 }
+file_put_contents("$root/archive/PARKS/app/node_modules/pkg/index.d.mts", str_repeat('x', 8000)); landed("$root/archive/PARKS/app/node_modules/pkg/index.d.mts", 8000);
 file_put_contents("$root/archive/PARKS0.mov", 'not in the folder'); landed("$root/archive/PARKS0.mov", 17);
 file_put_contents("$root/archive/PROXIES/PARKS/day1/a.mp4", 'proxy');
 $guess = prepare_plan('PARKS', false, false);
 check($guess['videos'] === 2 && $guess['have'] === 0 && !is_file(web_dir() . '/prepare-plan.json'),
       'a page asking gets a first guess from search alone: no proxy looked up on VIDEO, nothing kept');
 $plan = prepare_plan('PARKS', true);
-check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 300 && $plan['to_read'] === 200,
+check($plan['videos'] === 2 && $plan['have'] === 1 && $plan['bytes'] === 11000 && $plan['to_read'] === 6000,
       'a folder is planned at once from the catalogue: its videos, the ones with a proxy, what is left to read');
 rename("$root/archive/PROXIES", "$root/archive/PROXIES.away");           // the share stops answering
 check(prepare_plan('PARKS', true)['have'] === 1, 'while the previews cannot be reached, the last count stands (no "0 previews")');
@@ -234,12 +237,14 @@ check(prepare_plan('PARKS', true)['have'] === 0, 'but not for more than an hour:
 rename("$root/archive/PROXIES/PARKS.x", "$root/archive/PROXIES/PARKS");
 file_put_contents("$root/app/proxy-speed.tsv", "100000000\t10\tvideo chip\n300000000\t10\tvideo chip\n5\t0\tsoftware\n");
 check(abs(proxy_rate() - 20000000) < 1, 'the speed is measured from the proxies really made (bytes per second)');
-file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n");
+file_put_contents("$root/app/proxy-failed.tsv", "$root/archive/PARKS/day1/b.mxf\t1\tmoov atom not found\n$root/archive/PARKS/day1/a.MOV\t1\told failure\n$root/archive/OTHER/c.mov\t1\tx\n"
+    . "$root/archive/PARKS/app/node_modules/pkg/index.d.mts\t1\tInvalid data found\n$root/archive/PARKS/day1/Adobe Premiere Pro Video Previews/P.PRV/Rendered.mov\t1\tInvalid argument\n$root/archive/PARKS/day1/empty.mp4\t1\tInvalid data found\n");
 $f = proxy_failures('PARKS');
 check(count(prepare_plan('PARKS', false, false)['failures']) === 1 && count(prepare_plan('PARKS', true)['failures']) === 1,
       'what could not be made is read as it is now, every time a page asks (a file Removed leaves the list at once)');
 check(count($f) === 1 && $f[0]['file'] === 'day1/b.mxf' && $f[0]['why'] === 'moov atom not found',
-      "a folder's failures say which file and why, and leave out ones made since and other folders");
+      "a folder's failures say which file and why, and leave out ones made since, other folders, and what is not footage (code, caches, empty files)");
+check(prepare_plan('PARKS', true)['fails'] === 1, 'the page counts what could not be made the way the runner does (one number, not two)');
 // A pull for Premiere carries what describing found: a marker per shot and line spoken, at the right frame.
 require_once "$root/app/db/analysis.php"; analysis_init();
 db()->exec("INSERT INTO pulls (slug, name, created) VALUES ('p1', 'Kite day', 0)");
@@ -385,4 +390,26 @@ file_put_contents($sf, json_encode($sx)); settings(true);
 check(archive_folder_is('VIDEO from an old server') === 'waiting' && archive_folder_is('Parks') === 'filed' && archive_folder_is('_rushes') === 'own',
       'the archive itself as the shelf: a whole drive copied to the top waits; a department\'s folder is filed');
 file_put_contents($sf, $was); settings(true);
+// Search shows everything it found, a page at a time; cache files are never part of it; the words offered to
+// narrow it are single words (PROMISES.md)
+@mkdir("$arch/Find/Adobe Premiere Pro Video Previews/P.PRV", 0777, true);
+$mom = db()->prepare("INSERT INTO moments (fp, path, kind, shot, start_s, end_s, what, themes, hay) VALUES (?, ?, 'shot', 0, 0, 1, ?, ?, ?)");
+$put = function (string $rel, int $i) use ($arch, $mom) {
+    file_put_contents("$arch/$rel", str_repeat('z', 10)); landed("$arch/$rel", 10);
+    $what = 'a zeppelin over the ' . ($i % 2 ? 'harbor' : 'meadow'); $th = $i % 3 ? 'Parks & Recreation' : 'Transportation';
+    foreach ([sprintf('zp%03d', $i), "$arch/$rel", $what, $th, mb_strtolower("$what $th")] as $k => $v) $mom->bindValue($k + 1, $v);
+    $mom->execute(); $mom->reset();
+};
+for ($i = 0; $i < 130; $i++) $put(sprintf('Find/clip%03d.mov', $i), $i);
+$put('Find/Adobe Premiere Pro Video Previews/P.PRV/Rendered.mov', 999);
+labels_refresh();
+$p1 = $find(['q' => 'zeppelin']); $p2 = $find(['q' => 'zeppelin', 'only' => 'videos', 'voffset' => 120]);
+$seen = array_merge(array_column($p1['moments']['rows'], 'path'), array_column($p2['moments']['rows'], 'path'));
+check($p1['moments']['count'] === 130 && count($p1['moments']['rows']) === 120 && count($p2['moments']['rows']) === 10 && count(array_unique($seen)) === 130,
+      'Search: every video found can be reached, a page at a time (the count is the true count, never a cap)');
+check(!array_filter($seen, fn($x) => str_contains($x, 'Video Previews')) && $find(['q' => 'Rendered'])['total'] === 0 && $find(['q' => 'clip'])['total'] === 130,
+      'Search: a cache file is never part of it, by its name or by what is in it');
+$sg = $p1['moments']['suggest'] ?? $p1['suggest'] ?? [];
+check($sg && !array_filter($sg, fn($w) => !preg_match('/^[\p{L}\p{N}]+$/u', is_array($w) ? ($w['word'] ?? $w[0]) : $w)),
+      'Search: the words offered to narrow it are single words');
 echo "Server tests complete. Fixture: $root\n";

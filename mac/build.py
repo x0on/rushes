@@ -40,6 +40,36 @@ NOT_PAGES = (".htaccess", "router.php", "release.sig", "settings.json")     # se
 VERSION = open(os.path.join(HERE, "..", "app", "VERSION")).read().strip()
 RC = shutil.which("rcodesign") or next(os.path.join(r, "rcodesign") for r, _, fs in os.walk(TOP, followlinks=True) if "rcodesign" in fs)
 
+
+
+def checked():
+    """No app is made from code that does not pass its checks. Two things, both said aloud:
+    the helper's code carries a good signature, and GitHub ran every check (tests/all.sh) on this very commit
+    and all passed. RUSHES_BUILD_ANYWAY=1 builds regardless, for an experiment that is never released."""
+    import json, urllib.request
+    top = os.path.join(HERE, "..")
+    if subprocess.run([sys.executable, os.path.join(top, "app", "release.py"), "verify", os.path.join(top, "app")]).returncode:
+        return "the helper's code is not signed as it stands (app/release.sig): sign it first"
+    try:
+        sha = subprocess.run(["git", "-C", top, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        if subprocess.run(["git", "-C", top, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True).stdout.strip():
+            return "there are changes here that are not committed: GitHub has not checked them"
+        with urllib.request.urlopen(f"https://api.github.com/repos/x0on/rushes/commits/{sha}/check-runs", timeout=30) as r:
+            runs = [c for c in json.load(r)["check_runs"] if c["name"] == "tests"]
+    except Exception as e:
+        return f"could not ask GitHub whether this commit passed its checks ({e})"
+    if not runs:
+        return f"GitHub has not run the checks on {sha[:7]} yet (pushed? give it a few minutes)"
+    if runs[0]["conclusion"] != "success":
+        return f"the checks on {sha[:7]} are {runs[0]['conclusion'] or runs[0]['status']}: {runs[0]['html_url']}"
+    print(f"checks: all passed on GitHub for {sha[:7]}; the helper's code is signed"); return ""
+
+
+why = checked()
+if why and os.environ.get("RUSHES_BUILD_ANYWAY") != "1":
+    sys.exit(f"Not built: {why}.\n(RUSHES_BUILD_ANYWAY=1 builds anyway, for an experiment; never for a release.)")
+if why: print(f"BUILDING ANYWAY, unchecked: {why}")
+
 # Parts of Python the helper never uses: the GUI toolkit, tests, the editor,
 # pip, headers. About half the size.
 DROP_LIB = ["test", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3", "venv",

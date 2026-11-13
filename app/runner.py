@@ -144,6 +144,7 @@ EMPTY = 4096           # a "video" smaller than this holds no picture (a 0-byte 
 # ffmpeg's words for a file that is itself broken (an export never finished, a copy cut off): tried once, then
 # left until the file changes. Anything else (the share away, no room) is tried again every run.
 BROKEN = ("Invalid data found", "moov atom not found", "received no packets")
+AWAY_WAIT, AWAY_POLL = 900, 20     # an archive that goes away mid-run is waited for this long, looked for this often
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
@@ -855,6 +856,19 @@ class Runner:
             f.write(d["path"].rstrip("/") + "\n")
         return pr
 
+    def reachable(self, top, only, n, total, ok, failed, later):
+        """True once top (the archive, or a kept drive) is there; waits up to AWAY_WAIT for one that went away, saying so."""
+        t0 = time.time()
+        while not os.path.isdir(top):
+            if self.proxy_halt.is_set() or time.time() - t0 > AWAY_WAIT:
+                return False
+            if time.time() - t0 < AWAY_POLL: self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {top} is not there: waiting up to {AWAY_WAIT // 60} minutes for it")
+            self.proxy_state(state="building", only=only, done=n - 1, total=total, ok=ok, failed=failed, later=later,
+                             file="waiting for the archive to come back")
+            self.write("proxy-alive.txt", f"{int(time.time())}\n")
+            self.proxy_halt.wait(AWAY_POLL)
+        return True
+
     def proxies(self, only, build):
         """Plan (what is missing) or build the proxies of one folder (or the whole archive)."""
         a = self.arch()
@@ -924,6 +938,7 @@ class Runner:
                   + (f", {stuck} broken files not tried again (they have not changed)" if stuck else "") + " · "
                   + ("on the media engine" if hw == "1" else "in software") + f" · {h}p · {ff}")
         os.makedirs(proot, exist_ok=True)
+        here = os.path.dirname(root) if one else root        # the folder asked for: not there means the archive (or drive) is away
         for src, out in plan:
             n += 1
             if self.proxy_halt.is_set():
@@ -931,11 +946,23 @@ class Runner:
                 runs("stopped", ok, failed, later, total); self.plog(f"stopped from Manage after {ok} proxies"); return
             if os.path.exists(out):
                 continue
+            if not os.path.exists(src):
+                # The file cannot be reached. The whole archive away (a share that dropped): wait for it, and never
+                # walk on down the list calling thousands of files failed in a second each, then the folder done.
+                if not self.reachable(here, only, n, total, ok, failed, later):
+                    why = f"{os.path.basename(top) or top} went away while the proxies were being made, and did not come back in {AWAY_WAIT // 60} minutes"
+                    self.proxy_state(state="stopped", only=only, done=n - 1, total=total, ok=ok, failed=failed, later=later, why=why)
+                    runs("stopped", ok, failed, later, total); self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  stopped: {why}. Try again carries on from here."); return
+                if not os.path.exists(src):                  # the archive is there, the file is not: said, by name
+                    failed += 1
+                    self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  could not make {os.path.relpath(src, top)}: not there any more")
+                    with open(self.p("proxy-failed.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\tnot there any more\n")
+                    continue
             try:
                 if time.time() - os.path.getmtime(src) < RECENT:
                     later += 1; continue
             except OSError:
-                failed += 1; continue
+                later += 1; continue                         # gone again this very moment: a later run
             # one file, guarded: a file that breaks something (a name or metadata in another encoding, a probe that
             # never ends) is said and skipped; it never ends the whole build, which would start again on it for ever
             try:
@@ -949,6 +976,8 @@ class Runner:
                     with open(self.p("proxy-made.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{int(time.time())}\t{self.ledger(report)}\t1\n")
                     with open(self.p("proxy-built.tsv"), "a", errors="surrogateescape") as f: f.write(f"{src}\t{src}\tused as it is\n")
                     used += 1; ok += 1; continue
+                if not os.path.exists(src):                  # gone since the top of this turn (the share dropped): never
+                    later += 1; continue                     # make folders where the archive was; the next turn waits for it
                 os.makedirs(os.path.dirname(out), exist_ok=True)
                 tmp, t0 = out + ".part.mp4", time.time()      # never a playable-looking half file
                 made, how = self.encode(ff, src, tmp, h, b, hw == "1")
@@ -961,6 +990,10 @@ class Runner:
                 else:
                     if self.proxy_halt.is_set():
                         continue                             # Stop: said at the top of the next turn
+                    if not os.path.isdir(here):              # it failed because the archive went away: not this file's fault
+                        try: os.remove(tmp)
+                        except OSError: pass
+                        later += 1; continue                 # the next turn waits for the archive, or stops saying why
                     failed += 1
                     err = getattr(self, "last_err", "")
                     self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  could not make {os.path.relpath(src, top)}: {err}"[:500])   # said, by name

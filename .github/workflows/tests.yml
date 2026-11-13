@@ -1,0 +1,18 @@
+# Every check Rushes has, on every push and every pull request (tests/all.sh). main takes nothing that fails
+# (branch protection: the "tests" check is required), and mac/build.py makes no app from a commit that did not pass.
+name: tests
+on: [push, pull_request]
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: What the checks need
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq php-cli php-sqlite3 php-mbstring ffmpeg busybox original-awk
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Every check
+        run: sh tests/all.sh

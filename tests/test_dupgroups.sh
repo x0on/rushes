@@ -18,7 +18,7 @@ printf '{"built":"2026-10-06T10:00:00"}' > "$W/dedupe-plan.tsv.meta"
 mkdir -p "$A/Parks Promo" "$A/Library Opening"; printf y > "$A/Parks Promo/m.mov"; printf y > "$A/Library Opening/m.mov"
 printf '%s\t%s\t%s\n' 500 "$A/Parks Promo/m.mov" "$A/Library Opening/m.mov" 1000 "$A/Elsewhere/b.mov" "$A/Library/Parks/b.mov" > "$W/dedupe-left.tsv"
 printf '2048 3\n' > "$W/holding-kb.txt"; echo $(( $(date +%s) - 8 * 86400 )) > "$W/removed-at.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18680 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18680 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18680
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }

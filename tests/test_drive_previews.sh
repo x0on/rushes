@@ -14,7 +14,7 @@ printf '[{"source":"%s","name":"Films","id":"UUID-1","path":"%s","connected":tru
 printf 'original' > "$D/Gala/A001.mov"
 printf '%s\t%s\n' 8 "$D/Gala/A001.mov" > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18664 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18664 -t "$W" "$HERE/app/router.php" > "$R/srv.log" 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18664
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; tail -5 "$R/srv.log" "$W/php-errors.log" 2>/dev/null; exit 1; }
@@ -52,14 +52,14 @@ R2=$(cd "$W/db" && "$PHP" -r '
   echo json_encode([$a, $b, isset(prepare_resume()[$f])]); prepare_save($keep); @unlink(web_dir() . "/proxy-folders.tsv");')
 [ "$R2" = "[\"\",\"City Manager's Office\",false]" ] && ok "proxies stopped for another folder carry on by themselves after (and only those)" || no "resume: $R2"
 # What is in a folder: read on the disk the moment it is added (folders.php), not from Search, and what changed since
-mkdir -p "$D/Day Two/cam"; printf 1234 > "$D/Day Two/cam/a.mp4"; printf 12 > "$D/Day Two/b.mov"; printf x > "$D/Day Two/._b.mov"; printf x > "$D/Day Two/notes.txt"
+mkdir -p "$D/Day Two/cam"; head -c 5000 /dev/zero > "$D/Day Two/cam/a.mp4"; head -c 4100 /dev/zero > "$D/Day Two/b.mov"; printf x > "$D/Day Two/._b.mov"; printf x > "$D/Day Two/notes.txt"
 waitread() { for i in $(seq 1 50); do S=$(curl -s -G -d pass=rushes --data-urlencode "changes=$D/Day Two" "$U/db/analyze.php"); echo "$S" | grep -q '"state":"done"' && [ "$(echo "$S" | python3 -c 'import json,sys; print(json.load(sys.stdin)["read"]["at"])')" -ge "$1" ] && return 0; sleep 0.2; done; return 1; }
 T0=$(date +%s)
 curl -s -d pass=rushes -d action=prepare --data-urlencode "path=$D/Day Two" "$U/db/analyze.php" > /dev/null
 waitread "$T0" && P=$(curl -s -G -d pass=rushes --data-urlencode "plan=$D/Day Two" "$U/db/analyze.php") \
-    && echo "$P" | python3 -c "import json,sys; p=json.load(sys.stdin); assert p['videos']==2 and p['bytes']==6 and p['from']=='disk', p" \
+    && echo "$P" | python3 -c "import json,sys; p=json.load(sys.stdin); assert p['videos']==2 and p['bytes']==9100 and p['from']=='disk', p" \
     && ok "a folder added is read on the disk at once: 2 videos, though Search has not listed them (no ._ leftovers, no other files)" || no "read: $P $S"
-rm "$D/Day Two/b.mov"; printf 123 > "$D/Day Two/c.MOV"; sleep 1; T0=$(date +%s)
+rm "$D/Day Two/b.mov"; head -c 4200 /dev/zero > "$D/Day Two/c.MOV"; sleep 1; T0=$(date +%s)
 curl -s -d pass=rushes -d action=prepare --data-urlencode "path=$D/Day Two" "$U/db/analyze.php" > /dev/null
 waitread "$T0" && echo "$S" | python3 -c "
 import json,sys; d=json.load(sys.stdin); r=d['read']; c={(x['change'],x['rel']) for x in d['changes']}

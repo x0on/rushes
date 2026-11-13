@@ -94,6 +94,15 @@ And three that are older than these:
 
 ## Running the tests
 
+`sh tests/all.sh` runs every check and ends with a count. GitHub runs it on every
+push (`.github/workflows/tests.yml`), and `mac/build.py` makes no app from a commit
+GitHub has not passed. [PROMISES.md](PROMISES.md) lists what Rushes always or never
+does, each with the check that holds it to it; `tests/test_agree.py` fails when a
+promise names a check that is not there, or when a rule said in two languages
+(what is not footage, which files are video) is no longer the same in both.
+
+One by one:
+
 From the repository root. They use temporary folders and never touch a real
 archive.
 

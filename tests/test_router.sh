@@ -13,7 +13,7 @@ echo log > "$R/web/job.log"
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }
 serve() {     # $1 address:port, $2 RUSHES_OTHERS
-    (cd "$R" && RUSHES_OTHERS=$2 PHP_CLI_SERVER_WORKERS=2 "$PHP" -d session.save_path="$R/sessions" -d display_errors=0 \
+    (cd "$R" && export RUSHES_OTHERS=$2 PHP_CLI_SERVER_WORKERS=2 && exec "$PHP" -d session.save_path="$R/sessions" -d display_errors=0 \
         -S "$1" -t "$R/web" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/${1##*:}.pid")
 }
 code() { curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "$@"; }

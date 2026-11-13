@@ -85,11 +85,11 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     // what could not be made is read as it is now, every time (a file Removed leaves the list at once); the
     // counts may be up to 10 minutes old
     if (isset($cache[$rel]['media']) && (!$look || (!$fresh && time() - $cache[$rel]['at'] < 600)))   // (one counted before 0.13.22 is counted again)
-        return ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel];
+        { $all = proxy_failures($rel); return ['failures' => array_slice($all, 0, 100), 'fails' => count($all)] + $cache[$rel]; }
     // ponytail: the archive's previews answer through the share, which drops now and then; counted while it is away,
     // every preview would read as missing and "0 previews" would stay up, so the last count stands until it is back
     if (isset($cache[$rel]['media']) && !is_dir(rtrim(archive_dir(), '/') . '/PROXIES'))
-        return ['failures' => array_slice(proxy_failures($rel), 0, 100)] + $cache[$rel];
+        { $all = proxy_failures($rel); return ['failures' => array_slice($all, 0, 100), 'fails' => count($all)] + $cache[$rel]; }
     require_once __DIR__ . '/folders.php';
     $dir = prep_abs($rel);
     // a range, not LIKE, so the path index answers it
@@ -112,14 +112,16 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
           'from' => $read && (int)$read['at'] > 0 ? 'disk' : 'search'];
     foreach ($rows as $x) {
         if (preg_match('/\/\._[^\/]*$/', $x[0])) continue;                                 // macOS leftovers
+        if (not_footage($x[0])) continue;                                                  // caches and code: not counted (config.php)
         if (preg_match('/\.(wav|mp3|m4a|aiff?|aac|flac)$/i', $x[0])) { $p['media']++; continue; }
         if (!preg_match('/\.(mxf|mov|mp4|avi|mts|m4v|braw|r3d)$/i', $x[0])) continue;   // the same list as proxy.sh
         $p['videos']++; $p['media']++; $p['bytes'] += (int)$x[1];
         if ($x[2] === '1') { $p['have']++; $p['asis']++; }                                    // light enough to play as it is
         elseif ($look && is_file((string)preview_of($x[0]))) { $p['have']++; $p['previews']++; }
+        elseif ((int)$x[1] < EMPTY_VIDEO) { $p['videos']--; $p['media']--; $p['bytes'] -= (int)$x[1]; }                  // empty: the runner passes it by too
         else $p['to_read'] += (int)$x[1];
     }
-    $p['failures'] = array_slice(proxy_failures($rel), 0, 100);
+    $all = proxy_failures($rel); $p['failures'] = array_slice($all, 0, 100); $p['fails'] = count($all);
     if (!$look) return $p;
     // ponytail: the share can answer for the folder while its files do not (just after the Mac wakes, or a drop it has
     // not noticed): every preview reads as missing at once. Previews never all vanish between two counts, so a folder
@@ -128,7 +130,7 @@ function prepare_plan(string $rel, bool $fresh = false, bool $look = true): arra
     $old = $cache[$rel] ?? null;
     if ($old && (int)($old['previews'] ?? 0) > 0 && $p['previews'] === 0 && $p['videos'] > 0
         && time() - (int)($old['zero_since'] ?? time()) < 3600) {
-        $p = ['failures' => $p['failures'], 'at' => time(), 'zero_since' => (int)($old['zero_since'] ?? time())] + $old;
+        $p = ['failures' => $p['failures'], 'fails' => $p['fails'], 'at' => time(), 'zero_since' => (int)($old['zero_since'] ?? time())] + $old;
     }
     $cache[$rel] = $p;
     @file_put_contents("$f.new", json_encode($cache)) && @rename("$f.new", $f);
@@ -152,11 +154,11 @@ function proxy_failures(string $rel): array {
     $dir = prep_abs($rel); $out = [];
     foreach (@file(web_dir() . '/proxy-failed.tsv') ?: [] as $l) {
         [$src, $at, $why] = array_pad(explode("\t", rtrim($l, "\n"), 3), 3, '');
-        if (!str_starts_with($src, "$dir/")) continue;
+        if (!str_starts_with($src, "$dir/") || not_footage($src)) continue;
         $out[$src] = ['file' => substr($src, strlen("$dir/")), 'at' => (int)$at, 'why' => $why, 'src' => $src];
     }
     // a file made since, or not there any more (moved to Recently Removed, or elsewhere) leaves the list
-    return array_values(array_filter($out, fn($f) => is_file($f['src']) && !is_file((string)preview_of($f['src']))));
+    return array_values(array_filter($out, fn($f) => is_file($f['src']) && (int)@filesize($f['src']) >= EMPTY_VIDEO && !is_file((string)preview_of($f['src']))));
 }
 
 // rel folder => when it was (last) asked for

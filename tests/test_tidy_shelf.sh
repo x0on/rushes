@@ -26,7 +26,7 @@ f "PHOTO GALLERY/Events/e.jpg"
 f "VIDEOS/VIDEO from QNAP/001 VIDEO/PARKS/Kite Fest/old clock.mov" 200001010000   # a clock never set: not believed
 (cd "$A" && find "$A" -type f | while IFS= read -r p; do printf '%s\t%s\n' "$(wc -c < "$p" | tr -d ' ')" "$p"; done) > "$W/manifest.tsv"
 cut -f2 "$W/manifest.tsv" > "$W/index.txt"
-(cd "$R" && "$PHP" -S 127.0.0.1:18661 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
+(cd "$R" && exec "$PHP" -S 127.0.0.1:18661 -t "$W" "$HERE/app/router.php" > /dev/null 2>&1 & echo $! > "$R/pid"); sleep 1.5
 U=http://127.0.0.1:18661
 ok() { echo "PASS $1"; }
 no() { echo "FAIL $1"; exit 1; }
