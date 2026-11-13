@@ -45,7 +45,9 @@ VERSION = 5          # 5: piles (a look every 5 s, fingerprints, one description
 VIDEO = {".mxf", ".mov", ".mp4", ".avi", ".mts", ".m4v", ".mkv", ".m2ts", ".wmv"}
 IMAGE = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp", ".dng"}
 AUDIO = {".wav", ".aif", ".aiff", ".mp3", ".m4a", ".aac", ".flac"}
-SKIP_PARTS = ("/_rushes/", "/_duplicates/", "/@Recycle/", "/.@__thumb/", "/_media-cache/")
+SKIP_PARTS = ("/_rushes/", "/_duplicates/", "/@Recycle/", "/.@__thumb/", "/_media-cache/", "/_Recently Removed/")
+# Not footage, so never described: editing caches, a code project's packages, TypeScript's .d.mts (runner.py's rule)
+NOT_FOOTAGE = re.compile(r"/(adobe premiere pro (audio|video) previews|cache|peak files|proxies|node_modules)/|\.prv/|\.d\.mts$")
 
 DEFAULT_MODEL = "mlx-community/Qwen3-VL-8B-Instruct-4bit"
 DEFAULT_WHISPER = "mlx-community/whisper-large-v3-turbo"
@@ -1283,7 +1285,7 @@ def media_under(target, tell=None):
     out = []
     for p in t.rglob("*"):
         if p.suffix.lower() in VIDEO | IMAGE | AUDIO and not p.name.startswith(("._", ".")) \
-                and not any(s in str(p) + "/" for s in SKIP_PARTS):
+                and not any(s in str(p) + "/" for s in SKIP_PARTS) and not NOT_FOOTAGE.search(str(p).lower()):
             out.append(p)
             if tell and len(out) % 500 == 0:
                 tell(len(out))
@@ -1408,6 +1410,8 @@ def selftest():
         q.write_bytes(b"y" * 100)
         assert fingerprint(p) != fingerprint(q)
         (Path(td) / "_rushes").mkdir(); (Path(td) / "_rushes" / "c.mov").write_bytes(b"z")
+        for junk in ("Adobe Premiere Pro Video Previews/P.PRV/r.mov", "app/node_modules/pkg/index.d.mts", "Cache/c.mov", "_Recently Removed/d.mov"):
+            (Path(td) / junk).parent.mkdir(parents=True); (Path(td) / junk).write_bytes(b"z")
         assert [x.name for x in media_under(td)] == ["a.mov", "b.mov"]
     assert prompt_id(th) == prompt_id(list(th)) and prompt_id(th) != prompt_id(th[:3])
     assert all(t >= 2.0 for t in sample_times(0.0, 10.0))          # never the start of a recording

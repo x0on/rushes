@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.57 — November 2026
+
+- **Previews and describing pass by what is not footage.** Premiere's preview renders, cache folders, and the packages of a code project (whose `.d.mts` files only share a camera's extension) were given previews and descriptions, or tried and failed, at every run. They are left alone now, and not counted among a folder's videos. The same rule as the *cache* label.
+- **A broken file is tried once.** An export that never finished or a copy that was cut off cannot be read by anything; its preview was tried again at every run. It is tried once, still listed under "could not", and tried again only when the file changes. What failed for another reason (the share away, no room) is still tried every run.
+- **Empty files are not videos.** A "video" of a few bytes (an empty recording, a saved error page) is passed by.
+- **A preview is never bigger than its original.** A very wide graphic (1287 x 51) made 720 high came out 18,000 wide, which no encoder takes. Small clips keep their size.
+
 ## 0.13.56 — November 2026
 
 - **The words offered under "Narrow it:" are single words.** A theme like "parks & recreation" was offered whole, and a click added the "&" to the search as if it were a word: almost nothing matched. It offers *parks* and *recreation* now, each on its own.

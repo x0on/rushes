@@ -817,6 +817,13 @@ says where any original's proxy is.
   - Files changed in the last two hours are left for later (they may still be
     arriving). For a folder on the prepare list, they are made by themselves on
     a run two hours later; otherwise, the next time proxies are made.
+  - What is not footage gets no proxy and no description: editing caches (the
+    rule of the *cache* label), the packages of a code project, and files of a
+    few bytes.
+  - A file that is itself broken (an export never finished, a copy cut off) is
+    tried once, stays listed under "could not", and is tried again only when it
+    changes.
+  - A proxy is never bigger than its original.
   - Before starting, Rushes checks there is room for 5% of the originals plus
     2 GB.
   - A build stops at once on "Permission denied" or "No space left".

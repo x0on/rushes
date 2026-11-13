@@ -632,6 +632,37 @@ class MacProxies(MacJobs):
         self.assertIn("nothing was made for", open(os.path.join(self.web, "proxy-failed.tsv")).read())
         self.assertIn("could not make Stuck/A.mov: nothing was made for", open(os.path.join(self.web, "proxy.log")).read(), "said by name, where the page shows it")
 
+    def test_what_is_not_footage_is_passed_by_and_a_broken_file_is_tried_once(self):
+        """Caches, a code project's .d.mts files and empty files get no preview and are not counted; a file that is
+        itself broken is tried once and then left until it changes; a very wide graphic is made at its own size."""
+        import subprocess, time
+        d = os.path.join(self.a, "Waste"); mk = lambda *x: (os.makedirs(os.path.dirname(os.path.join(d, *x)), exist_ok=True), os.path.join(d, *x))[1]
+        clip = lambda path, size="640x360", codec="mpeg4": subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", f"testsrc=s={size}:d=1", "-c:v", codec, path], check=True)
+        clip(mk("A.mov")); clip(mk("thin.mov"), "1287x51", "qtrle")
+        clip(mk("Adobe Premiere Pro Video Previews", "P.PRV", "Rendered.mov")); clip(mk("Cache", "c.mov"))
+        open(mk("app", "node_modules", "pkg", "index.d.mts"), "w").write("export declare const x: number;\n" * 400)
+        open(mk("empty.mp4"), "wb").write(b"\0" * 24)
+        open(mk("broken.mp4"), "wb").write(b"\0\0\0\x18ftypmp42" + b"\x07" * 9000)
+        old = time.time() - 3 * 3600
+        for top, _, fs in os.walk(d):
+            for f in fs: os.utime(os.path.join(top, f), (old, old))
+        status = lambda: dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(self.web, "proxy-status.txt")))
+        with unittest.mock.patch.object(self.r, "ffmpeg", return_value=shutil.which("ffmpeg")), \
+             unittest.mock.patch.object(self.r, "media_engine", return_value=(False, "test")):
+            self.r.job("proxy-build", {"QUERY": "Waste"}); self.r.busy["proxies"].join(120)
+            st = status()
+            self.assertEqual((st["state"], st["total"], st["ok"], st["failed"]), ("done", "3", "2", "1"), "A and the graphic made, the broken one said")
+            made = sorted(os.path.relpath(os.path.join(t, f), self.a) for t, _, fs in os.walk(os.path.join(self.a, "PROXIES")) for f in fs)
+            self.assertEqual(made, ["PROXIES/Waste/A.mp4", "PROXIES/Waste/thin.mp4"], "nothing made of a cache or of code")
+            fails = open(os.path.join(self.web, "proxy-failed.tsv")).read()
+            self.assertEqual(fails.count("\n"), 1); self.assertIn("broken.mp4", fails)
+            self.r.job("proxy-build", {"QUERY": "Waste"}); self.r.busy["proxies"].join(120)
+            st = status()
+            self.assertEqual((st["state"], st["total"], st["failed"]), ("done", "0", "1"), "still counted as one that could not, not tried again")
+            self.assertEqual(open(os.path.join(self.web, "proxy-failed.tsv")).read(), fails)
+            self.assertIn("1 broken files not tried again", open(os.path.join(self.web, "proxy.log")).read())
+
     def test_one_file_that_breaks_never_stops_the_build(self):
         """A file whose report cannot be read (metadata in another encoding) is said and skipped; the next is made."""
         import subprocess, time

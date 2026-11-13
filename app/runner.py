@@ -137,6 +137,13 @@ def ssh_heads(host, paths):
 PROBE_WAIT = 300       # ffmpeg's report of a file that does not come in 5 minutes: none (probe)
 CHIP_STALL = 180       # on the media engine, nothing for 3 minutes: on to software (encode)
 STALL = 900            # a proxy that grows by nothing for 15 minutes is given up (encode)
+# What is not footage, so gets no preview: editing caches (the same rule as the cache label in db/labels.php),
+# a code project's packages, and TypeScript's .d.mts files, which only share AVCHD's extension.
+NOT_FOOTAGE = re.compile(r"/(adobe premiere pro (audio|video) previews|cache|peak files|proxies|node_modules)/|\.prv/|\.d\.mts$")
+EMPTY = 4096           # a "video" smaller than this holds no picture (a 0-byte leftover, a saved error page): passed by
+# ffmpeg's words for a file that is itself broken (an export never finished, a copy cut off): tried once, then
+# left until the file changes. Anything else (the share away, no room) is tried again every run.
+BROKEN = ("Invalid data found", "moov atom not found", "received no packets")
 RECENT = 7200          # a file written in the last two hours may still be arriving: its proxy waits for a later run
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
@@ -745,7 +752,8 @@ class Runner:
         audio = ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
         tries = []
         # the short side becomes {h}: a vertical clip keeps its width (720x1280, not 405x720)
-        fit = f"scale='if(gt(iw,ih),-2,{h})':'if(gt(iw,ih),{h},-2)'"
+        # never bigger than the original (a 1287x51 graphic made 720 high is 18,000 wide: no encoder takes it), always even
+        fit = f"scale='if(gt(iw,ih),-2,2*trunc(min({h},iw)/2))':'if(gt(iw,ih),2*trunc(min({h},ih)/2),-2)'"
         if engine and b != "sw":
             tries.append(("video chip", ["-hwaccel", "videotoolbox", "-i", src, "-vf", fit, "-c:v", "h264_videotoolbox",
                                          "-b:v", f"{b}M", "-maxrate", f"{int(b) * 3 // 2}M"]))
@@ -868,25 +876,38 @@ class Runner:
         top = drive["path"].rstrip("/") if drive else a
         proot = self.preview_root(a, drive) if drive else os.path.join(a, "PROXIES")
         plan, have, videos = [], 0, 0
+        size = lambda x: os.path.getsize(x) if os.path.exists(x) else 0
         for d, dirs, files in ([(os.path.dirname(root), [], [os.path.basename(root)])] if one else os.walk(root)):
             dirs[:] = sorted(x for x in dirs if x not in SKIP and not x.startswith(".")
+                             and not NOT_FOOTAGE.search(f"/{x.lower()}/")
                              and not (d == top and x in ("PROXIES", HOLD, OLD_HOLD, "_rushes")))
             for n in sorted(files):
-                if n.startswith(".") or not n.lower().endswith(VIDEO_EXT):
+                if n.startswith(".") or not n.lower().endswith(VIDEO_EXT) or NOT_FOOTAGE.search(n.lower()):
                     continue
-                src = os.path.join(d, n); videos += 1
+                src = os.path.join(d, n)
                 out = os.path.join(proot, os.path.splitext(os.path.relpath(src, top))[0] + ".mp4")
                 if os.path.exists(out): have += 1
+                elif not one and size(src) < EMPTY: continue     # asked for by name (Search), it is tried and says why
                 else: plan.append((src, out))
+                videos += 1
         try: asis = {l.split("\t")[0] for l in open(self.p("proxy-made.tsv")) if l.rstrip("\n").endswith("\t1")}
         except OSError: asis = set()
         have += sum(1 for s, _ in plan if s in asis); plan = [(s, o) for s, o in plan if s not in asis]
-        size = lambda x: os.path.getsize(x) if os.path.exists(x) else 0
+        # ponytail: the list is trimmed to its newest 1 MB (TRIM), so a very old failure is forgotten and tried once more
+        broken = {}
+        try:
+            for l in open(self.p("proxy-failed.tsv"), errors="surrogateescape"):
+                x = l.rstrip("\n").split("\t", 2)
+                if len(x) == 3 and x[1].isdigit() and any(b in x[2] for b in BROKEN): broken[x[0]] = int(x[1])
+        except OSError: pass
+        mtime = lambda x: os.path.getmtime(x) if os.path.exists(x) else 0
+        stuck = 0 if one else sum(1 for s, _ in plan if s in broken and mtime(s) <= broken[s])
+        if stuck: plan = [(s, o) for s, o in plan if not (s in broken and mtime(s) <= broken[s])]
         h, b = self.proxy_setting()
         engine, why = self.media_engine(ff)
         hw = "1" if engine and b != "sw" else "0"
         if not build:
-            self.proxy_state(state="planned", only=only, have=have, missing=len(plan), source_gb=round(sum(size(s) for s, _ in plan) / 2**30),
+            self.proxy_state(state="planned", only=only, have=have, missing=len(plan), broken=stuck, source_gb=round(sum(size(s) for s, _ in plan) / 2**30),
                              hw=hw, height=h, videos=videos, hw_why="" if engine else f"this ffmpeg cannot use the Mac's media engine ({why})",
                              cpu=platform.processor() or platform.machine(), ffmpeg=ff)
             return
@@ -896,10 +917,11 @@ class Runner:
         if free < need:                                  # said once, plainly, instead of failing file after file
             self.proxy_state(state="no-room", only=only, need=int(need), free=free); runs("no-room", 0, 0, 0, len(plan))
             self.plog(f"not enough room for the proxies: about {need / 1e9:,.0f} GB needed, {free / 1e9:,.0f} GB free"); return
-        total, ok, failed, later, n, used = len(plan), 0, 0, 0, 0, 0
+        total, ok, failed, later, n, used = len(plan), 0, stuck, 0, 0, 0
         count = {"video chip": 0, "software": 0}
         run_t0, run_b, run_n, pend = 0, 0, 0, 0     # this run's own pace (prepare.php: the time left, measured on this folder)
-        self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {only or 'the whole archive'}: {total} proxies to make, {have} already made · "
+        self.plog(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {only or 'the whole archive'}: {total} proxies to make, {have} already made"
+                  + (f", {stuck} broken files not tried again (they have not changed)" if stuck else "") + " · "
                   + ("on the media engine" if hw == "1" else "in software") + f" · {h}p · {ff}")
         os.makedirs(proot, exist_ok=True)
         for src, out in plan:
