@@ -1436,9 +1436,39 @@ function drvLevels(x) {
     lvRow('Playable', L.v ? pct(L.p, L.v) + '%' : 'no videos', pct(L.p, L.v)) +
     lvRow('Described', L.v ? pct(L.d, L.v) + '%' : 'no videos', pct(L.d, L.v)) + '</div>';
 }
+// ── the drive's switch: keep it playable and described by itself (analyze.php, action auto) ──
+// On, every folder of the drive that has videos goes on the list by itself, folders made later too. Off until
+// someone turns it on: a whole drive is days of the Mac's work. Asked twice, on the button, like everything that
+// starts long work; what happened is said beside it.
+let autoSaid = {};
+function autoSwitch(x, d) {
+  if (!x.levels || !x.levels.v || !(x.kind === 'archive' || (x.roles.indexOf('In Search') >= 0 && d && d.can_preview_drives))) return '';
+  const said = autoSaid[x.path] ? '<div class="note" style="margin-top:4px">' + esc(autoSaid[x.path]) + '</div>' : '';
+  return '<div class="more auto">' + (x.auto
+    ? '<span class="ok" style="color:var(--ok)">✓ Kept playable and described</span> · <button class="lnk" type="button" data-auto="' + esc(x.path) + '" data-on="0">Turn off</button>'
+    : '<button class="btn quiet" type="button" data-auto="' + esc(x.path) + '" data-on="1">Keep playable and described</button>') + said + '</div>';
+}
+async function autoSet(x, on, b) {
+  if (!x) return;
+  const left = Math.max(0, x.levels.v - Math.min(x.levels.p, x.levels.d));
+  if (!sure(b, on ? 'Every folder of ' + x.name + ' with videos goes on the list by itself: previews, then descriptions, one folder at a time. About ' + left.toLocaleString() + ' videos still to do; it can take days.'
+                  : 'No more folders are added by themselves. What is on the list stays and carries on.', 'auto:' + x.path + ':' + on)) return;
+  b.disabled = true; b.textContent = on ? 'Turning on: looking at the folders…' : 'Turning off…';
+  try {
+    const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'auto', root: x.kind === 'archive' ? '' : x.root, on: on ? '1' : '0' }) })).json();
+    if (r.error) throw new Error(r.error);
+    x.auto = r.on;
+    ((window.lastState || {}).drives_in || []).forEach(function (y) { if (y.path === x.path) y.auto = r.on; });   // the card too, before the next look
+    autoSaid[x.path] = on ? 'On ✓ ' + (r.added.length ? r.added.length + (r.added.length === 1 ? ' folder' : ' folders') + ' added to the list: ' + r.added.slice(0, 4).map(function (f) { return f.split('/').pop(); }).join(', ') + (r.added.length > 4 ? '…' : '')
+                                                 : 'every folder with videos is on the list already') + '.'
+                            : 'Off ✓ Nothing more is added by itself.';
+  } catch (e) { autoSaid[x.path] = 'Did not happen: ' + e.message; }
+  if (drv && drv.path === x.path) { drv.auto = x.auto; loadDrive(); }
+  if (window.lastState) drawDrives(window.lastState);
+}
 function openDrive(x) {
   if (!x) return;
-  drv = Object.assign({}, x, { in: '' }); dctx = drv; show('drive'); window.scrollTo(0, 0);
+  drv = Object.assign({}, x, { in: '' }); dctx = drv; drvOffered = null; drvPrep = null; show('drive'); window.scrollTo(0, 0);
 }
 // The drive's health: what is running on it (with Stop), broken files, files waiting to be filed, editing cache,
 // Recently Removed, duplicates; each a line with its count and the place it is looked after.
@@ -1458,15 +1488,43 @@ function drawHealth() {
   if (arch) html += row(w && w.n ? 'warn' : 'ok', n(w && w.n), 'files waiting to be filed' + (w && w.n ? ' · ' + tb(w.b) : ''), '/structure.php#filein', 'File in');
   if (arch) html += row(h.junk && h.junk.n ? 'warn' : 'ok', n(h.junk && h.junk.n), 'editing cache files' + (h.junk && h.junk.n ? ' · ' + tb(h.junk.b) + ', rebuilt by the editing software by itself' : ''), '/db/admin.php#cache=' + r, 'Cache');
   if (arch) html += row(h.hold ? 'warn' : 'ok', h.hold ? tb(h.hold) : '0', 'in Recently Removed · space comes back with Delete All', '/db/admin.php#cache=' + r, 'Recently Removed');
+  // previews: what could not be made (a broken file), and what is not made yet in a folder whose run is over
+  // (prepRowShort, the same count as Describe's rows): each a count, with the one thing to press
+  if (drvPrep) {
+    const fails = drvPrep.reduce(function (t, x) { return t + ((x.plan && x.plan.fails) || (x.failures || []).length); }, 0);
+    const shortIn = drvPrep.filter(function (x) { return x.proxies.step === 'done' && prepRowShort(x); });
+    const short = shortIn.reduce(function (t, x) { return t + prepRowShort(x); }, 0);
+    if (fails) html += '<div class="warn"><b>' + n(fails) + '</b><span>videos whose preview could not be made: broken or unfinished files</span><button class="btn quiet" type="button" id="dvWhy">See why</button></div>';
+    if (short) html += '<div class="warn"><b>' + n(short) + '</b><span>videos with no preview yet, in ' + shortIn.length + (shortIn.length === 1 ? ' folder' : ' folders') + ' whose run is over</span><button class="btn quiet" type="button" id="dvRetry">Try again</button></div>';
+    if (!fails && !short && drvPrep.length) html += row('ok', '0', 'previews that could not be made, or are waiting on a run that is over', '', '');
+  }
   html += row('', '—', 'duplicates: the same file twice on this drive', '/db/admin.php#dup=' + r, 'Find duplicates');
   html += row('', '', 'Folders: move, rename, remove, as in Finder', '/structure.php?drive=' + r + '#tidy', 'Tidy up');
   $('dvHealth').innerHTML = html;
+  if ($('dvWhy')) $('dvWhy').onclick = function () { show('describe'); };
+  if ($('dvRetry')) $('dvRetry').onclick = async function () {
+    const b = this; b.disabled = true; let done = 0;
+    for (const x of drvPrep.filter(function (y) { return y.proxies.step === 'done' && prepRowShort(y); })) {
+      b.textContent = 'Asking… ' + x.folder.split('/').pop();
+      try { const r = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams({ action: 'retry', path: x.folder }) })).json(); if (!r.error) done++; } catch (e) {}
+    }
+    b.textContent = 'Trying again ✓ ' + done + (done === 1 ? ' folder' : ' folders') + ': only what is missing';
+  };
   if ($('dvStop')) $('dvStop').onclick = function () { const b = this; b.disabled = true; b.textContent = 'Asking…';
     fetch('/db/stop.php', { method: 'POST', body: new URLSearchParams({}) }).then(function (x) { return x.json(); })
       .then(function (x) { b.textContent = x.error ? 'Did not stop: ' + x.error : 'Stopping after the file it is on…'; }); };
 }
+// videos of a list row that neither play nor are listed as could-not, nor are still arriving: a "done" that is not
+function prepRowShort(r) { const p = r.plan || {}; return p.videos ? Math.max(0, p.videos - p.have - (p.fails || (r.failures || []).length) - (+r.proxies.later || 0)) : 0; }
+let drvOffered = null, drvPrep = null;     // the folders' place on the list (analyze.php?folders), and the list's rows for this drive
 async function loadDrive(fresh) {
   if (!drv) return;
+  if (!drvOffered) try { drvOffered = (await (await fetch('analyze.php?folders=1')).json()).folders || []; } catch (e) { drvOffered = []; }
+  // the list's own counts for this drive (what could not be made, what is not made yet): fetched beside, shown in Health when they arrive
+  fetch('analyze.php?t=' + Date.now()).then(function (x) { return x.json(); }).then(function (a) {
+    const mine = drv.kind === 'archive' ? function (f) { return f[0] !== '/'; } : function (f) { return f.indexOf(drv.root + '/') === 0; };
+    drvPrep = (a.table || []).filter(function (r) { return mine(r.folder); }); drawHealth();
+  }).catch(function () {});
   const arch = drv.kind === 'archive', n = function (v) { return (+v || 0).toLocaleString(); };
   // a drive kept where it is: its previews are made too, kept on the archive (Make previews and descriptions)
   const kept = !arch && drv.roles && drv.roles.indexOf('In Search') >= 0;
@@ -1488,6 +1546,17 @@ async function loadDrive(fresh) {
   const lv = function (lab, big, p, say, btn) {
     return '<div><div class="lab">' + lab + '</div><div class="big">' + big + '</div><div class="lv"><i><b style="width:' + p + '%"></b></i></div>' +
       '<p>' + say + '</p>' + (btn || '') + '</div>';
+  };
+  // what can be done to a folder here: put it on the list, do it first, leave it out of the drive's switch
+  const onList = {}; (drvOffered || []).forEach(function (x) { onList[x.folder] = x.on; });
+  const folderActs = function (rel, todo) {
+    if (!todo) return '';
+    const out = (drv.auto_out || []).indexOf(rel) >= 0, on = onList[rel] || '';
+    const leave = drv.auto && !out && on !== 'part' ? ' · <button class="lnk" data-dv="out" data-on="1" data-f="' + esc(rel) + '" title="The drive\'s switch passes this folder by">Leave out</button>' : '';
+    if (out) return '<span class="dim">left out</span> · <button class="lnk" data-dv="out" data-on="0" data-f="' + esc(rel) + '">Put back</button>';
+    if (on === 'yes') return '<span class="dim">on the list</span> · <button class="lnk" data-dv="first" data-f="' + esc(rel) + '">Do this first</button>' + leave;
+    if (on === 'part') return '<span class="dim">partly on the list</span>';
+    return '<button class="lnk" data-dv="prep" data-f="' + esc(rel) + '">Make previews and descriptions</button>' + leave;
   };
   const where = top ? drv.name : drv.in;
   const keptHere = !kept ? '' : prepOk ? ' Its previews are kept on the archive, so they play even when this drive is unplugged; nothing is written on the drive.'
@@ -1521,17 +1590,18 @@ async function loadDrive(fresh) {
       return '<tr' + (f.is === 'waiting' ? ' class="wait"' : '') + '><td><a href="#" data-in="' + esc(path) + '">' + esc(f.name) + '</a>' +
           (f.is === 'waiting' ? ' <small>waiting to be filed</small>' : '') + '</td>' +
         '<td class="n">' + n(f.n) + '</td><td class="n">' + tb(f.b) + '</td><td class="n">' + bar(f.p) + '</td><td class="n">' + bar(f.d) + '</td>' +
-        '<td class="n">' + (prepOk && f.v && (f.p < f.v || f.d < f.v) ? '<button class="lnk" data-dv="prep" data-f="' + esc(prepAt(path)) + '">Make previews and descriptions</button>' : '') + '</td></tr>';
+        '<td class="n">' + folderActs(prepAt(path), prepOk && f.v && (f.p < f.v || f.d < f.v)) + '</td></tr>';
     }).join('') + '</tbody></table>' +
     (loose ? '<p class="note" style="margin:8px 0 0">And ' + n(loose.n) + ' files loose in ' + esc(where) + '.</p>' : ''));
 
   drawHealth();
   // what can be done on this drive: each opens the page that does it, set to this drive
   const isSrc = drv.roles && (drv.roles.indexOf('In Search') >= 0 || drv.roles.indexOf('To copy from') >= 0);
-  $('dvActs').innerHTML =
+  $('dvActs').innerHTML = autoSwitch(drv, window.lastState).replace('class="more auto"', 'class="auto" style="flex-basis:100%"') +
     (prepOk ? '<button class="btn quiet" data-dv="describe">Previews and descriptions, in order</button>' : '') +
     (isSrc && !arch ? '<button class="btn quiet" data-dv="unsource">Remove from Rushes</button>' : '');
 
+  $('dvActs').querySelectorAll('[data-auto]').forEach(function (b) { b.onclick = function () { autoSet(drv, b.dataset.on === '1', b); }; });
   document.querySelectorAll('#pane-drive [data-in]').forEach(function (a) {
     a.onclick = function (e) { e.preventDefault(); drv.in = a.dataset.in; loadDrive(); };
   });
@@ -1539,6 +1609,21 @@ async function loadDrive(fresh) {
     b.onclick = async function (e) {
       const k = b.dataset.dv; if (e) e.preventDefault();
       if (k === 'count') { loadDrive(true); return; }
+      if (k === 'first' || k === 'out') {
+        // said where it was pressed, and the row redrawn from what Rushes now has
+        if (k === 'out' && b.dataset.on === '1' && !sure(b, 'The drive\'s switch passes ' + b.dataset.f.split('/').pop() + ' by, and it comes off the list. Nothing made of it is deleted.', 'out:' + b.dataset.f)) return;
+        b.disabled = true;
+        try {
+          const body = k === 'first' ? { action: 'first', path: b.dataset.f } : { action: 'leaveout', path: b.dataset.f, root: arch ? '' : drv.root, on: b.dataset.on };
+          const x = await (await fetch('analyze.php', { method: 'POST', body: new URLSearchParams(body) })).json();
+          if (x.error) throw new Error(x.error);
+          if (k === 'out') drv.auto_out = x.out;
+          $('dvSaid').textContent = k === 'first' ? 'Starting ✓ ' + b.dataset.f + ' is first: its previews start within a minute, then its descriptions.'
+            : b.dataset.on === '1' ? 'Left out ✓ ' + b.dataset.f + ': the switch passes it by. Put back undoes it.' : 'Put back ✓ ' + b.dataset.f + ' is taken with the rest again.';
+          drvOffered = null; loadDrive();
+        } catch (e) { b.disabled = false; $('dvSaid').textContent = 'Did not happen: ' + e.message; }
+        return;
+      }
       if (k === 'dup') { show('duplicates'); $('dupDrive').value = arch ? '' : drv.source; dupList = null; loadDup(); loadRemoved(); return; }
       if (k === 'cache') { show('cache'); return; }
       if (k === 'describe') { show('describe'); return; }
@@ -1612,6 +1697,7 @@ function drawDrives(d) {
         drvLevels(x) +
         (x.levels && x.levels.wait && x.levels.wait.n ? '<div class="more"><span class="bad" style="color:var(--warn)">' + x.levels.wait.n.toLocaleString() + ' files waiting to be filed' +
           (x.kind === 'archive' && d.copy && !d.copy.stale && d.copy.phase === 'tidying' ? ' · being filed now' : '') + '</span></div>' : '') +
+        autoSwitch(x, d) +
         '<div class="acts">' + (own ? '<button class="lnk" data-unsource="' + esc(x.path) + '" data-name="' + esc(x.name) + '">Remove from Rushes</button>' : '') +
           (x.roles.indexOf('To copy from') >= 0 ? ' · <button class="lnk" data-how="in_place" data-src="' + esc(x.path) + '" title="Kept where it is: nothing is copied or moved">Add to Rushes, where it is</button>' : '') +
           (canMk && x.kind !== 'archive' && x.kind !== 'card' && mkOpen !== x.path ? (own ? ' · ' : '') + '<button class="lnk" data-mk="' + esc(x.path) + '">Make this the archive…</button>' : '') +
@@ -1686,6 +1772,9 @@ function drawDrives(d) {
         b.textContent = 'Removed ✓';
       } catch (e) { b.disabled = false; b.textContent = 'Remove from Rushes'; oops('Did not happen: ' + e.message); }
     };
+  });
+  $('drivesNow').querySelectorAll('[data-auto]').forEach(function (b) {
+    b.onclick = function () { autoSet((d.drives_in || []).find(function (y) { return y.path === b.dataset.auto; }), b.dataset.on === '1', b); };
   });
   $('drivesNow').querySelectorAll('[data-open]').forEach(function (c) {
     const x = (d.drives_in || []).find(function (y) { return y.path === c.dataset.open; });
@@ -2334,7 +2423,7 @@ function drawPrepare(rows, a) {
   a = a || {};
   if (!rows || !rows.length) { $('prepTable').innerHTML = '<div class="note">No folder is on the list yet.</div>'; return; }
   // videos that neither play nor are listed as could-not, nor are still arriving: a "done" that is not
-  const short = function (r) { const p = r.plan || {}; return p.videos ? Math.max(0, p.videos - p.have - (p.fails || (r.failures || []).length) - (+r.proxies.later || 0)) : 0; };
+  const short = prepRowShort;
   const px = function (r) {
     const p = r.proxies, f = (r.plan && r.plan.fails) || (r.failures || []).length;
     const fails = (f ? ' · <a href="#" class="bad" data-fails="' + esc(r.folder) + '">' + n(f) + ' could not be made — see why</a>' : '') +

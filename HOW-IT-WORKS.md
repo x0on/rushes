@@ -1745,6 +1745,15 @@ A percentage is rounded down: 100% means every video.
   to its own folders. On the archive, each folder has **Make previews and
   descriptions**, which puts it on Describe's list (previews first, then
   descriptions, one folder at a time, top to bottom);
+- **Keep playable and described**, the drive's switch (on its card too). On,
+  every folder of the drive that has videos goes on Describe's list by itself,
+  a folder made later too; the shelf is taken a department at a time. Off until
+  someone turns it on, and it asks twice: a whole drive can be days of work.
+  A folder on the list has **Do this first**; **Leave out** makes the switch
+  pass a folder by, and **Put back** undoes it. Videos and their sound only.
+  The switches are kept in `prepare-auto.json`, beside the list;
+- in Health, how many previews could not be made (**See why**) and how many are
+  not made yet in folders whose run is over (**Try again**: only those);
 - on the archive, **N files waiting to be filed**: what is in `ARCHIVE` (where
   copies land) and in top folders outside the shelf, with **Tidy up**
   (Reorganize). Rushes' own folders (`_rushes`, `PROXIES`, the bin) are not counted;

@@ -3,6 +3,15 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.59 — November 2026
+
+The first step back to drives: a drive is looked after from its own card, not from a list of folders.
+
+- **Keep playable and described: one switch on each drive.** On Overview, on the drive's card, and on the drive's page. On, every folder of the drive that has videos goes on the list by itself (previews, then descriptions, one folder at a time), a folder made later too. Off until someone turns it on: a whole drive can be days of the Mac's work, so it asks twice and says how many videos are left. Videos and their sound, as describing has been since 0.13.45; still images are not part of it.
+- **On the drive's page, each folder says where it stands and what can be done.** *Do this first* for a folder on the list; *Leave out* for one the switch should pass by (*Put back* undoes it); *Make previews and descriptions* for one that is not on the list, as before.
+- **Health counts previews too.** How many videos could not be made (*See why*), and how many are not made yet in folders whose run is over (*Try again*, which makes only those).
+- **Describe is as it was.** Nothing was taken away: the list, its order and its buttons work as before, and show what the switch added.
+
 ## 0.13.58 — November 2026
 
 - **Choose folder… is back on Describe.** 0.13.54 took the button away with the Mac's own folder window (which read a whole folder over the network before the page heard anything). The button was never the fault. It opens a list inside the page now, from Search's catalogue: click into a folder, press Choose. It opens at once and never reads the share. Typing still works, and the buttons for folders not on the list sit above the box, where the box's own suggestions cannot cover them.

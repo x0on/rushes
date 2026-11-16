@@ -522,6 +522,12 @@ foreach ($hv['vols'] as $dv) {
             'files' => $tot['roots'][$root][0] ?? null, 'bytes' => $tot['roots'][$root][1] ?? null];
     // the card's three levels, and the drive's page (db/drive.php): only for what Search covers
     if (isset($tot['roots'][$root])) { $one['root'] = $root; $one['levels'] = drive_levels($root)['total']; $one['source'] = $seenSrc[$root] ?? ''; }
+    // its switch: kept playable and described by itself (prepare.php, prepare_auto), and the folders left out of that
+    if (isset($one['levels'])) {
+        require_once __DIR__ . '/prepare.php';
+        static $autoAll = null; $autoAll ??= prepare_auto(); $au = $autoAll[$dArch ? '' : $root] ?? [];
+        $one['auto'] = !empty($au['on']); $one['auto_out'] = array_values((array)($au['out'] ?? []));
+    }
     if ($droles && !$dv['card']) $drives_in[] = $one; else $drives_other[] = $one;
 }
 usort($drives_in, fn($a, $b) => [$a['kind'] !== 'archive', $a['name']] <=> [$b['kind'] !== 'archive', $b['name']]);

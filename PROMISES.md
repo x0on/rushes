@@ -18,6 +18,12 @@ A promise is not taken away by taking its check away: changing a line here is a 
 - The buttons for folders not on the list are never covered by the box's suggestions. — `tests/test_folders_offered.sh`: “Not on the list yet: above the box”
 - The page and the runner count what could not be made the same way. — `tests/test_server.php`: “the page counts what could not be made the way the runner does”
 
+## Drives
+
+- A drive is kept playable and described from its own card: one switch, off until someone turns it on. — `tests/test_server.php`: “switch is off until someone turns it on”
+- The switch puts every folder with videos on the list once, never one that is on it already or was left out. — `tests/test_server.php`: “the switch on: folders go on the list whole”
+- Nothing is taken away in the version that brings its replacement: Describe stays while the drive's page learns to do its work. — `tests/test_folders_offered.sh`: “Choose folder… walks the offered folders by clicking”
+
 ## Previews and describing
 
 - What is not footage (editing caches, a code project's files, empty files) gets no preview and no description. — `tests/test_mac_runner.py`: “test_what_is_not_footage_is_passed_by_and_a_broken_file_is_tried_once”

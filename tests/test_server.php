@@ -412,4 +412,23 @@ check(!array_filter($seen, fn($x) => str_contains($x, 'Video Previews')) && $fin
 $sg = $p1['moments']['suggest'] ?? $p1['suggest'] ?? [];
 check($sg && !array_filter($sg, fn($w) => !preg_match('/^[\p{L}\p{N}]+$/u', is_array($w) ? ($w['word'] ?? $w[0]) : $w)),
       'Search: the words offered to narrow it are single words');
+// A drive kept playable and described by itself (PROMISES.md): off until turned on; on, every folder with videos
+// goes on the list once, whole, never one that is on it already (or inside one, or around one), never one left out
+$rel = fn(string $l, string $f) => $f === $l || str_starts_with($f, "$l/") || str_starts_with($l, "$f/");
+@unlink("$root/app/folders-offered.json"); prepare_save(['PARKS/day1' => 1]);
+check(prepare_advance()['auto_added'] === [] && array_keys(prepare_list()) === ['PARKS/day1'], 'the drive\'s switch is off until someone turns it on: nothing is added by itself');
+@mkdir("$arch/Library/Parks", 0777, true); file_put_contents("$arch/Library/Parks/a.mov", str_repeat('z', 5000)); landed("$arch/Library/Parks/a.mov", 5000);
+@unlink("$root/app/folders-offered.json");
+prepare_auto(['' => ['on' => time(), 'out' => ['Find']]]);
+$added = prepare_advance()['auto_added']; $have = array_merge(array_map('strval', array_keys(prepare_list())), ['Find']);
+$offered = array_column(folders_offered(), 'folder');
+check($added && !array_filter($added, fn($f) => $rel('PARKS/day1', $f) || $rel('Find', $f)) && count($added) === count(array_unique($added))
+      && !array_filter($added, fn($f) => count(array_filter($added, fn($g) => $g !== $f && $rel($g, $f)))),
+      'the switch on: folders go on the list whole, never one already on it, inside or around one, nor one left out');
+check(!array_filter($offered, fn($f) => is_dir(prep_abs($f)) && !array_filter($have, fn($l) => $rel($l, $f))), 'the switch on: every folder with videos that is there is on the list, or left out');
+check(prepare_advance()['auto_added'] === [], 'the switch on: a folder is added once');
+check(shelf_name() === 'Library' && in_array('Library/Parks', $added, true) && !in_array('Library', $added, true), 'the switch on: the shelf is never one folder on the list; its departments are');
+prepare_auto(['' => ['on' => 0, 'out' => []]]); @unlink("$root/app/folders-offered.json");
+$n = count(prepare_list());
+check(prepare_advance()['auto_added'] === [] && count(prepare_list()) === $n, 'the switch off again: nothing more is added, and what is on the list stays');
 echo "Server tests complete. Fixture: $root\n";

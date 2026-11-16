@@ -23,47 +23,7 @@ function drive_folder(string $raw): string {
 $root = rtrim(archive_dir(), '/');
 $helperRoot = rtrim(helper_archive(), '/');
 
-// The folders that can be described, from the search catalogue (instant: nothing is walked over the share),
-// each with how many videos it holds and whether it is on the list already. The Folders to describe box offers
-// them as you type (0.13.54: the Mac's "Choose folder" window walked every file of the folder over the network
-// before the page heard anything, so a big folder never arrived).
-//   GET ?folders  ->  {folders: [{folder, videos, on: "yes"|"part"|""}]}
-// The archive's folders three deep (VIDEOS/Department/2024), a drive kept where it is two deep below its top;
-// Rushes' own folders (PROXIES, _rushes, anything starting with _ or .) left out.
-function folders_offered(): array {
-    $root = rtrim(archive_dir(), '/');
-    $cache = web_dir() . '/folders-offered.json';
-    $c = @json_decode((string)@file_get_contents($cache), true);
-    if (is_array($c) && time() - (int)($c['at'] ?? 0) < 600) return $c['folders'];
-    require_once __DIR__ . '/schema.php';
-    $n = [];
-    // read once; a drive's folders only where they can be added (previews of a drive are made by the Rushes app on a Mac)
-    $drives = can_preview_drives() ? array_values(array_filter(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()))) : [];
-    $r = db()->query("SELECT path FROM files WHERE kind = 'video'");
-    while ($x = $r->fetchArray(SQLITE3_NUM)) {
-        $p = (string)$x[0]; $dr = '';
-        if (str_starts_with($p, "$root/")) { $base = ''; $parts = explode('/', substr($p, strlen($root) + 1)); $deep = 3; }
-        else {
-            foreach ($drives as $d) if (str_starts_with($p, "$d/")) { $dr = $d; break; }
-            if ($dr === '') continue;
-            $base = $dr; $parts = explode('/', substr($p, strlen($dr) + 1)); $deep = 2;
-        }
-        array_pop($parts);                                         // the file's own name
-        if (!$parts || $parts[0] === '' || $parts[0] === 'PROXIES' || $parts[0][0] === '_' || $parts[0][0] === '.') continue;
-        $f = $base;
-        foreach (array_slice($parts, 0, $deep) as $part) {
-            // a name the list would refuse (analyze.php, action prepare) is not offered, nor anything inside it
-            if ($part === '' || $part[0] === '.' || $part === '..' || preg_match('/[\x00-\x1f\\\\`$]/', $part)) break;
-            $f = $f === '' ? $part : "$f/$part";
-            $n[$f] = ($n[$f] ?? 0) + 1;
-        }
-    }
-    ksort($n, SORT_NATURAL | SORT_FLAG_CASE);
-    $out = [];
-    foreach ($n as $f => $k) $out[] = ['folder' => (string)$f, 'videos' => $k];
-    @file_put_contents($cache, json_encode(['at' => time(), 'folders' => $out], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-    return $out;
-}
+require_once __DIR__ . '/prepare.php';      // folders_offered(): the folders that can be described
 if (isset($_GET['folders'])) {
     require_once __DIR__ . '/prepare.php';
     $listed = array_map('strval', array_keys(prepare_list()));
@@ -264,6 +224,27 @@ QUERY=
         prepare_advance();
         out(['ok' => $_POST['action'], 'folder' => $rel]);
     }
+    // The drive's switch (Overview, the drive's page): keep it playable and described by itself. root = '' for the
+    // archive, a drive's top for a drive kept where it is. And a folder left out of it, or put back.
+    if (in_array($_POST['action'] ?? '', ['auto', 'leaveout'], true)) {
+        $r = rtrim(str_replace('\\', '/', (string)($_POST['root'] ?? '')), '/');
+        if ($r !== '' && !kept_drive_of("$r/x")) bail(400, 'That drive is not one Rushes keeps where it is.');
+        if ($r !== '' && !can_preview_drives()) bail(400, 'Previews of a drive kept where it is are made by the Rushes app on a Mac, with its own helper.');
+        $on = ($_POST['on'] ?? '1') === '1'; $auto = prepare_auto(); $a = $auto[$r] ?? ['on' => 0, 'out' => []];
+        if ($_POST['action'] === 'auto') $a['on'] = $on ? time() : 0;
+        else {
+            if ($rel === '' || str_contains("/$rel/", '/../')) bail(400, 'Pick a folder.');
+            $a['out'] = array_values(array_diff((array)$a['out'], [$rel]));
+            if ($on) {                                         // left out: off the list too, if nothing of it has started
+                $a['out'][] = $rel; $list = prepare_list();
+                if (isset($list[$rel])) { unset($list[$rel]); if (!prepare_save($list)) bail(500, 'Could not save — is the web folder writable?'); }
+            }
+        }
+        $auto[$r] = $a;
+        if (!prepare_auto($auto)) bail(500, 'Could not save — is the web folder writable?');
+        $got = prepare_advance();
+        out(['ok' => $_POST['action'], 'root' => $r, 'on' => !empty($a['on']), 'out' => $a['out'], 'added' => $got['auto_added'] ?? []]);
+    }
     if (($_POST['action'] ?? '') === 'prepare' || ($_POST['action'] ?? '') === 'forget') {
         $drive = str_starts_with($rel, '/');
         if ($drive && !can_preview_drives())
@@ -277,6 +258,9 @@ QUERY=
         else {
             if (!is_dir(prep_abs($rel))) bail(400, $drive ? "“{$rel}” is not there now: is the drive plugged in?" : "There is no folder “{$rel}” in the archive.");
             unset($list[$rel]); $list[$rel] = time();      // asked again: to the end, and runs again
+            $auto = prepare_auto(); $was = json_encode($auto);   // asked for by name: no longer left out of its drive's switch
+            foreach ($auto as $k => $v) $auto[$k]['out'] = array_values(array_diff((array)($v['out'] ?? []), [$rel]));
+            if (json_encode($auto) !== $was) prepare_auto($auto);
             require_once __DIR__ . '/folders.php';
             folder_read_start(prep_abs($rel), true);       // what is in it, read on the disk now, in the background
         }

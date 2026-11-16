@@ -500,9 +500,90 @@ function prepare_resume(?string $add = null, bool $on = true): array {
     return $r;
 }
 
+// The folders that can be described, from the search catalogue (instant: nothing is walked over the share),
+// each with how many videos it holds and whether it is on the list already. The Folders to describe box offers
+// them as you type (0.13.54: the Mac's "Choose folder" window walked every file of the folder over the network
+// before the page heard anything, so a big folder never arrived).
+//   GET ?folders  ->  {folders: [{folder, videos, on: "yes"|"part"|""}]}
+// The archive's folders three deep (VIDEOS/Department/2024), a drive kept where it is two deep below its top;
+// Rushes' own folders (PROXIES, _rushes, anything starting with _ or .) left out.
+function folders_offered(): array {
+    $root = rtrim(archive_dir(), '/');
+    $cache = web_dir() . '/folders-offered.json';
+    $c = @json_decode((string)@file_get_contents($cache), true);
+    if (is_array($c) && time() - (int)($c['at'] ?? 0) < 600) return $c['folders'];
+    require_once __DIR__ . '/schema.php';
+    $n = [];
+    // read once; a drive's folders only where they can be added (previews of a drive are made by the Rushes app on a Mac)
+    $drives = can_preview_drives() ? array_values(array_filter(array_map(fn($d) => rtrim((string)$d['path'], '/'), drives_seen()))) : [];
+    $r = db()->query("SELECT path FROM files WHERE kind = 'video'");
+    while ($x = $r->fetchArray(SQLITE3_NUM)) {
+        $p = (string)$x[0]; $dr = '';
+        if (str_starts_with($p, "$root/")) { $base = ''; $parts = explode('/', substr($p, strlen($root) + 1)); $deep = 3; }
+        else {
+            foreach ($drives as $d) if (str_starts_with($p, "$d/")) { $dr = $d; break; }
+            if ($dr === '') continue;
+            $base = $dr; $parts = explode('/', substr($p, strlen($dr) + 1)); $deep = 2;
+        }
+        array_pop($parts);                                         // the file's own name
+        if (!$parts || $parts[0] === '' || $parts[0] === 'PROXIES' || $parts[0][0] === '_' || $parts[0][0] === '.') continue;
+        $f = $base;
+        foreach (array_slice($parts, 0, $deep) as $part) {
+            // a name the list would refuse (analyze.php, action prepare) is not offered, nor anything inside it
+            if ($part === '' || $part[0] === '.' || $part === '..' || preg_match('/[\x00-\x1f\\\\`$]/', $part)) break;
+            $f = $f === '' ? $part : "$f/$part";
+            $n[$f] = ($n[$f] ?? 0) + 1;
+        }
+    }
+    ksort($n, SORT_NATURAL | SORT_FLAG_CASE);
+    $out = [];
+    foreach ($n as $f => $k) $out[] = ['folder' => (string)$f, 'videos' => $k];
+    @file_put_contents($cache, json_encode(['at' => time(), 'folders' => $out], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    return $out;
+}
+
+// ── a drive kept playable and described by itself (0.13.59) ──────────────────────────────────────────────
+// One switch per drive (Overview: the drive's card, and its page). On: every folder of it that has videos goes
+// on the list by itself, a folder made later too; the list does the rest as it always has (previews, then
+// descriptions, one folder at a time). Off until someone turns it on: a whole drive is days of the Mac's work.
+// Videos and their sound: describing has left still images out since 0.13.45.
+//   root ('' = the archive, else the top of a drive kept where it is) => ['on' => when or 0, 'out' => [folders left out]]
+function prepare_auto(?array $save = null): array {
+    $f = web_dir() . '/prepare-auto.json';
+    if ($save !== null)
+        return @file_put_contents("$f.new", json_encode($save, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) !== false && @rename("$f.new", $f) ? $save : [];
+    return json_decode((string)@file_get_contents($f), true) ?: [];
+}
+
+// Once a minute (prepare_advance): the folders of every drive whose switch is on that are not on the list, to its
+// end, in name order. A folder with part of it on the list (or left out) is taken by its other folders, one by one;
+// so is the shelf (VIDEOS/Parks, VIDEOS/Police…: a department is what one wants first, or left out).
+// ponytail: as deep as folders_offered() goes (three folders into the archive, two into a drive), and videos loose
+// in a folder taken by parts are not reached; a new folder is seen when Search's file list next has it.
+function prepare_auto_fill(): array {
+    $auto = array_filter(prepare_auto(), fn($a) => !empty($a['on']));
+    if (!$auto) return [];
+    $list = prepare_list(); $added = [];
+    foreach ($auto as $root => $a) {
+        $root = (string)$root;
+        if ($root !== '' && !can_preview_drives()) continue;
+        foreach (array_column(folders_offered(), 'folder') as $f) {
+            if ($root === '' ? str_starts_with($f, '/') : !str_starts_with($f, "$root/")) continue;
+            if ($root === '' && $f === shelf_name()) continue;   // the shelf itself is never one folder on the list: its departments are, each in its turn
+            foreach (array_merge(array_map('strval', array_keys($list)), (array)($a['out'] ?? [])) as $l)
+                if ($f === $l || str_starts_with($f, "$l/") || str_starts_with($l, "$f/")) continue 2;
+            if (!is_dir(prep_abs($f))) continue;               // not there now (the share away, the drive unplugged): next minute
+            $list[$f] = time(); $added[] = $f;
+        }
+    }
+    if ($added) prepare_save($list);
+    return $added;
+}
+
 // Once a minute: start what is next. Writes proxy-next.txt and queue lines only.
 function prepare_advance(): array {
     $h = rtrim(helper_archive(), '/');
+    $auto = prepare_auto_fill();
     $next = ''; $queued = [];
     $building = !empty(proxy_now()['running']);
     $Q = web_dir() . '/ingest-queue.tsv';
@@ -522,5 +603,5 @@ function prepare_advance(): array {
     if ($queued) @file_put_contents("$Q.new", implode("\n", $lines) . "\n") !== false && @rename("$Q.new", $Q);
     $nf = web_dir() . '/proxy-next.txt';
     $next !== '' ? @file_put_contents($nf, "$next\n") : @unlink($nf);
-    return ['proxies_next' => $next, 'describe_queued' => $queued];
+    return ['proxies_next' => $next, 'describe_queued' => $queued, 'auto_added' => $auto];
 }
