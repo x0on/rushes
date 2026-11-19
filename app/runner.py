@@ -863,7 +863,7 @@ class Runner:
         compared in size with its original, then given its name; one already there in full is passed by, so asking
         again carries on. How it goes is written to pull-copy-<slug>.json, which the pull's page reads.
         ponytail: checked by size, not by fingerprint (a working copy, the original stays); xxhash when that is asked for."""
-        state = {"state": "copying", "n": 0, "total": 0, "bytes": 0, "total_bytes": 0, "file": "", "dest": "", "failed": [], "skipped": 0}
+        state = {"state": "copying", "n": 0, "total": 0, "bytes": 0, "total_bytes": 0, "file": "", "dest": "", "failed": [], "skipped": 0, "files": []}
         def say(**kw):
             state.update(kw, at=int(time.time()))
             self.write(f"pull-copy-{slug}.json", json.dumps(state))
@@ -900,7 +900,7 @@ class Runner:
                     while out in used: out = os.path.join(dest, f"{stem} ({os.path.basename(os.path.dirname(src))} {k}){ext}"); k += 1
                 used[out] = 1
                 if os.path.exists(out) and os.path.getsize(out) == size:
-                    state["skipped"] += 1; say(n=i, bytes=state["bytes"] + size, file=base); continue
+                    state["skipped"] += 1; state["files"].append([src, out]); say(n=i, bytes=state["bytes"] + size, file=base); continue
                 say(file=base); part = out + ".part"; done0 = state["bytes"]
                 try:
                     with open(src, "rb") as fi, open(part, "wb") as fo:
@@ -914,6 +914,7 @@ class Runner:
                         fo.flush(); os.fsync(fo.fileno())
                     if os.path.getsize(part) != size: raise OSError(f"the copy is {os.path.getsize(part)} bytes, the original {size}")
                     shutil.copystat(src, part); os.replace(part, out)
+                    state["files"].append([src, out])       # original → its copy: what the Premiere panel imports (0.14.1)
                     say(n=i, bytes=done0 + size)
                 except InterruptedError:
                     try: os.remove(part)

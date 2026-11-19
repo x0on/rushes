@@ -39,6 +39,8 @@ A promise is not taken away by taking its check away: changing a line here is a 
 
 - A pull copied to work on is copies only: the originals are read, never moved or changed; two clips of one name are both kept. — `tests/test_mac_runner.py`: “test_a_pull_is_copied_to_work_on_and_the_originals_are_only_read”
 
+- The Premiere panel and Rushes agree on what is asked and answered, and the panel imports only copies the runner says it made. — `tests/test_agree.py`: “test_the_panel_is_whole_and_asks_for_what_rushes_answers”
+
 ## Safety
 
 - A file someone sends in is never run, whatever its name. — `tests/test_router.sh`: “was run”

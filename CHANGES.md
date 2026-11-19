@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.14.1 — November 2026
+
+- **Rushes inside Premiere.** A panel for Premiere (25.6 or newer; *Window → UXP Plugins → Rushes*): search the archive there, and **Import** on a clip copies it to the drive chosen (the copy of 0.14.0), then brings the copy into the open project. A clip asked for this way goes into a pull named after the Premiere project, so a project's footage is in one folder, *Rushes pulls / the project's name*, and Rushes remembers what the project took. **Import** on a pull does the same for all of it. It says how the copy goes and what was imported, and nothing is imported from a copy that failed. It comes as its own file, *Rushes Premiere panel 0.14.1.ccx*: double-click it and Creative Cloud installs it. The Mac version: it talks to the Rushes app on the same Mac.
+- A copy's record now tells where each clip went (what the panel imports).
+
 ## 0.14.0 — November 2026
 
 - **Copy the clips to work on.** A pull has a fourth step: pick a drive this Mac sees (or its Desktop) and press Copy. The clips themselves are copied beside each other into *Rushes pulls / the pull's name*, to edit from a faster drive than the archive. Copies only: the originals are read and stay where they are, and the copies are yours to delete when the job is done. It says how it goes (which clip, how much, a bar) and can be stopped; pressed again, it carries on and passes by what is already there. Two clips of one name (two shoots' `DJI_0003.MOV`) are both kept, the second saying its folder. Only where the Rushes app runs on a Mac, asked for on that Mac or signed in to Manage.

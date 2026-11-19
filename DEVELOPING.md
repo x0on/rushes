@@ -192,6 +192,11 @@ the same certificate.
 
 ## Publishing a release
 
+**The Premiere panel** (`premiere/`) is plain HTML and JavaScript that Premiere runs (Adobe's UXP), no build step.
+`python3 premiere/pack.py "Rushes Premiere panel <version>.ccx"` makes the file to double-click. It reaches Rushes at
+`http://127.0.0.1:8642` and reads and writes only through `app/db/pulls.php` and `search.php`. Premiere is not in the
+tests: `tests/test_agree.py` checks the two sides use the same names, and a browser test stands in for Premiere.
+
 The apps update from the releases of this repository on GitHub (`RELEASES` in
 `app/release.py`). For each version handed out, after the pull request is merged:
 

@@ -3,6 +3,7 @@
 //
 //   GET  ?list=1                       every pull, newest first
 //   GET  ?p=<slug>                     one pull and its clips
+//   GET  ?places=1                     where a pull can be copied to, and this Rushes' version
 //   POST action=create name made_by    a new pull  → {slug}
 //   POST action=add    p path          add a clip (a path search knows)
 //   POST action=remove p rel           take one out
@@ -40,6 +41,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         while ($x = $r->fetchArray(SQLITE3_ASSOC)) $all[] = $x;
         out(['pulls' => $all]);
     }
+    // Copy to work on (0.14): where a pull can be copied to. Only where the Rushes app itself runs on a Mac:
+    // its runner does the copying, onto a drive that Mac sees. ?places=1 asks for these alone (the Premiere panel).
+    $places = [];
+    if (can_preview_drives()) {
+        foreach ((helper_volumes()['vols'] ?? []) as $v)
+            if (empty($v['archive']) && empty($v['card'])) $places[] = ['to' => $v['path'], 'name' => $v['name'], 'free' => (int)$v['free']];
+        $places[] = ['to' => 'desktop', 'name' => 'The Desktop of the Mac Rushes runs on', 'free' => 0];
+    }
+    if (isset($_GET['places'])) out(['places' => $places, 'version' => trim((string)@file_get_contents(__DIR__ . '/../VERSION'))]);
     $p = pull_by_slug((string)($_GET['p'] ?? ''));
     if (!$p) bail(404, 'There is no pull with that link.');
     $st = $db->prepare('SELECT i.rel, i.name, i.kind, i.bytes, f.path IS NOT NULL AS here
@@ -48,14 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $st->bindValue(1, $root); $st->bindValue(2, $p['id']);
     $r = $st->execute(); $items = [];
     while ($x = $r->fetchArray(SQLITE3_ASSOC)) { $x['here'] = (bool)$x['here']; $items[] = $x; }
-    // Copy to work on (0.14): where this pull can be copied to, and how a copy asked for is going.
-    // Only where the Rushes app itself runs on a Mac: its runner does the copying, onto a drive that Mac sees.
-    $places = [];
-    if (can_preview_drives()) {
-        foreach ((helper_volumes()['vols'] ?? []) as $v)
-            if (empty($v['archive']) && empty($v['card'])) $places[] = ['to' => $v['path'], 'name' => $v['name'], 'free' => (int)$v['free']];
-        $places[] = ['to' => 'desktop', 'name' => 'The Desktop of the Mac Rushes runs on', 'free' => 0];
-    }
+    // how a copy asked for is going (runner.py writes it)
     $copy = json_decode((string)@file_get_contents(web_dir() . '/pull-copy-' . $p['slug'] . '.json'), true) ?: null;
     out(['pull' => $p, 'items' => $items, 'places' => $places, 'copy' => $copy]);
 }

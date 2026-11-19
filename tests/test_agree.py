@@ -66,6 +66,27 @@ class Players(unittest.TestCase):
         self.assertNotIn("show 200 more", js); self.assertIn("function pager()", js, "pages, not a longer and longer page")
 
 
+class PremierePanel(unittest.TestCase):
+    """The panel inside Premiere asks Rushes for things by name; a name changed on one side only is caught here."""
+    def test_the_panel_is_whole_and_asks_for_what_rushes_answers(self):
+        import json, tempfile, zipfile, subprocess, sys
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+        rd = lambda *p_: open(os.path.join(root, *p_)).read()
+        m = json.loads(rd("premiere", "manifest.json")); js = rd("premiere", "index.js"); php = rd("app", "db", "pulls.php")
+        self.assertEqual((m["host"]["app"], m["manifestVersion"], m["main"]), ("premierepro", 5, "index.html"))
+        for i in m["icons"] + m["entrypoints"][0]["icons"]:
+            self.assertTrue(os.path.exists(os.path.join(root, "premiere", i["path"])), i["path"])
+        for asked in ("?places=1", "?list=1", "action: 'create'", "action: 'add'", "action: 'copy'", "action: 'copy-stop'"):
+            self.assertIn(asked, js)
+        for answered in ("isset($_GET['places'])", "isset($_GET['list'])", "'create'", "'add'", "'copy'", "'copy-stop'"):
+            self.assertIn(answered, php)
+        self.assertIn("c.files", js); self.assertIn('state["files"].append([src, out])', rd("app", "runner.py"), "the runner tells each copy's path: the panel imports those")
+        out = os.path.join(tempfile.mkdtemp(), "p.ccx")
+        subprocess.run([sys.executable, os.path.join(root, "premiere", "pack.py"), out], check=True, capture_output=True)
+        z = zipfile.ZipFile(out); self.assertIn("manifest.json", z.namelist()); self.assertIn("index.js", z.namelist())
+        self.assertEqual(json.loads(z.read("manifest.json"))["version"], rd("app", "VERSION").strip(), "the panel carries Rushes' version")
+
+
 class Promises(unittest.TestCase):
     """PROMISES.md: what Rushes always does, or never does. Each line names the check that holds it to it."""
     def test_every_promise_names_a_check_that_exists(self):
