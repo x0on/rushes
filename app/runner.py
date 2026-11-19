@@ -164,6 +164,7 @@ class Runner:
     def __init__(self, web, url, limit=20):
         self.web, self.url, self.limit = web, url.rstrip("/"), limit
         self.busy = {}                                   # "upkeep" / "jobs": the thread doing it
+        self.pull_halt = threading.Event()               # Stop, for a pull being copied to work on (pull_copy)
         self.pending = {}                                # what the archive was asked and has not answered yet → its thread
         self.quiet = 120                                 # a long read with no data for this long is walked away from (watched)
         self.fresh = True                                # the first minute looks for a job a restart cut short (interrupted)
@@ -856,6 +857,79 @@ class Runner:
             f.write(d["path"].rstrip("/") + "\n")
         return pr
 
+    def pull_copy(self, slug, to, name):
+        """A pull's clips copied to a place to work from (0.14): <to>/Rushes pulls/<name>/, beside each other.
+        Copies only: an original is opened to be read and nothing else. Each file is written under a .part name,
+        compared in size with its original, then given its name; one already there in full is passed by, so asking
+        again carries on. How it goes is written to pull-copy-<slug>.json, which the pull's page reads.
+        ponytail: checked by size, not by fingerprint (a working copy, the original stays); xxhash when that is asked for."""
+        state = {"state": "copying", "n": 0, "total": 0, "bytes": 0, "total_bytes": 0, "file": "", "dest": "", "failed": [], "skipped": 0}
+        def say(**kw):
+            state.update(kw, at=int(time.time()))
+            self.write(f"pull-copy-{slug}.json", json.dumps(state))
+        try:
+            top = os.path.expanduser("~/Desktop") if to == "desktop" else to
+            a = self.arch()
+            if not (to == "desktop" or (top.startswith("/Volumes/") and "/../" not in top + "/")) or not os.path.isdir(top):
+                return say(state="failed", why=f"{top} is not there now (is the drive plugged in?)")
+            if a and (os.path.realpath(top) + "/").startswith(os.path.realpath(a) + "/"):
+                return say(state="failed", why="that is the archive itself: pick another drive")
+            with open(self.p(f"pull-copy-{slug}.txt"), errors="surrogateescape") as f:
+                srcs = [l.rstrip("\n") for l in f if l.strip()]
+            dest = os.path.join(top, "Rushes pulls", re.sub(r"[/\\:\x00-\x1f]", " ", name).strip() or slug)
+            sizes = {x: (os.path.getsize(x) if os.path.isfile(x) else -1) for x in srcs}
+            need = sum(v for v in sizes.values() if v > 0)
+            os.makedirs(dest, exist_ok=True)
+            say(total=len(srcs), total_bytes=need, dest=dest)
+            free = shutil.disk_usage(dest).free
+            if free < need + 1024 ** 3:
+                return say(state="failed", why=f"not enough room there: {need / 1e9:.1f} GB to copy, {free / 1e9:.1f} GB free")
+            used, last = {}, 0
+            for i, src in enumerate(srcs, 1):
+                if self.pull_halt.is_set():
+                    return say(state="stopped", why="stopped, as asked: what was copied stays, and Copy carries on from here")
+                base = os.path.basename(src); size = sizes[src]
+                if size < 0:
+                    state["failed"].append([base, "not in the archive now"]); say(n=i); continue
+                # two clips of one name (DJI_0003.MOV from two shoots): the second says which folder it is from
+                out = os.path.join(dest, base)
+                if out in used or (os.path.exists(out) and os.path.getsize(out) != size):
+                    stem, ext = os.path.splitext(base)
+                    out = os.path.join(dest, f"{stem} ({os.path.basename(os.path.dirname(src))}){ext}")
+                    k = 2
+                    while out in used: out = os.path.join(dest, f"{stem} ({os.path.basename(os.path.dirname(src))} {k}){ext}"); k += 1
+                used[out] = 1
+                if os.path.exists(out) and os.path.getsize(out) == size:
+                    state["skipped"] += 1; say(n=i, bytes=state["bytes"] + size, file=base); continue
+                say(file=base); part = out + ".part"; done0 = state["bytes"]
+                try:
+                    with open(src, "rb") as fi, open(part, "wb") as fo:
+                        got = 0
+                        while True:
+                            if self.pull_halt.is_set(): raise InterruptedError
+                            buf = fi.read(8 << 20)
+                            if not buf: break
+                            fo.write(buf); got += len(buf)
+                            if time.time() - last > 1: last = time.time(); say(bytes=done0 + got)
+                        fo.flush(); os.fsync(fo.fileno())
+                    if os.path.getsize(part) != size: raise OSError(f"the copy is {os.path.getsize(part)} bytes, the original {size}")
+                    shutil.copystat(src, part); os.replace(part, out)
+                    say(n=i, bytes=done0 + size)
+                except InterruptedError:
+                    try: os.remove(part)
+                    except OSError: pass
+                    return say(state="stopped", bytes=done0, why="stopped, as asked: what was copied stays, and Copy carries on from here")
+                except OSError as e:
+                    try: os.remove(part)
+                    except OSError: pass
+                    state["failed"].append([base, e.strerror or str(e)]); say(n=i, bytes=done0)
+                    if not os.path.isdir(dest) or (a and not os.path.isdir(a)):      # the drive or the archive went away: no use going on
+                        return say(state="failed", why="the drive or the archive went away while copying: what was copied stays, and Copy carries on from here")
+            say(state="done", file="")
+            self.log(f"  pull {slug}: {state['n'] - len(state['failed'])} of {len(srcs)} clips copied to {dest}" + (f", {len(state['failed'])} could not be" if state["failed"] else ""))
+        except Exception as e:
+            say(state="failed", why=f"{type(e).__name__}: {e}")
+
     def reachable(self, top, only, n, total, ok, failed, later):
         """True once top (the archive, or a kept drive) is there; waits up to AWAY_WAIT for one that went away, saying so."""
         t0 = time.time()
@@ -1295,6 +1369,16 @@ class Runner:
                     self.log(f"  threw away the proxies of {q} — making them again with the setting in use")
                 self.proxy_start(q)
                 self.log("  making proxies in the background: progress in Manage → Describe, detail in proxy.log")
+        elif action in ("pull-copy", "pull-copy-stop"):
+            slug = re.sub(r"[^a-z0-9-]", "", f.get("SLUG", ""))
+            t = self.busy.get("pullcopy")
+            if action == "pull-copy-stop":
+                self.pull_halt.set(); self.log("  asked the copy of a pull to stop"); return
+            if t and t.is_alive():
+                self.log("  a pull is being copied already: one at a time"); return
+            self.pull_halt.clear()
+            t = self.busy["pullcopy"] = threading.Thread(target=self.pull_copy, args=(slug, f.get("TO", ""), f.get("NAME", "") or slug), daemon=True)
+            t.start(); self.log("  copying the pull in the background: its page says how it goes")
         elif action != "refused":
             # ponytail: Test the video chip and Test proxy settings are the NAS's (runner.sh)
             self.log(f"  {action}: not on this computer yet — nothing was done")

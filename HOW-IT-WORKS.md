@@ -357,6 +357,11 @@ A pull is a named list of clips, made for handing to an editor.
     proxy yet are left out, and named in a note at the top of the file.
   - **List of paths:** a text file.
   - **The files (zip):** up to 1 GB and 1,000 files, stored without compression.
+- **Copy the clips to work on** (0.14, where the Rushes app runs on a Mac): the clips themselves, copied
+  beside each other into `Rushes pulls/<the pull's name>/` on a drive that Mac sees, or on its Desktop,
+  to edit from a faster drive than the archive. The runner does it (`runner.py`, `pull_copy`): each file
+  under a `.part` name, its size compared with the original's, then named. Copies only; the originals are
+  read. It can be stopped, and asked again it passes by what is there. The copies are the editor's to delete.
     It is built in the web folder under a hidden name, and deleted once sent.
 
 Everyone who can open Rushes can see and change every pull. They are the team's

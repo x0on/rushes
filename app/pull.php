@@ -62,6 +62,46 @@ $slug = (string)($_GET['p'] ?? '');
 const $ = function (i) { return document.getElementById(i); };
 const esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
   return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+// ── Copy the clips to work on: asked of the Mac's runner, and watched here until it is done ──
+let copyT = null;
+function copyShow(c, total) {
+  const said = $('copySaid'), bar = $('copyBar'), go = $('copyGo'), stop = $('copyStop');
+  if (!said || !c) return false;
+  const going = c.state === 'asked' || c.state === 'copying';
+  const fails = (c.failed || []).length ? ' ' + c.failed.length + ' could not be copied: ' + c.failed.slice(0, 3).map(function (f) { return f[0] + ' (' + f[1] + ')'; }).join('; ') + (c.failed.length > 3 ? '…' : '') + '.' : '';
+  bar.hidden = !going && c.state !== 'done'; bar.firstChild.style.width = (c.total_bytes ? Math.min(100, c.bytes / c.total_bytes * 100) : 0).toFixed(1) + '%';
+  go.disabled = going; stop.hidden = !going;
+  said.textContent =
+    c.state === 'asked' ? 'Asked: the copy starts within a minute.'
+    : c.state === 'copying' ? 'Copying ' + c.n + ' of ' + c.total + ' · ' + tb(c.bytes) + ' of ' + tb(c.total_bytes) + (c.file ? ' · now: ' + c.file : '') + fails
+    : c.state === 'done' ? 'Copied ✓ ' + (c.total - (c.failed || []).length) + ' of ' + c.total + ' clips into ' + c.dest + (c.skipped ? ' (' + c.skipped + (c.skipped === 1 ? ' was' : ' were') + ' there already)' : '') + '.' + fails
+    : (c.state === 'stopped' ? 'Stopped. ' : 'Did not finish. ') + (c.why || '') + fails;
+  return going;
+}
+function copyWatch(total) {
+  clearTimeout(copyT);
+  copyT = setTimeout(async function () {
+    try { const d = await (await fetch('/db/pulls.php?p=' + encodeURIComponent(SLUG) + '&t=' + Date.now())).json(); if (copyShow(d.copy, total)) copyWatch(total); }
+    catch (e) { copyWatch(total); }
+  }, 1500);
+}
+function copyWire(total) {
+  const to = store.get('copyTo'); if (to && [].some.call($('copyTo').options, function (o) { return o.value === to; })) $('copyTo').value = to;
+  if (copyShow(D.copy, total)) copyWatch(total);
+  $('copyGo').onclick = async function () {
+    store.set('copyTo', $('copyTo').value); this.disabled = true; $('copySaid').textContent = 'Asking…';
+    try {
+      const r = await (await fetch('/db/pulls.php', { method: 'POST', body: new URLSearchParams({ action: 'copy', p: SLUG, to: $('copyTo').value }) })).json();
+      if (r.error) throw new Error(r.error);
+      copyShow({ state: 'asked', n: 0, total: r.n, bytes: 0, total_bytes: r.b }, total); copyWatch(total);
+    } catch (e) { this.disabled = false; $('copySaid').textContent = 'Not started: ' + e.message; }
+  };
+  $('copyStop').onclick = async function () {
+    this.disabled = true; $('copySaid').textContent = 'Stopping after this moment…';
+    try { await fetch('/db/pulls.php', { method: 'POST', body: new URLSearchParams({ action: 'copy-stop', p: SLUG }) }); } catch (e) {}
+    this.disabled = false;
+  };
+}
 const tb = function (b) {
   return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB'
        : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.round(b / 1e3) + ' KB'; };
@@ -135,7 +175,20 @@ async function show() {
       '<p class="note" id="dlNote" style="margin:10px 0 0">Premiere opens the XML with File → Import, as a bin of clips. ' +
         'Final Cut opens the FCPXML with File → Import → XML, and DaVinci Resolve with File → Import → Timeline; ' +
         'clips that have no proxy yet are left out of it (their length is not known yet).' +
-        (total > 1073741824 ? ' The zip is for small sets of stills; this pull is ' + tb(total) + '.' : '') + '</p></div>';
+        (total > 1073741824 ? ' The zip is for small sets of stills; this pull is ' + tb(total) + '.' : '') + '</p></div>' +
+
+    // Copy to work on (0.14): the clips themselves, copied to a faster drive than the archive. Only on the Mac Rushes runs on.
+    ((D.places || []).length && here.length ?
+    '<div class="card"><h2><span>04 /</span> Copy the clips to work on</h2>' +
+      '<p class="note" style="margin:0 0 10px">The clips themselves, copied beside each other into <b>Rushes pulls / ' + esc(p.name) + '</b> on the drive you pick, to edit from there. ' +
+        'Copies only: the originals stay in the archive, and the copies are yours to delete when the job is done.</p>' +
+      '<div class="dl" style="align-items:center"><select id="copyTo" aria-label="Where to copy the clips">' +
+        D.places.map(function (x) { return '<option value="' + esc(x.to) + '">' + esc(x.name) + (x.free ? ' · ' + tb(x.free) + ' free' : '') + '</option>'; }).join('') + '</select>' +
+        '<button class="btn" id="copyGo">Copy ' + here.length + ' clip' + (here.length === 1 ? '' : 's') + ' · ' + tb(total) + '</button>' +
+        '<button class="btn quiet" id="copyStop" hidden>Stop</button></div>' +
+      '<div id="copyBar" hidden style="height:6px;border-radius:3px;background:var(--line);margin-top:12px;overflow:hidden"><i style="display:block;height:100%;width:0;background:var(--accent)"></i></div>' +
+      '<p class="note" id="copySaid" style="margin:10px 0 0"></p></div>' : '');
+  if ($('copyGo')) copyWire(total);
 
   // which computer this is — remembered, or guessed from the browser
   const saved = store.get('archiveBase');

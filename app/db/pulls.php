@@ -48,7 +48,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $st->bindValue(1, $root); $st->bindValue(2, $p['id']);
     $r = $st->execute(); $items = [];
     while ($x = $r->fetchArray(SQLITE3_ASSOC)) { $x['here'] = (bool)$x['here']; $items[] = $x; }
-    out(['pull' => $p, 'items' => $items]);
+    // Copy to work on (0.14): where this pull can be copied to, and how a copy asked for is going.
+    // Only where the Rushes app itself runs on a Mac: its runner does the copying, onto a drive that Mac sees.
+    $places = [];
+    if (can_preview_drives()) {
+        foreach ((helper_volumes()['vols'] ?? []) as $v)
+            if (empty($v['archive']) && empty($v['card'])) $places[] = ['to' => $v['path'], 'name' => $v['name'], 'free' => (int)$v['free']];
+        $places[] = ['to' => 'desktop', 'name' => 'The Desktop of the Mac Rushes runs on', 'free' => 0];
+    }
+    $copy = json_decode((string)@file_get_contents(web_dir() . '/pull-copy-' . $p['slug'] . '.json'), true) ?: null;
+    out(['pull' => $p, 'items' => $items, 'places' => $places, 'copy' => $copy]);
 }
 
 $act = (string)($_POST['action'] ?? '');
@@ -101,6 +110,33 @@ if ($act === 'add') {
         foreach ($list as $k => $rel) { $st->bindValue(1, $k + 1); $st->bindValue(2, $p['id']); $st->bindValue(3, $rel); $st->execute(); $st->reset(); }
         touch_pull($p['id']);
     }
+} elseif ($act === 'copy' || $act === 'copy-stop') {
+    // Copy the pull's clips to a place to work from (a faster drive than the archive). Copies only: the originals
+    // are read, never moved. The Mac's runner does it (runner.py, pull_copy) and writes how it goes beside the list.
+    $local = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1', $_SERVER['SERVER_ADDR'] ?? '-'], true);
+    require_once __DIR__ . '/auth.php';
+    if (!$local && !may_act()) bail(403, 'Copying is asked for on the Mac Rushes runs on, or signed in to Manage.');
+    if (!can_preview_drives()) bail(400, 'Copying a pull is done by the Rushes app on a Mac; this Rushes has no such helper.');
+    $q = web_dir() . '/queue'; if (!is_dir($q)) @mkdir($q, 0777, true);
+    $slug = $p['slug'];
+    if ($act === 'copy-stop') {
+        if (@file_put_contents("$q/" . date('Ymd-His') . '-pullstop.job', "ACTION=pull-copy-stop\nSLUG=$slug\n") === false) bail(500, 'Could not ask: the queue folder is not writable.');
+        out(['ok' => 'stop asked']);
+    }
+    $to = (string)($_POST['to'] ?? ''); $ok = $to === 'desktop';
+    foreach ((helper_volumes()['vols'] ?? []) as $v) if ($v['path'] === $to && empty($v['archive']) && empty($v['card'])) $ok = true;
+    if (!$ok) bail(400, 'Pick one of the drives this Mac sees now.');
+    $st = $db->prepare('SELECT i.rel, i.bytes FROM pull_items i JOIN files f ON f.path = ? || i.rel WHERE i.pull_id = ? ORDER BY i.pos, i.added');
+    $st->bindValue(1, $root); $st->bindValue(2, $p['id']); $r = $st->execute(); $list = ''; $n = 0; $b = 0;
+    while ($x = $r->fetchArray(SQLITE3_ASSOC)) { if (strpbrk($x['rel'], "\n\r\t") === false) { $list .= $root . $x['rel'] . "\n"; $n++; $b += (int)$x['bytes']; } }
+    if (!$n) bail(400, 'This pull has no clips that are in the archive.');
+    $folder = trim(preg_replace('/[^\p{L}\p{N} ._-]+/u', ' ', $p['name'])) ?: $slug;
+    if (@file_put_contents(web_dir() . "/pull-copy-$slug.txt", $list) === false
+        || @file_put_contents(web_dir() . "/pull-copy-$slug.json", json_encode(['state' => 'asked', 'n' => 0, 'total' => $n, 'bytes' => 0, 'total_bytes' => $b, 'at' => time()])) === false
+        || @file_put_contents("$q/" . date('Ymd-His') . '-pullcopy.job', "ACTION=pull-copy\nSLUG=$slug\nTO=$to\nNAME=$folder\n") === false)
+        bail(500, 'Could not ask: the web folder is not writable.');
+    activity_add('out', "Copying the pull “{$p['name']}” ($n clips) to work on", activity_who());
+    out(['ok' => 'asked', 'n' => $n, 'b' => $b]);
 } elseif ($act === 'rename') {
     $name = clean((string)($_POST['name'] ?? ''), 80);
     if ($name === '') bail(400, 'Give the pull a name.');

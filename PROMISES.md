@@ -35,6 +35,10 @@ A promise is not taken away by taking its check away: changing a line here is a 
 - One rule for what is not footage, in the pages, the runner, the helper and the NAS scripts. — `tests/test_agree.py`: “test_what_is_not_footage_is_the_same_rule_everywhere”
 - An archive that goes away mid-run is waited for; its files are never counted as failed, nor the folder as done. — `tests/test_mac_runner.py`: “test_an_archive_that_goes_away_is_waited_for_and_never_called_done”
 
+## Pulls
+
+- A pull copied to work on is copies only: the originals are read, never moved or changed; two clips of one name are both kept. — `tests/test_mac_runner.py`: “test_a_pull_is_copied_to_work_on_and_the_originals_are_only_read”
+
 ## Safety
 
 - A file someone sends in is never run, whatever its name. — `tests/test_router.sh`: “was run”

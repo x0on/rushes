@@ -697,6 +697,34 @@ class MacProxies(MacJobs):
             self.r.job("proxy-build", {"QUERY": "Drop"}); self.r.busy["proxies"].join(60)
             self.assertEqual(sorted(os.listdir(os.path.join(self.a, "PROXIES", "Drop"))), ["A.mp4", "B.mp4", "C.mp4"])
 
+    def test_a_pull_is_copied_to_work_on_and_the_originals_are_only_read(self):
+        """Copy the clips to work on (0.14): beside each other in <place>/Rushes pulls/<name>/, two of one name told
+        apart, one missing said by name, the originals untouched; asked again, what is there is passed by; Stop stops."""
+        import json
+        s1, s2 = os.path.join(self.a, "Shoot1", "DJI_0003.MOV"), os.path.join(self.a, "Shoot2", "DJI_0003.MOV")
+        s3, gone = os.path.join(self.a, "Shoot2", "wide.mov"), os.path.join(self.a, "Shoot2", "gone.mov")
+        for p_, body in ((s1, b"one" * 5000), (s2, b"two!" * 5000), (s3, b"w" * 9_000_000)):
+            os.makedirs(os.path.dirname(p_), exist_ok=True); open(p_, "wb").write(body)
+        before = {p_: (os.path.getsize(p_), os.path.getmtime(p_)) for p_ in (s1, s2, s3)}
+        open(os.path.join(self.web, "pull-copy-school-1a.txt"), "w").write("\n".join([s1, s2, s3, gone]) + "\n")
+        desk = tempfile.mkdtemp(); state = lambda: json.load(open(os.path.join(self.web, "pull-copy-school-1a.json")))
+        with unittest.mock.patch.object(runner.os.path, "expanduser", return_value=desk):
+            self.r.pull_copy("school-1a", "desktop", "School")
+            d = os.path.join(desk, "Rushes pulls", "School"); st = state()
+            self.assertEqual(sorted(os.listdir(d)), ["DJI_0003 (Shoot2).MOV", "DJI_0003.MOV", "wide.mov"], "beside each other, two of one name told apart, no .part left")
+            self.assertEqual(open(os.path.join(d, "DJI_0003 (Shoot2).MOV"), "rb").read(), b"two!" * 5000)
+            self.assertEqual((st["state"], st["n"], st["total"], st["failed"]), ("done", 4, 4, [["gone.mov", "not in the archive now"]]))
+            self.assertEqual(st["bytes"], st["total_bytes"]); self.assertEqual(before, {p_: (os.path.getsize(p_), os.path.getmtime(p_)) for p_ in (s1, s2, s3)}, "the originals are only read")
+            made = os.path.getmtime(os.path.join(d, "wide.mov")); os.utime(os.path.join(d, "wide.mov"), (1, 1))
+            self.r.pull_copy("school-1a", "desktop", "School")
+            self.assertEqual((state()["state"], state()["skipped"]), ("done", 3), "asked again: what is there in full is passed by")
+            self.assertEqual(os.path.getmtime(os.path.join(d, "wide.mov")), 1, "and not written again")
+            os.remove(os.path.join(d, "wide.mov")); self.r.pull_halt.set()
+            self.r.pull_copy("school-1a", "desktop", "School"); self.r.pull_halt.clear()
+            self.assertEqual(state()["state"], "stopped"); self.assertFalse(os.path.exists(os.path.join(d, "wide.mov")))
+        self.r.pull_copy("school-1a", os.path.join(self.a, "Shoot1"), "School")
+        self.assertEqual(state()["state"], "failed", "never into the archive, nor anywhere that is not a drive of this Mac")
+
     def test_one_file_that_breaks_never_stops_the_build(self):
         """A file whose report cannot be read (metadata in another encoding) is said and skipped; the next is made."""
         import subprocess, time

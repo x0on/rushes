@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.14.0 — November 2026
+
+- **Copy the clips to work on.** A pull has a fourth step: pick a drive this Mac sees (or its Desktop) and press Copy. The clips themselves are copied beside each other into *Rushes pulls / the pull's name*, to edit from a faster drive than the archive. Copies only: the originals are read and stay where they are, and the copies are yours to delete when the job is done. It says how it goes (which clip, how much, a bar) and can be stopped; pressed again, it carries on and passes by what is already there. Two clips of one name (two shoots' `DJI_0003.MOV`) are both kept, the second saying its folder. Only where the Rushes app runs on a Mac, asked for on that Mac or signed in to Manage.
+
+Everything from 0.13.59 and 0.13.60 (neither published on its own) comes with it: Search plays in the grid, numbered pages, Properties when asked for, renders of one piece shown once, one video playing at a time, and a drive kept playable and described from its own card.
+
 ## 0.13.60 — November 2026
 
 Search, as it is used: the pictures have the page, and a video plays where it is.

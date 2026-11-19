@@ -33,6 +33,11 @@ printf '127.0.0.1\tFALSE\t/\tFALSE\t0\trushes_who\tAna%%20M\n' >> "$R/cj"     # 
 S=$(curl -s -b "$R/cj" -d action=create -d "name=Council promo" "$U/db/pulls.php")
 slug=$(echo "$S" | python3 -c 'import json,sys; print(json.load(sys.stdin)["slug"])') || no "pull: $S"
 curl -s -b "$R/cj" -d action=add -d "p=$slug" --data-urlencode "path=$A/Parks/a.mov" "$U/db/pulls.php" > /dev/null
+# the pull's page reads this: its clips, where it could be copied to work on (a Mac's Rushes: none here), how a copy goes
+P=$(curl -s -b "$R/cj" "$U/db/pulls.php?p=$slug")
+echo "$P" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d["items"]) == 1 and d["places"] == [] and d["copy"] is None, d' && ok "a pull's page: its clips, and nowhere to copy them to where no Mac's Rushes runs" || no "pull page: $P"
+C=$(curl -s -b "$R/cj" -d action=copy -d "p=$slug" -d to=desktop "$U/db/pulls.php")
+case "$C" in *"done by the Rushes app on a Mac"*) ok "Copy to work on is refused where there is no Mac's Rushes to do it" ;; *) no "copy: $C" ;; esac
 curl -s -b "$R/cj" "$U/db/pull-export.php?p=$slug&fmt=list&base=/Volumes/VIDEO" > /dev/null
 curl -s -b "$R/cj" -d action=pause "$U/db/helper.php" > /dev/null
 curl -s -b "$R/cj" "$U/db/activity.php" | python3 -c '
