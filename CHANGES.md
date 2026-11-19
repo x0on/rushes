@@ -3,6 +3,11 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.14.3 — November 2026
+
+- **The Premiere panel fills its panel.** In Premiere it stopped at a fixed height and left the rest empty; it takes the panel's whole height and width now, and follows when the panel is resized.
+- **A panel newer than Rushes says so.** With an older Rushes behind it the panel showed the ordinary Search page, light and with its top bar, and no reason; it now says that Rushes needs updating. The panel and Rushes go together: install *Rushes Premiere panel 0.14.3.ccx* and update Rushes to 0.14.3.
+
 ## 0.14.2 — November 2026
 
 - **The Premiere panel is Search itself.** The panel no longer has a small search of its own: it shows Rushes' Search, the same grid, pictures, playing in the tile, filters, pages and Pulls menu, dressed as a Premiere panel (its greys, its blue, its small type) and without what an editor does not need there (the top bar, Ingest, Manage). It fits the panel at any size, docked narrow or a whole second screen.

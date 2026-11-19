@@ -30,14 +30,24 @@ async function answer(d) {
 document.addEventListener('DOMContentLoaded', function () {
   const wv = document.getElementById('wv'), note = document.getElementById('note'), said = document.getElementById('said');
   // the page has the whole panel, whatever size the panel is given
+  // (asked of the window, the document and the body in turn: Premiere's panels do not all answer the same one)
   let w = 0, h = 0;
+  const size = function (k) { return window['inner' + k] || document.documentElement['client' + k] || document.body['client' + k] || 0; };
   const fit = function () {
-    const nh = window.innerHeight - (note.className === 'hide' ? 0 : note.offsetHeight), nw = window.innerWidth;
-    if (nh === h && nw === w || nh < 50) return;
-    w = nw; h = nh; wv.setAttribute('width', nw + 'px'); wv.setAttribute('height', nh + 'px');
+    const nh = Math.floor(size('Height') - (note.className === 'hide' ? 0 : note.offsetHeight || 0)), nw = Math.floor(size('Width'));
+    if (!(nh > 50) || !(nw > 50) || (nh === h && nw === w)) return;
+    w = nw; h = nh; wv.setAttribute('width', nw + 'px'); wv.setAttribute('height', nh + 'px'); wv.style.width = nw + 'px'; wv.style.height = nh + 'px';
   };
   fit(); window.addEventListener('resize', fit); setInterval(fit, 400);
-  wv.addEventListener('loadstop', function () { note.className = 'hide'; fit(); });
+  // A Rushes older than this panel shows its ordinary page and never says hello: said here, not left to be wondered at.
+  let hello = false;
+  wv.addEventListener('loadstop', function () {
+    note.className = 'hide'; fit();
+    setTimeout(function () {
+      if (hello) return;
+      note.className = ''; said.textContent = 'This Rushes is older than the panel, so it shows its ordinary page. In Rushes: Check for updates, then press Try again.'; fit();
+    }, 6000);
+  });
   wv.addEventListener('loaderror', function (e) {
     note.className = ''; said.textContent = 'Rushes is not answering (' + ((e && e.message) || 'no reason given') + '). Is it running on this Mac? Its icon is in the menu bar.'; fit();
   });
@@ -46,6 +56,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof e.origin === 'string' && /^https?:/.test(e.origin) && e.origin.indexOf(RUSHES) !== 0) return;      // another website's page
     let d = e.data; try { if (typeof d === 'string') d = JSON.parse(d); } catch (x) { return; }
     if (!d || !d.rushes) return;
+    if (!hello) { hello = true; note.className = 'hide'; fit(); }
     const r = await answer(d);
     if (r) wv.postMessage(JSON.stringify(r));
   });
