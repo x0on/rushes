@@ -10,7 +10,13 @@ The first step back to drives: a drive is looked after from its own card, not fr
 - **Keep playable and described: one switch on each drive.** On Overview, on the drive's card, and on the drive's page. On, every folder of the drive that has videos goes on the list by itself (previews, then descriptions, one folder at a time), a folder made later too. Off until someone turns it on: a whole drive can be days of the Mac's work, so it asks twice and says how many videos are left. Videos and their sound, as describing has been since 0.13.45; still images are not part of it.
 - **On the drive's page, each folder says where it stands and what can be done.** *Do this first* for a folder on the list; *Leave out* for one the switch should pass by (*Put back* undoes it); *Make previews and descriptions* for one that is not on the list, as before.
 - **Health counts previews too.** How many videos could not be made (*See why*), and how many are not made yet in folders whose run is over (*Try again*, which makes only those).
+- **Footage waiting to be filed is passed by.** A server copied in and not yet put on the shelf is often a second copy of what the shelf has; the switch takes it once Tidy up has filed it. By hand it can go on the list any time.
 - **Describe is as it was.** Nothing was taken away: the list, its order and its buttons work as before, and show what the switch added.
+
+**Search: one video plays at a time.**
+
+- **Pause pauses.** The picture in the panel starts the video with a click, and went on listening for clicks after it had: a click on Pause started it again from the top.
+- **No more videos playing unseen.** A player that was replaced (another clip picked, a shot clicked, Pause pressed) was taken off the page without being stopped. It played on: its sound went on, and it kept writing its own shots into the description of whatever was shown, so several at once gave sound over sound and a description that flickered between videos until the page was reloaded. A player is stopped and emptied before it leaves the page, and a click on a shot moves the one player there is.
 
 ## 0.13.58 — November 2026
 

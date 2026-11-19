@@ -12,6 +12,8 @@ A promise is not taken away by taking its check away: changing a line here is a 
 - Cache files are not part of Search at all. — `tests/test_server.php`: “Search: a cache file is never part of it”
 - The words offered to narrow a search are single words. — `tests/test_server.php`: “Search: the words offered to narrow it are single words”
 
+- One video plays at a time: a player is stopped before it leaves the page, and Pause pauses. — `tests/test_agree.py`: “test_a_player_is_stopped_before_it_leaves_the_page”
+
 ## Describe
 
 - A folder is added by clicking, never only by typing. — `tests/test_folders_offered.sh`: “Choose folder… walks the offered folders by clicking”
@@ -22,6 +24,7 @@ A promise is not taken away by taking its check away: changing a line here is a 
 
 - A drive is kept playable and described from its own card: one switch, off until someone turns it on. — `tests/test_server.php`: “switch is off until someone turns it on”
 - The switch puts every folder with videos on the list once, never one that is on it already or was left out. — `tests/test_server.php`: “the switch on: folders go on the list whole”
+- The switch passes by footage that is waiting to be filed. — `tests/test_server.php`: “the switch on: footage waiting to be filed is passed by”
 - Nothing is taken away in the version that brings its replacement: Describe stays while the drive's page learns to do its work. — `tests/test_folders_offered.sh`: “Choose folder… walks the offered folders by clicking”
 
 ## Previews and describing

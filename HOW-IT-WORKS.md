@@ -1754,7 +1754,7 @@ A percentage is rounded down: 100% means every video.
   The switches are kept in `prepare-auto.json`, beside the list;
 - in Health, how many previews could not be made (**See why**) and how many are
   not made yet in folders whose run is over (**Try again**: only those);
-- on the archive, **N files waiting to be filed**: what is in `ARCHIVE` (where
+- on the archive, **N files waiting to be filed** (the switch passes these by until they are filed): what is in `ARCHIVE` (where
   copies land) and in top folders outside the shelf, with **Tidy up**
   (Reorganize). Rushes' own folders (`_rushes`, `PROXIES`, the bin) are not counted;
 - its actions: **Find duplicates on this drive**, **Clear editing cache** (the

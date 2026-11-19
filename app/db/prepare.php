@@ -561,6 +561,7 @@ function prepare_auto(?array $save = null): array {
 // ponytail: as deep as folders_offered() goes (three folders into the archive, two into a drive), and videos loose
 // in a folder taken by parts are not reached; a new folder is seen when Search's file list next has it.
 function prepare_auto_fill(): array {
+    require_once __DIR__ . '/drive.php';                       // archive_folder_is(): on the shelf, or waiting to be filed
     $auto = array_filter(prepare_auto(), fn($a) => !empty($a['on']));
     if (!$auto) return [];
     $list = prepare_list(); $added = [];
@@ -570,6 +571,9 @@ function prepare_auto_fill(): array {
         foreach (array_column(folders_offered(), 'folder') as $f) {
             if ($root === '' ? str_starts_with($f, '/') : !str_starts_with($f, "$root/")) continue;
             if ($root === '' && $f === shelf_name()) continue;   // the shelf itself is never one folder on the list: its departments are, each in its turn
+            // footage waiting to be filed (a server copied in, what Tidy up has yet to put on the shelf) is passed by:
+            // much of it is a second copy of what the shelf has. Filed, it is taken; by hand it can be added any time.
+            if ($root === '' && archive_folder_is(explode('/', $f)[0]) === 'waiting') continue;
             foreach (array_merge(array_map('strval', array_keys($list)), (array)($a['out'] ?? [])) as $l)
                 if ($f === $l || str_starts_with($f, "$l/") || str_starts_with($l, "$f/")) continue 2;
             if (!is_dir(prep_abs($f))) continue;               // not there now (the share away, the drive unplugged): next minute

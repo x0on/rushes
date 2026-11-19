@@ -45,6 +45,19 @@ class OneRule(unittest.TestCase):
         self.assertEqual(mac, nas, "runner.py and proxy.sh"); self.assertEqual(mac, page, "runner.py and prepare.php (the page's count)")
 
 
+class Players(unittest.TestCase):
+    """Search plays one video at a time. A player taken off the page still playing plays on unseen: sound over
+    sound, and its shots written into the description of whatever is shown (0.13.58 and before)."""
+    def test_a_player_is_stopped_before_it_leaves_the_page(self):
+        js = read("db", "find.php")
+        self.assertIn("v.pause(); v.removeAttribute('src'); v.load();", js, "quiet(): stopped and emptied")
+        lines = js.splitlines()                            # the panel is never emptied or hidden with a player still in it
+        for i, line in enumerate(lines):
+            if re.search(r"\$\('inspect'\)\.(hidden = true|innerHTML = )", line) or "box.innerHTML = html" in line:
+                self.assertIn("quiet(", lines[i - 1] + line, f"a player may be left playing here: {line.strip()[:90]}")
+        self.assertIn("quiet(pv); pv.onclick = null;", js, "the picture starts the player once: a click on Pause is not Play")
+
+
 class Promises(unittest.TestCase):
     """PROMISES.md: what Rushes always does, or never does. Each line names the check that holds it to it."""
     def test_every_promise_names_a_check_that_exists(self):

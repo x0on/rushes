@@ -520,7 +520,7 @@ async function run(more) {
   const words = $('q').value.trim();
   if (!words && !filtering() && kind === 'all') {
     total = 0; videos = { count: 0, moments: 0, rows: [] }; $('stat').textContent = 'Start typing.';
-    clearSel(); $('inspect').hidden = true; return draw();
+    clearSel(); quiet($('inspect')); $('inspect').hidden = true; return draw();
   }
   const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset });
   FILTERS.forEach(function (f) { const v = Array.isArray(F[f.k]) ? F[f.k].join(',') : F[f.k]; if (v) p.set(f.k, v); });
@@ -722,7 +722,7 @@ function draw() {
   const best = pieces(videos.rows);
   const vshow = vids.filter(function (x) { return best.indexOf(x[0]) > -1; });
   if (!files.length && !vshow.length) {
-    $('inspect').hidden = true;
+    quiet($('inspect')); $('inspect').hidden = true;
     $('out').innerHTML = '<div class="panel"><div class="empty">' +
       ($('q').value.trim() || filtering() || kind !== 'all' ? 'Nothing matches.' : 'Type a few words above: what it shows, a name, a folder, an event.') + '</div></div>';
     return;
@@ -759,7 +759,7 @@ function draw() {
 }
 // The panel keeps its place while there are results, so a click never moves the pictures under the mouse
 function hint() {
-  $('inspect').hidden = false;
+  quiet($('inspect')); $('inspect').hidden = false;
   $('inspect').innerHTML = '<div style="padding:16px 14px"><p class="note" style="margin:0">Click a picture to see it here.<br>' +
     'Double-click to open it large and play it. Right-click to add it to a pull.</p></div>';
 }
@@ -815,7 +815,7 @@ function drawSel() {
     $('selN').textContent = n + ' picked';
     $('selAdd').textContent = paths.length ? 'Add ' + paths.length + ' to pull' : 'Not in the archive: cannot be pulled';
     $('selAdd').disabled = !paths.length;
-    $('inspect').hidden = false;
+    quiet($('inspect')); $('inspect').hidden = false;
     $('inspect').innerHTML = '<div style="padding:16px 14px"><b>' + n + ' picked</b><p class="note" style="margin:6px 0 0">Double-click one to open it. Right-click for more.</p></div>';
   }
 }
@@ -961,6 +961,15 @@ function shootOf(r) {
 // Sounds and pictures a browser plays or shows as they are (play.php sends the file itself)
 const HEAR = /\.(mp3|wav|m4a|aac|aiff?|flac)$/i, VIEW = /\.(jpe?g|png|gif|webp|heic)$/i;
 const asIs = function (p) { return 'play.php?p=' + encodeURIComponent(p); };
+// A player about to leave the page is stopped and emptied first. Taken off the page still playing, it plays on
+// unseen: its sound goes on, and it keeps writing its own shots into the description of whatever is shown now
+// (several of them at once: sound over sound, and a description that flickers between videos). 0.13.59.
+function quiet(box, but) {
+  box.querySelectorAll('video').forEach(function (v) {
+    if (v === but) return;
+    v.ontimeupdate = v.onloadeddata = v.onerror = null; v.pause(); v.removeAttribute('src'); v.load();
+  });
+}
 function render(where) {
   const st = where === 'big' ? BIG : PANEL; if (!st) return;
   const r = st.row, it = st.it, cur = shotAt(st), big = where === 'big';
@@ -994,9 +1003,13 @@ function render(where) {
     : head(r) + '<div class="vb">' + player + versionsBox(r, it) + '<div data-desc>' + describe(cur) + '</div>' + shotsBox + details(r, cur) + '</div>';
   if (big) $('bigName').textContent = r.name;
   const box = big ? $('bigBody') : $('inspect');
-  box.hidden = false; box.innerHTML = html;
+  const keep = st.keep; st.keep = null;              // the player a click on a shot moved: it stays, playing from there
+  if (keep) keep.remove();
+  quiet(box); box.hidden = false; box.innerHTML = html;
   wire(box, st, where);
-  if (st.playing && canPlay) startVideo(box, r.path, t, st);
+  const pv = box.querySelector('[data-pv]');
+  if (keep && pv && canPlay) { pv.innerHTML = ''; pv.onclick = null; pv.appendChild(keep); const n = box.querySelector('[data-pvn]'); if (n) n.textContent = 'Playing its proxy (the original stays where it is).'; }
+  else { if (keep) quiet({ querySelectorAll: function () { return [keep]; } }); if (st.playing && canPlay) startVideo(box, r.path, t, st); }
 }
 function head(r, big) {
   const on = inPull(r.path);
@@ -1054,12 +1067,14 @@ function startVideo(box, path, t, st) {
   const pv = box.querySelector('[data-pv]'), note = box.querySelector('[data-pvn]');
   if (!pv) return;
   const was = pv.querySelector('img');               // the shot's still stays on screen while the proxy loads
+  quiet(pv); pv.onclick = null;                      // the picture started it; from here the player's own controls do (a click on Pause is not "play")
   pv.innerHTML = '<video controls autoplay playsinline' + (was ? ' poster="' + esc(was.getAttribute('src')) + '"' : '') + ' src="play.php?p=' + encodeURIComponent(path) + (t ? '#t=' + t : '') + '"></video>';
   const v = pv.querySelector('video');
   v.onloadeddata = function () { if (note) note.textContent = 'Playing its proxy' + (t ? ' from ' + tcode(t) : '') + ' (the original stays where it is).'; };
   v.onerror = function () { if (note) note.textContent = 'No proxy to play yet. Proxies are made in Manage → Describe.'; };
   // the description and the strip follow what is on screen as it plays
   if (st && st.shots.length) v.ontimeupdate = function () {
+    if (!v.isConnected) { quiet({ querySelectorAll: function () { return [v]; } }); return; }   // off the page: silent
     let cur = null;
     st.shots.forEach(function (x) { if (x.kind === 'shot' && +x.start_s <= v.currentTime + .05) cur = x; });
     if (!cur || cur === st.onScreen) return;
@@ -1108,10 +1123,8 @@ function wire(box, st, where) {
     b.onclick = function () {
       st.t = +b.dataset.shot;
       const v = box.querySelector('[data-pv] video');
-      if (v) { v.currentTime = st.t; v.play().catch(function () {}); st.playing = true; }
-      const keep = v ? v : null;
+      if (v) { v.currentTime = st.t; v.play().catch(function () {}); st.playing = true; st.keep = v; }
       render(where);
-      if (keep) { const pv2 = box.querySelector('[data-pv]'); pv2.innerHTML = ''; pv2.appendChild(keep); }
     };
   });
   box.querySelectorAll('[data-kw]').forEach(function (b) {
@@ -1152,7 +1165,7 @@ function stepBig(d) { const all = items(), el = all[bigAt + d]; if (el) { choose
 $('bigPrev').onclick = function () { stepBig(-1); };
 $('bigNext').onclick = function () { stepBig(1); };
 $('bigClose').onclick = function () { $('big').close(); };
-$('big').addEventListener('close', function () { $('bigBody').querySelectorAll('video').forEach(function (v) { v.pause(); }); $('bigBody').innerHTML = ''; BIG = null; });
+$('big').addEventListener('close', function () { quiet($('bigBody')); $('bigBody').innerHTML = ''; BIG = null; });
 $('big').addEventListener('click', function (e) { if (e.target === $('big')) $('big').close(); });   // a click outside closes it
 
 // The path as this computer reaches it, for Copy path

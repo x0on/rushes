@@ -425,7 +425,10 @@ $offered = array_column(folders_offered(), 'folder');
 check($added && !array_filter($added, fn($f) => $rel('PARKS/day1', $f) || $rel('Find', $f)) && count($added) === count(array_unique($added))
       && !array_filter($added, fn($f) => count(array_filter($added, fn($g) => $g !== $f && $rel($g, $f)))),
       'the switch on: folders go on the list whole, never one already on it, inside or around one, nor one left out');
-check(!array_filter($offered, fn($f) => is_dir(prep_abs($f)) && !array_filter($have, fn($l) => $rel($l, $f))), 'the switch on: every folder with videos that is there is on the list, or left out');
+check(!array_filter($offered, fn($f) => is_dir(prep_abs($f)) && $f !== shelf_name() && archive_folder_is(explode('/', $f)[0]) !== 'waiting' && !array_filter($have, fn($l) => $rel($l, $f))), 'the switch on: every folder with videos that is there and filed is on the list, or left out');
+check(!array_filter($added, fn($f) => archive_folder_is(explode('/', $f)[0]) === 'waiting')
+      && array_filter($offered, fn($f) => archive_folder_is(explode('/', $f)[0]) === 'waiting' && is_dir(prep_abs($f))),
+      'the switch on: footage waiting to be filed is passed by');
 check(prepare_advance()['auto_added'] === [], 'the switch on: a folder is added once');
 check(shelf_name() === 'Library' && in_array('Library/Parks', $added, true) && !in_array('Library', $added, true), 'the switch on: the shelf is never one folder on the list; its departments are');
 prepare_auto(['' => ['on' => 0, 'out' => []]]); @unlink("$root/app/folders-offered.json");
