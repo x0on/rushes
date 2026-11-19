@@ -277,10 +277,16 @@ match, with the still the model looked at, and lines that were spoken, with
 their time. Click one and its file's proxy plays from that moment, in a window
 over the page.
 
-**Every video found is counted and can be reached** (0.13.55). The page shows the first 120, best match
-first (or in the order chosen), says how many there are in all, and **show 120 more videos** brings the
-next page (`search.php?only=videos&voffset=N`), until all of them are on the page. Search never keeps
-part of what it found to itself: the order is only an order. Above them, **Narrow it:** offers the tags
+**Everything found is counted and can be reached, on numbered pages** (0.13.55; pages since 0.13.60).
+A page holds 120. The first pages are the videos found by what they show, best match first (or in the
+order chosen; `search.php?only=videos&voffset=N`); the pages after them are what was found by its name or
+folder alone (`only=files&byname=1`), and say so. A result is on one page only. Search never keeps part
+of what it found to itself: the order is only an order.
+
+**A click plays a video in its tile**, from the moment found; one at a time. ⌘ or Shift only picks.
+Double-click opens it large. **Properties** (the description, the shots, the versions, the file) is a
+panel beside that is shut until asked for: right-click → Properties, or the **i** on a tile.
+Made pieces in one folder of exactly the same length (renders of one piece) are one tile, with how many. Above them, **Narrow it:** offers the tags
 and themes those videos have most, as single words ("parks & recreation" offers *parks* and *recreation*;
 not a word every one of them has, nor one only a single video has);
 a click adds the word to the box, and taking it out widens the search again.

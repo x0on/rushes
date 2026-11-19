@@ -183,6 +183,16 @@ require __DIR__ . '/config.php';
   .thumb.pic img { width: 100%; height: 100%; object-fit: contain; display: block }
   .k-video, .k-image, .k-audio { color: var(--accent-text) }
   .dim { opacity: .5 }
+  /* a tile that plays where it is (a click), with the player's own controls; the picture comes back when it stops */
+  .frame.playing video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: block }
+  .frame.playing .chip, .frame.playing .tl, .frame.playing .vers { display: none }
+  .frame .ph small.np { opacity: .7; font-size: 10.5px }
+  .pager { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 16px 0 }
+  .pager button { min-width: 34px; padding: 6px 9px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 13px var(--font); cursor: pointer }
+  .pager button.cur { background: var(--accent); color: var(--accent-fg, #fff); border-color: var(--accent); cursor: default }
+  .pager button:disabled { opacity: .4; cursor: default }
+  .pager .note { margin-left: 8px }
+  .inspect .px { position: sticky; top: 6px; float: right; margin: 6px 8px 0 0; z-index: 2; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; font-size: 15px; line-height: 1 }
   .more { display: block; width: 100%; margin: 16px 0; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--line);
           background: var(--surface); color: var(--fg); font: 13.5px var(--font); cursor: pointer }
   /* ── one video, opened: the panel beside (small) and the big view (double-click) share these ── */
@@ -411,6 +421,16 @@ let kind = 'all';
 let asked = '';                         // the search as it was asked, for its next page of videos (moreVideos)
 let asking = null;                      // the search being waited for (run)
 let rows = [], total = 0, seq = 0, timer = null, videos = { count: 0, moments: 0, rows: [] };
+// Everything found, a page at a time (0.13.60): first the videos found by what they show, then what was found by
+// its name alone. One result is on one page only (search.php, byname), so the pages can be counted and walked.
+const PAGE = 120;
+let page = 0;
+const vPages = function () { return Math.ceil((videos.count || 0) / PAGE); };
+const nPages = function () { return vPages() + Math.ceil(total / PAGE); };
+// Properties: the panel beside (description, the shots of the video, its versions, the file). Shut until asked
+// for (right-click → Properties, or the i on a tile), so the pictures have the whole width; then it follows
+// what is picked until it is shut.
+let PROPS = false;
 let view = store('view') === 'list' ? 'list' : 'wall';
 const KNOWN = {};          // every file row seen, by path: the panel and the big view find versions here too
 
@@ -514,15 +534,15 @@ function drawActive() {
 
 async function run(more) {
   const my = ++seq;
-  const offset = more ? rows.length : 0;
-  if (!more) rows = [];
+  const offset = 0; more = false; page = 0;
+  rows = [];
   drawActive();
   const words = $('q').value.trim();
   if (!words && !filtering() && kind === 'all') {
     total = 0; videos = { count: 0, moments: 0, rows: [] }; $('stat').textContent = 'Start typing.';
     clearSel(); quiet($('inspect')); $('inspect').hidden = true; return draw();
   }
-  const p = new URLSearchParams({ q: words, kind: kind, limit: 200, offset: offset });
+  const p = new URLSearchParams({ q: words, kind: kind, limit: PAGE, offset: offset, byname: 1 });
   FILTERS.forEach(function (f) { const v = Array.isArray(F[f.k]) ? F[f.k].join(',') : F[f.k]; if (v) p.set(f.k, v); });
   if (more) p.set('only', 'files'); else asked = p.toString();     // more files: the videos are on the page already
   $('stat').textContent = 'searching…';
@@ -553,23 +573,41 @@ async function run(more) {
   remember(words);
 }
 
-// The next page of videos found by what they show: every one found can be reached, a page at a time.
-async function moreVideos(b) {
-  const my = seq, was = b.textContent;
-  b.disabled = true; b.textContent = 'loading…';
-  const p = new URLSearchParams(asked); p.set('only', 'videos'); p.set('voffset', videos.rows.length); p.delete('offset');
+// One page of what was found. The videos found by what they show fill the first pages; what was found by name
+// alone fills the rest. The page asked for is fetched alone, and takes the place of the one shown.
+async function goPage(n, b) {
+  const my = seq, vp = vPages();
+  if (n < 0 || n >= nPages() || n === page) return;
+  const was = b ? b.textContent : ''; if (b) { b.disabled = true; b.textContent = '…'; }
+  const p = new URLSearchParams(asked); p.delete('offset');
+  if (n < vp) { p.set('only', 'videos'); p.set('voffset', n * PAGE); }
+  else { p.set('only', 'files'); p.set('offset', (n - vp) * PAGE); }
   try {
     const d = await (await fetch('search.php?' + p)).json();
     if (my !== seq) return;                         // another search was made meanwhile
     if (d.error || (d.moments || {}).error) throw new Error(d.error || d.moments.error);
-    if (!d.moments.rows.length) throw new Error('no more came');
-    videos.rows = videos.rows.concat(d.moments.rows); videos.count = d.moments.count;
-    draw();
-  } catch (e) { b.disabled = false; b.textContent = 'Could not load more (' + e.message + '): press to try again'; b.title = was; }
+    if (n < vp) { videos.rows = d.moments.rows; videos.count = d.moments.count; }
+    else { rows = d.rows; d.rows.forEach(function (r) { KNOWN[r.path] = r; }); }
+    page = n; clearSel(); draw(); window.scrollTo(0, 0); const o = $('out').closest('.results'); if (o) o.scrollTop = 0;
+    say('Page ' + (n + 1) + ' of ' + nPages() + '.');
+  } catch (e) { if (b) { b.disabled = false; b.textContent = was; } say('Could not load page ' + (n + 1) + ' (' + e.message + '). Press it again.'); }
+}
+function pager() {
+  const vp = vPages(), n = nPages();
+  if (n <= 1) return '';
+  const btn = function (i, label, title) { return '<button type="button" data-page="' + i + '"' + (i === page ? ' class="cur" aria-current="page"' : '') + (i < 0 || i >= n ? ' disabled' : '') + (title ? ' title="' + title + '"' : '') + '>' + label + '</button>'; };
+  const want = {}; [0, n - 1, page - 2, page - 1, page, page + 1, page + 2, vp - 1, vp].forEach(function (i) { if (i >= 0 && i < n) want[i] = 1; });
+  let nums = '', last = -1;
+  Object.keys(want).map(Number).sort(function (a, b) { return a - b; }).forEach(function (i) { if (i > last + 1) nums += '<span class="dim">…</span>'; nums += btn(i, i + 1, i < vp ? 'found by what it shows' : 'found by name'); last = i; });
+  const fp = n - vp;
+  return '<nav class="pager" aria-label="Pages of results">' + btn(page - 1, '‹', 'The page before') + nums + btn(page + 1, '›', 'The next page') +
+    '<span class="note">Page ' + (page + 1) + ' of ' + n.toLocaleString() + ' · ' +
+      (vp && fp ? 'pages 1' + (vp > 1 ? '–' + vp : '') + ': found by what they show · ' + (fp > 1 ? 'pages ' + (vp + 1) + '–' + n : 'page ' + n) + ': found by name'
+                : vp ? 'found by what they show' : 'found by name') + '</span></nav>';
 }
 
 function fail(what, detail) {
-  $('stat').textContent = '';
+  $('stat').textContent = ''; quiet($('out'));
   $('out').innerHTML = '<div class="panel"><div class="empty"><b>' + esc(what) + '</b>' +
     '<div class="code block" style="text-align:left;margin-top:10px">' + esc(detail) + '</div></div></div>';
 }
@@ -586,7 +624,26 @@ function pieces(list) {
     const b = best[r.vkey];
     if (!b || (+r.vrank || 0) > (+b.vrank || 0) || ((+r.vrank || 0) === (+b.vrank || 0) && light(r) > light(b))) best[r.vkey] = r;
   });
-  return list.filter(function (r) { return !r.vkey || best[r.vkey] === r; });
+  // and renders of one piece that its names do not tell apart as versions (Promo 001, 002, FINAL, 001_480; one
+  // saved under a music track's name): videos beside each other, in one folder, of exactly the same length, are
+  // one piece, shown once, with how many there are. The one named final stands for it, else the first found.
+  // ponytail: among what is on this page; two different pieces of one folder with the same length to the hundredth
+  // of a second would fold too (both are still there: Properties, the folder). Camera footage is never folded.
+  const same = {}, dir = function (r) { return r.path.slice(0, r.path.lastIndexOf('/')); };
+  const out = list.filter(function (r) { return !r.vkey || best[r.vkey] === r; });
+  out.forEach(function (r) {
+    if (!r.vkey || !(+r.duration > 0) || (r.kind && r.kind !== 'video' && r.kind !== 'shot' && r.kind !== 'speech')) return;   // made pieces only (a deliverable, a render): camera footage is never folded
+    const k = dir(r) + '|' + (+r.duration).toFixed(2), g = same[k] = same[k] || [];
+    g.push(r);
+  });
+  const drop = new Set();
+  Object.keys(same).forEach(function (k) {
+    const g = same[k]; if (g.length < 2) return;
+    const face = g.reduce(function (a, b) { return (+b.vrank || 0) > (+a.vrank || 0) ? b : a; });
+    face.alike = g.reduce(function (t, r) { return t + Math.max(1, +r.versions || 1); }, 0);
+    g.forEach(function (r) { if (r !== face) drop.add(r); });
+  });
+  return out.filter(function (r) { return !drop.has(r); });
 }
 // What a version is, at a glance and in standard words: its shape (16:9, 9:16, 1:1 …)
 // from its real size, or from its name until it has been read; its language from its name.
@@ -624,7 +681,8 @@ const versTag = function (n) { return n > 1 ? '<span class="vers">' + ICON.versi
 // Pull and Copy, on the picture itself: one click, without opening anything
 const acts = function (path) {
   return '<span class="acts">' + (pullable(path) ? '<button data-act="pull" class="' + (inPull(path) ? 'in' : '') + '" title="' + (inPull(path) ? 'In the pull' : 'Add to pull') + '">' +
-    (inPull(path) ? '✓' : ICON.pull) + '</button>' : '') + '<button data-act="copy" title="Copy its path">' + ICON.copy + '</button></span>';
+    (inPull(path) ? '✓' : ICON.pull) + '</button>' : '') + '<button data-act="copy" title="Copy its path">' + ICON.copy + '</button>' +
+    '<button data-act="info" title="Properties: what it shows, its shots, its versions, the file" style="font:600 12px var(--font)">i</button></span>';
 };
 // Where in the video the matches are: a line the width of the video, a tick at each
 const timeline = function (found, length) {
@@ -639,7 +697,7 @@ function videoTile(m, i) {
             : '<img loading="lazy" alt="' + esc(m.what) + '" src="' + still(m.fp, m.shot) + '">') +
     '<span class="chip">' + (speech ? ICON.quote : ICON.video) + (m.duration ? clock(m.duration) : 'at ' + tcode(m.start_s)) +
       (m.width && aspect(m.width, m.height) !== '16:9' ? ' <span class="r">' + aspect(m.width, m.height) + '</span>' : '') + '</span>' +
-    versTag(m.versions) + acts(m.path) + timeline(m.found, m.duration) + '<span class="pk">✓</span></div>';
+    versTag(m.alike || m.versions) + acts(m.path) + timeline(m.found, m.duration) + '<span class="pk">✓</span></div>';
 }
 // A file: its first still if it was described, else its kind drawn with its name
 function fileTile(r) {
@@ -647,11 +705,12 @@ function fileTile(r) {
   return '<div class="frame' + (inPull(r.path) ? ' pulled' : '') + '" tabindex="0" data-k="' + esc(r.path) + '" data-p="' + esc(r.path) + '">' +
     (st.length === 2 ? '<img loading="lazy" alt="' + esc(r.name) + '" src="' + still(st[0], st[1]) + '">'
      : k === 'image' && VIEW.test(r.name) ? '<img loading="lazy" alt="' + esc(r.name) + '" src="' + asIs(r.path) + '" onerror="this.outerHTML=\'<div class=ph>' + esc(ICON.image).replace(/'/g, '&#39;') + '</div>\'">'
-     : '<div class="ph">' + (ICON[k] || ICON.file) + '<small>' + esc(r.name) + '</small></div>') +
+     : '<div class="ph">' + (ICON[k] || ICON.file) + '<small>' + esc(r.name) + '</small>' +
+         (k === 'video' ? '<small class="np">' + (r.proxy_at || r.asis === '1' ? 'not described yet' : 'no preview yet') + '</small>' : '') + '</div>') +
     '<span class="chip">' + (ICON[k] || ICON.file) + (r.duration ? clock(r.duration) : '') +
       (res(r) ? ' <span class="r">' + res(r) + '</span>' : '') +
       (r.width && aspect(r.width, r.height) !== '16:9' ? ' <span class="r">' + aspect(r.width, r.height) + '</span>' : '') + '</span>' +
-    versTag(r.versions) + acts(r.path) + '<span class="pk">✓</span></div>';
+    versTag(r.alike || r.versions) + acts(r.path) + '<span class="pk">✓</span></div>';
 }
 // In the list, a video found by what it shows is a row too: its picture, its name, where the match is
 function videoRows(list) {
@@ -721,36 +780,30 @@ function draw() {
   const vids = videos.rows.map(function (m, i) { return [m, i]; });
   const best = pieces(videos.rows);
   const vshow = vids.filter(function (x) { return best.indexOf(x[0]) > -1; });
-  if (!files.length && !vshow.length) {
+  if (!total && !(videos.count || 0)) {
     quiet($('inspect')); $('inspect').hidden = true;
     $('out').innerHTML = '<div class="panel"><div class="empty">' +
       ($('q').value.trim() || filtering() || kind !== 'all' ? 'Nothing matches.' : 'Type a few words above: what it shows, a name, a folder, an event.') + '</div></div>';
     return;
   }
   let html = '';
-  // Videos found by what they show come first, as pictures, in both views
-  const shown = {};
   // Words to narrow it with: what these videos have most (search.php). A click adds the word to the search;
   // taking it out of the box widens it again. Offered, never applied by itself.
   if ((videos.suggest || []).length) html += '<div class="sugg">Narrow it: ' + videos.suggest.map(function (x) {
     return '<button class="fchip" data-sugg="' + esc(x[0]) + '" title="' + x[1].toLocaleString() + ' of these videos">' + esc(x[0]) + '</button>'; }).join('') + '</div>';
-  if (vshow.length) {
-    vshow.forEach(function (x) { shown[x[0].vkey || x[0].path] = 1; });
+  // One page, one grid: a page of videos found by what they show, or (after those) a page found by name
+  if (page < vPages()) {
     html += view === 'list' ? videoRows(vshow) : '<div class="wall">' + vshow.map(function (x) { return videoTile(x[0], x[1]); }).join('') + '</div>';
-    const vleft = (videos.count || 0) - videos.rows.length;
-    if (vleft > 0) html += '<button class="more" id="moreV">show ' + Math.min(videos.page || 120, vleft) + ' more videos (' + vleft.toLocaleString() + ' left)</button>';
-  }
-  if (view === 'wall') {
-    // footage and pictures as tiles (not again when the video is already shown); the rest as a list
-    const pics = files.filter(function (r) { return (r.kind === 'video' || r.kind === 'image') && !shown[r.vkey || r.path]; });
+  } else if (view === 'wall') {
+    const pics = files.filter(function (r) { return r.kind === 'video' || r.kind === 'image'; });
     const rest = files.filter(function (r) { return r.kind !== 'video' && r.kind !== 'image'; });
-    if (pics.length) html += (vshow.length ? '<div class="wall-h">Files</div>' : '') + '<div class="wall">' + pics.map(fileTile).join('') + '</div>';
-    if (rest.length) html += '<div class="wall-h">Other files</div>' + listHTML(rest);
-  } else html += listHTML(files.filter(function (r) { return !shown[r.vkey || r.path]; }));
-  if (rows.length < total) html += '<button class="more" id="more">show 200 more (' + (total - rows.length).toLocaleString() + ' left)</button>';
-  $('out').innerHTML = html;
-  const m = $('more'); if (m) m.onclick = function () { run(true); };
-  const mv = $('moreV'); if (mv) mv.onclick = function () { moreVideos(mv); };
+    if (vPages()) html += '<div class="wall-h">Found by name: these have the words in their name or folder, not (yet) in what they show</div>';
+    if (pics.length) html += '<div class="wall">' + pics.map(fileTile).join('') + '</div>';
+    if (rest.length) html += (pics.length ? '<div class="wall-h">Other files</div>' : '') + listHTML(rest);
+  } else html += listHTML(files);
+  html += pager();
+  quiet($('out')); $('out').innerHTML = html;
+  $('out').querySelectorAll('[data-page]').forEach(function (b) { b.onclick = function () { goPage(+b.dataset.page, b); }; });
   $('out').querySelectorAll('[data-sugg]').forEach(function (b) {
     b.onclick = function () { $('q').value = ($('q').value.trim() + ' ' + b.dataset.sugg).trim(); run(); };
   });
@@ -759,9 +812,37 @@ function draw() {
 }
 // The panel keeps its place while there are results, so a click never moves the pictures under the mouse
 function hint() {
+  if (!PROPS) { quiet($('inspect')); $('inspect').hidden = true; return; }
   quiet($('inspect')); $('inspect').hidden = false;
-  $('inspect').innerHTML = '<div style="padding:16px 14px"><p class="note" style="margin:0">Click a picture to see it here.<br>' +
-    'Double-click to open it large and play it. Right-click to add it to a pull.</p></div>';
+  $('inspect').innerHTML = '<button class="px" type="button" id="propsX" title="Close Properties">×</button><div style="padding:16px 14px"><p class="note" style="margin:0">Pick a picture to see what it shows here.<br>' +
+    'A click plays it where it is. Double-click opens it large. Right-click for more.</p></div>';
+  $('propsX').onclick = closeProps;
+}
+function closeProps() { PROPS = false; PANEL = null; quiet($('inspect')); $('inspect').hidden = true; say('Properties closed. Right-click a picture, or its i, to open them again.'); }
+function openProps(el) { PROPS = true; if (!SEL.has(el.dataset.k) || SEL.size !== 1) { SEL.clear(); SEL.add(el.dataset.k); lastEl = el; drawSel(); } openIn('panel', itemOf(el)); }
+// ── a tile plays where it is ──────────────────────────────────────────────
+// A click on a video's picture plays it there, from the moment that was found, with the player's own controls
+// (pause, the line, sound, full screen). One at a time: the one before stops and its picture comes back.
+function stopTiles(but) {
+  $('out').querySelectorAll('.frame.playing').forEach(function (f) {
+    if (f === but) return;
+    quiet(f); f.querySelectorAll('video').forEach(function (v) { v.remove(); });
+    const i = f.querySelector('img'); if (i) i.hidden = false;
+    f.classList.remove('playing');
+  });
+}
+function playTile(el) {
+  if (el.classList.contains('playing')) return;
+  const r = el.dataset.t !== undefined ? videos.rows[+el.dataset.k.slice(1)] : KNOWN[el.dataset.p];
+  if (!r || !(r.proxy_at || r.asis === '1')) { stopTiles(); say('No preview of ' + (r && r.name ? r.name : 'it') + ' yet, so it cannot play here. Previews are made in Manage.'); return; }
+  stopTiles(); quiet($('inspect'));
+  const img = el.querySelector('img'), t = +el.dataset.t || 0, v = document.createElement('video');
+  v.controls = true; v.autoplay = true; v.playsInline = true; if (img) v.poster = img.currentSrc || img.src;
+  v.src = 'play.php?p=' + encodeURIComponent(el.dataset.p) + (t ? '#t=' + t : '');
+  v.onerror = function () { stopTiles(); say('Its preview would not play (is the archive there?).'); };
+  if (img) img.hidden = true;
+  el.classList.add('playing'); el.insertBefore(v, el.firstChild);
+  v.play().catch(function () {});
 }
 
 // ── sounds: played on their own row, one at a time on the whole page ──────
@@ -815,7 +896,7 @@ function drawSel() {
     $('selN').textContent = n + ' picked';
     $('selAdd').textContent = paths.length ? 'Add ' + paths.length + ' to pull' : 'Not in the archive: cannot be pulled';
     $('selAdd').disabled = !paths.length;
-    quiet($('inspect')); $('inspect').hidden = false;
+    quiet($('inspect')); $('inspect').hidden = !PROPS;
     $('inspect').innerHTML = '<div style="padding:16px 14px"><b>' + n + ' picked</b><p class="note" style="margin:6px 0 0">Double-click one to open it. Right-click for more.</p></div>';
   }
 }
@@ -833,13 +914,15 @@ function choose(el, e) {
   } else { SEL.clear(); SEL.add(el.dataset.k); }
   if (!(e && e.shiftKey)) lastEl = el;
   drawSel();
-  if (SEL.size === 1) openIn('panel', itemOf(picked()[0]));
+  if (SEL.size === 1 && PROPS) openIn('panel', itemOf(picked()[0]));
   else if (!SEL.size) hint();
 }
 $('out').addEventListener('click', function (e) {
+  if (e.target.closest('video')) return;            // the player's own controls: Pause is Pause, nothing is picked again
   const a = e.target.closest('[data-act]');
   if (a) {
     const p = a.closest('[data-p]').dataset.p;
+    if (a.dataset.act === 'info') { openProps(a.closest('[data-k]')); return; }
     if (a.dataset.act === 'play') { playSound(a.closest('[data-p]'), p); return; }
     if (a.dataset.act === 'copy') copyText(localPath(p), function (ok) {
       a.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); setTimeout(function () { a.innerHTML = ICON.copy; }, 1600); });
@@ -847,14 +930,18 @@ $('out').addEventListener('click', function (e) {
       const on = inPull(p); a.classList.toggle('in', on); a.innerHTML = on ? '✓' : ICON.pull; a.title = on ? 'In the pull' : 'Add to pull'; });
     return;
   }
-  const el = e.target.closest('[data-k]'); if (el) choose(el, e);
+  const el = e.target.closest('[data-k]'); if (!el) return;
+  choose(el, e);
+  // a plain click on a video's picture plays it there; with ⌘ or Shift it is only picked (several, for a pull)
+  if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+  if (el.classList.contains('frame') && playable(el)) playTile(el); else stopTiles();
 });
 $('out').addEventListener('keydown', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
   if (e.key === 'Enter') { e.preventDefault(); if (SEL.has(el.dataset.k)) openBig(el); else choose(el, e); }
   if (e.key === ' ') { e.preventDefault(); choose(el, e); }
 });
-$('out').addEventListener('dblclick', function (e) { if (e.target.closest('[data-act]')) return; const el = e.target.closest('[data-k]'); if (el) openBig(el); });
+$('out').addEventListener('dblclick', function (e) { if (e.target.closest('[data-act]') || e.target.closest('video')) return; const el = e.target.closest('[data-k]'); if (el) { stopTiles(); openBig(el); } });
 $('out').addEventListener('contextmenu', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
   e.preventDefault();
@@ -862,18 +949,22 @@ $('out').addEventListener('contextmenu', function (e) {
   const paths = selPaths(), one = SEL.size === 1;
   const m = $('ctx');
   m.innerHTML =
+    (one && playable(el) && el.classList.contains('frame') ? '<button data-do="play">Play here</button>' : '') +
     (one ? '<button data-do="open">Open large' + (playable(el) ? ' and play' : '') + '</button>' : '') +
     '<button data-do="pull"' + (paths.length ? '' : ' disabled') + '>' +
       (paths.length ? 'Add ' + (paths.length > 1 ? paths.length + ' ' : '') + (PULL && PULL.name ? 'to ' + esc(PULL.name) : 'to a pull…')
                     : 'Not in the archive: cannot be pulled') + '</button>' +
-    (one ? '<button data-do="copy">Copy path</button>' : '');
+    (one ? '<button data-do="copy">Copy path</button>' : '') +
+    (one ? '<button data-do="props">Properties' + ((itemOf(el).versions || 0) > 1 ? ' and its ' + itemOf(el).versions + ' versions' : '') + '</button>' : '');
   m.hidden = false;
   m.style.left = Math.min(e.clientX, innerWidth - m.offsetWidth - 8) + 'px';
   m.style.top  = Math.min(e.clientY, innerHeight - m.offsetHeight - 8) + 'px';
   m.onclick = function (ev) {
     const b = ev.target.closest('[data-do]'); if (!b || b.disabled) return;
     m.hidden = true;
-    if (b.dataset.do === 'open') openBig(el);
+    if (b.dataset.do === 'open') { stopTiles(); openBig(el); }
+    if (b.dataset.do === 'play') playTile(el);
+    if (b.dataset.do === 'props') openProps(el);
     if (b.dataset.do === 'pull') addToPull(paths, null);
     if (b.dataset.do === 'copy') copyText(localPath(el.dataset.p), function (ok) { say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); });
   };
@@ -919,7 +1010,7 @@ async function shotsOf(fp) {
 }
 async function openIn(where, it) {
   const st = { it: it, row: await rowOf(it.path), shots: await shotsOf(it.fp), t: it.t, playing: where === 'big' };
-  if (where === 'panel') { PANEL = st; if (SEL.size === 1) render('panel'); }
+  if (where === 'panel') { PANEL = st; if (SEL.size === 1 && PROPS) render('panel'); }
   else { BIG = st; render('big'); }
 }
 const shotAt = function (st) {
@@ -1000,7 +1091,7 @@ function render(where) {
           Object.keys(words).slice(0, 24).map(function (k) { return '<button data-kw="' + esc(words[k]) + '">' + esc(words[k]) + '</button>'; }).join('') + '</div>' : '') +
       '</div></div>' +
       '<div>' + head(r, true) + '<div class="vb">' + versionsBox(r, it) + '<div data-desc>' + describe(cur) + '</div>' + details(r, cur) + '</div></div>'
-    : head(r) + '<div class="vb">' + player + versionsBox(r, it) + '<div data-desc>' + describe(cur) + '</div>' + shotsBox + details(r, cur) + '</div>';
+    : '<button class="px" type="button" data-do="closeprops" title="Close Properties">×</button>' + head(r) + '<div class="vb">' + player + versionsBox(r, it) + '<div data-desc>' + describe(cur) + '</div>' + shotsBox + details(r, cur) + '</div>';
   if (big) $('bigName').textContent = r.name;
   const box = big ? $('bigBody') : $('inspect');
   const keep = st.keep; st.keep = null;              // the player a click on a shot moved: it stays, playing from there
@@ -1067,6 +1158,7 @@ function startVideo(box, path, t, st) {
   const pv = box.querySelector('[data-pv]'), note = box.querySelector('[data-pvn]');
   if (!pv) return;
   const was = pv.querySelector('img');               // the shot's still stays on screen while the proxy loads
+  if (box.id === 'inspect') stopTiles();
   quiet(pv); pv.onclick = null;                      // the picture started it; from here the player's own controls do (a click on Pause is not "play")
   pv.innerHTML = '<video controls autoplay playsinline' + (was ? ' poster="' + esc(was.getAttribute('src')) + '"' : '') + ' src="play.php?p=' + encodeURIComponent(path) + (t ? '#t=' + t : '') + '"></video>';
   const v = pv.querySelector('video');
@@ -1086,6 +1178,7 @@ function startVideo(box, path, t, st) {
 }
 function wire(box, st, where) {
   const r = st.row;
+  box.querySelectorAll('[data-do="closeprops"]').forEach(function (b) { b.onclick = closeProps; });
   box.querySelectorAll('[data-do="copy"]').forEach(function (b) {
     b.onclick = function () { copyText(localPath(r.path), function (ok) {
       b.innerHTML = ok ? '✓ Copied' : 'Press ⌘C'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C');

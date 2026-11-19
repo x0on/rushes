@@ -3,6 +3,16 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.13.60 — November 2026
+
+Search, as it is used: the pictures have the page, and a video plays where it is.
+
+- **A click plays the video in its tile**, from the moment that was found, with the player's own controls. One at a time: the one before stops and its picture comes back. With ⌘ or Shift a click only picks (several, for a pull). Double-click still opens it large.
+- **Properties, when asked for.** The panel beside (the description, the shots of the video, its versions, the file) is shut until it is asked for: right-click → Properties, or the **i** on a tile. Open, it follows what is picked; its × shuts it. The pictures have the whole width the rest of the time. Right-click also has Play here.
+- **Pages.** Everything found is on numbered pages of 120: first the videos found by what they show, then what was found by its name alone, which says so. A result is on one page only. "Show 120 more" and "show 200 more" are gone, and with them the page that grew and grew.
+- **One grid.** "Files" under the videos was the videos (and pictures) found by name and not by what they show; shown as a second, unexplained grid of blank tiles. They are pages of the same results now, and a video with nothing to show says why: *no preview yet*, or *not described yet*.
+- **Renders of one piece are shown once.** Promo 001, 002, 003, FINAL, 001_480 and one saved under a music track's name were seven tiles with one picture: their names do not say "version" the way Rushes reads names. Made pieces beside each other in one folder, of exactly the same length, are one tile now, with how many there are; the one named final stands for them. Camera footage is never folded.
+
 ## 0.13.59 — November 2026
 
 The first step back to drives: a drive is looked after from its own card, not from a list of folders.

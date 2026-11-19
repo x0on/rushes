@@ -12,6 +12,8 @@ A promise is not taken away by taking its check away: changing a line here is a 
 - Cache files are not part of Search at all. — `tests/test_server.php`: “Search: a cache file is never part of it”
 - The words offered to narrow a search are single words. — `tests/test_server.php`: “Search: the words offered to narrow it are single words”
 
+- A result is on one page only, and the pages are numbered: videos found by what they show, then what was found by name. — `tests/test_server.php`: “Search: a result is on one page only”
+- A click plays a video where it is; Properties stay shut until asked for (right-click, or the i). — `tests/test_agree.py`: “test_search_plays_in_the_grid_and_keeps_properties_shut_until_asked”
 - One video plays at a time: a player is stopped before it leaves the page, and Pause pauses. — `tests/test_agree.py`: “test_a_player_is_stopped_before_it_leaves_the_page”
 
 ## Describe

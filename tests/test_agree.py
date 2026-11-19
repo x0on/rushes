@@ -56,6 +56,14 @@ class Players(unittest.TestCase):
             if re.search(r"\$\('inspect'\)\.(hidden = true|innerHTML = )", line) or "box.innerHTML = html" in line:
                 self.assertIn("quiet(", lines[i - 1] + line, f"a player may be left playing here: {line.strip()[:90]}")
         self.assertIn("quiet(pv); pv.onclick = null;", js, "the picture starts the player once: a click on Pause is not Play")
+        self.assertIn("quiet($('out')); $('out').innerHTML = html;", js, "a new page of results: a tile that was playing is stopped first")
+
+    def test_search_plays_in_the_grid_and_keeps_properties_shut_until_asked(self):
+        js = read("db", "find.php")
+        self.assertIn("if (e.target.closest('video')) return;", js, "a click on the player's controls picks nothing and starts nothing")
+        self.assertIn("function playTile(el)", js); self.assertIn("let PROPS = false;", js, "the panel is shut until Properties is asked for")
+        self.assertIn('data-do="props"', js, "right-click offers Properties"); self.assertIn('data-act="info"', js, "and so does the i on a tile")
+        self.assertNotIn("show 200 more", js); self.assertIn("function pager()", js, "pages, not a longer and longer page")
 
 
 class Promises(unittest.TestCase):

@@ -402,10 +402,18 @@ $put = function (string $rel, int $i) use ($arch, $mom) {
 };
 for ($i = 0; $i < 130; $i++) $put(sprintf('Find/clip%03d.mov', $i), $i);
 $put('Find/Adobe Premiere Pro Video Previews/P.PRV/Rendered.mov', 999);
+// two files with the word in their names: one is also found by what it shows (it has a moment), one is not
+file_put_contents("$arch/Find/zeppelin take.mov", str_repeat('z', 10)); landed("$arch/Find/zeppelin take.mov", 10);
+foreach (['zptake', "$arch/Find/zeppelin take.mov", 'a zeppelin lands', 'Transportation', 'a zeppelin lands transportation'] as $k => $v) $mom->bindValue($k + 1, $v);
+$mom->execute(); $mom->reset();
+file_put_contents("$arch/Find/zeppelin notes.mov", str_repeat('z', 10)); landed("$arch/Find/zeppelin notes.mov", 10);
 labels_refresh();
+$all = $find(['q' => 'zeppelin']); $named = $find(['q' => 'zeppelin', 'byname' => '1']);
+check($all['total'] === 2 && $named['total'] === 1 && basename($named['rows'][0]['path']) === 'zeppelin notes.mov' && $all['moments']['count'] === 131,
+      'Search: a result is on one page only: found by what it shows, it is not listed again among those found by name');
 $p1 = $find(['q' => 'zeppelin']); $p2 = $find(['q' => 'zeppelin', 'only' => 'videos', 'voffset' => 120]);
 $seen = array_merge(array_column($p1['moments']['rows'], 'path'), array_column($p2['moments']['rows'], 'path'));
-check($p1['moments']['count'] === 130 && count($p1['moments']['rows']) === 120 && count($p2['moments']['rows']) === 10 && count(array_unique($seen)) === 130,
+check($p1['moments']['count'] === 131 && count($p1['moments']['rows']) === 120 && count($p2['moments']['rows']) === 11 && count(array_unique($seen)) === 131,
       'Search: every video found can be reached, a page at a time (the count is the true count, never a cap)');
 check(!array_filter($seen, fn($x) => str_contains($x, 'Video Previews')) && $find(['q' => 'Rendered'])['total'] === 0 && $find(['q' => 'clip'])['total'] === 130,
       'Search: a cache file is never part of it, by its name or by what is in it');

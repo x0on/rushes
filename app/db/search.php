@@ -148,16 +148,27 @@ if ($nothing) {
 $only = (string)($_GET['only'] ?? '');
 $rows = []; $counts = ['all' => 0]; $bytes = 0;
 if ($only !== 'videos') {
+    // byname=1: the files found by their names alone. A video found by what it shows (every word somewhere in it,
+    // as analysis_videos() finds it) is on the videos' pages already; here it is left out, so every result is on
+    // one page only and the pages can be counted. Asked per file by its path (moments are indexed by it).
+    $fsql = $sql; $fargs = $args;
+    $typed = preg_split('/\s+/', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY);
+    if (($_GET['byname'] ?? '') === '1' && $typed) {
+        analysis_init();
+        $fsql .= ($fsql ? ' AND ' : ' WHERE ') . 'NOT (' . implode(' AND ', array_fill(0, count($typed),
+            "EXISTS (SELECT 1 FROM moments m WHERE m.path = files.path AND m.kind != 'failed' AND wmatch(m.hay, ?))")) . ')';
+        foreach ($typed as $w) $fargs[] = word_pattern($w);
+    }
     // the rows
     $st = $db->prepare("SELECT files.path, name, ext, kind, bytes, year, event, dept,
                                width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera, asis,
                                (SELECT group_concat(place || '|' || present || '|' || checked, ';') FROM copies WHERE file_id = files.id) AS copies,
                                (SELECT fp || ':' || shot FROM moments WHERE moments.path = files.path AND kind = 'shot' ORDER BY shot LIMIT 1) AS still,
                                lb.vkey, lb.vrank, (SELECT COUNT(*) FROM labels x WHERE x.vkey = lb.vkey) AS versions
-                        FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$sql ORDER BY $order LIMIT ? OFFSET ?");
-    $bind($st, $args);
-    $st->bindValue(count($args) + 1, $limit, SQLITE3_INTEGER);
-    $st->bindValue(count($args) + 2, $offset, SQLITE3_INTEGER);
+                        FROM files LEFT JOIN media ON media.file_id = files.id LEFT JOIN labels lb ON lb.path = files.path$fsql ORDER BY $order LIMIT ? OFFSET ?");
+    $bind($st, $fargs);
+    $st->bindValue(count($fargs) + 1, $limit, SQLITE3_INTEGER);
+    $st->bindValue(count($fargs) + 2, $offset, SQLITE3_INTEGER);
     $res = $st->execute();
     if ($res === false) { echo json_encode(['error' => 'rows query: ' . $db->lastErrorMsg()]); exit; }
     // On a Mac, the archive itself is a drive that can be unplugged
@@ -170,8 +181,8 @@ if ($only !== 'videos') {
     }
 
     // true totals, and per-kind counts for the chips — one scan, not five
-    $cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$sql GROUP BY +kind");   // +kind: read the files in their own order; by the kind index, each row was fetched out of order (four times slower)
-    $bind($cs, $args);
+    $cs = $db->prepare("SELECT kind, COUNT(*) c, SUM(bytes) b FROM files LEFT JOIN media ON media.file_id = files.id$fsql GROUP BY +kind");   // +kind: read the files in their own order; by the kind index, each row was fetched out of order (four times slower)
+    $bind($cs, $fargs);
     $cr = $cs->execute();
     if ($cr === false) { echo json_encode(['error' => 'counts query: ' . $db->lastErrorMsg()]); exit; }
     while ($r = $cr->fetchArray(SQLITE3_ASSOC)) {
@@ -201,7 +212,7 @@ if ($only !== 'files' && ($q !== '' || $cond !== '') && ($kind === '' || $kind =
         if ($condAt >= 0) { array_splice($fw, $condAt, 1); array_splice($fa, $condArg, count($cargs)); }
         $fw = array_slice($fw, $words); $fa = array_slice($fa, $wargs); $file = [];
         foreach (array_chunk(array_values(array_unique(array_column($found, 'path'))), 500) as $some) {
-            $st = $db->prepare('SELECT files.path, files.year, files.bytes, media.duration, media.width, media.height, media.recorded, media.proxy_at
+            $st = $db->prepare('SELECT files.path, files.year, files.bytes, media.duration, media.width, media.height, media.recorded, media.proxy_at, media.asis
                 FROM files LEFT JOIN media ON media.file_id = files.id WHERE files.path IN (' . implode(',', array_fill(0, count($some), '?')) . ')'
                 . ($fw ? ' AND ' . implode(' AND ', $fw) : ''));
             $bind($st, array_merge($some, $fa));
