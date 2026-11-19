@@ -15,13 +15,19 @@
 // Versions of one piece (v2, _1, FINAL, ENG/SPA, YouTube/Instagram: labels.php) show once.
 $NAV = 'search';
 require __DIR__ . '/config.php';
+// Inside Premiere (the panel in premiere/ shows this page with ?premiere=1): the same Search, dressed as a Premiere
+// panel, with the pull being filled along the bottom and Copy and import on it. A panel is a browser of its own,
+// so the question "who is using Rushes here?" is answered for it.
+$PP = isset($_GET['premiere']);
+if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['expires' => time() + 31536000, 'path' => '/', 'samesite' => 'Lax']);
 ?><!doctype html>
-<html lang="en">
+<html lang="en"<?= $PP ? ' class="pp" data-theme="dark"' : '' ?>>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Search &middot; Rushes</title>
 <script>
   window.RUSHES = <?= json_encode([
+    'premiere' => $PP,
     'archive' => archive_dir(),
     'mac'     => on_mac(),
     'local'   => s_path('archive.as_seen_from_helper', archive_dir()),
@@ -310,6 +316,35 @@ require __DIR__ . '/config.php';
   .pd-pick small { color: var(--muted) }
   .pd-new { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px }
   #pullDlg label.f { margin-bottom: 10px }
+
+  /* ── inside Premiere: its greys and its blue, its small type, and only what an editor needs ── */
+  html.pp.pp { --bg: #1d1d1d; --surface: #262626; --raised: rgba(255,255,255,.07); --fg: #dedede;
+    --muted: rgba(255,255,255,.62); --faint: rgba(255,255,255,.4); --line: rgba(255,255,255,.13); --line-soft: rgba(255,255,255,.07);
+    --accent: #2d8ceb; --accent-fg: #fff; --accent-text: #74b4f5; --sel-bg: #2d8ceb; --sel-fg: #fff;
+    --code-bg: rgba(255,255,255,.06); --shadow: none; --radius: 4px; color-scheme: dark; font-size: 12.5px }
+  .pp .topbar, .pp #pbOpen { display: none }
+  /* a panel of any size, narrow or a whole screen: the results scroll inside it and the pull's bar stays at its foot */
+  html.pp body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden }
+  html.pp body > :not(.app) { flex: none }
+  html.pp .app { flex: 1; min-height: 0; height: auto; overflow: hidden }
+  .pp .pad { padding: 8px 10px 10px }
+  .pp .sbar { margin-bottom: 6px; gap: 6px }
+  .pp .q select { font-size: 12.5px; padding: 7px 6px 7px 9px } .pp .q input { font-size: 13px; padding: 7px 10px 7px 8px }
+  .pp .statline { font-size: 12px }
+  .pp .btn, .pp .ghost, .pp .plain { font-size: 12px; border-radius: 4px }
+  .pp .pullbar, .pp #pullbar[hidden] { position: relative; left: auto; bottom: auto; transform: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+    width: auto; max-width: none; margin: 0; padding: 6px 10px; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+    background: var(--surface); box-shadow: none }
+  .pp .pullbar .pb-t b { font-size: 12.5px; max-width: 30vw } .pp .pullbar .pb-t small { font-size: 11.5px }
+  .pp-grow { flex: 1 }
+  #ppSaid { color: var(--muted); font-size: 12px; min-width: 0; max-width: 100%; overflow-wrap: anywhere }
+  .pp-to { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; margin: 0 }
+  .pp-to select { width: auto; max-width: 180px; font-size: 12px; padding: 4px 6px }
+  #ppBar { position: absolute; left: 0; right: 0; top: -1px; height: 2px; display: block } #ppBar i { display: block; height: 2px; width: 0; background: var(--accent) }
+  #ppList { top: auto; bottom: calc(100% + 4px); left: 10px; max-height: 50vh; overflow-y: auto; min-width: 280px; max-width: calc(100vw - 20px) }
+  #ppList div { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 12px }
+  #ppList div span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  #ppList div small { color: var(--muted); flex: none } #ppList div button { width: auto; padding: 2px 7px }
 </style>
 
 <div class="app" style="grid-template-rows:1fr">
@@ -1388,6 +1423,120 @@ $('pBtn').onclick = async function () {
     '<button id="pdNew">Fill another pull…</button><a href="/pull.php">All pulls</a>';
   $('pdNew').onclick = function () { dd.hidden = true; pending = null; openPullDlg(); };
 };
+// ── Inside Premiere ────────────────────────────────────────────────────────
+// The panel (premiere/index.js) shows this page and is spoken to in short notes: hello → project (the open
+// project's name), import (the copies' paths) → imported. The pull being filled is the project's own: named after it,
+// made when first needed; the Pulls menu fills another. Copy and import copies that pull to the drive chosen
+// (pulls.php action=copy, the Mac's runner) and hands Premiere the copies, each one once.
+// ponytail: what was imported is remembered in this panel only; Premiere's own bins are not read.
+if (RUSHES.premiere) (function () {
+  const host = window.uxpHost, bar = $('pullbar'), enc = encodeURIComponent;
+  let project = null, heard = false, busy = false, again = false, slugNow = '';
+  const waiting = {};
+  const tell = function (o) { try { host.postMessage(JSON.stringify(o)); return true; } catch (e) { return false; } };
+  bar.insertAdjacentHTML('beforeend', '<button class="ghost" id="ppClips" title="The clips in this pull">Clips</button><span id="ppSaid" role="status"></span><span class="pp-grow"></span>' +
+    '<label class="pp-to">Copy to <select id="ppTo" aria-label="Where the clips are copied to"></select></label><button class="btn" id="ppGo" disabled>Copy and import</button>' +
+    '<button class="ghost" id="ppStop" hidden>Stop</button><i id="ppBar"><i></i></i><div class="dd" id="ppList" hidden></div>');
+  function said(t, pct) { $('ppSaid').textContent = t; if (pct != null) $('ppBar').firstChild.style.width = Math.max(0, Math.min(100, pct)) + '%'; }
+  const ready = function () { $('ppGo').disabled = busy || !PULL || !$('ppTo').value; };
+  const wasRefresh = refreshPull;
+  refreshPull = async function () { await wasRefresh(); ready(); if (!$('ppList').hidden) clips(); };
+
+  fetch('/db/pulls.php?places=1').then(function (r) { return r.json(); }).then(function (d) {
+    const was = store('ppTo');
+    $('ppTo').innerHTML = (d.places || []).map(function (p) {
+      return '<option value="' + esc(p.to) + '"' + (p.to === was ? ' selected' : '') + '>' + esc(p.to === 'desktop' ? 'Desktop' : p.name) + (p.free ? ' · ' + tb(p.free) + ' free' : '') + '</option>'; }).join('');
+    if (!(d.places || []).length) said('This Rushes has nowhere to copy to: copying is done by the Rushes app on a Mac.');
+    ready();
+  }).catch(function () { said('Could not ask Rushes where clips can be copied to.'); });
+
+  async function setProject(name) {
+    if (name === project) return; project = name;
+    if (!name) return said('No project is open in Premiere: clips can be gathered and copied, not imported.');
+    try {
+      let p = (await pullsList()).filter(function (x) { return x.name === name; })[0];
+      if (!p) p = await pullPost({ action: 'create', name: name, made_by: 'Premiere' });
+      await usePull({ slug: p.slug, name: name });
+      said('Project: ' + name);
+    } catch (e) { said('Could not start the pull for ' + name + ': ' + e.message); }
+  }
+  window.addEventListener('message', function (e) {
+    let d = e.data; try { if (typeof d === 'string') d = JSON.parse(d); } catch (x) { return; }
+    if (!d || !d.rushes) return;
+    if (d.rushes === 'project') { heard = true; setProject(String(d.name || '')); }
+    if (d.rushes === 'imported' && waiting[d.id]) { waiting[d.id](d); delete waiting[d.id]; }
+  });
+  const hello = function () { if (!busy) tell({ rushes: 'hello' }); };
+  hello(); setInterval(hello, 4000);                       // the project open in Premiere can change
+  setTimeout(function () { if (!heard) said('Not connected to Premiere: clips can be gathered and copied here, not imported.'); }, 3000);
+  const ask = function (o) { return new Promise(function (ok, no) {
+    o.id = String(Date.now()); waiting[o.id] = ok;
+    if (!tell(o)) { delete waiting[o.id]; return no(new Error('not connected to Premiere')); }
+    setTimeout(function () { if (waiting[o.id]) { delete waiting[o.id]; no(new Error('Premiere did not answer in two minutes')); } }, 120000); }); };
+
+  async function go() {
+    if (busy || !PULL) return;
+    const slug = slugNow = PULL.slug, name = PULL.name, to = $('ppTo').value; store('ppTo', to);
+    busy = true; ready(); $('ppStop').hidden = false;
+    try {
+      said('Asking Rushes to copy ' + name + '…', 0);
+      await pullPost({ action: 'copy', p: slug, to: to });
+      let c; const t0 = Date.now();
+      for (;;) {
+        await new Promise(function (r) { setTimeout(r, 1000); });
+        c = (await (await fetch('/db/pulls.php?p=' + enc(slug) + '&t=' + Date.now())).json()).copy || { state: 'asked' };
+        if (c.state === 'asked') {
+          if (Date.now() - t0 > 90000) throw new Error('Rushes has not started the copy after 90 seconds: another copy may be running (Activity, in Rushes, says).');
+          said('Waiting for Rushes to start the copy…', 0);
+        } else if (c.state === 'copying') said('Copying ' + c.n + ' of ' + c.total + (c.file ? ' · ' + c.file : '') + ' · ' + tb(c.bytes) + ' of ' + tb(c.total_bytes), c.total_bytes ? 100 * c.bytes / c.total_bytes : 0);
+        else break;
+      }
+      if (c.state !== 'done') throw new Error('The copy ' + (c.state === 'stopped' ? 'was stopped' : 'failed') + ': ' + (c.why || 'no reason given') + '. Nothing was imported.');
+      const bad = (c.failed || []).length ? ' ' + c.failed.length + ' could not be copied (' + c.failed.map(function (f) { return f[0] + ': ' + f[1]; }).join('; ') + ').' : '';
+      const files = (c.files || []).map(function (f) { return f[1]; });
+      if (!files.length) throw new Error('Nothing could be copied, so nothing was imported.' + bad);
+      if (!heard || !project) return said('Copied ' + files.length + ' to ' + c.dest + '. Not connected to a Premiere project, so nothing was imported.' + bad, 100);
+      const key = 'ppIn:' + project; let before = []; try { before = JSON.parse(store(key) || '[]'); } catch (e) {}
+      let fresh = files.filter(function (f) { return before.indexOf(f) < 0; });
+      if (!fresh.length && !again) { again = true; return said('All ' + files.length + ' are copied, and were imported into ' + project + ' before. Press again to import them once more.' + bad, 100); }
+      if (!fresh.length) fresh = files;
+      again = false;
+      said('Copied. Importing ' + fresh.length + ' into ' + project + '…', 100);
+      const r = await ask({ rushes: 'import', files: fresh });
+      if (!r.ok) throw new Error('The copies are in ' + c.dest + ', but Premiere did not import them: ' + (r.error || 'no reason given'));
+      store(key, JSON.stringify(before.concat(fresh.filter(function (f) { return before.indexOf(f) < 0; })).slice(-5000)));
+      said('Imported ' + fresh.length + (fresh.length === 1 ? ' clip' : ' clips') + ' into ' + project + (files.length > fresh.length ? ' (' + (files.length - fresh.length) + ' were in it already)' : '') + '. The copies are in ' + c.dest + '.' + bad, 100);
+    } catch (e) { said(e.message, 0); }
+    finally { busy = false; ready(); $('ppStop').hidden = true; }
+  }
+  $('ppGo').onclick = go;
+  $('ppStop').onclick = function () { said('Asking Rushes to stop…'); pullPost({ action: 'copy-stop', p: slugNow }).catch(function (e) { said(e.message); }); };
+
+  // Clips: what is in the pull, each with a way out of it
+  async function clips() {
+    const l = $('ppList'); if (!PULL) { l.hidden = true; return; }
+    const d = await (await fetch('/db/pulls.php?p=' + enc(PULL.slug) + '&t=' + Date.now())).json();
+    l.innerHTML = (d.items || []).map(function (i) {
+      return '<div><span title="' + esc(i.rel) + '">' + esc(i.name) + '</span><small>' + tb(i.bytes) + '</small><button class="ghost" data-rel="' + esc(i.rel) + '" title="Out of this pull; the file stays in the archive">×</button></div>'; }).join('')
+      || '<div><span>Nothing in this pull yet. The pull button on a picture adds it.</span></div>';
+    l.hidden = false;
+  }
+  $('ppClips').onclick = function () { if ($('ppList').hidden) clips().catch(function (e) { said(e.message); }); else $('ppList').hidden = true; };
+  $('ppList').onclick = async function (e) {
+    const b = e.target.closest('button[data-rel]'); if (!b || !PULL) return;
+    try { await pullPost({ action: 'remove', p: PULL.slug, rel: b.dataset.rel }); await refreshPull(); } catch (x) { said(x.message); }
+  };
+  // Another page of Rushes would leave the panel with no way back: a pull's link fills that pull here, the rest say where they open.
+  document.addEventListener('click', function (e) {
+    const a = e.target.closest('a[href]'); if (!a) return;
+    const u = new URL(a.getAttribute('href'), location.href);
+    if (u.pathname === location.pathname) return;
+    e.preventDefault(); e.stopPropagation();
+    const slug = u.pathname === '/pull.php' && u.searchParams.get('p');
+    if (slug) { $('pullsDd').hidden = true; usePull({ slug: slug, name: '' }); }
+    else say('That page opens in Rushes itself, not in Premiere.');
+  }, true);
+})();
 // Arriving from a pull's "+ Add clips": that pull is the one being filled.
 (function () {
   const w = new URLSearchParams(location.search).get('pull');

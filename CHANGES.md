@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.14.2 — November 2026
+
+- **The Premiere panel is Search itself.** The panel no longer has a small search of its own: it shows Rushes' Search, the same grid, pictures, playing in the tile, filters, pages and Pulls menu, dressed as a Premiere panel (its greys, its blue, its small type) and without what an editor does not need there (the top bar, Ingest, Manage). It fits the panel at any size, docked narrow or a whole second screen.
+- **The project's pull, along the bottom.** The pull being filled is the open project's own, named after it and made when first needed; the pull button on a picture adds to it, **Clips** lists what is in it (× takes one out), and the Pulls menu fills another pull instead. **Copy to** picks the drive; **Copy and import** copies the pull there (*Rushes pulls / the pull's name*) and brings the copies into the project, saying how it goes on the same line. A clip is imported once: pressed again, only what was added since is imported.
+- A panel that cannot reach Premiere says so, and still gathers and copies. Install the new *Rushes Premiere panel 0.14.2.ccx* over the old one.
+- Search in a browser is as it was.
+
 ## 0.14.1 — November 2026
 
 - **Rushes inside Premiere.** A panel for Premiere (25.6 or newer; *Window → UXP Plugins → Rushes*): search the archive there, and **Import** on a clip copies it to the drive chosen (the copy of 0.14.0), then brings the copy into the open project. A clip asked for this way goes into a pull named after the Premiere project, so a project's footage is in one folder, *Rushes pulls / the project's name*, and Rushes remembers what the project took. **Import** on a pull does the same for all of it. It says how the copy goes and what was imported, and nothing is imported from a copy that failed. It comes as its own file, *Rushes Premiere panel 0.14.1.ccx*: double-click it and Creative Cloud installs it. The Mac version: it talks to the Rushes app on the same Mac.

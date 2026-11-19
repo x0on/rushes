@@ -7,6 +7,6 @@ m = json.load(open(os.path.join(here, "manifest.json")))
 m["version"] = open(os.path.join(here, "..", "app", "VERSION")).read().strip()
 with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("manifest.json", json.dumps(m, indent=2))
-    for f in ["index.html", "index.js", "style.css"] + ["icons/" + x for x in sorted(os.listdir(os.path.join(here, "icons")))]:
+    for f in ["index.html", "index.js"] + ["icons/" + x for x in sorted(os.listdir(os.path.join(here, "icons")))]:
         z.write(os.path.join(here, f), f)
 print(f"{sys.argv[1]}: Rushes panel {m['version']} for Premiere {m['host']['minVersion']} and newer")

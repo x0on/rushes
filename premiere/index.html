@@ -2,16 +2,16 @@
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="stylesheet" href="style.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+  #note { padding: 12px; color: #dedede; font-size: 13px; }
+  #note.hide { display: none; }
+  #again { margin-top: 10px; }
+</style>
 <script src="index.js"></script>
 </head>
 <body>
-<div id="top">
-  <div id="status">Looking for Rushes…</div>
-  <div class="row"><span class="lab">Copy to</span><select id="place"></select></div>
-  <div class="row"><input id="q" type="text" placeholder="Search Rushes"><button id="go">Search</button></div>
-  <div id="work" class="hide"><div id="bar"><div id="fill"></div></div><div id="said"></div><button id="stop" class="hide">Stop</button></div>
-</div>
-<div id="list"></div>
+<div id="note"><div id="said">Opening Rushes…</div><button id="again">Try again</button></div>
+<webview id="wv" width="100%" height="600px" src="http://127.0.0.1:8642/db/find.php?premiere=1"></webview>
 </body>
 </html>

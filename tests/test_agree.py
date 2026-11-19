@@ -67,24 +67,38 @@ class Players(unittest.TestCase):
 
 
 class PremierePanel(unittest.TestCase):
-    """The panel inside Premiere asks Rushes for things by name; a name changed on one side only is caught here."""
+    """The panel inside Premiere shows Rushes' own Search and the two speak in short notes; a name changed on one
+    side only is caught here."""
     def test_the_panel_is_whole_and_asks_for_what_rushes_answers(self):
         import json, tempfile, zipfile, subprocess, sys
         root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
         rd = lambda *p_: open(os.path.join(root, *p_)).read()
-        m = json.loads(rd("premiere", "manifest.json")); js = rd("premiere", "index.js"); php = rd("app", "db", "pulls.php")
+        m = json.loads(rd("premiere", "manifest.json")); js = rd("premiere", "index.js"); html = rd("premiere", "index.html")
+        page = rd("app", "db", "find.php"); php = rd("app", "db", "pulls.php")
         self.assertEqual((m["host"]["app"], m["manifestVersion"], m["main"]), ("premierepro", 5, "index.html"))
+        self.assertEqual(m["requiredPermissions"]["webview"]["enableMessageBridge"], "localAndRemote", "the page and the panel can speak")
         for i in m["icons"] + m["entrypoints"][0]["icons"]:
             self.assertTrue(os.path.exists(os.path.join(root, "premiere", i["path"])), i["path"])
-        for asked in ("?places=1", "?list=1", "action: 'create'", "action: 'add'", "action: 'copy'", "action: 'copy-stop'"):
-            self.assertIn(asked, js)
-        for answered in ("isset($_GET['places'])", "isset($_GET['list'])", "'create'", "'add'", "'copy'", "'copy-stop'"):
-            self.assertIn(answered, php)
-        self.assertIn("c.files", js); self.assertIn('state["files"].append([src, out])', rd("app", "runner.py"), "the runner tells each copy's path: the panel imports those")
+        # the panel opens the page dressed for Premiere, and the page knows that dress
+        self.assertIn("/db/find.php?premiere=1", js); self.assertIn("/db/find.php?premiere=1", html); self.assertIn("isset($_GET['premiere'])", page)
+        # the notes: each is sent by one side and read by the other
+        for note in ("hello", "import"):
+            self.assertIn("rushes: '%s'" % note, page); self.assertIn("d.rushes === '%s'" % note, js)
+        for note in ("project", "imported"):
+            self.assertIn("rushes: '%s'" % note, js); self.assertIn("d.rushes === '%s'" % note, page)
+        # the page asks pulls.php for what pulls.php answers, and imports the copies the runner says it made
+        for asked, answered in (("?places=1", "isset($_GET['places'])"), ("action: 'copy'", "'copy'"), ("action: 'copy-stop'", "'copy-stop'"), ("action: 'remove'", "'remove'")):
+            self.assertIn(asked, page); self.assertIn(answered, php)
+        self.assertIn("c.files", page); self.assertIn('state["files"].append([src, out])', rd("app", "runner.py"))
         out = os.path.join(tempfile.mkdtemp(), "p.ccx")
         subprocess.run([sys.executable, os.path.join(root, "premiere", "pack.py"), out], check=True, capture_output=True)
-        z = zipfile.ZipFile(out); self.assertIn("manifest.json", z.namelist()); self.assertIn("index.js", z.namelist())
+        z = zipfile.ZipFile(out); self.assertEqual(sorted(n for n in z.namelist() if "/" not in n), ["index.html", "index.js", "manifest.json"])
         self.assertEqual(json.loads(z.read("manifest.json"))["version"], rd("app", "VERSION").strip(), "the panel carries Rushes' version")
+
+    def test_search_outside_premiere_is_as_it_was(self):
+        page = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "db", "find.php")).read()
+        self.assertIn("if (RUSHES.premiere) (function () {", page, "what is Premiere's runs only there")
+        self.assertIn("""<?= $PP ? ' class="pp" data-theme="dark"' : '' ?>""", page, "and its dress is put on only there")
 
 
 class Promises(unittest.TestCase):
