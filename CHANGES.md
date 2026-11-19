@@ -6,6 +6,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 ## 0.14.3 — November 2026
 
 - **The Premiere panel fills its panel.** In Premiere it stopped at a fixed height and left the rest empty; it takes the panel's whole height and width now, and follows when the panel is resized.
+- **The panel shows Rushes as it is now.** After Rushes was updated the panel went on showing the page it had kept from before, the old one. It asks for the page afresh every time it opens, and Rushes tells it not to keep it.
 - **A panel newer than Rushes says so.** With an older Rushes behind it the panel showed the ordinary Search page, light and with its top bar, and no reason; it now says that Rushes needs updating. The panel and Rushes go together: install *Rushes Premiere panel 0.14.3.ccx* and update Rushes to 0.14.3.
 
 ## 0.14.2 — November 2026

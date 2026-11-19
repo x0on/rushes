@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', function () {
     w = nw; h = nh; wv.setAttribute('width', nw + 'px'); wv.setAttribute('height', nh + 'px'); wv.style.width = nw + 'px'; wv.style.height = nh + 'px';
   };
   fit(); window.addEventListener('resize', fit); setInterval(fit, 400);
+  // asked for afresh each time the panel opens: a webview keeps pages, and a kept one is an older Rushes' (0.14.3)
+  wv.src = PAGE + '&t=' + Date.now();
   // A Rushes older than this panel shows its ordinary page and never says hello: said here, not left to be wondered at.
   let hello = false;
   wv.addEventListener('loadstop', function () {

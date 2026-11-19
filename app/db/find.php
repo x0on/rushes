@@ -19,6 +19,7 @@ require __DIR__ . '/config.php';
 // panel, with the pull being filled along the bottom and Copy and import on it. A panel is a browser of its own,
 // so the question "who is using Rushes here?" is answered for it.
 $PP = isset($_GET['premiere']);
+if ($PP) header('Cache-Control: no-store');     // a panel keeps what it is given: an older Rushes' page must not outlive the update (0.14.3)
 if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['expires' => time() + 31536000, 'path' => '/', 'samesite' => 'Lax']);
 ?><!doctype html>
 <html lang="en"<?= $PP ? ' class="pp" data-theme="dark"' : '' ?>>

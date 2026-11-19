@@ -80,7 +80,9 @@ class PremierePanel(unittest.TestCase):
         for i in m["icons"] + m["entrypoints"][0]["icons"]:
             self.assertTrue(os.path.exists(os.path.join(root, "premiere", i["path"])), i["path"])
         # the panel opens the page dressed for Premiere, and the page knows that dress
-        self.assertIn("/db/find.php?premiere=1", js); self.assertIn("/db/find.php?premiere=1", html); self.assertIn("isset($_GET['premiere'])", page)
+        self.assertIn("/db/find.php?premiere=1", js); self.assertIn("isset($_GET['premiere'])", page)
+        self.assertIn("wv.src = PAGE + '&t=' + Date.now()", js, "asked for afresh: never a page kept from an older Rushes")
+        self.assertNotIn("src=", html.split("<webview")[1].split(">")[0]); self.assertIn("if ($PP) header('Cache-Control: no-store')", page)
         # the notes: each is sent by one side and read by the other
         for note in ("hello", "import"):
             self.assertIn("rushes: '%s'" % note, page); self.assertIn("d.rushes === '%s'" % note, js)
