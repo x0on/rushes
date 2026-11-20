@@ -328,7 +328,8 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   html.pp body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden }
   html.pp body > :not(.app) { flex: none }
   html.pp .app { flex: 1; min-height: 0; height: auto; overflow: hidden }
-  .pp .pad { padding: 8px 10px 10px }
+  .pp .pad { padding: 8px 10px 0 }
+  html.pp .work { padding-bottom: 0 !important }   /* room left for the pull's bar where it floats; here it has a place of its own */
   .pp .sbar { margin-bottom: 6px; gap: 6px }
   .pp .q select { font-size: 12.5px; padding: 7px 6px 7px 9px } .pp .q input { font-size: 13px; padding: 7px 10px 7px 8px }
   .pp .statline { font-size: 12px }
@@ -337,6 +338,19 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
     width: auto; max-width: none; margin: 0; padding: 6px 10px; border: 0; border-top: 1px solid var(--line); border-radius: 0;
     background: var(--surface); box-shadow: none }
   .pp .pullbar .pb-t b { font-size: 12.5px; max-width: 30vw } .pp .pullbar .pb-t small { font-size: 11.5px }
+  /* the page numbers keep one place, at the foot of the results just above the pull's bar, on a full page or a short one (0.14.4) */
+  .pp #out { display: flex; flex-direction: column; padding-bottom: 0 } .pp #out > * { flex: none }
+  .pp #out > .pager { position: sticky; bottom: 0; z-index: 3; margin: auto 0 0; padding: 7px 0; background: var(--bg); border-top: 1px solid var(--line-soft) }
+  .pp .pager button { min-width: 28px; padding: 3px 7px; font-size: 12px }
+  /* menus drawn here, in the panel's greys: the Mac's own are light whatever the page wears (0.14.4) */
+  .pp-selwrap { position: relative; display: inline-flex; flex: none } .pp-selwrap select { display: none }
+  .pp-sel { display: inline-flex; align-items: center; gap: 6px; width: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--raised); color: var(--fg);
+    font: 12px var(--font); padding: 4px 8px; cursor: pointer; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis }
+  .pp-sel::after { content: ''; flex: none; border: 4px solid transparent; border-top-color: var(--muted); margin-top: 4px }
+  .q .pp-selwrap { border-right: 1px solid var(--line) } .q .pp-sel { border: 0; background: none; font-weight: 600; padding: 7px 9px }
+  .pp-menu { min-width: 100%; width: max-content; max-height: 60vh; overflow-y: auto; left: 0 } .pp-menu.up { top: auto; bottom: calc(100% + 4px) } .pp-menu.right { left: auto; right: 0 }
+  .pp-menu button { font-size: 12px; padding: 5px 10px } .pp-menu button.cur { color: var(--accent-text) }
+  #ppBar.wait i { width: 32%; animation: sweep 1.6s ease-in-out infinite }
   .pp-grow { flex: 1 }
   #ppSaid { color: var(--muted); font-size: 12px; min-width: 0; max-width: 100%; overflow-wrap: anywhere }
   .pp-to { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; margin: 0 }
@@ -1438,8 +1452,36 @@ if (RUSHES.premiere) (function () {
   bar.insertAdjacentHTML('beforeend', '<button class="ghost" id="ppClips" title="The clips in this pull">Clips</button><span id="ppSaid" role="status"></span><span class="pp-grow"></span>' +
     '<label class="pp-to">Copy to <select id="ppTo" aria-label="Where the clips are copied to"></select></label><button class="btn" id="ppGo" disabled>Copy and import</button>' +
     '<button class="ghost" id="ppStop" hidden>Stop</button><i id="ppBar"><i></i></i><div class="dd" id="ppList" hidden></div>');
-  function said(t, pct) { $('ppSaid').textContent = t; if (pct != null) $('ppBar').firstChild.style.width = Math.max(0, Math.min(100, pct)) + '%'; }
+  // what is going on, in words; how far, as the blue line; and while nothing can be counted yet (wait) the line moves, so it is not taken for stuck
+  function said(t, pct, wait) {
+    $('ppSaid').textContent = t; $('ppBar').className = wait ? 'wait' : '';
+    if (wait) $('ppBar').firstChild.style.width = ''; else if (pct != null) $('ppBar').firstChild.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+  // A menu of the panel's own in place of a <select>'s: the select stays, unseen, and is still what the page reads and listens to.
+  function ownMenu(sel, how) {
+    const wrap = document.createElement('span'), b = document.createElement('button'), dd = document.createElement('div');
+    wrap.className = 'pp-selwrap'; b.type = 'button'; b.className = 'pp-sel'; b.title = sel.title || ''; b.setAttribute('aria-label', sel.getAttribute('aria-label') || ''); b.setAttribute('aria-haspopup', 'listbox');
+    dd.className = 'dd pp-menu ' + (how || ''); dd.hidden = true;
+    sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(b); wrap.appendChild(dd); wrap.appendChild(sel);
+    const label = function () { const o = sel.options[sel.selectedIndex]; const t = o ? o.textContent : ''; if (b.textContent !== t) b.textContent = t; };
+    b.onclick = function (e) {
+      e.stopPropagation(); const open = dd.hidden;
+      document.querySelectorAll('.pp-menu').forEach(function (m) { m.hidden = true; });
+      if (!open) return;
+      dd.innerHTML = Array.prototype.map.call(sel.options, function (o, i) { return '<button type="button" role="option" data-i="' + i + '"' + (i === sel.selectedIndex ? ' class="cur" aria-selected="true"' : '') + '>' + esc(o.textContent) + '</button>'; }).join('');
+      dd.hidden = false;
+    };
+    dd.onclick = function (e) {
+      const x = e.target.closest('button[data-i]'); if (!x) return;
+      sel.selectedIndex = +x.dataset.i; dd.hidden = true; label(); sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    document.addEventListener('click', function () { dd.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dd.hidden = true; });
+    setInterval(label, 400); label();        // the page also sets a select itself (a filter cleared): the button follows
+    return label;
+  }
   const ready = function () { $('ppGo').disabled = busy || !PULL || !$('ppTo').value; };
+  ownMenu($('kind')); const toLabel = ownMenu($('ppTo'), 'up right');
   const wasRefresh = refreshPull;
   refreshPull = async function () { await wasRefresh(); ready(); if (!$('ppList').hidden) clips(); };
 
@@ -1447,6 +1489,7 @@ if (RUSHES.premiere) (function () {
     const was = store('ppTo');
     $('ppTo').innerHTML = (d.places || []).map(function (p) {
       return '<option value="' + esc(p.to) + '"' + (p.to === was ? ' selected' : '') + '>' + esc(p.to === 'desktop' ? 'Desktop' : p.name) + (p.free ? ' · ' + tb(p.free) + ' free' : '') + '</option>'; }).join('');
+    toLabel();
     if (!(d.places || []).length) said('This Rushes has nowhere to copy to: copying is done by the Rushes app on a Mac.');
     ready();
   }).catch(function () { said('Could not ask Rushes where clips can be copied to.'); });
@@ -1480,7 +1523,7 @@ if (RUSHES.premiere) (function () {
     const slug = slugNow = PULL.slug, name = PULL.name, to = $('ppTo').value; store('ppTo', to);
     busy = true; ready(); $('ppStop').hidden = false;
     try {
-      said('Asking Rushes to copy ' + name + '…', 0);
+      said('Asking Rushes to copy ' + name + '…', 0, true);
       await pullPost({ action: 'copy', p: slug, to: to });
       let c; const t0 = Date.now();
       for (;;) {
@@ -1488,7 +1531,7 @@ if (RUSHES.premiere) (function () {
         c = (await (await fetch('/db/pulls.php?p=' + enc(slug) + '&t=' + Date.now())).json()).copy || { state: 'asked' };
         if (c.state === 'asked') {
           if (Date.now() - t0 > 90000) throw new Error('Rushes has not started the copy after 90 seconds: another copy may be running (Activity, in Rushes, says).');
-          said('Waiting for Rushes to start the copy…', 0);
+          said('Rushes is picking the copy up…', 0, true);
         } else if (c.state === 'copying') said('Copying ' + c.n + ' of ' + c.total + (c.file ? ' · ' + c.file : '') + ' · ' + tb(c.bytes) + ' of ' + tb(c.total_bytes), c.total_bytes ? 100 * c.bytes / c.total_bytes : 0);
         else break;
       }
@@ -1502,7 +1545,7 @@ if (RUSHES.premiere) (function () {
       if (!fresh.length && !again) { again = true; return said('All ' + files.length + ' are copied, and were imported into ' + project + ' before. Press again to import them once more.' + bad, 100); }
       if (!fresh.length) fresh = files;
       again = false;
-      said('Copied. Importing ' + fresh.length + ' into ' + project + '…', 100);
+      said('Copied. Importing ' + fresh.length + ' into ' + project + '…', 100, true);
       const r = await ask({ rushes: 'import', files: fresh });
       if (!r.ok) throw new Error('The copies are in ' + c.dest + ', but Premiere did not import them: ' + (r.error || 'no reason given'));
       store(key, JSON.stringify(before.concat(fresh.filter(function (f) { return before.indexOf(f) < 0; })).slice(-5000)));

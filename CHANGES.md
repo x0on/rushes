@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.14.4 — November 2026
+
+In the Premiere panel (the page is Rushes' own, so updating Rushes is enough; the panel file need not be installed again):
+
+- **No gap above the pull's bar.** The results stopped short of the bar and left an empty band between the page numbers and it. The results now run down to the bar, and the page numbers keep one place, at their foot, on a full page and on a short one.
+- **Its menus are dark too.** The kind of file (Everything, Videos…) and **Copy to** opened as the Mac's own light menus; they are drawn in the panel's greys now.
+- **Waiting is seen to be waiting.** Between pressing **Copy and import** and the first clip, while Rushes picks the copy up, the blue line moves instead of standing still.
+
 ## 0.14.3 — November 2026
 
 - **The Premiere panel fills its panel.** In Premiere it stopped at a fixed height and left the rest empty; it takes the panel's whole height and width now, and follows when the panel is resized.
