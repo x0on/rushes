@@ -20,10 +20,7 @@ if (!$st->execute()->fetchArray()) $no(404, 'Not a video Rushes knows.');
 $root = rtrim(archive_dir(), '/');
 if (!str_starts_with($path, "$root/")) $no(400, 'Only videos in the archive have proxies.');
 $rel = substr($path, strlen($root) + 1);
-if (str_contains($rel, '..') || str_contains($rel, "\n")) $no(400, 'Not a path Rushes can ask for.');
-// the runner reads a job's path with the same characters only (runner.py): say so rather than ask for nothing
-if (preg_match('/[^A-Za-z0-9 _.\/&(),+\x{80}-\x{10FFFF}-]/u', $rel, $m))
-    $no(400, "Its name or folder has a “{$m[0]}”, which the proxy maker cannot be asked for yet. Add its folder in Manage → Describe instead.");
+if (in_array('..', explode('/', $rel), true) || preg_match('/[\t\r\n\0]/', $rel)) $no(400, 'Not a path Rushes can ask for.');   // any other name is asked for as it is (runner.py rel_folder)
 $q = web_dir() . '/queue';
 if (!is_dir($q)) @mkdir($q, 0777, true);
 if (@file_put_contents("$q/" . date('Ymd-His') . '-one.job', "ACTION=proxy-build\nQUERY=$rel\n") === false)

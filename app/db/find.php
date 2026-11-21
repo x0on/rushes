@@ -29,6 +29,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
 <script>
   window.RUSHES = <?= json_encode([
     'premiere' => $PP,
+    'version' => trim((string)@file_get_contents(__DIR__ . '/../VERSION')),
     'archive' => archive_dir(),
     'mac'     => on_mac(),
     'local'   => s_path('archive.as_seen_from_helper', archive_dir()),
@@ -130,7 +131,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .work { overflow: hidden }
   .pad { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0 }
   .results { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: stretch }
-  #out { min-height: 0; overflow-y: auto; padding-bottom: 90px }
+  #out { min-height: 0; overflow-y: auto }
   .results:has(> #inspect[hidden]) { grid-template-columns: minmax(0, 1fr) }   /* only before anything is found */
   @media (max-width: 1100px) { .results { grid-template-columns: minmax(0, 1fr) } .inspect { display: none } }
   @media (max-width: 640px) { .shoot .sh .n { display: none } .row { gap: 8px; padding-left: 10px; padding-right: 10px }
@@ -199,6 +200,9 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .pager button.cur { background: var(--accent); color: var(--accent-fg, #fff); border-color: var(--accent); cursor: default }
   .pager button:disabled { opacity: .4; cursor: default }
   .pager .note { margin-left: 8px }
+  /* the page numbers keep one place, at the foot of the results, on a full page and on a short one (in Premiere 0.14.4, everywhere 0.14.5) */
+  #out { display: flex; flex-direction: column } #out > * { flex: none }
+  #out > .pager { position: sticky; bottom: 0; z-index: 3; margin: auto 0 0; padding: 8px 0; background: var(--bg); border-top: 1px solid var(--line-soft) }
   .inspect .px { position: sticky; top: 6px; float: right; margin: 6px 8px 0 0; z-index: 2; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; font-size: 15px; line-height: 1 }
   .more { display: block; width: 100%; margin: 16px 0; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--line);
           background: var(--surface); color: var(--fg); font: 13.5px var(--font); cursor: pointer }
@@ -297,7 +301,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
                 background: none; color: var(--fg); font: 13px var(--font); cursor: pointer }
   .ctx button:hover { background: var(--raised) }
   .ctx button:disabled { color: var(--faint); cursor: default; background: none }
-  .work { padding-bottom: 80px }
+  body:has(#pullbar:not([hidden])) .work { padding-bottom: 84px }   /* room for the pull's bar, only while there is one */
   .pullbar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20;
              display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px;
              background: var(--surface); border: 1px solid var(--accent); border-radius: 12px;
@@ -338,9 +342,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
     width: auto; max-width: none; margin: 0; padding: 6px 10px; border: 0; border-top: 1px solid var(--line); border-radius: 0;
     background: var(--surface); box-shadow: none }
   .pp .pullbar .pb-t b { font-size: 12.5px; max-width: 30vw } .pp .pullbar .pb-t small { font-size: 11.5px }
-  /* the page numbers keep one place, at the foot of the results just above the pull's bar, on a full page or a short one (0.14.4) */
-  .pp #out { display: flex; flex-direction: column; padding-bottom: 0 } .pp #out > * { flex: none }
-  .pp #out > .pager { position: sticky; bottom: 0; z-index: 3; margin: auto 0 0; padding: 7px 0; background: var(--bg); border-top: 1px solid var(--line-soft) }
+  .pp #out > .pager { padding: 7px 0 }
   .pp .pager button { min-width: 28px; padding: 3px 7px; font-size: 12px }
   /* menus drawn here, in the panel's greys: the Mac's own are light whatever the page wears (0.14.4) */
   .pp-selwrap { position: relative; display: inline-flex; flex: none } .pp-selwrap select { display: none }
@@ -991,7 +993,18 @@ $('out').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') { e.preventDefault(); if (SEL.has(el.dataset.k)) openBig(el); else choose(el, e); }
   if (e.key === ' ') { e.preventDefault(); choose(el, e); }
 });
-$('out').addEventListener('dblclick', function (e) { if (e.target.closest('[data-act]') || e.target.closest('video')) return; const el = e.target.closest('[data-k]'); if (el) { stopTiles(); openBig(el); } });
+// A double click opens it large, over the grid. The first of the two clicks has already started it playing in its tile,
+// so the second lands on that player: it counts too (it was passed over, and nothing opened: 0.14.5), except on the
+// player's own strip of controls at its foot, where two quick clicks are somebody scrubbing.
+$('out').addEventListener('dblclick', function (e) {
+  if (e.target.closest('[data-act]')) return;
+  const v = e.target.closest('video');
+  if (v && e.offsetY > v.clientHeight - 44) return;
+  const el = e.target.closest('[data-k]'); if (!el) return;
+  e.preventDefault();                       // not the browser's own full screen
+  if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+  stopTiles(); openBig(el);
+});
 $('out').addEventListener('contextmenu', function (e) {
   const el = e.target.closest('[data-k]'); if (!el) return;
   e.preventDefault();
@@ -1510,6 +1523,18 @@ if (RUSHES.premiere) (function () {
     if (d.rushes === 'project') { heard = true; setProject(String(d.name || '')); }
     if (d.rushes === 'imported' && waiting[d.id]) { waiting[d.id](d); delete waiting[d.id]; }
   });
+  // Premiere keeps a panel alive for as long as it runs itself, so this page would stay the old one after Rushes is
+  // updated (0.14.4 was not seen until Premiere was quit). It asks which Rushes is there now, and loads itself afresh
+  // when that is a newer one; never in the middle of a copy. Reload, in the bar, does it when asked.
+  bar.querySelector('.pp-to').insertAdjacentHTML('beforebegin', '<button class="ghost" id="ppReload" title="Load this panel again from Rushes (' + esc(RUSHES.version) + ')">Reload</button>');
+  const reload = function (why) { said(why); setTimeout(function () { location.replace('/db/find.php?premiere=1&t=' + Date.now()); }, 1200); };
+  $('ppReload').onclick = function () { if (busy) return said('A copy is running: reload when it is done.'); reload('Loading the panel again…'); };
+  setInterval(function () {
+    if (busy) return;
+    fetch('/db/pulls.php?places=1&t=' + Date.now()).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.version && RUSHES.version && d.version !== RUSHES.version && !busy) reload('Rushes was updated to ' + d.version + ': loading the panel again…');
+    }).catch(function () {});               // Rushes restarting for its update: asked again in a moment
+  }, 30000);
   const hello = function () { if (!busy) tell({ rushes: 'hello' }); };
   hello(); setInterval(hello, 4000);                       // the project open in Premiere can change
   setTimeout(function () { if (!heard) said('Not connected to Premiere: clips can be gathered and copied here, not imported.'); }, 3000);

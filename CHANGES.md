@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.14.5 — November 2026
+
+- **A folder is asked for by its own name.** Previews for *Harbor Master's Office* were refused with "found no folder Harbor Masters Office": the name was stripped of its apostrophe on the way to the part that makes them, as it was of any mark outside a short list (# ! @ [ ] and more), so a folder that does not exist was looked for. Names are no longer altered; the same for one video's preview asked for from Search, which was refused outright for such a folder. (The NAS version still has the old rule.)
+- **A double click opens the video large.** It always should have, over the grid, with ‹ › and the arrow keys to step, Esc or a click outside to close. Since a click began to play a video in its tile, the second click of the two landed on that player and was passed over, so nothing opened.
+- **The page numbers stay at the foot of the results**, in Search in a browser as in Premiere, on a full page and on a short one, clear of the pull's bar.
+- **The Premiere panel keeps up with Rushes.** Premiere keeps a panel alive for as long as it runs, so after an update the panel showed the old page until Premiere was quit. The panel now notices a newer Rushes within half a minute and loads itself again, saying so; never in the middle of a copy. **Reload**, in its bar, does it when asked.
+
 ## 0.14.4 — November 2026
 
 In the Premiere panel (the page is Rushes' own, so updating Rushes is enough; the panel file need not be installed again):
@@ -317,7 +324,7 @@ Changes the helper's code (`analyze.py`, `ingest.py`): signed again.
 
 ## 0.13.15 — October 2026
 
-- **Make previews and descriptions works on any folder name.** A folder with an apostrophe (*City Manager's Office*), a # or brackets was refused, and the refusal was said at the top of the page, out of sight: the link seemed to do nothing. Now any folder of the archive goes on the list (never one outside it), and if one is ever refused, it says why right under the link.
+- **Make previews and descriptions works on any folder name.** A folder with an apostrophe (*Harbor Master's Office*), a # or brackets was refused, and the refusal was said at the top of the page, out of sight: the link seemed to do nothing. Now any folder of the archive goes on the list (never one outside it), and if one is ever refused, it says why right under the link.
 
 ## 0.13.14 — October 2026
 

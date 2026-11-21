@@ -510,6 +510,11 @@ class Drives(MacJobs):
         self.assertEqual(self.r.prep_folder("/etc"), "")
         self.assertEqual(self.r.prep_folder(folder + "/../.."), "")
         self.assertEqual(self.r.prep_folder(folder + "/"), folder)
+        # a folder of the archive is asked for by its own name, whatever marks are in it (it was once stripped of them)
+        for name in ("VIDEOS/Harbor Master's Office", "VIDEOS/Parks & Rec #2 [final]!", "VIDEOS/Año 2024 @home"):
+            self.assertEqual(self.r.prep_folder(name + "/"), name)
+        for bad in ("VIDEOS/../..", "..", "VIDEOS/a\tb", "VIDEOS/a\nACTION=apply"):
+            self.assertEqual(self.r.prep_folder(bad), "", bad)
 
     def test_each_drive_says_how_it_is_kept(self):
         # asked per drive (Overview): its own answer wins over Setup 01's

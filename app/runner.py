@@ -836,8 +836,16 @@ class Runner:
             if ".." in raw.split("/") or any(c in raw for c in "\t\n\r"):
                 return ""
             return raw if self.kept_drive(raw) else ""
-        q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", raw).strip("/")[:200]
-        return "" if ".." in q.split("/") else q
+        return self.rel_folder(raw)
+
+    @staticmethod
+    def rel_folder(raw):
+        """A folder inside the archive, as it was asked for: its name is never altered. (It was once stripped of
+        every mark outside a short list, so "Harbor Master's Office" became a folder that does not exist: 0.14.5.)
+        Nothing here goes through a shell, so no mark in a name is dangerous; refused, as "", are only a path that
+        climbs out ("..") and one with a line break or tab in it, which a job file cannot carry."""
+        q = raw.strip().strip("/")
+        return "" if ".." in q.split("/") or any(c in q for c in "\t\n\r\0") else q
 
     def kept_drive(self, path):
         """The drive kept where it is that holds this path, plugged in now, or None."""
@@ -1290,8 +1298,8 @@ class Runner:
             if action == "apply" and f.get("PICK") == "1":
                 files["PICK"] = self.p(f"dedupe-pick{sfx}.txt")
             if action == "verify":
-                q = re.sub(r"[^A-Za-z0-9 _./&(),+\x80-\U0010ffff-]", "", f.get("QUERY", ""))[:200]
-                if ".." in q:
+                q = self.rel_folder(f.get("QUERY", ""))
+                if not q and f.get("QUERY", "").strip("/ "):
                     self.log("  refused a folder with .. in it"); return
                 self.script("verify.sh", [q] if q else [], PLAN=files["PLAN"], MOVES=self.p(f"dedupe-moves{sfx}.tsv"),
                             OUT=self.p(f"verify-result{sfx}.tsv"), HOLD=self.hold(top), ARCH=top)

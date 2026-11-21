@@ -41,6 +41,8 @@ A promise is not taken away by taking its check away: changing a line here is a 
 
 - The Premiere panel and Rushes agree on what is asked and answered, and the panel imports only copies the runner says it made. — `tests/test_agree.py`: “test_the_panel_is_whole_and_asks_for_what_rushes_answers”
 
+- A folder is asked for by its own name, whatever marks are in it (an apostrophe, a #); only a path that climbs out is refused. — `tests/test_mac_runner.py`: “test_previews_of_a_kept_drive_live_on_the_archive”
+
 ## Safety
 
 - A file someone sends in is never run, whatever its name. — `tests/test_router.sh`: “was run”
