@@ -27,3 +27,16 @@ The public copy now presents training, technical support, and joint reviews as o
 ## Storyboard and overlay gallery
 
 The workspace now has five tabs, including Storyboard. All StoryTown image links open a native modal dialog on the same page, with previous/next controls, a close button, arrow-key navigation, Escape dismissal, background scroll locking, and focus restoration. The gallery contains all seven originally supplied screenshots plus the later canvas close-up. No new browser tab is opened.
+
+
+## Cloudflare hosting
+
+Published with Cloudflare Pages Direct Upload on 2026-11-23.
+Project: audiovisual-intelligence-services
+Pages URL: https://audiovisual-intelligence-services.pages.dev/
+Custom domain: https://audiovisualintelligenceservices.com/
+Cloudflare dashboard confirmed domain Active and SSL enabled.
+Email routing: hello@audiovisualintelligenceservices.com forwards to the owner’s verified destination.
+Security: _headers includes CSP, HSTS, frame protection, MIME protection, referrer and permissions policies. Always Use HTTPS is enabled; minimum TLS is 1.2.
+Do not remove _headers from future uploads. Deploy from this folder with index.html at archive root.
+Office network currently classifies the new domain as unknown; IT must identify the filter and review classification. That issue is separate from the Pages deployment, which returns HTTPS 200.
