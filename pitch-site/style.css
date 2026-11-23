@@ -28,3 +28,6 @@
 /* Let the connected archive and storyboard images fill their case-study frames. */
 .case-card:first-child img{object-fit:cover;padding:0}.case-card:nth-child(2) img{object-position:center}
 
+
+/* Align the monogram with the name; give the tagline the full lockup width. */
+.identity{display:grid;grid-template-columns:44px auto;column-gap:14px;row-gap:9px;align-items:center}.identity .mark{grid-column:1;grid-row:1;font-size:3.05rem;line-height:.8;padding-right:5px;align-self:center;transform:translateY(-3px)}.identity-name{grid-column:2;grid-row:1;font-size:.94rem;line-height:1.25;font-weight:600}.identity small.identity-tagline{grid-column:1/-1;grid-row:2;font-size:.76rem;line-height:1.35;font-weight:500;letter-spacing:.01em;max-width:none;margin:0;color:var(--teal)}@media(max-width:650px){.identity{grid-template-columns:34px auto;column-gap:10px;row-gap:8px}.identity .mark{font-size:2.45rem;transform:translateY(-2px)}.identity-name{font-size:.77rem}.identity small.identity-tagline{font-size:.62rem;max-width:240px}}
