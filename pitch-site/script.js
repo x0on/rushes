@@ -64,3 +64,55 @@ storyTabs.forEach((tab, index) => {
     event.preventDefault(); selectStoryTab(storyTabs[next]); storyTabs[next].focus();
   });
 });
+
+const galleryItems = [
+  ['storytown-production.jpg', 'Production timeline', 'Línea de tiempo de producción'],
+  ['storytown-storyboard.jpg', 'Storyboard your next campaign', 'El storyboard de su próxima campaña'],
+  ['storytown-characters.jpg', 'Characters, voices, and settings', 'Personajes, voces y escenarios'],
+  ['storytown-writing.jpg', 'Writing and creative development', 'Guion y desarrollo creativo'],
+  ['storytown-planning.jpg', 'Shot planning and staging', 'Planificación de planos y puesta en escena'],
+  ['storytown-canvas-overview.jpg', 'Generative creation canvas', 'Lienzo de creación generativa'],
+  ['storytown-creative-tools.jpg', 'Generative media tools', 'Herramientas de medios generativos'],
+  ['storytown-canvas.jpg', 'Create on the canvas', 'Crear en el lienzo']
+];
+const gallery = document.getElementById('image-gallery');
+const galleryImage = document.getElementById('gallery-image');
+let galleryIndex = 0;
+let galleryOpener;
+let previousOverflow;
+function renderGallery() {
+  const item = galleryItems[galleryIndex];
+  const title = item[spanish ? 2 : 1];
+  galleryImage.src = 'assets/' + item[0];
+  galleryImage.alt = 'StoryTown — ' + title;
+  document.getElementById('gallery-title').textContent = title;
+  document.getElementById('gallery-count').textContent = `${galleryIndex + 1} / ${galleryItems.length}`;
+}
+function moveGallery(step) {
+  galleryIndex = (galleryIndex + step + galleryItems.length) % galleryItems.length;
+  renderGallery();
+}
+document.querySelectorAll('.st-viewer a[href]').forEach(link => {
+  link.addEventListener('click', event => {
+    event.preventDefault();
+    galleryOpener = link;
+    galleryIndex = galleryItems.findIndex(item => link.getAttribute('href') === 'assets/' + item[0]);
+    if (galleryIndex < 0) galleryIndex = 0;
+    renderGallery();
+    previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    gallery.showModal();
+  });
+});
+gallery.querySelector('.gallery-close').addEventListener('click', () => gallery.close());
+gallery.querySelector('.gallery-prev').addEventListener('click', () => moveGallery(-1));
+gallery.querySelector('.gallery-next').addEventListener('click', () => moveGallery(1));
+gallery.addEventListener('keydown', event => {
+  if (event.key === 'ArrowLeft') { event.preventDefault(); moveGallery(-1); }
+  if (event.key === 'ArrowRight') { event.preventDefault(); moveGallery(1); }
+});
+gallery.addEventListener('click', event => { if (event.target === gallery) gallery.close(); });
+gallery.addEventListener('close', () => {
+  document.body.style.overflow = previousOverflow || '';
+  galleryOpener?.focus();
+});

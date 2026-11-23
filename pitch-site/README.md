@@ -23,3 +23,7 @@ Rushes claims are limited to the current repository README (archive organization
 ## Service framing and StoryTown gallery
 
 The public copy now presents training, technical support, and joint reviews as ongoing parts of the service, with a departmental service proposal and localized discussion brief. The StoryTown gallery uses four supplied screenshots and accessible tabs with keyboard navigation. Each image opens separately for a larger view. Ongoing integration of new models is described without an absolute claim that every external model is already available.
+
+## Storyboard and overlay gallery
+
+The workspace now has five tabs, including Storyboard. All StoryTown image links open a native modal dialog on the same page, with previous/next controls, a close button, arrow-key navigation, Escape dismissal, background scroll locking, and focus restoration. The gallery contains all seven originally supplied screenshots plus the later canvas close-up. No new browser tab is opened.
