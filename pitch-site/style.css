@@ -27,3 +27,6 @@
 
 /* Let the connected archive and storyboard images fill their case-study frames. */
 .case-card:first-child img{object-fit:cover;padding:0}.case-card:nth-child(2) img{object-position:center}
+
+/* Archive frames meet the next production. */
+.brand-symbol{display:block;width:62px;height:62px;flex-shrink:0}.identity small{font-size:.75rem;line-height:1.4;max-width:290px}.identity{gap:16px}@media(max-width:650px){.brand-symbol{width:42px;height:42px}.identity{gap:10px}.identity small{font-size:.6rem;max-width:150px}.header nav{gap:10px}}
