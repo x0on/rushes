@@ -19,3 +19,7 @@ Rushes claims are limited to the current repository README (archive organization
 ## Bilingual visual edition
 
 `index.html` is English; `es.html` is Spanish. Both link through an EN/ES switch. The pilot discussion guide, download filename, and status messages are localized. Two original editorial images and the existing Rushes interface concept support the pitch. See assets/ASSET-NOTES.md for provenance and generation prompts. Generated images are illustrative, not client evidence. JPEGs are used for loading efficiency. The original PNGs are retained locally, outside the GitHub change.
+
+## Service framing and StoryTown gallery
+
+The public copy now presents training, technical support, and joint reviews as ongoing parts of the service, with a departmental service proposal and localized discussion brief. The StoryTown gallery uses four supplied screenshots and accessible tabs with keyboard navigation. Each image opens separately for a larger view. Ongoing integration of new models is described without an absolute claim that every external model is already available.
