@@ -6,3 +6,6 @@
 
 /* Show the wider archive scene rather than a tall close crop. */
 .hero{grid-template-columns:1fr 1.25fr;gap:48px}.hero-image{align-self:center;min-height:0;aspect-ratio:6/5}.hero-image>img{object-position:center}.hero-image figcaption{max-width:85%}.hero-image:after{inset:65% 0 0}.image-label{font-size:1.8rem;bottom:24px;left:24px;right:24px}@media(max-width:900px){.hero{grid-template-columns:1fr 1.1fr;gap:28px}.hero-image{min-height:0;aspect-ratio:1/1}}@media(max-width:650px){.hero{grid-template-columns:1fr;gap:35px}.hero-image{min-height:0;aspect-ratio:6/5;width:100%}.image-label{font-size:1.65rem;bottom:18px;left:18px;right:18px}}
+
+/* Service signature beneath the name. */
+.identity small{font-size:.76rem;letter-spacing:.025em;font-weight:500;margin-top:9px;color:var(--teal)}@media(max-width:650px){.identity small{font-size:.62rem;letter-spacing:0;max-width:145px;line-height:1.4}}
