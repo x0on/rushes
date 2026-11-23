@@ -9,3 +9,6 @@
 
 /* Service signature beneath the name. */
 .identity small{font-size:.76rem;letter-spacing:.025em;font-weight:500;margin-top:9px;color:var(--teal)}@media(max-width:650px){.identity small{font-size:.62rem;letter-spacing:0;max-width:145px;line-height:1.4}}
+
+/* Support and tailored development are core parts of the service. */
+.service{border-top:1px solid var(--line)}.service-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:36px;margin-top:48px}.service-grid article{border-top:1px solid var(--line);padding-top:25px}.service-grid h3{font-size:1.3rem}.service-grid p{color:var(--muted);font-size:.97rem}.service-signature{margin-top:30px;padding:25px 30px;background:#eaf0e8}.service-signature strong{font-weight:600}.service-signature p{margin:8px 0 0;color:var(--muted)}@media(min-width:901px){.header nav{gap:20px;font-size:.83rem}}@media(max-width:650px){.service-grid{grid-template-columns:1fr;gap:15px;margin-top:30px}.service-signature{padding:24px}}
