@@ -5,7 +5,7 @@ toggle.addEventListener('click', () => {
   const open = toggle.getAttribute('aria-expanded') !== 'true';
   toggle.setAttribute('aria-expanded', String(open));
   brief.hidden = !open;
-  toggle.textContent = spanish ? (open ? 'Cerrar la guía del servicio' : 'Preparar una conversación sobre el servicio') : (open ? 'Close the service brief' : 'Prepare a service conversation');
+  toggle.textContent = spanish ? (open ? 'Cerrar la guía del servicio' : 'Prepare su demostración') : (open ? 'Close the service brief' : 'Plan your demonstration');
   if (open) brief.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' });
 });
 document.getElementById('download-brief').addEventListener('click', () => {
