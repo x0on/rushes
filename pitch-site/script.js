@@ -71,9 +71,7 @@ const galleryItems = [
   ['storytown-characters.jpg', 'Characters, voices, and settings', 'Personajes, voces y escenarios'],
   ['storytown-writing.jpg', 'Writing and creative development', 'Guion y desarrollo creativo'],
   ['storytown-planning.jpg', 'Shot planning and staging', 'Planificación de planos y puesta en escena'],
-  ['storytown-canvas-overview.jpg', 'Generative creation canvas', 'Lienzo de creación generativa'],
   ['storytown-creative-tools.jpg', 'Generative media tools', 'Herramientas de medios generativos'],
-  ['storytown-canvas.jpg', 'Create on the canvas', 'Crear en el lienzo']
 ];
 const gallery = document.getElementById('image-gallery');
 const galleryImage = document.getElementById('gallery-image');
@@ -97,6 +95,9 @@ document.querySelectorAll('.st-viewer a[href]').forEach(link => {
     event.preventDefault();
     galleryOpener = link;
     galleryIndex = galleryItems.findIndex(item => link.getAttribute('href') === 'assets/' + item[0]);
+    if (link.getAttribute('href') === 'assets/storytown-canvas.jpg') {
+      galleryIndex = galleryItems.findIndex(item => item[0] === 'storytown-creative-tools.jpg');
+    }
     if (galleryIndex < 0) galleryIndex = 0;
     renderGallery();
     previousOverflow = document.body.style.overflow;
