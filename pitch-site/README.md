@@ -15,3 +15,7 @@ Open index.html directly, or run `python3 -m http.server 4173 --directory pitch-
 ## Content basis
 
 Rushes claims are limited to the current repository README (archive organization, search, verified copying, local archive processing). StoryTown language follows the supplied pitch brief, without additional verified technical claims. No automatic integration is claimed. The city example is explicitly illustrative; no customer, results, endorsement, pricing, or performance statistic is invented. The pilot establishes compatibility, costs, rights, governance, and suitability before wider adoption. The working descriptor is not a final brand.
+
+## Bilingual visual edition
+
+`index.html` is English; `es.html` is Spanish. Both link through an EN/ES switch. The pilot discussion guide, download filename, and status messages are localized. Two original editorial images and the existing Rushes interface concept support the pitch. See assets/ASSET-NOTES.md for provenance and generation prompts. Generated images are illustrative, not client evidence. JPEGs are used for loading efficiency. The original PNGs are retained locally, outside the GitHub change.
