@@ -45,7 +45,7 @@
    "url": "https://sqlite.org/",
    "credits": "PHP 8.5",
    "inside": "PHP",
-   "note": "public domain: no license text to carry"
+   "note": "public domain: no license text to carry. Known gap: 3.45.2 is from March 2024, the version static-php-cli 2.8.5 compiles in; later SQLite releases fix security problems that need a crafted database or crafted queries, and Rushes opens only its own catalogue with its own queries. To be moved forward in the rushes-parts recipe."
   },
   {
    "name": "zlib",
@@ -135,7 +135,7 @@
     "ffmpeg-9.1-macos-arm64.zip": "30830523c209f83ce76029af1de01d4c9bffd026c693579befbb326f789ae7ed",
     "ffprobe-9.1-macos-arm64.zip": "5708a72a0203cf4a4fa0fe0f1c9903a58fdda44b2916342a518013e9a4e07994"
    },
-   "note": "compiled from ffmpeg.org's source, signed by FFmpeg's release key, by github.com/x0on/rushes-parts; no GPL part. Not inside the app: downloaded by Install the AI, or the first time a proxy is made on a Mac with no ffmpeg."
+   "note": "compiled from ffmpeg.org's source, signed by FFmpeg's release key, by github.com/x0on/rushes-parts; no GPL part. Not inside the app: downloaded by Install the AI, or the first time a proxy is made on a Mac with no ffmpeg. A Mac that already has an ffmpeg (Homebrew's, say) uses its own: that one is not Rushes' to list or to update."
   },
   {
    "name": "OpenH264",
@@ -145,7 +145,7 @@
    "url": "https://github.com/cisco/openh264",
    "credits": "FFmpeg",
    "inside": "FFmpeg",
-   "note": "the H.264 encoder used when the Mac's video chip cannot be"
+   "note": "the H.264 encoder used when the Mac's video chip cannot be (rare: an odd or damaged file). Chosen over x264, which is GPL; its picture is a little softer at the same size."
   },
   {
    "name": "mlx-vlm",

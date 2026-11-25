@@ -87,6 +87,22 @@ with every release as a parts list (`Rushes <version>.cdx.json`, CycloneDX). The
 inside the app is in the app itself: `Rushes.app/Contents/Resources/LICENSES`. FFmpeg and PHP are compiled from their
 projects' own source, in the open, by github.com/x0on/rushes-parts: nobody stands between the source and the program.
 
+### What to know about these parts
+
+Three things that are true today, written down so nobody has to find them out:
+
+- **A Mac's own FFmpeg comes first.** Where a Mac already has FFmpeg (Homebrew's, for one), Rushes uses it, and
+  downloads its own only where there is none. An FFmpeg Rushes did not supply is not in the parts list: Rushes
+  cannot say what is in it, or update it.
+- **Previews made without the video chip are a little softer with Rushes' FFmpeg.** A Mac's video chip makes
+  nearly every preview. For the rare file it refuses, the processor does the work with an encoder: Rushes' FFmpeg
+  has OpenH264 for that, not x264, because x264 is GPL and Rushes' FFmpeg carries no GPL part. Nothing about
+  safety; a Mac using its own FFmpeg is not affected.
+- **SQLite inside PHP is 3.45.2, from March 2024.** It is the version the tool that compiles PHP puts in. It is
+  the one part still behind its newer releases. The security problems fixed since need a crafted database or
+  crafted queries; Rushes opens only its own catalogue, with its own queries. To be moved forward in the recipe
+  (github.com/x0on/rushes-parts).
+
 ## On this Mac: describing footage
 
 | Part | What it does in Rushes | Where it runs | License | Where it comes from |

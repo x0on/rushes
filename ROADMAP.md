@@ -106,6 +106,12 @@ that NAS; the Mac app has to prove each part again.
 
 ## Known problems
 
+- **SQLite inside the Mac app's PHP is 3.45.2 (March 2024).** The one part behind its releases: it is what the
+  tool that compiles PHP puts in. Low risk as Rushes uses it (its own catalogue, its own queries). To do: a newer
+  SQLite in the rushes-parts recipe, then a new PHP build. See CREDITS.md → What to know about these parts.
+- **Rushes cannot vouch for a Mac's own FFmpeg.** It is used when there is one; only the FFmpeg Rushes downloads
+  is in the parts list. To decide: always use Rushes' own.
+
 - **The NAS's Setup pages and its install script still call the Mac app
   Rushes Helper** (renamed Rushes in 0.12), and an update of the app from a
   NAS looks for `Rushes Helper.app` (`release.py`, signed code: changed with
