@@ -904,10 +904,13 @@ function stopTiles(but) {
 function playTile(el) {
   if (el.classList.contains('playing')) return;
   const r = el.dataset.t !== undefined ? videos.rows[+el.dataset.k.slice(1)] : KNOWN[el.dataset.p];
-  if (!r || !(r.proxy_at || r.asis === '1')) { stopTiles(); say('No preview of ' + (r && r.name ? r.name : 'it') + ' yet, so it cannot play here. Previews are made in Manage.'); return; }
+  if (!r || !(r.proxy_at || r.asis === '1')) { stopTiles(); say('No preview of ' + (r && r.name ? r.name : 'it') + ' yet, so it cannot play here.' + (RUSHES.viewer ? '' : ' Previews are made in Manage.')); return; }
   stopTiles(); quiet($('inspect'));
   const img = el.querySelector('img'), t = +el.dataset.t || 0, v = document.createElement('video');
-  v.controls = true; v.autoplay = true; v.playsInline = true; if (img) v.poster = img.currentSrc || img.src;
+  // its controls come a moment after it starts: a browser's player keeps a click on its middle to itself, so the second
+  // click of a double click was never heard, and nothing opened large (0.14.5 opened only from the picture's edges)
+  v.autoplay = true; v.playsInline = true; if (img) v.poster = img.currentSrc || img.src;
+  setTimeout(function () { v.controls = true; }, 500);
   v.src = playUrl(el.dataset.p) + (t ? '#t=' + t : '');
   v.onerror = function () { stopTiles(); say('Its preview would not play (is the archive there?).'); };
   if (img) img.hidden = true;
