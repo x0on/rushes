@@ -164,8 +164,6 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .acts button svg { width: 15px; height: 15px }
   .acts button.in { background: var(--ok); color: #fff }
   /* where in the video the match is: a line the width of the video, a tick at each moment */
-  .tl { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.55) }
-  .tl i { position: absolute; top: -3px; width: 3px; height: 7px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5) }
   .chip, .vers { position: absolute; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px;
                  background: rgba(0,0,0,.66); color: #fff; font: 600 11px var(--font) }
   .chip { left: 6px } .vers { right: 6px }
@@ -199,7 +197,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .dim { opacity: .5 }
   /* a tile that plays where it is (a click), with the player's own controls; the picture comes back when it stops */
   .frame.playing video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: block }
-  .frame.playing .chip, .frame.playing .tl, .frame.playing .vers { display: none }
+  .frame.playing .chip, .frame.playing .vers { display: none }
   .frame .ph small.np { opacity: .7; font-size: 10.5px }
   .pager { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 16px 0 }
   .pager button { min-width: 34px; padding: 6px 9px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 13px var(--font); cursor: pointer }
@@ -760,11 +758,6 @@ const acts = function (path) {
     (inPull(path) ? '✓' : ICON.pull) + '</button>' : '') + '<button data-act="copy" title="Copy its path">' + ICON.copy + '</button>' +
     '<button data-act="info" title="Properties: what it shows, its shots, its versions, the file" style="font:600 12px var(--font)">i</button></span>';
 };
-// Where in the video the matches are: a line the width of the video, a tick at each
-const timeline = function (found, length) {
-  if (!length || !found || !found.length) return '';
-  return '<span class="tl">' + found.map(function (t) { return '<i style="left:' + Math.min(99.5, t / length * 100).toFixed(1) + '%"></i>'; }).join('') + '</span>';
-};
 // A video found by what it shows: the shot that matches best; the chip says how long the video is
 function videoTile(m, i) {
   const speech = m.kind === 'speech';
@@ -773,7 +766,7 @@ function videoTile(m, i) {
             : '<img loading="lazy" alt="' + esc(m.what) + '" src="' + still(m.fp, m.shot) + '">') +
     '<span class="chip">' + (speech ? ICON.quote : ICON.video) + (m.duration ? clock(m.duration) : 'at ' + tcode(m.start_s)) +
       (m.width && aspect(m.width, m.height) !== '16:9' ? ' <span class="r">' + aspect(m.width, m.height) + '</span>' : '') + '</span>' +
-    versTag(m.alike || m.versions) + acts(m.path) + timeline(m.found, m.duration) + '<span class="pk">✓</span></div>';
+    versTag(m.alike || m.versions) + acts(m.path) + '<span class="pk">✓</span></div>';
 }
 // A file: its first still if it was described, else its kind drawn with its name
 function fileTile(r) {

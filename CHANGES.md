@@ -9,6 +9,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 - **A pull made in the Viewer is sent to an editor as a request.** The pull is kept in that person's browser (the Viewer cannot write anywhere). **Send to an editor…** asks their name once, which editor, and what it is for, and opens an email with the request in it, between two lines of =====. The editors' names and addresses are typed in **Setup → The Viewer**, nowhere else.
 - **Paste a request.** In Search, and in the Premiere panel: **Pulls → Paste a request…**, paste the whole email. Only the part between the two lines is read, so a greeting, a signature and a mail program's quote marks do no harm. It becomes a pull, "Request from …", to copy and import as any other. A clip that is no longer in the catalogue under that name is said to be missing, never guessed; a request with a part cut off makes nothing and says so.
 - **A double click opens the video large from anywhere on its picture.** 0.14.5 opened it only from the picture's edges: a browser's player keeps a click on its middle to itself, so the second click was never heard. The player's controls now come half a second after the video starts.
+- **No white ticks along the foot of a picture.** They marked where in a video the words were found, told nobody that, and drew the eye from the picture. The moments are still one click away: the large view and Properties show every shot.
 
 ## 0.14.5 — November 2026
 
