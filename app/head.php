@@ -9,17 +9,22 @@
 // A page sets $NAV to 'search', 'ingest' or 'admin' before including this.
 require_once __DIR__ . '/db/config.php';
 $NAV = $NAV ?? '';
+// The Viewer (db/find.php?viewer=1, saved onto the archive): a page with nothing behind it, so it carries its own
+// looks, and is never asked who is using Rushes.
+$VIEWER = $VIEWER ?? false;
 ?>
-<link rel="stylesheet" href="/tokens.css?v=<?= @filemtime(__DIR__ . '/tokens.css') ?>">
+<?php if ($VIEWER): ?><style><?php readfile(__DIR__ . '/tokens.css') ?></style>
+<?php else: ?><link rel="stylesheet" href="/tokens.css?v=<?= @filemtime(__DIR__ . '/tokens.css') ?>"><?php endif ?>
 <style>
   .tab-i { display: inline-flex; align-items: center; gap: 7px }
   .tab-i svg { width: 15px; height: 15px; flex: none }
   .topbar .pulse { padding-right: 14px; border-right: 1px solid var(--line-soft) }
   .topbar .slow { font-size: 12px; color: var(--warn, #b26a00); white-space: nowrap }
 </style>
-<?php $iv = substr(md5(favicon_href()), 0, 8); ?>
+<?php if (!$VIEWER): $iv = substr(md5(favicon_href()), 0, 8); ?>
 <link rel="icon" type="image/png" sizes="64x64" href="/icon.php?v=<?= $iv ?>">
 <link rel="apple-touch-icon" href="/icon.php?s=180&amp;v=<?= $iv ?>">
+<?php endif ?>
 <script>
 // A phone or tablet (iPads say they are a Mac, but with a touch screen): the Mac apps' downloads step aside.
 if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1))
@@ -239,6 +244,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
      (db/activity.php). The page waits behind it until a name is given; it is kept in
      this browser (the rushes_who cookie), so each person types it once per computer
      or phone. Anyone can type any name; editors' computers are known by their pairing. -->
+<?php if (!$VIEWER): ?>
 <div class="whoveil" id="whoBar" role="dialog" aria-modal="true" aria-labelledby="whoTitle" hidden>
   <form class="whocard" id="whoForm">
     <h2 id="whoTitle">Who is using Rushes here?</h2>
@@ -292,6 +298,7 @@ if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Mac/.test(navigat
   };
 })();
 </script>
+<?php endif ?>
 
 <script>
 (function () {

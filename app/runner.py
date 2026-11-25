@@ -149,6 +149,45 @@ RECENT = 7200          # a file written in the last two hours may still be arriv
 PRIVATE = ("rushes.sqlite", "db-copy.sqlite", "ingest-queue.tsv", "helper-refused.tsv", "activity.tsv")
 
 
+def viewer_lists(cat, root, out, say=print):
+    """The Viewer's lists, from the catalogue (db/viewer.js reads them, and names their columns): the videos and
+    pictures inside the archive, and what was described in them. A drive or another server is left out: it is not
+    reachable from where the Viewer is opened. Each list is a script the page loads from beside it, its text packed
+    (gzip, base64); written whole under another name first, so a page opened meanwhile reads yesterday's."""
+    import base64, gzip, io
+    root = root.rstrip("/"); own = (root + "/PROXIES/", root + "/_")       # Rushes' own: previews, its records
+    db = sqlite3.connect(f"file:{cat}?mode=ro", uri=True, timeout=30)
+    like = root.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"
+    # a line each, a tab between its columns: a tab inside one (a version's key has them) travels as \x1f, a line end as a space
+    flat = lambda v: "" if v is None else re.sub(r"[\r\n]", " ", str(v)).replace("\t", "\x1f")
+    n = {}
+    def write(name, rows):
+        buf = io.BytesIO(); i = 0
+        with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as g:
+            for r in rows:
+                if r[0 if name == "files" else 1].startswith(own): continue
+                r = list(r); k = 0 if name == "files" else 1; r[k] = r[k][len(root) + 1:]
+                g.write(("\t".join(flat(v) for v in r) + "\n").encode()); i += 1
+                if i % 50000 == 0: say(f"the Viewer's lists: {name}, {i:,} so far")
+        part = os.path.join(out, name + ".js.part")
+        with open(part, "w") as f: f.write(f"RUSHES_LIST('{name}','{base64.b64encode(buf.getvalue()).decode()}');\n")
+        os.replace(part, os.path.join(out, name + ".js")); n[name] = i
+    os.makedirs(out, exist_ok=True)
+    write("files", db.execute("""SELECT f.path, m.camera, m.reel, f.kind, f.bytes, f.year, f.event, f.dept, m.width, m.height, m.fps, m.codec,
+            m.duration, m.proxy_at, m.recorded, m.timecode, m.asis, l.label, l.vkey, l.vrank,
+            (SELECT COUNT(*) FROM labels x WHERE x.vkey = l.vkey), f.id
+        FROM files f LEFT JOIN media m ON m.file_id = f.id LEFT JOIN labels l ON l.path = f.path
+        WHERE f.kind IN ('video', 'image') AND f.path LIKE ? ESCAPE '\\' AND COALESCE(l.label, '') != 'cache' ORDER BY f.path""", (like,)))
+    write("moments", db.execute("""SELECT fp, path, kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, light,
+            part_of_day, mood, language, comp, hay
+        FROM moments WHERE kind != 'failed' AND path LIKE ? ESCAPE '\\' ORDER BY fp, start_s, kind""", (like,)))
+    info = {"made": int(time.time()), "catalogue": int(os.path.getmtime(cat)), "root": root, **n}
+    with open(os.path.join(out, "info.js.part"), "w") as f: f.write("RUSHES_INFO(" + json.dumps(info) + ");\n")
+    os.replace(os.path.join(out, "info.js.part"), os.path.join(out, "info.js"))
+    db.close()
+    return info
+
+
 def archive_ok(a, web):
     """An archive: a folder that exists, at least two deep, never a system folder, never the web folder."""
     bad = ("/System", "/Library", "/usr", "/bin", "/sbin", "/etc", "/private", "/Applications", "/dev", "/Users/Shared")

@@ -100,7 +100,9 @@ class PremierePanel(unittest.TestCase):
     def test_search_outside_premiere_is_as_it_was(self):
         page = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "db", "find.php")).read()
         self.assertIn("if (RUSHES.premiere) (function () {", page, "what is Premiere's runs only there")
-        self.assertIn("""<?= $PP ? ' class="pp" data-theme="dark"' : '' ?>""", page, "and its dress is put on only there")
+        self.assertIn("""<?= $PP ? ' class="pp" data-theme="dark"' : ($VW ? ' class="vw"' : '') ?>""", page, "and its dress is put on only there")
+        self.assertIn("if (RUSHES.viewer) (function () {", page, "what is the Viewer's runs only there")
+        self.assertIn("if (!RUSHES.viewer) run();", page)
 
 
 class Promises(unittest.TestCase):

@@ -15,27 +15,32 @@
 // Versions of one piece (v2, _1, FINAL, ENG/SPA, YouTube/Instagram: labels.php) show once.
 $NAV = 'search';
 require __DIR__ . '/config.php';
+if (isset($_GET['viewer'])) require_once __DIR__ . '/labels.php';     // the sections' names, for the Viewer's own search
 // Inside Premiere (the panel in premiere/ shows this page with ?premiere=1): the same Search, dressed as a Premiere
 // panel, with the pull being filled along the bottom and Copy and import on it. A panel is a browser of its own,
 // so the question "who is using Rushes here?" is answered for it.
 $PP = isset($_GET['premiere']);
+// The Viewer (viewer.php saves this page onto the archive, for people with no Rushes; db/viewer.js answers it there):
+// the same Search, with what only Rushes can do left out.
+$VW = isset($_GET['viewer']); $VIEWER = $VW;
 if ($PP) header('Cache-Control: no-store');     // a panel keeps what it is given: an older Rushes' page must not outlive the update (0.14.3)
 if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['expires' => time() + 31536000, 'path' => '/', 'samesite' => 'Lax']);
 ?><!doctype html>
-<html lang="en"<?= $PP ? ' class="pp" data-theme="dark"' : '' ?>>
+<html lang="en"<?= $PP ? ' class="pp" data-theme="dark"' : ($VW ? ' class="vw"' : '') ?>>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Search &middot; Rushes</title>
+<title><?= $VW ? 'Rushes Viewer' : 'Search &middot; Rushes' ?></title>
 <script>
   window.RUSHES = <?= json_encode([
     'premiere' => $PP,
+    'viewer'  => $VW,
     'version' => trim((string)@file_get_contents(__DIR__ . '/../VERSION')),
     'archive' => archive_dir(),
     'mac'     => on_mac(),
     'local'   => s_path('archive.as_seen_from_helper', archive_dir()),
     // drives kept where they are: a path on one reads from the drive's name
     'drives'  => array_map(fn($d) => ['path' => rtrim($d['path'], '/'), 'name' => $d['name']], drives_seen()),
-  ], JSON_UNESCAPED_SLASHES) ?>;
+  ] + ($VW ? ['editors' => array_values(array_filter((array)(settings()['viewer']['editors'] ?? []), fn($e) => !empty($e['name']) && !empty($e['email']))), 'related' => (array)(rules()['analysis']['related'] ?? []), 'sections' => LABEL_SHOWN, 'drives' => []] : []), JSON_UNESCAPED_SLASHES) ?>;
   // The same drawings the rest of Rushes uses, handed to the script for tiles, rows and buttons.
   window.ICON = <?= json_encode([
     'search'   => icon('search', 1.9),
@@ -52,7 +57,8 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
     'copy'     => icon('copy', 1.8),
   ], JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<?php require __DIR__ . '/../head.php'; ?>
+<?php if ($VW): ?><script><?php readfile(__DIR__ . '/viewer.js') ?></script>
+<?php endif; require __DIR__ . '/../head.php'; ?>
 <style>
   .pad { max-width: none }   /* results use the whole window */
   /* the search bar: the kind of file, then the words, as one field */
@@ -321,6 +327,16 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .pd-pick small { color: var(--muted) }
   .pd-new { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px }
   #pullDlg label.f { margin-bottom: 10px }
+
+  /* ── the Viewer: Search alone, opened from the archive; nothing that only Rushes can do ── */
+  .vw .topbar a.tab, .vw .topbar .pulse, .vw .topbar .slow, .vw #hMenu, .vw #hHere, .vw #hWho, .vw #pbOpen,
+  .vw [data-act="copy"], .vw [data-do="copy"], .vw [data-do="proxy"], .vw #pullsDd a[href="/pull.php"] { display: none !important }
+  .vw-note { color: var(--muted); font-size: 12.5px; margin-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  .vw .pullbar { gap: 8px } .vw #ppList { left: 0 }
+  dialog#vwDlg { width: min(460px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; background: var(--surface); color: var(--fg) }
+  dialog#vwDlg::backdrop { background: rgba(10, 22, 21, .6) }
+  #vwDlg .dh { display: flex; align-items: center; margin: 0 0 8px } #vwDlg .dh b { flex: 1; font-size: 15px } #vwDlg label.f { margin-bottom: 10px }
+  #vwDlg select { width: 100% } .vw-go { display: flex; flex-wrap: wrap; align-items: center; gap: 8px } #vwSaid { color: var(--muted); font-size: 12.5px; flex-basis: 100% }
 
   /* ── inside Premiere: its greys and its blue, its small type, and only what an editor needs ── */
   html.pp.pp { --bg: #1d1d1d; --surface: #262626; --raised: rgba(255,255,255,.07); --fg: #dedede;
@@ -727,7 +743,9 @@ function res(r) {
   const w = Math.max(r.width, r.height), h = Math.min(r.width, r.height);
   return w >= 3800 || h >= 2100 ? '4K' : w >= 2500 || h >= 1400 ? '2.7K' : h >= 1060 ? 'HD' : h >= 700 ? '720p' : 'SD';
 }
-const still = function (fp, shot) { return 'thumb.php?fp=' + encodeURIComponent(fp) + '&shot=' + (+shot || 0); };
+const still = RUSHES.viewer ? VIEWER.still : function (fp, shot) { return 'thumb.php?fp=' + encodeURIComponent(fp) + '&shot=' + (+shot || 0); };
+// a file's preview (play.php), or the picture or sound itself; in the Viewer, where that is on the archive
+const playUrl = function (p) { return RUSHES.viewer ? VIEWER.play(p) : 'play.php?p=' + encodeURIComponent(p); };
 const versTag = function (n) { return n > 1 ? '<span class="vers">' + ICON.versions + n + '</span>' : ''; };
 
 // Pull and Copy, on the picture itself: one click, without opening anything
@@ -890,7 +908,7 @@ function playTile(el) {
   stopTiles(); quiet($('inspect'));
   const img = el.querySelector('img'), t = +el.dataset.t || 0, v = document.createElement('video');
   v.controls = true; v.autoplay = true; v.playsInline = true; if (img) v.poster = img.currentSrc || img.src;
-  v.src = 'play.php?p=' + encodeURIComponent(el.dataset.p) + (t ? '#t=' + t : '');
+  v.src = playUrl(el.dataset.p) + (t ? '#t=' + t : '');
   v.onerror = function () { stopTiles(); say('Its preview would not play (is the archive there?).'); };
   if (img) img.hidden = true;
   el.classList.add('playing'); el.insertBefore(v, el.firstChild);
@@ -1114,7 +1132,7 @@ function shootOf(r) {
 
 // Sounds and pictures a browser plays or shows as they are (play.php sends the file itself)
 const HEAR = /\.(mp3|wav|m4a|aac|aiff?|flac)$/i, VIEW = /\.(jpe?g|png|gif|webp|heic)$/i;
-const asIs = function (p) { return 'play.php?p=' + encodeURIComponent(p); };
+const asIs = playUrl;
 // A player about to leave the page is stopped and emptied first. Taken off the page still playing, it plays on
 // unseen: its sound goes on, and it keeps writing its own shots into the description of whatever is shown now
 // (several of them at once: sound over sound, and a description that flickers between videos). 0.13.59.
@@ -1223,7 +1241,7 @@ function startVideo(box, path, t, st) {
   const was = pv.querySelector('img');               // the shot's still stays on screen while the proxy loads
   if (box.id === 'inspect') stopTiles();
   quiet(pv); pv.onclick = null;                      // the picture started it; from here the player's own controls do (a click on Pause is not "play")
-  pv.innerHTML = '<video controls autoplay playsinline' + (was ? ' poster="' + esc(was.getAttribute('src')) + '"' : '') + ' src="play.php?p=' + encodeURIComponent(path) + (t ? '#t=' + t : '') + '"></video>';
+  pv.innerHTML = '<video controls autoplay playsinline' + (was ? ' poster="' + esc(was.getAttribute('src')) + '"' : '') + ' src="' + esc(playUrl(path)) + (t ? '#t=' + t : '') + '"></video>';
   const v = pv.querySelector('video');
   v.onloadeddata = function () { if (note) note.textContent = 'Playing its proxy' + (t ? ' from ' + tcode(t) : '') + ' (the original stays where it is).'; };
   v.onerror = function () { if (note) note.textContent = 'No proxy to play yet. Proxies are made in Manage → Describe.'; };
@@ -1451,6 +1469,24 @@ $('pBtn').onclick = async function () {
     '<button id="pdNew">Fill another pull…</button><a href="/pull.php">All pulls</a>';
   $('pdNew').onclick = function () { dd.hidden = true; pending = null; openPullDlg(); };
 };
+// Clips (#ppClips, #ppList, on the pull's bar inside Premiere and in the Viewer): what is in the pull, each with a way out of it
+function clipsList(said) {
+  const enc = encodeURIComponent;
+  async function clips() {
+    const l = $('ppList'); if (!PULL) { l.hidden = true; return; }
+    const d = await (await fetch('/db/pulls.php?p=' + enc(PULL.slug) + '&t=' + Date.now())).json();
+    l.innerHTML = (d.items || []).map(function (i) {
+      return '<div><span title="' + esc(i.rel) + '">' + esc(i.name) + '</span><small>' + tb(i.bytes) + '</small><button class="ghost" data-rel="' + esc(i.rel) + '" title="Out of this pull; the file stays in the archive">×</button></div>'; }).join('')
+      || '<div><span>Nothing in this pull yet. The pull button on a picture adds it.</span></div>';
+    l.hidden = false;
+  }
+  $('ppClips').onclick = function () { if ($('ppList').hidden) clips().catch(function (e) { said(e.message); }); else $('ppList').hidden = true; };
+  $('ppList').onclick = async function (e) {
+    const b = e.target.closest('button[data-rel]'); if (!b || !PULL) return;
+    try { await pullPost({ action: 'remove', p: PULL.slug, rel: b.dataset.rel }); await refreshPull(); } catch (x) { said(x.message); }
+  };
+  return clips;
+}
 // ── Inside Premiere ────────────────────────────────────────────────────────
 // The panel (premiere/index.js) shows this page and is spoken to in short notes: hello → project (the open
 // project's name), import (the copies' paths) → imported. The pull being filled is the project's own: named after it,
@@ -1581,20 +1617,7 @@ if (RUSHES.premiere) (function () {
   $('ppGo').onclick = go;
   $('ppStop').onclick = function () { said('Asking Rushes to stop…'); pullPost({ action: 'copy-stop', p: slugNow }).catch(function (e) { said(e.message); }); };
 
-  // Clips: what is in the pull, each with a way out of it
-  async function clips() {
-    const l = $('ppList'); if (!PULL) { l.hidden = true; return; }
-    const d = await (await fetch('/db/pulls.php?p=' + enc(PULL.slug) + '&t=' + Date.now())).json();
-    l.innerHTML = (d.items || []).map(function (i) {
-      return '<div><span title="' + esc(i.rel) + '">' + esc(i.name) + '</span><small>' + tb(i.bytes) + '</small><button class="ghost" data-rel="' + esc(i.rel) + '" title="Out of this pull; the file stays in the archive">×</button></div>'; }).join('')
-      || '<div><span>Nothing in this pull yet. The pull button on a picture adds it.</span></div>';
-    l.hidden = false;
-  }
-  $('ppClips').onclick = function () { if ($('ppList').hidden) clips().catch(function (e) { said(e.message); }); else $('ppList').hidden = true; };
-  $('ppList').onclick = async function (e) {
-    const b = e.target.closest('button[data-rel]'); if (!b || !PULL) return;
-    try { await pullPost({ action: 'remove', p: PULL.slug, rel: b.dataset.rel }); await refreshPull(); } catch (x) { said(x.message); }
-  };
+  const clips = clipsList(said);
   // Another page of Rushes would leave the panel with no way back: a pull's link fills that pull here, the rest say where they open.
   document.addEventListener('click', function (e) {
     const a = e.target.closest('a[href]'); if (!a) return;
@@ -1606,11 +1629,79 @@ if (RUSHES.premiere) (function () {
     else say('That page opens in Rushes itself, not in Premiere.');
   }, true);
 })();
+// ── The Viewer ─────────────────────────────────────────────────────────────
+// This page saved onto the archive (runner.py viewer), opened from there by people who have no Rushes: viewer.js
+// answers it from the lists beside it. A pull is kept in this browser and sent to an editor as a request, in an
+// email: the editor's Rushes reads it (Pulls → Paste a request) and makes the pull, to copy and import as any other.
+if (RUSHES.viewer) (function () {
+  const q = $('q'), ph = q.placeholder, bar = $('pullbar');
+  q.disabled = true; q.placeholder = 'Reading the catalogue…';
+  $('kind').querySelectorAll('option[value="audio"], option[value="project"]').forEach(function (o) { o.remove(); });
+  const brand = document.querySelector('.topbar .brand'); if (brand) brand.removeAttribute('href');
+  VIEWER.missing = function (what) { q.placeholder = 'The catalogue is not beside this page'; $('stat').textContent = 'This page reads its lists from _rushes/viewer, beside it on the archive, and "' + what + '" is not there. Open the Viewer from the archive itself, not a copy of it.'; };
+  VIEWER.ready.then(function (info) {
+    q.disabled = false; q.placeholder = ph; q.focus();
+    const d = new Date((info.catalogue || info.made) * 1000);
+    if (brand) brand.insertAdjacentHTML('afterend', '<span class="vw-note">Viewer · the archive as it was on ' + esc(d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })) +
+      ' · ' + (+info.files).toLocaleString() + ' videos and pictures</span>');
+    run();
+  });
+  bar.insertAdjacentHTML('beforeend', '<button class="ghost" id="ppClips" title="The clips in this pull">Clips</button><button class="btn" id="vwSend">Send to an editor…</button><div class="dd" id="ppList" hidden></div>');
+  const clips = clipsList(say), wasRefresh = refreshPull;
+  refreshPull = async function () { await wasRefresh(); if (!$('ppList').hidden) clips(); };
+  // Send: who it is from (asked once, kept in this browser), which editor, a line about what it is for; then the
+  // email, with the request in it. It is copied as well, for an email written by hand or a request too long for a link.
+  const dlg = document.createElement('dialog'); dlg.id = 'vwDlg'; document.body.appendChild(dlg);
+  const eds = RUSHES.editors || [];
+  $('vwSend').onclick = async function () {
+    if (!PULL) return;
+    const d = await (await fetch('/db/pulls.php?p=' + encodeURIComponent(PULL.slug))).json();
+    if (!(d.items || []).length) return say('Nothing in this pull yet. The pull button on a picture adds it.');
+    dlg.innerHTML = '<div class="dh"><b>Send “' + esc(d.pull.name) + '” to an editor</b><button type="button" class="ghost" id="vwClose">Close</button></div>' +
+      '<p class="note" style="margin:0 0 12px">' + d.items.length + ' clip' + (d.items.length === 1 ? '' : 's') + '. The editor gets them as a request in an email, and brings the files into the edit.</p>' +
+      '<label class="f"><span>Your name</span><input type="text" id="vwFrom" maxlength="60"></label>' +
+      (eds.length ? '<label class="f"><span>The editor</span><select id="vwTo">' + eds.map(function (e, i) { return '<option value="' + i + '">' + esc(e.name) + '</option>'; }).join('') + '</select></label>' : '') +
+      '<label class="f"><span>What it is for (optional)</span><input type="text" id="vwNote" maxlength="200" placeholder="e.g. the recap video, due Friday"></label>' +
+      '<div class="vw-go"><button class="btn" id="vwMail">' + (eds.length ? 'Open the email' : 'Copy the request') + '</button><button class="ghost" id="vwCopy"' + (eds.length ? '' : ' hidden') + '>Copy the request</button><span id="vwSaid" role="status"></span></div>' +
+      (eds.length ? '' : '<p class="note">No editor is set for this Viewer yet (Rushes → Setup): paste the request into an email to your editor.</p>');
+    $('vwFrom').value = store('myName') || d.pull.made_by || ''; $('vwTo') && ($('vwTo').value = store('vwTo') || '0');
+    $('vwClose').onclick = function () { dlg.close(); };
+    const text = function () {
+      const from = $('vwFrom').value.trim(); if (!from) { $('vwFrom').focus(); $('vwSaid').textContent = 'Your name first: the editor needs to know who asks.'; return null; }
+      store('myName', from); if ($('vwTo')) store('vwTo', $('vwTo').value);
+      return VIEWER.request({ name: d.pull.name, items: d.items }, from, eds.length ? eds[+$('vwTo').value].name : '', $('vwNote').value);
+    };
+    const copy = function (t, then) { copyText(t, function (ok) { $('vwSaid').textContent = ok ? then : 'The browser would not copy it: select the text and copy it.'; }); };
+    $('vwCopy').onclick = function () { const t = text(); if (t) copy(t, '✓ The request is copied: paste it into an email.'); };
+    $('vwMail').onclick = function () {
+      const t = text(); if (!t) return;
+      if (!eds.length) return copy(t, '✓ The request is copied: paste it into an email to your editor.');
+      const e = eds[+$('vwTo').value], head = 'mailto:' + encodeURIComponent(e.email) + '?subject=' + encodeURIComponent('Rushes request: ' + d.pull.name) + '&body=';
+      const hello = 'Hi ' + e.name + ',\n\nCould you bring these into the edit?' + ($('vwNote').value.trim() ? ' ' + $('vwNote').value.trim() : '') + '\n\n';
+      // ponytail: a link holds about 1,800 characters in every mail program; a longer request goes by the clipboard
+      let body = hello + t + '\n\nThanks,\n' + $('vwFrom').value.trim(), long = false;
+      if (encodeURIComponent(body).length > 1800) { long = true; body = hello + '(Paste the request here: it is copied. Ctrl+V, or ⌘V on a Mac.)\n\nThanks,\n' + $('vwFrom').value.trim(); }
+      copy(t, long ? '✓ The email is opening. This request is long: it is copied, paste it into the email (Ctrl+V).' : '✓ The email is opening, with the request in it. Press Send there.');
+      location.href = head + encodeURIComponent(body);
+    };
+    dlg.showModal(); ($('vwFrom').value ? $('vwNote') : $('vwFrom')).focus();
+  };
+  // A link to another page of Rushes leads nowhere from here: a pull's link fills that pull, the rest say so.
+  document.addEventListener('click', function (e) {
+    const a = e.target.closest('a[href]'); if (!a || /^mailto:/.test(a.getAttribute('href'))) return;
+    e.preventDefault(); e.stopPropagation();
+    const u = new URL(a.getAttribute('href'), 'http://viewer/'), slug = u.pathname === '/pull.php' && u.searchParams.get('p');
+    if (slug) { $('pullsDd').hidden = true; usePull({ slug: slug, name: '' }); }
+    else say('That is in Rushes itself, not in the Viewer.');
+  }, true);
+})();
 // Arriving from a pull's "+ Add clips": that pull is the one being filled.
 (function () {
   const w = new URLSearchParams(location.search).get('pull');
   if (w) { PULL = { slug: w, name: '' }; store('pull', JSON.stringify(PULL)); }
   refreshPull().catch(function () {});
 })();
-run();
+if (!RUSHES.viewer) run();          // the Viewer runs once its lists are read
 </script>
+<?php if ($VW): foreach (['info', 'files', 'moments'] as $l): ?><script async src="_rushes/viewer/<?= $l ?>.js" onerror="VIEWER.missing('<?= $l ?>.js')"></script>
+<?php endforeach; endif ?>
