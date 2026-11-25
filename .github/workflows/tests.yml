@@ -2,6 +2,8 @@
 # (branch protection: the "tests" check is required), and mac/build.py makes no app from a commit that did not pass.
 name: tests
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   tests:
     runs-on: ubuntu-24.04
