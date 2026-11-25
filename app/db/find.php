@@ -1703,5 +1703,5 @@ if (RUSHES.viewer) (function () {
 })();
 if (!RUSHES.viewer) run();          // the Viewer runs once its lists are read
 </script>
-<?php if ($VW): foreach (['info', 'files', 'moments'] as $l): ?><script async src="_rushes/viewer/<?= $l ?>.js" onerror="VIEWER.missing('<?= $l ?>.js')"></script>
+<?php if ($VW): foreach (['info', 'files', 'moments', 'words'] as $l): ?><script async src="_rushes/viewer/<?= $l ?>.js" onerror="VIEWER.missing('<?= $l ?>.js')"></script>
 <?php endforeach; endif ?>

@@ -3,10 +3,10 @@
 const fs = require('fs'), zlib = require('zlib'), V = require(process.argv[5]);
 const dir = process.argv[2], U = process.argv[3], html = fs.readFileSync(process.argv[4], 'utf8');
 const R = JSON.parse(html.match(/window\.RUSHES = (\{.*?\});\n/s)[1]);
-const unpack = n => zlib.gunzipSync(Buffer.from(fs.readFileSync(dir + '/' + n + '.js', 'utf8').match(/'([A-Za-z0-9+\/=]*)'\);/)[1], 'base64')).toString();
+const unpack = (n, how) => zlib.gunzipSync(Buffer.from(fs.readFileSync(dir + '/' + n + '.js', 'utf8').match(/'([A-Za-z0-9+\/=]*)'\);/)[1], 'base64')).toString(how);
 const info = JSON.parse(fs.readFileSync(dir + '/info.js', 'utf8').replace(/^RUSHES_INFO\(|\);\s*$/g, ''));
 let t = Date.now();
-V.load(Object.assign({}, info, { root: R.archive.replace(/\/$/, ''), related: R.related, sections: R.sections }), unpack('files'), unpack('moments'));
+V.load(Object.assign({}, info, { root: R.archive.replace(/\/$/, ''), related: R.related, sections: R.sections }), unpack('files'), unpack('moments'), unpack('words', 'latin1'));
 console.log('lists read in', Date.now() - t, 'ms');
 const norm = v => v === null || v === undefined || v === '' ? null : typeof v === 'number' ? v : /^-?\d+(\.\d+)?$/.test(v) ? +v : Array.isArray(v) ? v.map(norm) : v;
 const pickRow = (a, b) => { const o = {}; Object.keys(a).forEach(k => { if (k !== 'copies' && k !== 'comp') o[k] = [norm(a[k]), norm(b[k])]; }); return o; };

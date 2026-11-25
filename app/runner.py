@@ -161,17 +161,28 @@ def viewer_lists(cat, root, out, say=print):
     # a line each, a tab between its columns: a tab inside one (a version's key has them) travels as \x1f, a line end as a space
     flat = lambda v: "" if v is None else re.sub(r"[\r\n]", " ", str(v)).replace("\t", "\x1f")
     n = {}
-    def write(name, rows):
-        buf = io.BytesIO(); i = 0
-        with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as g:
-            for r in rows:
-                if r[0 if name == "files" else 1].startswith(own): continue
-                r = list(r); k = 0 if name == "files" else 1; r[k] = r[k][len(root) + 1:]
-                g.write(("\t".join(flat(v) for v in r) + "\n").encode()); i += 1
-                if i % 50000 == 0: say(f"the Viewer's lists: {name}, {i:,} so far")
+    def save(name, buf):
         part = os.path.join(out, name + ".js.part")
         with open(part, "w") as f: f.write(f"RUSHES_LIST('{name}','{base64.b64encode(buf.getvalue()).decode()}');\n")
-        os.replace(part, os.path.join(out, name + ".js")); n[name] = i
+        os.replace(part, os.path.join(out, name + ".js"))
+    # words.js: each moment's searchable words, a line each beside moments.js, one byte a letter, so a word is found
+    # in the whole of it at once. A letter that does not fit a byte (rare: another alphabet, a curly quote) is \x01
+    # there, and that moment keeps its words in moments.js, where the Viewer reads them as they are.
+    plain = re.compile(r"[^\x00-\x7f\xa0-\xff]")
+    def write(name, rows):
+        buf = io.BytesIO(); wbuf = io.BytesIO(); i = 0
+        with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as g, gzip.GzipFile(fileobj=wbuf, mode="wb", compresslevel=6, mtime=0) as w:
+            for r in rows:
+                if r[0 if name == "files" else 1].startswith(own): continue
+                r = [flat(v) for v in r]; k = 0 if name == "files" else 1; r[k] = r[k][len(root) + 1:]
+                if name == "moments":
+                    hay = r[-1]; odd = plain.search(hay) is not None
+                    w.write((plain.sub("\x01", hay) + "\n").encode("latin-1"))
+                    if not odd: r[-1] = ""
+                g.write(("\t".join(r) + "\n").encode()); i += 1
+                if i % 50000 == 0: say(f"the Viewer's lists: {name}, {i:,} so far")
+        save(name, buf); n[name] = i
+        if name == "moments": save("words", wbuf)
     os.makedirs(out, exist_ok=True)
     write("files", db.execute("""SELECT f.path, m.camera, m.reel, f.kind, f.bytes, f.year, f.event, f.dept, m.width, m.height, m.fps, m.codec,
             m.duration, m.proxy_at, m.recorded, m.timecode, m.asis, l.label, l.vkey, l.vrank,

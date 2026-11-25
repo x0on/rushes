@@ -69,7 +69,7 @@ video("VIDEOS/Parks/2024/Picnic/DJI_0002.MP4", ("shot", 0, 100, "A park from abo
                                                ("shot", 100, 301.5, "An elderly couple walks by the water", "senior · couple · water", "family · outdoors", "full", "two", "daylight", "tender"),
                                                ("failed", 200, 210, "", "", "", "", "", "", ""))
 B = "VIDEOS/Harbor Master's Office/2023/Boats #1/"
-video(B + "boat one.mov", ("shot", 0, 9.9, "Boats in the harbor at night", "boats · harbor · night", "work · city", "wide", "none", "night", "quiet"))
+video(B + "boat one.mov", ("shot", 0, 9.9, "Boats in the harbor at night — “still” water, Ελληνικά on a sign", "boats · harbor · night", "work · city", "wide", "none", "night", "quiet"))
 video(B + "Boat Two.mov", ("shot", 0, 44, "A worker repairs a boat", "boat · worker · repair", "work · city", "medium", "one", "artificial", "focused"),
                           ("speech", 3, 20, "we fix about ten boats a week here", "", "", "", "", "", ""))
 F = "VIDEOS/Public Works/2025/Fiesta/"
@@ -132,6 +132,10 @@ q=&mood=joyful&people=one
 q=parade&mood=festive&light=day&shot=full&byname=1
 q=kite&dept=Parks&byname=1
 q=promo&byname=1
+q=still&byname=1
+q=%CE%B5%CE%BB%CE%BB%CE%B7%CE%BD%CE%B9%CE%BA%CE%AC&byname=1
+q=night+water&byname=1
+q=stil&byname=1
 q=&kind=image
 q=
 q=nothingatall&byname=1
@@ -142,7 +146,7 @@ python3 -c 'import sys, urllib.parse as u; print("q=&v=" + u.quote(sys.argv[1]))
 python3 -c 'import sqlite3, sys; [print("shots=" + r[0]) for r in sqlite3.connect(sys.argv[1]).execute("SELECT DISTINCT fp FROM moments LIMIT 4")]' "$W/rushes.sqlite" >> "$R/ask.txt"
 node "$HERE/tests/viewer_agree.js" "$A/_rushes/viewer" "$U" "$R/Viewer.html" "$HERE/app/db/viewer.js" < "$R/ask.txt" > "$R/agree.txt" 2>&1 \
   && ok "the Viewer answers as Rushes does: $(tail -1 "$R/agree.txt")" || { grep -A8 "^FAIL" "$R/agree.txt" | head -60; tail -12 "$R/agree.txt"; no "the Viewer and Rushes differ: $(tail -1 "$R/agree.txt")"; }
-grep -c "^PASS" "$R/agree.txt" | grep -q "^5[0-9]$" || no "every question was asked ($(grep -c '^PASS' "$R/agree.txt"))"
+grep -c "^PASS" "$R/agree.txt" | grep -q "^56$" || no "every question was asked ($(grep -c '^PASS' "$R/agree.txt"))"
 grep "^PASS q=kite&byname=1&limit=120 " "$R/agree.txt" | grep -q "3 videos" && ok "found by what they show, each video once" || no "kite: $(grep '^PASS q=kite&byname=1&limit=120 ' "$R/agree.txt")"
 # a drive kept where it is, a sound, a project file: in Rushes' Search, never in the Viewer (not reachable from it, or not footage)
 python3 - "$W/rushes.sqlite" "$A" "$D" <<'PY'
@@ -159,8 +163,8 @@ PY
 # where the pictures and the previews are, from where the page is; a pull kept in the browser; the request an editor's Rushes reads
 node - "$A/_rushes/viewer" "$R/Viewer.html" "$HERE/app/db/viewer.js" "$A" <<'JS' || no "stills, previews, pulls, the request"
 const fs = require('fs'), zlib = require('zlib'), [dir, page, js, A] = process.argv.slice(2), V = require(js), assert = require('assert');
-const un = n => zlib.gunzipSync(Buffer.from(fs.readFileSync(dir + '/' + n + '.js', 'utf8').match(/'([A-Za-z0-9+\/=]*)'\);/)[1], 'base64')).toString();
-V.load({ root: A, related: [], sections: {} }, un('files'), un('moments'));
+const un = (n, how) => zlib.gunzipSync(Buffer.from(fs.readFileSync(dir + '/' + n + '.js', 'utf8').match(/'([A-Za-z0-9+\/=]*)'\);/)[1], 'base64')).toString(how);
+V.load({ root: A, related: [], sections: {} }, un('files'), un('moments'), un('words', 'latin1'));
 assert.strictEqual(V.still('00000000000000000000aabb', 3), '_rushes/analysis/00/00000000000000000000aabb/0003.jpg');
 const K = A + '/VIDEOS/Parks/2025/Kite Day/';
 assert.strictEqual(V.play(K + 'Kite Promo.mp4'), 'PROXIES/VIDEOS/Parks/2025/Kite%20Day/Kite%20Promo.mp4', 'a video plays from its proxy');
@@ -183,5 +187,7 @@ assert.ok(/^===== RUSHES REQUEST =====\nFrom: Sam Rivera\nFor: Alex\nPull: Recap
 V.pulls(mem, {}, { action: 'remove', p: p.slug, rel: d.items[0].rel }); assert.strictEqual(V.pulls(mem, { p: p.slug }).items.length, 1);
 assert.ok(V.pulls(mem, { p: 'nope' }).error && V.pulls(mem, {}, { action: 'copy', p: p.slug }).error, 'copying is Rushes\' own');
 JS
+grep -q "^PASS q=still&byname=1 .* 1 videos" "$R/agree.txt" && grep -q "^PASS q=%CE%B5.* 1 videos" "$R/agree.txt" && grep -q "^PASS q=stil&byname=1 .* 0 videos" "$R/agree.txt" \
+  && ok "a word beside a curly quote, a word in another alphabet: found, and only whole" || no "odd letters: $(grep 'still\|%CE\|stil&' "$R/agree.txt")"
 ok "stills and previews from where the page is; a pull kept in the browser; the request as an editor's Rushes reads it"
 echo "viewer: all checks pass"

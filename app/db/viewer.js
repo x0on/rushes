@@ -7,14 +7,16 @@
 //
 // It must answer as search.php does: tests/test_viewer.sh asks both the same questions and fails when they
 // differ. A change to search.php's rules is a change here, and that test says so.
-// ponytail: every search reads the lists through (each word looked for once in the whole text of what was described:
-// a tenth of a second for 200,000 moments); an index if that ever shows. The lists are held as text, about
-// 400 MB of the browser's memory for an archive that size; split into years if that ever weighs.
+// ponytail: every search reads the lists through (each word looked for once in the whole text of the moments'
+// words: a tenth of a second for 200,000 moments); an index if that ever shows. The lists are held as text, a few
+// hundred MB of the browser's memory for an archive that size; split into years if that ever weighs.
 (function (root) {
 'use strict';
 const VPAGE = 120;
 // files.js, a line each:   path camera reel | kind bytes year event dept width height fps codec duration proxy_at recorded timecode asis label vkey vrank versions id
 // moments.js, a line each: fp path kind shot start_s end_s what on_screen themes tags shot_size people light part_of_day mood language comp hay
+// words.js, a line each:   the same moment's hay (everything searchable, small letters), a byte a letter; a letter that
+//                          does not fit one is \x01 there, and only then is hay in moments.js too (read as it is)
 const FC = ['path', 'camera', 'reel', 'kind', 'bytes', 'year', 'event', 'dept', 'width', 'height', 'fps', 'codec', 'duration', 'proxy_at',
             'recorded', 'timecode', 'asis', 'label', 'vkey', 'vrank', 'versions', 'id'];
 const MC = ['fp', 'path', 'kind', 'shot', 'start_s', 'end_s', 'what', 'on_screen', 'themes', 'tags', 'shot_size', 'people', 'light',
@@ -22,7 +24,8 @@ const MC = ['fp', 'path', 'kind', 'shot', 'start_s', 'end_s', 'what', 'on_screen
 const NUM = { bytes: 1, width: 1, height: 1, fps: 1, duration: 1, proxy_at: 1, vrank: 1, versions: 1, shot: 1, start_s: 1, end_s: 1 };
 let INFO = { root: '', related: [], sections: {} };
 let FL = [], FH = [], BY = new Map();          // the files' lines; path, camera and reel in small letters; a file by its path
-let MT = '', MS = new Uint32Array(1), HS = new Uint32Array(0), MN = 0;   // the moments, one text: where each line starts, and its words (the last column)
+let MT = '', MS = new Uint32Array(1), MN = 0;   // the moments, one text, and where each line starts
+let HT = '', HS = new Uint32Array(1), ODD = []; // their words, one text beside it; the moments whose words are read from MT instead
 let FPAT = new Map(), MBY = new Map();          // where a video's moments are; a file's moments
 const mline = function (i) { return MT.slice(MS[i], MS[i + 1] - 1); };
 const mcols = function (i, n) { return n ? mline(i).split('\t', n) : mline(i).split('\t'); };
@@ -39,7 +42,7 @@ const cmpAll = function (a, b) { for (let i = 0; i < a.length; i++) { const c = 
 const lowA = function (s) { return s.replace(/[A-Z]+/g, function (m) { return m.toLowerCase(); }); };   // as SQLite's NOCASE and LIKE: A to Z only
 const base = function (p) { return p.slice(p.lastIndexOf('/') + 1); };
 
-function load(info, files, moments) {
+function load(info, files, moments, words) {
   INFO = info; last = { q: null };
   FL = files ? files.split('\n') : []; if (FL[FL.length - 1] === '') FL.pop();
   MT = moments || ''; if (MT && MT[MT.length - 1] !== '\n') MT += '\n';
@@ -49,10 +52,13 @@ function load(info, files, moments) {
     t = l.indexOf('\t', l.indexOf('\t', t + 1) + 1); FH[i] = '/' + l.slice(0, t).toLowerCase();
   }
   MN = 0; for (let p = MT.indexOf('\n'); p >= 0; p = MT.indexOf('\n', p + 1)) MN++;
-  MS = new Uint32Array(MN + 1); HS = new Uint32Array(MN); FPAT = new Map(); MBY = new Map();
+  MS = new Uint32Array(MN + 1); HS = new Uint32Array(MN + 1); FPAT = new Map(); MBY = new Map(); ODD = [];
+  HT = words || ''; if (HT && HT[HT.length - 1] !== '\n') HT += '\n';
+  for (let i = 0, a = 0; i < MN; i++) { HS[i] = a; a = HT.indexOf('\n', a) + 1; HS[i + 1] = a; }
+  for (let p = HT.indexOf('\x01'), li = 0; p >= 0; p = HT.indexOf('\x01', HS[li + 1])) { while (HS[li + 1] <= p) li++; ODD.push(li); }
   for (let i = 0, a = 0; i < MN; i++) {
     const e = MT.indexOf('\n', a), t = MT.indexOf('\t', a), t2 = MT.indexOf('\t', t + 1), fp = MT.slice(a, t), p = MT.slice(t + 1, t2);
-    MS[i] = a; MS[i + 1] = e + 1; HS[i] = MT.lastIndexOf('\t', e) + 1;
+    MS[i] = a; MS[i + 1] = e + 1;
     const at = FPAT.get(fp); if (at) at[1] = i + 1; else FPAT.set(fp, [i, i + 1]);
     const of = MBY.get(p); if (of) of.push(i); else MBY.set(p, [i]);
     a = e + 1;
@@ -88,16 +94,23 @@ const list = function (v) { return String(v || '').split(',').filter(Boolean); }
 function scan(q) {
   if (last.q === q) return last;
   const words = split(q.toLowerCase()).map(wordForms), had = new Int32Array(MN), hits = new Uint8Array(MN), n = words.length;
-  for (let w = 0; w < n; w++) words[w].forEach(function (f) {
-    if (!f) return;
-    // every place the word is written, in the whole text; a place counts when it is in a line's words and stands whole there
-    for (let pos = MT.indexOf(f), li = 0; pos >= 0; pos = MT.indexOf(f, pos)) {
-      while (MS[li + 1] <= pos) li++;
-      if (pos < HS[li]) pos = HS[li];
-      else if (edge(MT, pos) && edge(MT, pos + f.length)) { had[li] |= 1 << w; pos = MS[li + 1]; }
-      else pos++;
-    }
-  });
+  for (let w = 0; w < n; w++) {
+    const forms = words[w].filter(Boolean);
+    // every place the word is written, in the whole text of the words; a place counts when the word stands whole there
+    forms.forEach(function (f) {
+      for (let pos = HT.indexOf(f), li = 0; pos >= 0; pos = HT.indexOf(f, pos)) {
+        while (HS[li + 1] <= pos) li++;
+        if (edge(HT, pos) && edge(HT, pos + f.length)) { had[li] |= 1 << w; pos = HS[li + 1]; }
+        else pos++;
+      }
+    });
+    // the few moments with a letter that does not fit a byte: their words as they are
+    ODD.forEach(function (li) {
+      const h = mline(li), from = h.lastIndexOf('\t') + 1;
+      const is = forms.some(function (f) { for (let pos = h.indexOf(f, from); pos >= 0; pos = h.indexOf(f, pos + 1)) if (edge(h, pos) && edge(h, pos + f.length)) return true; return false; });
+      if (is) had[li] |= 1 << w; else had[li] &= ~(1 << w);
+    });
+  }
   const full = n ? (n >= 31 ? -1 : (1 << n) - 1) : 0, seen = new Map(), shown = new Set();   // a file's path → which of the words its moments have
   for (let i = 0; i < MN && n; i++) if (had[i]) {
     let b = had[i], h = 0; while (b) { h++; b &= b - 1; } hits[i] = h;
@@ -302,17 +315,19 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = V; retur
 // without asking): each hands its text over packed, and the page's questions wait until both are read.
 root.VIEWER = V;
 const got = {}, want = {};
+const text = function (u, how) { return how ? Promise.resolve(new TextDecoder(how).decode(u)) : new Response(u).text(); };
 const have = function (n) { return new Promise(function (ok) { if (n in got) ok(got[n]); else want[n] = ok; }); };
 const give = function (n, v) { got[n] = v; if (want[n]) want[n](v); };
 root.RUSHES_LIST = function (name, b64) {
   const bin = atob(b64), u = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-  new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text().then(function (t) { give(name, t); });
+  new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
+    .then(function (b) { return text(b, name === 'words' ? 'latin1' : ''); }).then(function (t) { give(name, t); });
 };
 root.RUSHES_INFO = function (i) { give('info', i); };
-V.ready = Promise.all([have('info'), have('files'), have('moments')]).then(function (x) {
+V.ready = Promise.all([have('info'), have('files'), have('moments'), have('words')]).then(function (x) {
   const R = root.RUSHES || {};                   // the archive as the page names it; the words' groups and the sections as Rushes has them
-  load(Object.assign({}, x[0], { root: String(R.archive || x[0].root).replace(/\/$/, ''), related: R.related || [], sections: R.sections || {} }), x[1], x[2]);
+  load(Object.assign({}, x[0], { root: String(R.archive || x[0].root).replace(/\/$/, ''), related: R.related || [], sections: R.sections || {} }), x[1], x[2], x[3]);
   return x[0]; });
 const json = function (o) { return new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } }); };
 const f0 = root.fetch;
