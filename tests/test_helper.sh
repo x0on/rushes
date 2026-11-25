@@ -155,8 +155,8 @@ call SQL "INSERT INTO projects (path, name, saved, archived, missing, state, asi
   ('PARKS/NotKept/C.prproj', 'C', $old, '', '', 'active', 0), ('PARKS/Missing/D.prproj', 'D', $old, 'x', 'a.wav', 'active', 0)" >/dev/null
 plan() { LOCAL=1 call GET "{\"plan\":\"\"}" "{}" db/projects.php; }
 check '[ "$(plan)" = "aside	PARKS/Old" ]' 'only a folder asleep 90 days, kept in the archive and missing nothing, is planned to move aside'
-check 'call GET "{\"plan\":\"\"}" "{}" db/projects.php | grep -q "Only the runner"' 'only the runner asks for the plan'
-check 'call POST "{}" "{\"action\":\"moved\",\"lines\":\"aside\tPARKS/Mixed\tok\"}" db/projects.php | grep -q "only the runner"' 'and only the runner says what it moved'
+check 'FROM=10.0.0.9 call GET "{\"plan\":\"\"}" "{}" db/projects.php | grep -q "Only the runner"' 'only the runner asks for the plan'
+check 'FROM=10.0.0.9 call POST "{}" "{\"action\":\"moved\",\"lines\":\"aside\tPARKS/Mixed\tok\"}" db/projects.php | grep -q "only the runner"' 'and only the runner says what it moved'
 LOCAL=1 call POST "{}" "{\"action\":\"moved\",\"lines\":\"aside\tPARKS/Old\tok\"}" db/projects.php >/dev/null
 check '[ -z "$(plan)" ] && grep -q "	aside	PARKS/Old	ok" "$ROOT/app/projects-moves.tsv"' 'moved aside: recorded, and not planned again'
 check 'call POST "{}" "{\"action\":\"back\",\"folder\":\"PARKS/Old\"}" db/projects.php | grep -q "Sign in"' 'Bring it back needs Manage'

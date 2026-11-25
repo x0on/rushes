@@ -737,8 +737,18 @@ function helper_pairing(): string {
 
 // At the top of every door that gives a helper work or takes its word: any
 // helper but the paired one is refused, and named on the page.
+// Before any helper is paired, only the machine Rushes runs on is let in (the helper built into it): a door that
+// took anyone until then was an open one for as long as nobody had paired (security review, November 2026).
 function helper_gate(): void {
-    if (helper_pairing() !== 'other') return;
+    $who = helper_pairing();
+    if ($who === 'this') return;
+    if ($who === 'none') {
+        if (in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) return;
+        http_response_code(403); header('Content-Type: application/json');
+        echo json_encode(['error' => 'no helper is paired yet',
+            'why' => 'This Rushes takes work only from a helper it is paired with. Get a code in Rushes → Setup → Pair a helper, and enter it in Rushes Helper.']);
+        exit;
+    }
     $f = web_dir() . '/helper-refused.tsv';
     $l = array_slice(@file($f, FILE_IGNORE_NEW_LINES) ?: [], -19);
     $l[] = time() . "\t" . ($_SERVER['REMOTE_ADDR'] ?? '') . "\t" . substr(preg_replace('/[\t\r\n]/', ' ', (string)($_POST['host'] ?? '')), 0, 80);

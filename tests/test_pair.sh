@@ -14,7 +14,7 @@ no() { echo "FAIL $1"; exit 1; }
 ask() {
     cat > "$R/ask.php" <<EOF
 <?php
-\$_SERVER['REQUEST_METHOD'] = '$2'; \$_SERVER['REMOTE_ADDR'] = '10.0.0.9';
+\$_SERVER['REQUEST_METHOD'] = '$2'; \$_SERVER['REMOTE_ADDR'] = '${HERE_ADDR:-10.0.0.9}';
 \$_SERVER['HTTP_X_RUSHES_HELPER'] = '$3'; \$_POST = $4; \$_GET = ['queue' => ''];
 register_shutdown_function(function () { echo ' ', http_response_code() ?: 200; });
 include '$R/web/db/$1';
@@ -23,7 +23,8 @@ EOF
 }
 code() { ask pair.php POST '' "['action' => 'start', 'pass' => 'rushes']" | sed 's/.*"code":"\([0-9]*\)".*/\1/'; }
 
-case "$(ask helper.php GET '' '[]')" in "copy	/x "*" 200") ok "not paired yet: any helper is given work, as before" ;; *) no "unpaired queue" ;; esac
+case "$(ask helper.php GET '' '[]')" in *"no helper is paired yet"*403) ok "not paired yet: a helper on another machine is given nothing" ;; *) no "unpaired queue: $(ask helper.php GET '' '[]')" ;; esac
+case "$(HERE_ADDR=127.0.0.1 ask helper.php GET '' '[]')" in "copy	/x "*" 200") ok "not paired yet: the helper built into the machine itself works" ;; *) no "unpaired, the machine itself" ;; esac
 case "$(ask pair.php POST '' "['action' => 'start']")" in *"sign in"*403) ok "only someone signed in can make a code" ;; *) no "code without sign-in" ;; esac
 
 c=$(code)
