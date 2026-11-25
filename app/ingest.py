@@ -3053,16 +3053,30 @@ def watch(root, every=20):
 # archive's _rushes/analysis, and reports progress as "@@ {json}" lines.
 AI = HOME / "ai"        # what Install the AI puts on this Mac (Manage → Describe): its own Python, ffmpeg, the tools
 # Each download pinned and checked against its fingerprint before it is used.
+# FFmpeg 9.1 as Martin Riedl builds it (ffmpeg.martin-riedl.de: signed, its build scripts public), since 0.15.2;
+# before, 6.0 from 2023. ponytail: his address for 9.1; if it ever goes, Install says the download failed, and
+# the answer is the FFmpeg Rushes builds itself from FFmpeg's own source (planned).
 AI_GET = {
-    "python": ("https://github.com/astral-sh/python-build-standalone/releases/download/20250918/"
-               "cpython-3.12.11%2B20250918-aarch64-apple-darwin-install_only_stripped.tar.gz",
-               "559fb918c10f0cff226604257dcc390b391c87e6cbb2426824e99069c143e714"),
-    "ffmpeg":  ("https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-darwin-arm64.gz",
-                "6be74d6f449889c2e87a75873894f8520cad56c08ac76f2a628d85b0519daaca"),
-    "ffprobe": ("https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffprobe-darwin-arm64.gz",
-                "a4db76bafdb8529312e138fb55aaf143cad21b6d672e2634c9dd07ae83c6a310"),
+    "python": ("https://github.com/astral-sh/python-build-standalone/releases/download/20261124/"
+               "cpython-3.12.16%2B20261124-aarch64-apple-darwin-install_only_stripped.tar.gz",
+               "9d6d9d0d85feda3f9cb4eb3e048f0fed21ed280feda087927eaa4fbc7124826f"),
+    "ffmpeg":  ("https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffmpeg.zip",
+                "1f66e9a690a7f1c9e60b012379f8869c11818d1797f45b21dbb2f2564ba61ae1"),
+    "ffprobe": ("https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffprobe.zip",
+                "6ef2df5f575042923a28537ab37adf936f28bf3e7b85de23a1447ed447ec1dbd"),
 }
-AI_PACKAGES = ["mlx-vlm", "mlx-whisper", "scenedetect[opencv-headless]", "huggingface_hub"]
+# The describing tools, each at one version: the ones the archive this was made for describes with. Before 0.15.2
+# every install took whatever was newest that day, so no list could say what a Mac ran. AI_PACKAGES is what is
+# asked for; AI_PINS holds everything they bring with them to the same versions (pip's constraints).
+AI_PACKAGES = ["mlx-vlm==0.7.2", "mlx-whisper==0.4.3", "scenedetect[opencv-headless]==0.7.1", "huggingface_hub==1.32.0"]
+AI_PINS = """annotated-types==0.8.0 anyio==4.15.1 certifi==2026.7.22 charset-normalizer==3.5.1 click==8.5.0 filelock==4.0.1
+fsspec==2026.9.0 h11==0.16.0 hf-xet==1.6.0 httpcore==1.0.9 httpx==0.28.1 idna==3.20 Jinja2==3.1.6 llvmlite==0.49.0
+MarkupSafe==3.0.3 mlx==0.32.2 mlx-metal==0.32.2 more-itertools==11.1.0 mpmath==1.3.0 networkx==3.7 numba==0.67.0
+numpy==2.5.3 opencv-python==5.0.0.93 opencv-python-headless==5.0.0.93 packaging==26.3 pillow==12.3.0 platformdirs==4.11.12
+protobuf==7.36.2 pydantic==2.13.5 pydantic_core==2.46.5 Pygments==2.21.0 PyYAML==6.0.3 regex==2026.9.10 requests==2.34.2
+rich==15.0.0 safetensors==0.8.0 scipy==1.18.1 sentencepiece==0.2.2 shellingham==1.5.4 sympy==1.14.0 tiktoken==0.14.0
+tokenizers==0.23.2 torch==2.14.0 tqdm==4.70.1 transformers==5.17.0 typer==0.27.2 typing_extensions==4.16.0
+typing-inspection==0.4.4 urllib3==2.8.0""".split()
 NIGHT = (22, 7)         # ponytail: "only at night" is 10 pm to 7 am; a setting if anyone needs other hours
 
 
@@ -3088,7 +3102,7 @@ def install_ai():
     and ffprobe, the tools (pip) and the models. Each step is said in Describe
     while it happens (turning) and becomes a ✓; a step already done is skipped,
     so pressing it again finishes what is missing."""
-    import gzip, tarfile
+    import tarfile, zipfile
     done = []
     def step(line):
         print(f"  {line}"); status(phase="installing", note=line, done=" | ".join(done))
@@ -3127,7 +3141,7 @@ def install_ai():
     AI.mkdir(parents=True, exist_ok=True)
     py = AI / "python" / "bin" / "python3"
     if not py.exists():
-        step("Downloading a Python for the AI (17 MB) …")
+        step("Downloading a Python for the AI (25 MB) …")
         fetch("python", AI / "python.tar.gz")
         with tarfile.open(AI / "python.tar.gz") as t:
             t.extractall(AI, filter="data")            # makes AI/python
@@ -3137,16 +3151,17 @@ def install_ai():
     for n in ("ffmpeg", "ffprobe"):
         b = AI / "bin" / n
         if b.exists(): continue
-        step(f"Downloading {n} (19 MB) …")
-        fetch(n, AI / "bin" / (n + ".gz"))
-        with gzip.open(AI / "bin" / (n + ".gz")) as g, open(str(b) + ".part", "wb") as f:
+        step(f"Downloading {n} (26 MB) …")
+        fetch(n, AI / "bin" / (n + ".zip"))
+        with zipfile.ZipFile(AI / "bin" / (n + ".zip")) as z, z.open(n) as g, open(str(b) + ".part", "wb") as f:   # the one program inside, by its name
             shutil.copyfileobj(g, f)
-        os.chmod(str(b) + ".part", 0o755); os.replace(str(b) + ".part", b); (AI / "bin" / (n + ".gz")).unlink()
+        os.chmod(str(b) + ".part", 0o755); os.replace(str(b) + ".part", b); (AI / "bin" / (n + ".zip")).unlink()
         # An Apple chip runs only signed programs: signed here, for this Mac only (ad hoc)
         subprocess.run(["codesign", "-s", "-", "-f", str(b)], capture_output=True)
         ok(n)
     long_step("Installing the AI tools (mlx-vlm, mlx-whisper, scenedetect) — a few minutes …")
-    run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", *AI_PACKAGES])
+    pins = AI / "pins.txt"; pins.write_text("\n".join(AI_PINS) + "\n")
+    run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "-c", str(pins), *AI_PACKAGES])
     ok("The AI tools")
     tools, model, whisper = analysis_tools()
     for what, m in (("the vision model (about 6 GB)", model), ("the speech model (about 1.6 GB)", whisper)):

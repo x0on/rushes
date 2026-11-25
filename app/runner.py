@@ -743,24 +743,24 @@ class Runner:
         return shutil.which("ffmpeg")
 
     # The same pinned ffmpeg Install the AI brings (ingest.py AI_GET), checked against its fingerprint
-    FFMPEG_GET = ("https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-darwin-arm64.gz",
-                  "6be74d6f449889c2e87a75873894f8520cad56c08ac76f2a628d85b0519daaca")
+    FFMPEG_GET = ("https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffmpeg.zip",
+                  "1f66e9a690a7f1c9e60b012379f8869c11818d1797f45b21dbb2f2564ba61ae1")
 
     def get_ffmpeg(self, only):
         """No ffmpeg on this Mac: the pinned one, downloaded once, so nobody opens Terminal. -> its path, or None."""
-        import gzip
+        import zipfile
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             return None
         d = os.path.expanduser("~/archive-pilot/ai/bin"); os.makedirs(d, exist_ok=True)
-        dest, part, h = os.path.join(d, "ffmpeg"), os.path.join(d, "ffmpeg.gz.part"), hashlib.sha256()
-        self.proxy_state(state="planning", only=only, step="downloading ffmpeg, the tool that makes proxies (19 MB), once")
+        dest, part, h = os.path.join(d, "ffmpeg"), os.path.join(d, "ffmpeg.zip.part"), hashlib.sha256()
+        self.proxy_state(state="planning", only=only, step="downloading ffmpeg, the tool that makes proxies (26 MB), once")
         try:
             with urllib.request.urlopen(self.FFMPEG_GET[0], timeout=60) as r, open(part, "wb") as f:
                 for b in iter(lambda: r.read(1 << 20), b""):
                     h.update(b); f.write(b)
             if h.hexdigest() != self.FFMPEG_GET[1]:
                 raise OSError("the download is not the one expected (its fingerprint differs): not used")
-            with gzip.open(part) as g, open(dest + ".part", "wb") as f:
+            with zipfile.ZipFile(part) as z, z.open("ffmpeg") as g, open(dest + ".part", "wb") as f:
                 shutil.copyfileobj(g, f)
             os.chmod(dest + ".part", 0o755); os.replace(dest + ".part", dest)
             subprocess.run(["codesign", "-s", "-", "-f", dest], capture_output=True)    # an Apple chip runs only signed programs

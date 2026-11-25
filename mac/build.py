@@ -30,7 +30,7 @@ NAME = "Rushes Watcher" if WATCHER else "Rushes"
 BUNDLE = "org.rushes.watcher" if WATCHER else "org.rushes.app"
 APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
-PBS = "cpython-3.12.11+20250918-{}-apple-darwin-install_only_stripped.tar.gz"
+PBS = "cpython-3.12.16+20261124-{}-apple-darwin-install_only_stripped.tar.gz"
 ARCHES = {"arm64": "aarch64", "x86_64": "x86_64"}
 PHP = "php-8.5.8-cli-macos-{}.tar.gz"
 # Rushes on a Mac (HOW-IT-WORKS.md): the pages, without what only runs elsewhere

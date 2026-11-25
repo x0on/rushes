@@ -1392,4 +1392,4 @@ class InstallAITests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'fingerprint'):
                 m.install_ai()
         self.assertEqual(list(m.AI.iterdir()), [])                       # nothing kept, not even a part
-        self.assertEqual(said[0]['note'], 'Downloading a Python for the AI (17 MB) …')
+        self.assertEqual(said[0]['note'], 'Downloading a Python for the AI (25 MB) …')
