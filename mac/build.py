@@ -184,9 +184,10 @@ import json, uuid, datetime
 PARTS = json.load(open(os.path.join(HERE, "parts.json"), encoding="utf-8"))["parts"]
 if WATCHER:                                        # the Watcher carries Python and nothing else
     PARTS = [x for x in PARTS if x["name"] in ("CPython", "python-build-standalone")]
-wheel = next((w for w in os.listdir(TOP) if w.startswith("xxhash-") and w.endswith(".whl")), "")
-for x in PARTS:
-    if x["name"] == "python-xxhash" and wheel: x["version"] = wheel.split("-")[1]
+# ponytail: python-xxhash is not in the list because the app is built without it (no wheel beside this file; the
+# helper then uses BLAKE2). A build that carries the wheel must add it to parts.json and licenses/ first:
+if not WATCHER and any(w.startswith("xxhash-") and w.endswith(".whl") for w in os.listdir(TOP)) and not any(x["name"] == "python-xxhash" for x in PARTS):
+    sys.exit("build.py: an xxhash wheel is beside build.py, but python-xxhash is not in parts.json. Add it (and its license text), or take the wheel away. Not built.")
 os.makedirs(os.path.join(C, "Resources", "LICENSES"))
 for x in PARTS:
     if x["where"] != "in the app" or not x.get("license_file"): continue

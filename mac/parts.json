@@ -43,27 +43,6 @@
    "license_file": "static-php-cli.txt"
   },
   {
-   "name": "python-xxhash",
-   "version": "",
-   "license": "BSD-2-Clause",
-   "where": "in the app",
-   "url": "https://github.com/ifduyue/python-xxhash",
-   "credits": "xxHash (python-xxhash)",
-   "license_file": "python-xxhash.txt",
-   "note": "the version is the wheel's, read by the build"
-  },
-  {
-   "name": "xxHash",
-   "version": "",
-   "license": "BSD-2-Clause",
-   "where": "in the app",
-   "url": "https://github.com/Cyan4973/xxHash",
-   "credits": "xxHash (python-xxhash)",
-   "license_file": "xxHash.txt",
-   "note": "the version python-xxhash carries",
-   "inside": "python-xxhash"
-  },
-  {
    "name": "OpenSSL",
    "version": "3.6.2",
    "license": "Apache-2.0",
