@@ -83,6 +83,11 @@ damaged copies and resuming, and every file it copies is checked as above.
 | xxHash (python-xxhash) | The XXH3-128 fingerprint that proves each copy matches its original — the one ASC MHL and professional copy tools read | Inside Rushes Helper | BSD-2-Clause | Yann Collet (xxHash); github.com/ifduyue/python-xxhash |
 | macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive and shows the window for choosing the archive; caffeinate keeps the Mac awake while a copy or describing runs; scutil gives the computer's name for pairing; xattr and pbpaste help find the Rushes address during setup (where the app was downloaded from, the clipboard); AppKit and WebKit draw the window; open | Part of macOS | Apple | Apple |
 
+The exact version of each part, with its license and where it is downloaded from, is in `mac/parts.json`, and goes
+with every release as a parts list (`Rushes <version>.cdx.json`, CycloneDX). The license text of every part shipped
+inside the app is in the app itself: `Rushes.app/Contents/Resources/LICENSES`. PHP carries about thirty libraries
+built into it (OpenSSL, curl, SQLite, zlib, libxml2 …): they are named one by one in the parts list.
+
 ## On this Mac: describing footage
 
 | Part | What it does in Rushes | Where it runs | License | Where it comes from |
@@ -93,7 +98,7 @@ damaged copies and resuming, and every file it copies is checked as above.
 | mlx-vlm | Runs the vision model with MLX | This Mac | MIT | Prince Canuma — github.com/Blaizzy/mlx-vlm |
 | mlx-whisper | Runs Whisper with MLX | This Mac | MIT | Apple — github.com/ml-explore/mlx-examples |
 | PySceneDetect | Cuts footage into shots | This Mac | BSD-3-Clause | Brandon Castellano — github.com/Breakthrough/PySceneDetect |
-| FFmpeg | Reads frames and sound from video | This Mac | LGPL-2.1+ (some builds GPL) | ffmpeg.org |
+| FFmpeg | Reads frames and sound from video, and makes proxies on a Mac that has no FFmpeg of its own. Not inside the app: downloaded when needed, version 9.1, checked against its fingerprint | This Mac | GPL-3.0-or-later (this build includes x264 and x265) | ffmpeg.org; built by Martin Riedl — ffmpeg.martin-riedl.de, his build scripts at gitlab.com/martinr92/ffmpeg |
 | Hugging Face Hub | Where the models are downloaded from the first time, if they are not already on the Mac (by the MLX libraries; no footage is sent) | Download only | — | huggingface.co |
 
 ## On the archive machine

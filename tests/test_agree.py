@@ -105,6 +105,48 @@ class PremierePanel(unittest.TestCase):
         self.assertIn("if (!RUSHES.viewer) run();", page)
 
 
+class Parts(unittest.TestCase):
+    """mac/parts.json: every part Rushes for Mac ships or downloads, at its exact version. The parts list given
+    with each release (SBOM) is made from it, so it must say what the code really fetches, and what CREDITS.md says."""
+    def setUp(self):
+        self.root = os.path.join(HERE, "..")
+        self.parts = {x["name"]: x for x in json.load(open(os.path.join(self.root, "mac", "parts.json"), encoding="utf-8"))["parts"]}
+        self.rd = lambda *p_: open(os.path.join(self.root, *p_), encoding="utf-8").read()
+
+    def test_the_list_says_what_the_code_fetches(self):
+        build, ingest, run = self.rd("mac", "build.py"), self.rd("app", "ingest.py"), self.rd("app", "runner.py")
+        py, pbs, php, ff = (self.parts[k] for k in ("CPython", "python-build-standalone", "PHP", "FFmpeg"))
+        self.assertIn(f'PBS = "cpython-{py["version"]}+{pbs["version"]}-', build, "the Python the app is built with")
+        self.assertIn(f'PHP = "php-{php["version"]}-cli-macos-', build, "the PHP the app is built with")
+        self.assertIn(f'cpython-{py["version"]}%2B{pbs["version"]}-aarch64-apple-darwin', ingest, "the Python Install the AI downloads")
+        self.assertIn(pbs["sha256"]["aarch64"], ingest)
+        for h in ff["sha256"].values(): self.assertIn(h, ingest, "FFmpeg's fingerprints")
+        self.assertIn(ff["url"] + "ffmpeg.zip", ingest); self.assertIn(ff["url"] + "ffmpeg.zip", run, "the runner downloads the same FFmpeg")
+        self.assertIn(ff["sha256"]["ffmpeg.zip"], run)
+        asked = re.search(r"AI_PACKAGES = \[(.*)\]\n", ingest).group(1)
+        for k in ("mlx-vlm", "mlx-whisper", "scenedetect", "huggingface_hub"):
+            self.assertRegex(asked, re.escape(k) + r"(\[[^\]]*\])?==" + re.escape(self.parts[k]["version"]) + '"', f"{k} is asked for at the version listed")
+        self.assertNotRegex(asked, r'"[^"=]+"', "no describing tool without a version")
+        self.assertIn(f'mlx=={self.parts["MLX"]["version"]} ', ingest)
+
+    def test_every_part_is_credited_and_every_shipped_part_has_a_license_text_named(self):
+        credits = self.rd("CREDITS.md")
+        for n, x in self.parts.items():
+            self.assertIn(f"| {x['credits']} |", credits, f"{n} is in the parts list, so CREDITS.md names it ({x['credits']})")
+            self.assertIn(x["where"], ("in the app", "downloaded at setup", "model, downloaded at setup"))
+            if x["where"] == "in the app" and x["license"] != "blessing":
+                self.assertTrue(x.get("license_file"), f"{n} is shipped inside the app: its license text goes with it")
+        build = self.rd("mac", "build.py")
+        self.assertIn('sys.exit(f"build.py: no license text for', build, "the build stops without one")
+        self.assertIn('.cdx.json")', build, "and writes the parts list beside the app")
+
+    def test_what_credits_says_ships_in_the_app_is_in_the_list(self):
+        rows = [l.split("|") for l in self.rd("CREDITS.md").splitlines() if "| Inside Rushes Helper |" in l]
+        self.assertGreater(len(rows), 3)
+        named = {x["credits"] for x in self.parts.values()}
+        for r in rows: self.assertIn(r[1].strip(), named, "shipped inside the app, so it is in the parts list")
+
+
 class Promises(unittest.TestCase):
     """PROMISES.md: what Rushes always does, or never does. Each line names the check that holds it to it."""
     def test_every_promise_names_a_check_that_exists(self):

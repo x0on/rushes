@@ -17,6 +17,9 @@ Runs on Linux or a Mac. Needs, next to this file or on the PATH:
   - python3.12, to precompile the standard library
   - zig, to compile the launcher for both chips (pip install ziglang)
   - rcodesign, to sign it (github.com/indygreg/apple-platform-rs, apple-codesign)
+  - licenses/: the license text of each part shipped inside the app, a file each as parts.json names them
+    (license_file), fetched once from the part's own project (url). The build stops when one is missing.
+It also writes the parts list beside the zip: "Rushes <version>.cdx.json" (CycloneDX), from parts.json.
 """
 import os, plistlib, shutil, struct, subprocess, sys, tarfile, zipfile
 
@@ -171,6 +174,51 @@ shutil.copy(os.path.join(HERE, "AppIcon.icns"), os.path.join(C, "Resources"))
 # What Rushes is made of, and whose each part is: shown in the app's window.
 shutil.copy(os.path.join(HERE, "..", "CREDITS.md") if os.path.exists(os.path.join(HERE, "..", "CREDITS.md"))
             else os.path.join(HERE, "CREDITS.md"), os.path.join(C, "Resources"))
+
+# ── what the app is made of: each part's license text inside it, and the parts list beside it ──
+# parts.json is the one list (tests/test_agree.py holds it to the versions in the code and to CREDITS.md). The
+# licenses of the parts shipped inside the app ask that their text goes with every copy: Resources/LICENSES, a file
+# a part, from licenses/ beside this file (each fetched once from the part's own project: its address is in
+# parts.json). A part with no text there stops the build: an app that could not be given away is not made.
+import json, uuid, datetime
+PARTS = json.load(open(os.path.join(HERE, "parts.json"), encoding="utf-8"))["parts"]
+if WATCHER:                                        # the Watcher carries Python and nothing else
+    PARTS = [x for x in PARTS if x["name"] in ("CPython", "python-build-standalone")]
+wheel = next((w for w in os.listdir(TOP) if w.startswith("xxhash-") and w.endswith(".whl")), "")
+for x in PARTS:
+    if x["name"] == "python-xxhash" and wheel: x["version"] = wheel.split("-")[1]
+os.makedirs(os.path.join(C, "Resources", "LICENSES"))
+for x in PARTS:
+    if x["where"] != "in the app" or not x.get("license_file"): continue
+    src = os.path.join(TOP, "licenses", x["license_file"])
+    if not os.path.exists(src) or os.path.getsize(src) < 200:
+        sys.exit(f"build.py: no license text for {x['name']} (licenses/{x['license_file']}, beside build.py). Not built.")
+    shutil.copy(src, os.path.join(C, "Resources", "LICENSES", x["license_file"]))
+
+
+def sbom(path):
+    """The parts list, as CycloneDX 1.5 (a format scanners and auditors read): every part with its exact version,
+    license, where it comes from, its fingerprint where the code pins one, and whether it is inside the app or
+    downloaded when the Mac is set up."""
+    def comp(x):
+        c = {"type": "machine-learning-model" if x["where"].startswith("model") else "library", "name": x["name"],
+             "bom-ref": x["name"], "externalReferences": [{"type": "distribution", "url": x["url"]}],
+             "properties": [{"name": "rushes:where", "value": x["where"]}]}
+        if x.get("version"): c["version"] = x["version"]
+        lic = x["license"]
+        c["licenses"] = [{"expression": lic}] if " OR " in lic else [{"license": {"name": lic} if lic == "blessing" else {"id": lic}}]
+        if x.get("inside"): c["properties"].append({"name": "rushes:inside", "value": x["inside"]})
+        if x.get("note"): c["properties"].append({"name": "rushes:note", "value": x["note"]})
+        for k, v in (x.get("sha256") or {}).items(): c["properties"].append({"name": f"rushes:sha256:{k}", "value": v})
+        return c
+    doc = {"bomFormat": "CycloneDX", "specVersion": "1.5", "serialNumber": "urn:uuid:" + str(uuid.uuid4()), "version": 1,
+           "metadata": {"timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "component": {"type": "application", "name": NAME, "version": VERSION, "bom-ref": NAME,
+                                      "licenses": [{"license": {"name": "source-available; its license is being prepared (README.md)"}}],
+                                      "externalReferences": [{"type": "vcs", "url": "https://github.com/x0on/rushes"}]}},
+           "components": [comp(x) for x in PARTS]}
+    with open(path, "w", encoding="utf-8") as f: json.dump(doc, f, indent=1, ensure_ascii=False)
+    print(f"{path}: {len(PARTS)} parts")
 with open(os.path.join(C, "Info.plist"), "wb") as f:
     plistlib.dump({
         "CFBundleIdentifier": BUNDLE,
@@ -206,3 +254,4 @@ print("signed by:", "the author's certificate" if KEY and CERT else "nobody (ad 
 z = os.path.join(OUT, NAME + ".zip")
 run("zip", "-qry", z, NAME + ".app", cwd=OUT)
 print(f"\n{z}: {os.path.getsize(z) / 1e6:.1f} MB")
+sbom(os.path.join(OUT, f"{NAME} {VERSION}.cdx.json"))

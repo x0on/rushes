@@ -1,0 +1,461 @@
+{
+ "_": "Every part Rushes for Mac ships or downloads, at its exact version: the one list the parts list (SBOM, mac/build.py) and its tests are made from. tests/test_agree.py holds it to the versions written in the code and to CREDITS.md.",
+ "parts": [
+  {
+   "name": "CPython",
+   "version": "3.12.16",
+   "license": "PSF-2.0",
+   "where": "in the app",
+   "url": "https://www.python.org/",
+   "credits": "Python 3.12",
+   "license_file": "Python.txt"
+  },
+  {
+   "name": "python-build-standalone",
+   "version": "20261124",
+   "license": "MPL-2.0",
+   "where": "in the app",
+   "url": "https://github.com/astral-sh/python-build-standalone/releases/tag/20261124",
+   "credits": "python-build-standalone",
+   "sha256": {
+    "aarch64": "9d6d9d0d85feda3f9cb4eb3e048f0fed21ed280feda087927eaa4fbc7124826f",
+    "x86_64": "6d7ef4efa1adf65f312e6e865040ce03ef8a4bd7e1b45415193295c9ffc0dbdd"
+   },
+   "license_file": "python-build-standalone.txt"
+  },
+  {
+   "name": "PHP",
+   "version": "8.5.8",
+   "license": "PHP-3.01",
+   "where": "in the app",
+   "url": "https://www.php.net/",
+   "credits": "PHP 8.5",
+   "license_file": "PHP.txt",
+   "note": "php.net is at 8.5.13 (a security release); static-php-cli's ready-made Mac builds stop at 8.5.8. It moves when Rushes builds PHP itself."
+  },
+  {
+   "name": "static-php-cli",
+   "version": "2.8.6",
+   "license": "MIT",
+   "where": "in the app",
+   "url": "https://dl.static-php.dev/static-php-cli/common/",
+   "credits": "static-php-cli",
+   "license_file": "static-php-cli.txt"
+  },
+  {
+   "name": "python-xxhash",
+   "version": "",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://github.com/ifduyue/python-xxhash",
+   "credits": "xxHash (python-xxhash)",
+   "license_file": "python-xxhash.txt",
+   "note": "the version is the wheel's, read by the build"
+  },
+  {
+   "name": "xxHash",
+   "version": "",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://github.com/Cyan4973/xxHash",
+   "credits": "xxHash (python-xxhash)",
+   "license_file": "xxHash.txt",
+   "note": "the version python-xxhash carries",
+   "inside": "python-xxhash"
+  },
+  {
+   "name": "OpenSSL",
+   "version": "3.6.2",
+   "license": "Apache-2.0",
+   "where": "in the app",
+   "url": "https://www.openssl.org/",
+   "credits": "PHP 8.5",
+   "license_file": "OpenSSL.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "curl",
+   "version": "8.20.0",
+   "license": "curl",
+   "where": "in the app",
+   "url": "https://curl.se/",
+   "credits": "PHP 8.5",
+   "license_file": "curl.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "SQLite",
+   "version": "3.45.2",
+   "license": "blessing",
+   "where": "in the app",
+   "url": "https://sqlite.org/",
+   "credits": "PHP 8.5",
+   "inside": "PHP",
+   "note": "public domain: no license text to carry"
+  },
+  {
+   "name": "zlib",
+   "version": "1.3.2",
+   "license": "Zlib",
+   "where": "in the app",
+   "url": "https://zlib.net/",
+   "credits": "PHP 8.5",
+   "license_file": "zlib.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libxml2",
+   "version": "2.15.3",
+   "license": "MIT",
+   "where": "in the app",
+   "url": "https://gitlab.gnome.org/GNOME/libxml2",
+   "credits": "PHP 8.5",
+   "license_file": "libxml2.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "PCRE2",
+   "version": "10.44",
+   "license": "BSD-3-Clause",
+   "where": "in the app",
+   "url": "https://github.com/PCRE2Project/pcre2",
+   "credits": "PHP 8.5",
+   "license_file": "PCRE2.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "Oniguruma",
+   "version": "6.9.10",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://github.com/kkos/oniguruma",
+   "credits": "PHP 8.5",
+   "license_file": "Oniguruma.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "bzip2",
+   "version": "1.0.8",
+   "license": "bzip2-1.0.6",
+   "where": "in the app",
+   "url": "https://sourceware.org/bzip2/",
+   "credits": "PHP 8.5",
+   "license_file": "bzip2.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "FreeType",
+   "version": "2.14.3",
+   "license": "FTL",
+   "where": "in the app",
+   "url": "https://freetype.org/",
+   "credits": "PHP 8.5",
+   "license_file": "FreeType.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libpng",
+   "version": "1.6.57",
+   "license": "libpng-2.0",
+   "where": "in the app",
+   "url": "http://www.libpng.org/",
+   "credits": "PHP 8.5",
+   "license_file": "libpng.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libjpeg",
+   "version": "6b",
+   "license": "IJG",
+   "where": "in the app",
+   "url": "https://ijg.org/",
+   "credits": "PHP 8.5",
+   "license_file": "libjpeg.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "GMP",
+   "version": "6.3.0",
+   "license": "LGPL-3.0-or-later OR GPL-2.0-or-later",
+   "where": "in the app",
+   "url": "https://gmplib.org/",
+   "credits": "PHP 8.5",
+   "license_file": "GNU-LGPL-3.0.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libzip",
+   "version": "1.11.4",
+   "license": "BSD-3-Clause",
+   "where": "in the app",
+   "url": "https://libzip.org/",
+   "credits": "PHP 8.5",
+   "license_file": "libzip.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libiconv",
+   "version": "1.19",
+   "license": "LGPL-2.1-or-later",
+   "where": "in the app",
+   "url": "https://www.gnu.org/software/libiconv/",
+   "credits": "PHP 8.5",
+   "license_file": "GNU-LGPL-2.1.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libssh2",
+   "version": "1.11.1",
+   "license": "BSD-3-Clause",
+   "where": "in the app",
+   "url": "https://libssh2.org/",
+   "credits": "PHP 8.5",
+   "license_file": "libssh2.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "libpq (PostgreSQL)",
+   "version": "18.3",
+   "license": "PostgreSQL",
+   "where": "in the app",
+   "url": "https://www.postgresql.org/",
+   "credits": "PHP 8.5",
+   "license_file": "PostgreSQL.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "Lexbor",
+   "version": "2.7.0",
+   "license": "Apache-2.0",
+   "where": "in the app",
+   "url": "https://github.com/lexbor/lexbor",
+   "credits": "PHP 8.5",
+   "license_file": "Lexbor.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "phpredis",
+   "version": "6.3.0",
+   "license": "PHP-3.01",
+   "where": "in the app",
+   "url": "https://github.com/phpredis/phpredis",
+   "credits": "PHP 8.5",
+   "license_file": "phpredis.txt",
+   "inside": "PHP"
+  },
+  {
+   "name": "Zstandard",
+   "version": "",
+   "license": "BSD-3-Clause",
+   "where": "in the app",
+   "url": "https://github.com/facebook/zstd",
+   "credits": "PHP 8.5",
+   "license_file": "Zstandard.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "LZ4",
+   "version": "",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://github.com/lz4/lz4",
+   "credits": "PHP 8.5",
+   "license_file": "LZ4.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "Brotli",
+   "version": "",
+   "license": "MIT",
+   "where": "in the app",
+   "url": "https://github.com/google/brotli",
+   "credits": "PHP 8.5",
+   "license_file": "Brotli.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "libwebp",
+   "version": "",
+   "license": "BSD-3-Clause",
+   "where": "in the app",
+   "url": "https://github.com/webmproject/libwebp",
+   "credits": "PHP 8.5",
+   "license_file": "libwebp.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "libavif",
+   "version": "",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://github.com/AOMediaCodec/libavif",
+   "credits": "PHP 8.5",
+   "license_file": "libavif.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "nghttp2",
+   "version": "",
+   "license": "MIT",
+   "where": "in the app",
+   "url": "https://nghttp2.org/",
+   "credits": "PHP 8.5",
+   "license_file": "nghttp2.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "libsodium",
+   "version": "",
+   "license": "ISC",
+   "where": "in the app",
+   "url": "https://libsodium.org/",
+   "credits": "PHP 8.5",
+   "license_file": "libsodium.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "ICU",
+   "version": "",
+   "license": "Unicode-3.0",
+   "where": "in the app",
+   "url": "https://icu.unicode.org/",
+   "credits": "PHP 8.5",
+   "license_file": "ICU.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "libxslt",
+   "version": "",
+   "license": "MIT",
+   "where": "in the app",
+   "url": "https://gitlab.gnome.org/GNOME/libxslt",
+   "credits": "PHP 8.5",
+   "license_file": "libxslt.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "XZ Utils (liblzma)",
+   "version": "",
+   "license": "0BSD",
+   "where": "in the app",
+   "url": "https://tukaani.org/xz/",
+   "credits": "PHP 8.5",
+   "license_file": "XZ-Utils.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "OpenLDAP",
+   "version": "",
+   "license": "OLDAP-2.8",
+   "where": "in the app",
+   "url": "https://www.openldap.org/",
+   "credits": "PHP 8.5",
+   "license_file": "OpenLDAP.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "ncurses",
+   "version": "",
+   "license": "X11",
+   "where": "in the app",
+   "url": "https://invisible-island.net/ncurses/",
+   "credits": "PHP 8.5",
+   "license_file": "ncurses.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "libedit",
+   "version": "",
+   "license": "BSD-3-Clause",
+   "where": "in the app",
+   "url": "https://www.thrysoee.dk/editline/",
+   "credits": "PHP 8.5",
+   "license_file": "libedit.txt",
+   "note": "built into this PHP; PHP does not say which version",
+   "inside": "PHP"
+  },
+  {
+   "name": "FFmpeg",
+   "version": "9.1",
+   "license": "GPL-3.0-or-later",
+   "where": "downloaded at setup",
+   "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/",
+   "credits": "FFmpeg",
+   "sha256": {
+    "ffmpeg.zip": "1f66e9a690a7f1c9e60b012379f8869c11818d1797f45b21dbb2f2564ba61ae1",
+    "ffprobe.zip": "6ef2df5f575042923a28537ab37adf936f28bf3e7b85de23a1447ed447ec1dbd"
+   },
+   "note": "Martin Riedl's build (with x264, x265 and --enable-version3: GPL). Not inside the app: downloaded by Install the AI, or the first time a proxy is made on a Mac with no ffmpeg."
+  },
+  {
+   "name": "mlx-vlm",
+   "version": "0.7.2",
+   "license": "MIT",
+   "where": "downloaded at setup",
+   "url": "https://pypi.org/project/mlx-vlm/0.7.2/",
+   "credits": "mlx-vlm"
+  },
+  {
+   "name": "mlx-whisper",
+   "version": "0.4.3",
+   "license": "MIT",
+   "where": "downloaded at setup",
+   "url": "https://pypi.org/project/mlx-whisper/0.4.3/",
+   "credits": "mlx-whisper"
+  },
+  {
+   "name": "MLX",
+   "version": "0.32.2",
+   "license": "MIT",
+   "where": "downloaded at setup",
+   "url": "https://pypi.org/project/mlx/0.32.2/",
+   "credits": "MLX"
+  },
+  {
+   "name": "scenedetect",
+   "version": "0.7.1",
+   "license": "BSD-3-Clause",
+   "where": "downloaded at setup",
+   "url": "https://pypi.org/project/scenedetect/0.7.1/",
+   "credits": "PySceneDetect"
+  },
+  {
+   "name": "huggingface_hub",
+   "version": "1.32.0",
+   "license": "Apache-2.0",
+   "where": "downloaded at setup",
+   "url": "https://pypi.org/project/huggingface-hub/1.32.0/",
+   "credits": "Hugging Face Hub"
+  },
+  {
+   "name": "Qwen3-VL-8B-Instruct-4bit",
+   "version": "",
+   "license": "Apache-2.0",
+   "where": "model, downloaded at setup",
+   "url": "https://huggingface.co/mlx-community/Qwen3-VL-8B-Instruct-4bit",
+   "credits": "Qwen3-VL 8B Instruct",
+   "note": "the newest revision at the time it is downloaded"
+  },
+  {
+   "name": "whisper-large-v3-turbo",
+   "version": "",
+   "license": "MIT",
+   "where": "model, downloaded at setup",
+   "url": "https://huggingface.co/mlx-community/whisper-large-v3-turbo",
+   "credits": "Whisper large-v3-turbo",
+   "note": "the newest revision at the time it is downloaded"
+  }
+ ]
+}

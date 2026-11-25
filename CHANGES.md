@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.2 — November 2026
+
+- **Newer parts, for their security fixes.** The Python inside the app goes from 3.12.11 to 3.12.16. FFmpeg, where Rushes downloads it (Install the AI, or the first proxy on a Mac that has none), goes from 6.0 of 2023 to 9.1, now from Martin Riedl's builds, checked against his published fingerprint as before. PHP stays at 8.5.8: php.net is further on, but the ready-made builds Rushes uses stop there. It moves when Rushes builds PHP itself.
+- **The describing tools at one version each.** Install the AI took whatever was newest that day, so two Macs could run different code and no list could say which. It installs the versions this archive describes with (mlx-vlm 0.7.2, mlx-whisper 0.4.3, scenedetect 0.7.1, huggingface_hub 1.32.0, and what they bring). A Mac already set up is left as it is.
+- **A parts list with every release.** `Rushes <version>.cdx.json`: each part with its exact version, license, where it comes from and its fingerprint, in the format scanners read (CycloneDX). A test holds it to what the code really downloads and to CREDITS.md.
+- **The license texts are inside the app** (`Contents/Resources/LICENSES`), a file for each part it carries. The build stops if one is missing.
+- **Before a helper is paired, its doors take only the machine Rushes runs on.** They took anyone on the network until a helper was paired (security review, finding 4). On a Mac nothing changes: the helper is built in.
+
 ## 0.15.1 — November 2026
 
 - **The Viewer's editors: a field for the name and a field for the address.** Setup asked for both on one line with a comma between, which nobody types that way: two addresses pasted in were refused, and nothing was saved. Each editor is a row now, name beside address, with an empty row to add one; emptying a row takes that editor out. What is missing is said by the editor's own name.
