@@ -66,6 +66,9 @@ check 'call POST "{}" "{\"action\":\"plan\",\"pass\":\"rushes\",\"keep_side\":\"
 check 'call POST "{}" "{\"action\":\"plan\"}" run.php | grep -q "not signed in"' 'job buttons need the password or a session'
 check 'call POST "{}" "{\"action\":\"plan\",\"pass\":\"rushes\",\"dest\":\"/etc\"}" run.php >/dev/null; grep -h "^DEST=" "$ROOT"/app/queue/*.job | grep -qv "^DEST=/etc"' \
       'a holding folder outside the archive is replaced by the archive'"'"'s own'
+rm -f "$ROOT"/app/queue/*.job
+check 'call POST "{}" "{\"action\":\"plan\",\"pass\":\"rushes\",\"dest\":\"$ROOT/archive/x\\nACTION=pull-copy\\nTO=/tmp/anywhere\"}" run.php >/dev/null; [ "$(grep -c "^ACTION=" "$ROOT"/app/queue/*.job)" = 1 ] && ! grep -q "^TO=" "$ROOT"/app/queue/*.job' \
+      'a line break in a job'"'"'s folder never adds lines to the job'
 
 # taking everything with you: whole lists, behind the password, in open formats
 check 'call GET "{\"what\":\"files\"}" "{}" db/export.php | grep -q "Sign in"' 'the export needs signing in'

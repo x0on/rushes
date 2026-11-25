@@ -1195,12 +1195,22 @@ class Runner:
                   f"{failed} failed, {later} left for a later run (still arriving)")
 
     # ── the queue ────────────────────────────────────────────────────────────
+    @staticmethod
+    def job_fields(lines):
+        """A job's fields. The first line that names one is the one that counts, as on the NAS (runner.sh): a value
+        that carried a line of its own into the job can never replace what Rushes wrote above it."""
+        fields = {}
+        for l in lines:
+            if "=" in l:
+                k, v = l.rstrip("\n").split("=", 1); fields.setdefault(k, v)
+        return fields
+
     def jobs(self):
         q = self.p("queue")
         for job in sorted(x for x in os.listdir(q) if x.endswith(".job")):
             try:
                 with open(os.path.join(q, job)) as f:
-                    fields = dict(l.rstrip("\n").split("=", 1) for l in f if "=" in l)
+                    fields = self.job_fields(f)
                 os.remove(os.path.join(q, job))
             except OSError:
                 continue

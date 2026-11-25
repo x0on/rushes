@@ -7,6 +7,10 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
 - **The Viewer's editors: a field for the name and a field for the address.** Setup asked for both on one line with a comma between, which nobody types that way: two addresses pasted in were refused, and nothing was saved. Each editor is a row now, name beside address, with an empty row to add one; emptying a row takes that editor out. What is missing is said by the editor's own name.
 - **The pull's tick is a tick box.** A click on ✓ takes the clip out of the pull again (the file stays in the archive), on a picture, in the large view and in Properties; the right-click menu says **Remove from …** for clips already in it. Before, the only way out was the pull's own list.
+- **From the security review of 25 November** (none could be reached without the Manage password):
+  - *A line break in a job's folder could add lines to the job.* Someone signed in could have made the Mac's helper read an action Manage never offers. Such a folder is refused now, and the helper takes the first line that names a field, as the NAS always did.
+  - *Tidy up could list a folder that a link led out of the archive.* It could be read (names, sizes), never changed. Reading stays inside now, as moving did.
+  - *Hardening:* values a pull's page hands its script are escaped whatever they hold; every answer says what kind it is and asks the browser not to guess (`nosniff`). SECURITY.md says how the Mac app differs from a server: it answers only its own Mac unless you let other devices in, and then they sign in.
 
 ## 0.15.0 — November 2026
 

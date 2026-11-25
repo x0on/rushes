@@ -28,6 +28,9 @@ G() { curl -s -G -d pass=rushes --data-urlencode "$1" "$U/db/browse.php"; }
 G roots=1 | grep -q '"name":"Films","archive":false' && ok "the places to look: the archive, and each drive in Search" || no "roots"
 G "dir=$A" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert [i["name"] for i in d["items"]] == ["VIDEOS"], d' && ok "the archive's top, without Rushes' own folders" || no "top"
 G "dir=$A/../" | grep -q error && ok "never a way out of it" || no "way out"
+mkdir -p "$R/outside/secret" && ln -s "$R/outside" "$A/VIDEOS/Parks/link"
+G "dir=$A/VIDEOS/Parks/link" | grep -q "leads out of the archive" && G "info=$A/VIDEOS/Parks/link/secret" | grep -q error && ok "a link that points out of the archive is not followed, to read either" || no "link out: $(G "dir=$A/VIDEOS/Parks/link")"
+rm "$A/VIDEOS/Parks/link"
 printf 'VIDEOS/Public Works/2025/Shelter\t100\n' > "$W/prepare.tsv"     # on the Describe list before it moves
 J=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$A/VIDEOS/Public Works/2025/Shelter")
 X=$(B -d op=move --data-urlencode "items=$J" --data-urlencode "to=$A/VIDEOS/Parks/2025")

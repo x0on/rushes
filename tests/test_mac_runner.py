@@ -306,6 +306,12 @@ class MacJobs(unittest.TestCase):
         self.assertIn("nothing was done", self.log())
 
 
+class JobFile(unittest.TestCase):
+    def test_the_first_line_that_names_a_field_counts(self):
+        f = runner.Runner.job_fields(["ACTION=transfer\n", "DEST=/a/x\n", "ACTION=pull-copy\n", "TO=/tmp/anywhere\n", "no equals\n"])
+        self.assertEqual(f, {"ACTION": "transfer", "DEST": "/a/x", "TO": "/tmp/anywhere"}, "a line smuggled in below never replaces what Rushes wrote")
+
+
 class TheViewer(MacJobs):
     """runner.py viewer(): Search for people without Rushes, written onto the archive after the catalogue's daily copy."""
     def test_written_once_for_each_copy_and_never_half(self):

@@ -23,8 +23,11 @@ These are decisions, not holes:
 
 - Rushes runs on a local network, or through a VPN. It is never meant to be
   put on the public internet.
-- Search, pulls and ingest need no password: anyone on that network can use
-  them. The Manage page has a password.
+- On a server or a NAS, Search, pulls and ingest need no password: anyone on
+  that network can use them. The Manage page has a password.
+- The Mac app answers only the Mac it runs on, unless "Let other devices open
+  Rushes" is turned on and the first password has been changed; then every
+  page asks other devices to sign in.
 - Rushes never phones home.
 
 What counts as a hole: anything that lets someone on the network read, change

@@ -8,6 +8,9 @@
 // Both files sit beside the web root, not inside db/, because the Python build reads
 // exactly the same two files from exactly the same place.
 
+// A browser shows what Rushes sends as the kind Rushes says it is, never as what it guesses from the contents.
+if (PHP_SAPI !== 'cli' && !headers_sent()) header('X-Content-Type-Options: nosniff');
+
 // Every POST must come from Rushes' own pages. A browser always says where a
 // request comes from (Origin, or else Referer), so another website's page that
 // tries to make this browser press a Rushes button, with or without a

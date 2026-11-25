@@ -106,10 +106,10 @@ const tb = function (b) {
   return b >= 1e12 ? (b / 1e12).toFixed(2) + ' TB' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB'
        : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.round(b / 1e3) + ' KB'; };
 const when = function (t) { return new Date(t * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); };
-const SLUG  = <?= json_encode($slug) ?>;
-const PATHS = <?= json_encode($paths, JSON_UNESCAPED_SLASHES) ?>;
+const SLUG  = <?= json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+const PATHS = <?= json_encode($paths, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 const ICON  = <?= json_encode(['video' => icon('video'), 'image' => icon('image'), 'audio' => icon('audio'),
-                               'project' => icon('project'), 'file' => icon('file')]) ?>;
+                               'project' => icon('project'), 'file' => icon('file')], JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 const store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 

@@ -55,6 +55,12 @@ function in_archive(string $p): bool {
     $A = realpath(archive_dir()); $d = realpath(dirname($p));
     return $A && $d && ($d === $A || str_starts_with($d, "$A/"));
 }
+// Reading too stays inside: a link in the archive (or on a drive) that points elsewhere is not followed out of it.
+function really_in(string $p, ?array $w): bool {
+    if (!$w) return false;
+    $r = realpath($w['root']); $x = realpath($p);
+    return $r && $x && ($x === $r || str_starts_with($x, "$r/"));
+}
 // A name a folder or file can have on any share: no slash, no control characters, not hidden, not too long.
 function good_name(string $n): bool {
     return $n !== '' && $n === trim($n) && strlen($n) <= 240 && $n[0] !== '.' && !preg_match('#[/\\\\:\x00-\x1f]#', $n);
@@ -72,6 +78,7 @@ if (isset($_GET['dir'])) {
     $dir = rtrim((string)$_GET['dir'], '/');
     $w = place($dir);
     if ($dir === "$A/" . HOLD && !is_dir($dir)) out(['dir' => $dir, 'root' => $A, 'archive' => true, 'items' => [], 'more' => 0]);   // nothing removed yet
+    if ($w && is_dir($dir) && !really_in($dir, $w)) bail(404, 'That folder leads out of ' . ($w['archive'] ? 'the archive' : 'its drive') . ': it is not shown here.');
     if (!$w || !is_dir($dir)) bail(404, 'That folder is not there now' . ($w && !$w['archive'] ? ' (is the drive plugged in?)' : '') . '.');
     $names = @scandir($dir);
     if ($names === false) bail(500, 'Could not read that folder.');
@@ -99,7 +106,7 @@ if (isset($_GET['dir'])) {
 if (isset($_GET['info'])) {
     require_once __DIR__ . '/years.php';
     $p = rtrim((string)$_GET['info'], '/');
-    if (!place($p) || !file_exists($p)) bail(404, 'That is not there now.');
+    if (!place($p) || !file_exists($p) || !really_in($p, place($p))) bail(404, 'That is not there now.');
     $born = function (string $p) {                       // created: the Mac keeps it; elsewhere it is not known
         if (PHP_OS_FAMILY !== 'Darwin') return null;
         $t = trim((string)@shell_exec('stat -f %B ' . escapeshellarg($p) . ' 2>/dev/null'));

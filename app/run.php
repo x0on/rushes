@@ -61,7 +61,8 @@ if (!in_array($keep_side, ['project', 'card', 'short', 'oldest'], true)) {
 }
 
 // destination must stay inside the video share
-if (strpos($dest, archive_dir() . '/') !== 0 || strpos($dest, '..') !== false) {
+// (and is one line: a line break in it would write lines of its own into the job, a second ACTION among them)
+if (strpos($dest, archive_dir() . '/') !== 0 || strpos($dest, '..') !== false || preg_match('/[\x00-\x1f]/', $dest)) {
     $dest = archive_dir() . "/$HOLD";
 }
 $dest = rtrim($dest, '/');
