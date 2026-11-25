@@ -6,6 +6,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 ## 0.15.1 — November 2026
 
 - **The Viewer's editors: a field for the name and a field for the address.** Setup asked for both on one line with a comma between, which nobody types that way: two addresses pasted in were refused, and nothing was saved. Each editor is a row now, name beside address, with an empty row to add one; emptying a row takes that editor out. What is missing is said by the editor's own name.
+- **The pull's tick is a tick box.** A click on ✓ takes the clip out of the pull again (the file stays in the archive), on a picture, in the large view and in Properties; the right-click menu says **Remove from …** for clips already in it. Before, the only way out was the pull's own list.
 
 ## 0.15.0 — November 2026
 

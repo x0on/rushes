@@ -754,7 +754,7 @@ const versTag = function (n) { return n > 1 ? '<span class="vers">' + ICON.versi
 
 // Pull and Copy, on the picture itself: one click, without opening anything
 const acts = function (path) {
-  return '<span class="acts">' + (pullable(path) ? '<button data-act="pull" class="' + (inPull(path) ? 'in' : '') + '" title="' + (inPull(path) ? 'In the pull' : 'Add to pull') + '">' +
+  return '<span class="acts">' + (pullable(path) ? '<button data-act="pull" class="' + (inPull(path) ? 'in' : '') + '" title="' + (inPull(path) ? 'In the pull: click to take it out' : 'Add to pull') + '">' +
     (inPull(path) ? '✓' : ICON.pull) + '</button>' : '') + '<button data-act="copy" title="Copy its path">' + ICON.copy + '</button>' +
     '<button data-act="info" title="Properties: what it shows, its shots, its versions, the file" style="font:600 12px var(--font)">i</button></span>';
 };
@@ -998,8 +998,8 @@ $('out').addEventListener('click', function (e) {
     if (a.dataset.act === 'play') { playSound(a.closest('[data-p]'), p); return; }
     if (a.dataset.act === 'copy') copyText(localPath(p), function (ok) {
       a.innerHTML = ok ? '✓' : '!'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); setTimeout(function () { a.innerHTML = ICON.copy; }, 1600); });
-    if (a.dataset.act === 'pull') addToPull([p], null).then(function () {
-      const on = inPull(p); a.classList.toggle('in', on); a.innerHTML = on ? '✓' : ICON.pull; a.title = on ? 'In the pull' : 'Add to pull'; });
+    if (a.dataset.act === 'pull') togglePull([p]).then(function () {
+      const on = inPull(p); a.classList.toggle('in', on); a.innerHTML = on ? '✓' : ICON.pull; a.title = on ? 'In the pull: click to take it out' : 'Add to pull'; });
     return;
   }
   const el = e.target.closest('[data-k]'); if (!el) return;
@@ -1035,7 +1035,8 @@ $('out').addEventListener('contextmenu', function (e) {
     (one && playable(el) && el.classList.contains('frame') ? '<button data-do="play">Play here</button>' : '') +
     (one ? '<button data-do="open">Open large' + (playable(el) ? ' and play' : '') + '</button>' : '') +
     '<button data-do="pull"' + (paths.length ? '' : ' disabled') + '>' +
-      (paths.length ? 'Add ' + (paths.length > 1 ? paths.length + ' ' : '') + (PULL && PULL.name ? 'to ' + esc(PULL.name) : 'to a pull…')
+      (paths.length && PULL && paths.every(inPull) ? 'Remove ' + (paths.length > 1 ? paths.length + ' ' : '') + 'from ' + esc(PULL.name)
+       : paths.length ? 'Add ' + (paths.length > 1 ? paths.length + ' ' : '') + (PULL && PULL.name ? 'to ' + esc(PULL.name) : 'to a pull…')
                     : 'Not in the archive: cannot be pulled') + '</button>' +
     (one ? '<button data-do="copy">Copy path</button>' : '') +
     (one ? '<button data-do="props">Properties' + ((itemOf(el).versions || 0) > 1 ? ' and its ' + itemOf(el).versions + ' versions' : '') + '</button>' : '');
@@ -1048,7 +1049,7 @@ $('out').addEventListener('contextmenu', function (e) {
     if (b.dataset.do === 'open') { stopTiles(); openBig(el); }
     if (b.dataset.do === 'play') playTile(el);
     if (b.dataset.do === 'props') openProps(el);
-    if (b.dataset.do === 'pull') addToPull(paths, null);
+    if (b.dataset.do === 'pull') togglePull(paths);
     if (b.dataset.do === 'copy') copyText(localPath(el.dataset.p), function (ok) { say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C'); });
   };
 });
@@ -1287,8 +1288,8 @@ function wire(box, st, where) {
     };
   });
   box.querySelectorAll('[data-do="pull"]').forEach(function (b) {
-    b.onclick = async function () { await addToPull([r.path], null); const on = inPull(r.path);
-      b.classList.toggle('in', on); b.classList.toggle('go-pull', !on); b.innerHTML = on ? '✓ In the pull' : ICON.pull + 'Add to pull'; };
+    b.onclick = async function () { await togglePull([r.path]); const on = inPull(r.path);
+      b.classList.toggle('in', on); b.classList.toggle('go-pull', !on); b.innerHTML = on ? '✓ In the pull' : ICON.pull + 'Add to pull'; b.title = on ? 'Click to take it out of the pull' : ''; };
   });
   // the picture is the player: a click plays it there, from the shot shown
   const pv = box.querySelector('[data-pv]');
@@ -1426,6 +1427,17 @@ async function addToPull(paths, btn) {
     await refreshPull().catch(function () {});
   }
   if (btn) btn.disabled = false;
+}
+// The pull's button on a picture is a tick box: a clip already in the pull comes out of it (the file stays where it is),
+// one that is not goes in. Several picked at once come out only when all of them are in.
+async function togglePull(paths) {
+  paths = paths.filter(pullable);
+  if (!PULL || !paths.length || !paths.every(inPull)) return addToPull(paths, null);
+  try {
+    for (const p of paths) await pullPost({ action: 'remove', p: PULL.slug, rel: p.replace(ROOT, '') });
+    await refreshPull();
+    say((paths.length === 1 ? 'Taken out of ' : paths.length + ' taken out of ') + PULL.name + '. The file' + (paths.length === 1 ? ' stays' : 's stay') + ' in the archive.');
+  } catch (e) { say('Not taken out: ' + e.message); await refreshPull().catch(function () {}); }
 }
 async function pullsList() { return (await (await fetch('/db/pulls.php?list=1&t=' + Date.now())).json()).pulls || []; }
 async function openPullDlg() {
