@@ -329,6 +329,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   /* ── the Viewer: Search alone, opened from the archive; nothing that only Rushes can do ── */
   .vw .topbar a.tab, .vw .topbar .pulse, .vw .topbar .slow, .vw #hMenu, .vw #hHere, .vw #hWho, .vw #pbOpen,
   .vw [data-act="copy"], .vw [data-do="copy"], .vw [data-do="proxy"], .vw #pullsDd a[href="/pull.php"] { display: none !important }
+  .pv-dl { margin: 8px 0 0; font-size: 13px; color: var(--muted) } .pv-dl b { color: var(--fg) } .pv-dl [data-dln] { margin-left: 6px }
   .vw-note { color: var(--muted); font-size: 12.5px; margin-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .vw .pullbar { gap: 8px } .vw #ppList { left: 0 }
   dialog#reqDlg { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; background: var(--surface); color: var(--fg) }
@@ -1038,6 +1039,7 @@ $('out').addEventListener('contextmenu', function (e) {
       (paths.length && PULL && paths.every(inPull) ? 'Remove ' + (paths.length > 1 ? paths.length + ' ' : '') + 'from ' + esc(PULL.name)
        : paths.length ? 'Add ' + (paths.length > 1 ? paths.length + ' ' : '') + (PULL && PULL.name ? 'to ' + esc(PULL.name) : 'to a pull…')
                     : 'Not in the archive: cannot be pulled') + '</button>' +
+    (one && RUSHES.viewer && playable(el) ? '<button data-do="dl">Download this preview…</button>' : '') +
     (one ? '<button data-do="copy">Copy path</button>' : '') +
     (one ? '<button data-do="props">Properties' + ((itemOf(el).versions || 0) > 1 ? ' and its ' + itemOf(el).versions + ' versions' : '') + '</button>' : '');
   m.hidden = false;
@@ -1047,6 +1049,7 @@ $('out').addEventListener('contextmenu', function (e) {
     const b = ev.target.closest('[data-do]'); if (!b || b.disabled) return;
     m.hidden = true;
     if (b.dataset.do === 'open') { stopTiles(); openBig(el); }
+    if (b.dataset.do === 'dl') { stopTiles(); openBig(el, true); }
     if (b.dataset.do === 'play') playTile(el);
     if (b.dataset.do === 'props') openProps(el);
     if (b.dataset.do === 'pull') togglePull(paths);
@@ -1092,8 +1095,8 @@ async function shotsOf(fp) {
   if (!SHOTS[fp]) { try { SHOTS[fp] = (await getJSON({ shots: fp })).shots; } catch (e) { SHOTS[fp] = []; } }
   return SHOTS[fp];
 }
-async function openIn(where, it) {
-  const st = { it: it, row: await rowOf(it.path), shots: await shotsOf(it.fp), t: it.t, playing: where === 'big' };
+async function openIn(where, it, dl) {
+  const st = { it: it, row: await rowOf(it.path), shots: await shotsOf(it.fp), t: it.t, playing: where === 'big', dl: !!dl };
   if (where === 'panel') { PANEL = st; if (SEL.size === 1 && PROPS) render('panel'); }
   else { BIG = st; render('big'); }
 }
@@ -1167,7 +1170,14 @@ function render(where) {
       (canPlay ? '<p class="pv-note" data-pvn>' + (st.playing ? 'Loading its proxy from the archive…' : 'Click to play' + (t ? ' from ' + tcode(t) : '') + '.') + '</p>'
        : noProxy ? '<p class="pv-note" data-pvn>' + (st.making ? '<span class="spin"></span> Making its proxy on this Mac… it plays here as soon as it is ready.'
                    : 'No proxy yet, so it cannot play here. ' + (RUSHES.mac && pullable(r.path) ? '<button class="plain" data-do="proxy" style="padding:0;color:var(--accent-text);font-weight:600">Make its proxy now</button>'
-                   : 'Proxies are made in Manage → Describe.')) + '</p>' : '');
+                   : RUSHES.viewer ? '' : 'Proxies are made in Manage → Describe.')) + '</p>' : '') +
+      // The Viewer: how to take a copy away. A page opened from a folder may not save a file itself (the browser
+      // plays it instead), so the browser's own player does it: a right click on the video has "Save video as…",
+      // and its ⋮ menu has Download. Said where it is needed, by a button and in the right-click menu.
+      (!RUSHES.viewer ? ''
+       : canPlay ? '<p class="pv-dl"><button class="ib" data-do="dl">Download this preview…</button><span data-dln></span></p>'
+       : picture ? '<p class="pv-dl">To save this picture: right-click it, then <b>Save image as…</b></p>'
+       : noProxy ? '<p class="pv-dl">Nothing to download here. Add it to your pull and send the request: an editor can make it a video any computer opens.</p>' : '');
   const shotsBox = st.shots.length ? '<div class="sec">In this video' + (big ? ' · ' + (function (n) { return n + ' shot' + (n === 1 ? '' : 's'); })(st.shots.filter(function (s) { return s.kind === 'shot'; }).length) : '') + '</div>' + strip(st, found) : '';
   const html = big
     ? '<div><div class="vb">' + player + shotsBox +
@@ -1260,6 +1270,13 @@ function startVideo(box, path, t, st) {
   };
   v.play().catch(function () {});
 }
+// The Viewer's Download: the player is started (its controls with it) and the two ways to save are said beside it.
+function howToDownload(box, r) {
+  const pv = box.querySelector('[data-pv]'); if (pv && !pv.querySelector('video')) pv.click();
+  const n = box.querySelector('[data-dln]');
+  if (n) n.innerHTML = ' Right-click the video, then <b>Save video as…</b> (or the <b>⋮</b> at the player\'s bottom right, then <b>Download</b>). It saves an MP4 any computer opens: ' + esc((r.name || '').replace(/\.[^.]*$/, '')) + '.mp4';
+  say('Right-click the video → Save video as…');
+}
 function wire(box, st, where) {
   const r = st.row;
   box.querySelectorAll('[data-do="closeprops"]').forEach(function (b) { b.onclick = closeProps; });
@@ -1268,6 +1285,8 @@ function wire(box, st, where) {
       b.innerHTML = ok ? '✓ Copied' : 'Press ⌘C'; say(ok ? 'Path copied.' : 'The browser would not copy: press ⌘C');
       setTimeout(function () { b.innerHTML = ICON.copy + 'Copy path'; }, 1600); }); };
   });
+  box.querySelectorAll('[data-do="dl"]').forEach(function (b) { b.onclick = function () { howToDownload(box, r); }; });
+  if (st.dl) { st.dl = false; howToDownload(box, r); }                // asked for from the right-click menu
   box.querySelectorAll('[data-do="proxy"]').forEach(function (b) {
     b.onclick = async function () {
       b.disabled = true; b.textContent = 'Asking…';
@@ -1331,12 +1350,12 @@ async function loadVersions(box, st, where) {
 
 // The big view: a double-click; ‹ › walk through what was found without closing
 let bigAt = -1;
-function openBig(el) {
+function openBig(el, dl) {
   const all = items(); bigAt = all.indexOf(el);
   $('bigPrev').disabled = bigAt <= 0; $('bigNext').disabled = bigAt >= all.length - 1;
   if (!$('big').open) $('big').showModal();
   $('bigBody').innerHTML = '<p class="note">Opening…</p>';
-  openIn('big', itemOf(el));
+  openIn('big', itemOf(el), dl);
 }
 function stepBig(d) { const all = items(), el = all[bigAt + d]; if (el) { choose(el, null); openBig(el); } }
 $('bigPrev').onclick = function () { stepBig(-1); };

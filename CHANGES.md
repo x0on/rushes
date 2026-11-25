@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.4 — November 2026
+
+- **The Viewer: Download this preview.** In the large view, and in the right-click menu of a video: it opens the video and says how to take a copy, beside the player. A page opened from a folder is not allowed to save a file itself (the browser plays it instead), so the browser's own player does it: right-click the video → **Save video as…**, or **⋮** → **Download**. What is saved is the preview, an MP4 any computer opens. A picture says *right-click → Save image as…*; a video with no preview says to ask an editor for it, with a pull.
+
 ## 0.15.3 — November 2026
 
 - **Copies are proven with XXH3-128 again, and get their ASC MHL record.** The part that computes it (xxHash) was not in the app: it went missing from the build's folder between 3 October and 9 November, the build said nothing, and the app fell back to another fingerprint (BLAKE2) and said nothing either. Every copy made meanwhile was verified as it was made, just as safely. What was lost: no ASC MHL record was written, and **Check copies** did nothing. xxHash is back inside the app.
