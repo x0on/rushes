@@ -7,7 +7,9 @@
 //
 // It must answer as search.php does: tests/test_viewer.sh asks both the same questions and fails when they
 // differ. A change to search.php's rules is a change here, and that test says so.
-// ponytail: every search reads the lists through (about 0.1 s for 200,000 moments); an index if that ever shows.
+// ponytail: every search reads the lists through (each word looked for once in the whole text of what was described:
+// a tenth of a second for 200,000 moments); an index if that ever shows. The lists are held as text, about
+// 400 MB of the browser's memory for an archive that size; split into years if that ever weighs.
 (function (root) {
 'use strict';
 const VPAGE = 120;
@@ -20,12 +22,15 @@ const MC = ['fp', 'path', 'kind', 'shot', 'start_s', 'end_s', 'what', 'on_screen
 const NUM = { bytes: 1, width: 1, height: 1, fps: 1, duration: 1, proxy_at: 1, vrank: 1, versions: 1, shot: 1, start_s: 1, end_s: 1 };
 let INFO = { root: '', related: [], sections: {} };
 let FL = [], FH = [], BY = new Map();          // the files' lines; path, camera and reel in small letters; a file by its path
-let ML = [], MH = [], FPAT = new Map(), MBY = new Map();   // the moments' lines; their words; where a video's moments are; a file's moments
+let MT = '', MS = new Uint32Array(1), HS = new Uint32Array(0), MN = 0;   // the moments, one text: where each line starts, and its words (the last column)
+let FPAT = new Map(), MBY = new Map();          // where a video's moments are; a file's moments
+const mline = function (i) { return MT.slice(MS[i], MS[i + 1] - 1); };
+const mcols = function (i, n) { return n ? mline(i).split('\t', n) : mline(i).split('\t'); };
 let last = { q: null };                         // the words searched last, read through once for all its pages
 
 const val = function (k, v) { return v === '' ? null : NUM[k] ? +v : v.indexOf('\x1f') < 0 ? v : v.replace(/\x1f/g, '\t'); };   // a tab inside a column travels as \x1f
 const frow = function (i) { const c = FL[i].split('\t'), o = {}; FC.forEach(function (k, n) { o[k] = val(k, c[n] || ''); }); return o; };
-const mrow = function (i) { const c = ML[i].split('\t'), o = {}; MC.forEach(function (k, n) { if (k !== 'hay') o[k] = val(k, c[n] || ''); });
+const mrow = function (i) { const c = mcols(i), o = {}; MC.forEach(function (k, n) { if (k !== 'hay') o[k] = val(k, c[n] || ''); });
   // what is always text or a number in the catalogue stays so
   ['what', 'on_screen', 'themes', 'tags', 'shot_size', 'people', 'light', 'part_of_day', 'mood', 'language'].forEach(function (k) { if (o[k] === null) o[k] = ''; });
   o.shot = o.shot || 0; o.start_s = o.start_s || 0; o.end_s = o.end_s || 0; o.path = INFO.root + '/' + o.path; return o; };
@@ -37,23 +42,25 @@ const base = function (p) { return p.slice(p.lastIndexOf('/') + 1); };
 function load(info, files, moments) {
   INFO = info; last = { q: null };
   FL = files ? files.split('\n') : []; if (FL[FL.length - 1] === '') FL.pop();
-  ML = moments ? moments.split('\n') : []; if (ML[ML.length - 1] === '') ML.pop();
+  MT = moments || ''; if (MT && MT[MT.length - 1] !== '\n') MT += '\n';
   FH = new Array(FL.length); BY = new Map();
   for (let i = 0; i < FL.length; i++) {
     const l = FL[i]; let t = l.indexOf('\t'); BY.set(l.slice(0, t), i);
     t = l.indexOf('\t', l.indexOf('\t', t + 1) + 1); FH[i] = '/' + l.slice(0, t).toLowerCase();
   }
-  MH = new Array(ML.length); FPAT = new Map(); MBY = new Map();
-  for (let i = 0; i < ML.length; i++) {
-    const l = ML[i], t = l.indexOf('\t'), t2 = l.indexOf('\t', t + 1), fp = l.slice(0, t), p = l.slice(t + 1, t2);
-    MH[i] = l.slice(l.lastIndexOf('\t') + 1);
+  MN = 0; for (let p = MT.indexOf('\n'); p >= 0; p = MT.indexOf('\n', p + 1)) MN++;
+  MS = new Uint32Array(MN + 1); HS = new Uint32Array(MN); FPAT = new Map(); MBY = new Map();
+  for (let i = 0, a = 0; i < MN; i++) {
+    const e = MT.indexOf('\n', a), t = MT.indexOf('\t', a), t2 = MT.indexOf('\t', t + 1), fp = MT.slice(a, t), p = MT.slice(t + 1, t2);
+    MS[i] = a; MS[i + 1] = e + 1; HS[i] = MT.lastIndexOf('\t', e) + 1;
     const at = FPAT.get(fp); if (at) at[1] = i + 1; else FPAT.set(fp, [i, i + 1]);
     const of = MBY.get(p); if (of) of.push(i); else MBY.set(p, [i]);
+    a = e + 1;
   }
 }
 
 // analysis.php word_pattern(): the word whole, its plural or singular, and the words of its group
-function wordPattern(word) {
+function wordForms(word) {
   word = word.toLowerCase().trim();
   const one = function (w) { const f = [w];
     if (/ies$/.test(w)) f.push(w.slice(0, -3) + 'y'); else if (/(s|x|z|ch|sh)es$/.test(w)) f.push(w.slice(0, -2)); else if (/[^s]s$/.test(w)) f.push(w.slice(0, -1));
@@ -64,8 +71,15 @@ function wordPattern(word) {
   const b = one(word); let words = b.slice();
   (INFO.related || []).forEach(function (g) { g = g.map(function (x) { return String(x).toLowerCase(); }); if (b.some(function (x) { return g.indexOf(x) >= 0; })) words = words.concat(g); });
   const forms = new Set(); words.forEach(function (w) { all(w).forEach(function (f) { forms.add(f); }); });
-  const W = '[\\p{L}\\p{N}_]', edge = '(?:(?<=' + W + ')(?!' + W + ')|(?<!' + W + ')(?=' + W + '))';     // \b, for every alphabet
-  return new RegExp(edge + '(?:' + Array.from(forms).map(function (f) { return f.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&'); }).join('|') + ')' + edge, 'u');
+  return Array.from(forms);
+}
+// \b as the catalogue's search has it (for every alphabet): at p, a letter, digit or _ on one side only
+const WB = /[\p{L}\p{N}_]$/u, WA = /^[\p{L}\p{N}_]/u;
+const wch = function (c) { return c < 128 ? (c > 47 && c < 58) || (c > 64 && c < 91) || (c > 96 && c < 123) || c === 95 : -1; };
+function edge(t, p) {
+  let b = p > 0 ? wch(t.charCodeAt(p - 1)) : false, a = p < t.length ? wch(t.charCodeAt(p)) : false;
+  if (b === -1) b = WB.test(t.slice(p > 1 ? p - 2 : 0, p)); if (a === -1) a = WA.test(t.slice(p, p + 2));
+  return b !== a;
 }
 const split = function (s) { return s.split(/\s+/).filter(Boolean); };
 const list = function (v) { return String(v || '').split(',').filter(Boolean); };
@@ -73,15 +87,22 @@ const list = function (v) { return String(v || '').split(',').filter(Boolean); }
 // The words, read through the moments once: which moments have which, and for each file whether every word is somewhere in it.
 function scan(q) {
   if (last.q === q) return last;
-  const pats = split(q.toLowerCase()).map(wordPattern), hits = new Uint8Array(ML.length), had = new Int32Array(ML.length), n = pats.length;
-  const seen = new Map();                        // a file's path → which of the words its moments have (bits)
-  for (let i = 0; i < ML.length && n; i++) {
-    let h = 0, bits = 0;
-    for (let w = 0; w < n; w++) if (pats[w].test(MH[i])) { h++; bits |= 1 << w; }
-    hits[i] = h; had[i] = bits;
-    if (bits) { const l = ML[i], t = l.indexOf('\t'), p = l.slice(t + 1, l.indexOf('\t', t + 1)); seen.set(p, (seen.get(p) || 0) | bits); }
+  const words = split(q.toLowerCase()).map(wordForms), had = new Int32Array(MN), hits = new Uint8Array(MN), n = words.length;
+  for (let w = 0; w < n; w++) words[w].forEach(function (f) {
+    if (!f) return;
+    // every place the word is written, in the whole text; a place counts when it is in a line's words and stands whole there
+    for (let pos = MT.indexOf(f), li = 0; pos >= 0; pos = MT.indexOf(f, pos)) {
+      while (MS[li + 1] <= pos) li++;
+      if (pos < HS[li]) pos = HS[li];
+      else if (edge(MT, pos) && edge(MT, pos + f.length)) { had[li] |= 1 << w; pos = MS[li + 1]; }
+      else pos++;
+    }
+  });
+  const full = n ? (n >= 31 ? -1 : (1 << n) - 1) : 0, seen = new Map(), shown = new Set();   // a file's path → which of the words its moments have
+  for (let i = 0; i < MN && n; i++) if (had[i]) {
+    let b = had[i], h = 0; while (b) { h++; b &= b - 1; } hits[i] = h;
+    const p = mcols(i, 2)[1]; seen.set(p, (seen.get(p) || 0) | had[i]);
   }
-  const full = n ? (n >= 31 ? -1 : (1 << n) - 1) : 0, shown = new Set();
   seen.forEach(function (b, p) { if (b === full) shown.add(p); });
   return last = { q: q, n: n, full: full, hits: hits, had: had, shown: shown };
 }
@@ -97,7 +118,7 @@ function search(g) {
   if (g.facets) {
     const y = {}, m = new Map();
     FL.forEach(function (l) { const v = l.split('\t')[5]; if (v) y[v] = (y[v] || 0) + 1; });
-    ML.forEach(function (l) { const c = l.split('\t'); if (c[2] === 'shot' && c[14]) c[14].toLowerCase().split(/\s*,\s*/).forEach(function (w) { if (w) m.set(w, (m.get(w) || 0) + 1); }); });
+    for (let i = 0; i < MN; i++) { const c = mcols(i, 15); if (c[2] === 'shot' && c[14]) c[14].toLowerCase().split(/\s*,\s*/).forEach(function (w) { if (w) m.set(w, (m.get(w) || 0) + 1); }); }
     return { years: Object.keys(y).sort().reverse().map(function (k) { return { year: k, n: y[k] }; }),
              moods: Array.from(m).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 12).map(function (x) { return x[0]; }) };
   }
@@ -133,9 +154,9 @@ function search(g) {
   ].forEach(function (x) { const c = pick(x[0], x[1]); if (c.length) cond.push(any(c)); });
   const moods = list(String(g.mood || '').toLowerCase()).filter(function (m) { return /^[a-z -]{2,30}$/.test(m); });
   if (moods.length) cond.push(function (m) { return moods.some(function (x) { return lowA(m[14]).indexOf(x) >= 0; }); });
-  const shotIs = function (i) { const m = ML[i].split('\t'); return m[2] === 'shot' && cond.every(function (f) { return f(m); }); };
+  const shotIs = function (i) { const m = mcols(i, 15); return m[2] === 'shot' && cond.every(function (f) { return f(m); }); };
   let condPaths = null;                          // the files with such a shot
-  if (cond.length) { condPaths = new Set(); for (let i = 0; i < ML.length; i++) if (shotIs(i)) condPaths.add(ML[i].split('\t', 2)[1]); }
+  if (cond.length) { condPaths = new Set(); for (let i = 0; i < MN; i++) if (shotIs(i)) condPaths.add(mcols(i, 2)[1]); }
   if (g.p) fil.push(function (r) { return INFO.root + '/' + r.path === g.p; });
   if (g.v) fil.push(function (r) { return r.vkey === g.v; });
   if (g.in) {
@@ -168,7 +189,7 @@ function search(g) {
     if (by) found.sort(by);
     found.slice(offset, offset + limit).forEach(function (r) {
       const name = base(r.path), dot = name.lastIndexOf('.'), mine = MBY.get(r.path) || []; let st = null;
-      mine.forEach(function (i) { const m = ML[i].split('\t', 4); if (m[2] === 'shot' && (st === null || +m[3] < st[1])) st = [m[0], +m[3]]; });
+      mine.forEach(function (i) { const m = mcols(i, 4); if (m[2] === 'shot' && (st === null || +m[3] < st[1])) st = [m[0], +m[3]]; });
       rows.push({ path: INFO.root + '/' + r.path, name: name, ext: dot > 0 ? name.slice(dot + 1).toLowerCase() : '', kind: r.kind, bytes: r.bytes, year: r.year, event: r.event, dept: r.dept,
         width: r.width, height: r.height, fps: r.fps, codec: r.codec, duration: r.duration, proxy_at: r.proxy_at, recorded: r.recorded, timecode: r.timecode,
         reel: r.reel, camera: r.camera, asis: r.asis, copies: null, still: st ? st[0] + ':' + st[1] : null, vkey: r.vkey, vrank: r.vrank, versions: r.versions || 0 });
@@ -272,7 +293,7 @@ function request(pull, from, to, note) {
     ['Clips: ' + pull.items.length], pull.items.map(function (x, n) { return (n + 1) + '. ' + x.name + ' [#' + x.id + ']'; }), [FENCE[1]]).join('\n');
 }
 
-const V = { load: load, search: search, still: still, play: play, wordPattern: wordPattern, pulls: pulls, request: request };
+const V = { load: load, search: search, still: still, play: play, wordForms: wordForms, pulls: pulls, request: request };
 if (typeof module !== 'undefined' && module.exports) { module.exports = V; return; }
 
 // ── in the page ────────────────────────────────────────────────────────────
