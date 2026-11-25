@@ -657,6 +657,8 @@ class Runner:
         if '"state":"current"' not in sync.replace(" ", "") or "could not" in sync:
             self.say(f"search update: {sync.strip()}")
         self.dbcopy()
+        try: self.viewer()
+        except Exception as e: self.say(f"the Viewer was not made: {e}")
         self.exposed()
         if not self.stalled:                             # a whole minute without a stall: the count starts again
             try: os.remove(self.p("video-stalls.txt"))
@@ -677,6 +679,44 @@ class Runner:
         if self.v("database copy", cp, 600):
             open(done, "w").close()
             self.say(f"database copied to _rushes/db-copies/rushes-{day}.sqlite")
+
+    def viewer(self):
+        """The Viewer, written onto the archive: Search for the people who have no Rushes (db/find.php in its viewer
+        dress, answered by db/viewer.js from the lists beside it). "Rushes Viewer.html" at the archive's top, its lists
+        in _rushes/viewer. Made again when the catalogue's daily copy is newer, after an update of Rushes (the page
+        is this version's Search), and when Setup changed (the editors a request can go to)."""
+        src, done = self.p("db-copy.sqlite"), self.p("viewer-made")
+        if not os.path.exists(src):
+            return
+        mt = lambda f: int(os.path.getmtime(f)) if os.path.exists(f) else 0
+        stamp = f"{mt(src)} {mt(self.p('VERSION'))} {mt(self.p('settings.json'))}"
+        try:
+            if open(done).read() == stamp: return
+        except OSError:
+            pass
+        if not self.may_v():
+            return
+        a = self.arch(); tmp = tempfile.mkdtemp(prefix="rushes-viewer-")   # never in the web folder: the lists are the catalogue's words
+        try:
+            info = viewer_lists(src, a, tmp, self.say)      # on this Mac first: the archive is only written to at the end
+            page = self.get("/db/find.php?viewer=1", 30)
+            if 'class="vw"' not in page or "RUSHES_LIST" not in page:
+                return self.say("the Viewer was not made: Rushes did not give its page")
+            ok = self.v("the Viewer", lambda: self.viewer_put(a, tmp, page), 600)
+        finally:
+            if not self.pending.get("the Viewer"): shutil.rmtree(tmp, ignore_errors=True)   # one still being copied keeps its lists
+        if ok:
+            self.write("viewer-made", stamp)
+            self.say(f"the Viewer written to the archive (Rushes Viewer.html): {info['files']:,} videos and pictures, {info['moments']:,} described moments")
+
+    @staticmethod
+    def viewer_put(a, tmp, page):
+        d = os.path.join(a, "_rushes", "viewer"); os.makedirs(d, exist_ok=True)
+        for n in ("files", "moments", "words", "info"):      # each whole under another name, then in place: a page opened meanwhile reads the one before
+            shutil.copyfile(os.path.join(tmp, n + ".js"), os.path.join(d, n + ".js.part"))
+            os.replace(os.path.join(d, n + ".js.part"), os.path.join(d, n + ".js"))
+        with open(os.path.join(a, "Rushes Viewer.html.part"), "w", encoding="utf-8") as f: f.write(page)
+        os.replace(os.path.join(a, "Rushes Viewer.html.part"), os.path.join(a, "Rushes Viewer.html"))
 
     def exposed(self):
         """Once a day: can anything private be downloaded from this machine's own web server?"""

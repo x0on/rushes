@@ -159,6 +159,19 @@ if (($_POST['_save'] ?? '') === '1') {
     }
     $s['sources'] = $kept;
 
+    // The Viewer's editors: who a request can be sent to, a line each ("Name, address"). Only here, in this
+    // archive's own settings: the Viewer's page carries them to the people who open it.
+    if (isset($_POST['v_editors'])) {
+        $eds = [];
+        foreach (preg_split('/\R/', (string)$_POST['v_editors']) as $l) {
+            [$n, $m] = array_map('trim', explode(',', $l, 2) + ['', '']);
+            if ($n === '' && $m === '') continue;
+            if ($n === '' || !filter_var($m, FILTER_VALIDATE_EMAIL)) { $bad[] = 'The Viewer\'s editors: “' . mb_substr($l, 0, 60) . '” is not a name, a comma and an email address.'; continue; }
+            $eds[] = ['name' => mb_substr($n, 0, 60), 'email' => $m];
+        }
+        $s['viewer']['editors'] = $eds;
+    }
+
     $s['helper']['mode']  = ($_POST['h_mode'] ?? '') === 'external' ? 'external' : 'built_in';
     $s['helper']['label'] = trim((string)($_POST['h_label'] ?? '')) ?: 'workstation';
     unset($s['helper']['enabled'], $s['helper']['command']);   // replaced by mode, and worked out live
@@ -1013,6 +1026,17 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
           });
         })();
         </script>
+        <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
+      </details>
+
+      <!-- ══ the Viewer: Search for people without Rushes, opened from the archive ══ -->
+      <?php $veds = (array)($s['viewer']['editors'] ?? []); ?>
+      <details class="grp sec" id="viewer"<?= $is('viewer') ? ' open' : '' ?><?= $done((bool)$veds) ?>>
+        <summary><h2>The Viewer<?= $tip('Search for the people who have no Rushes: a page the Rushes app on a Mac writes onto the archive each day (“Rushes Viewer.html”, at its top). They open it from there, look, gather clips, and send them to an editor as a request in an email. The editor pastes that email into Search (Pulls → Paste a request).') ?><?= $here_('viewer') ?></h2>
+          <span class="val"><?= $veds ? $e(implode(', ', array_column($veds, 'name'))) : 'No editor to send requests to yet' ?></span>
+          <span class="chg">Change</span></summary>
+        <label class="f"><span>The editors a request can be sent to<?= $tip('A line each: the name, a comma, the email address. The names are what people choose from in the Viewer; the address is where their email goes. They are written into the Viewer the next time it is made.') ?></span>
+          <textarea name="v_editors" rows="3" style="min-height:0" placeholder="Alex, alex@example.org"><?= $e(implode("\n", array_map(fn($x) => ($x['name'] ?? '') . ', ' . ($x['email'] ?? ''), $veds))) ?></textarea></label>
         <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
       </details>
 

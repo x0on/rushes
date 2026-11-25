@@ -372,6 +372,35 @@ move, rename), `db/pull-export.php` (the four downloads).
 
 ---
 
+### The Viewer
+
+Search for the people who have no Rushes: the rest of a team, on any computer that reaches the archive. It is a
+page on the archive itself, `Rushes Viewer.html` at its top, opened by a double click. Nothing is installed, nothing
+runs, nothing is asked, and it works when the Mac with Rushes is off.
+
+- **It is Search itself.** `db/find.php?viewer=1` is the same page in another dress (as `?premiere=1` is), saved
+  whole: its looks and its script inside it. What only Rushes can do is left out (Ingest, Manage, making a proxy,
+  copying a path). A change to Search is a change to the Viewer the next time it is written.
+- **What answers it.** Nothing is running behind the page, so `db/viewer.js` answers the questions the page asks
+  (`search.php`, `pulls.php`) from three lists beside it, in `_rushes/viewer`: `files.js` (the videos and pictures
+  inside the archive), `moments.js` (what was described in them) and `words.js` (each moment's searchable words, a
+  byte a letter, so a word is found in the whole text in one pass). They are scripts because a page opened from a
+  folder may load scripts from beside it without asking, and nothing else. A drive kept where it is, another
+  server, sounds and project files are not in them: they are not reachable from there, or not footage.
+- **It must agree with Rushes.** `tests/test_viewer.sh` asks `search.php` and `viewer.js` the same questions over the
+  same catalogue and compares every value. A rule changed in one and not the other fails there.
+- **Stills and previews** are read from where Rushes keeps them on the archive (`_rushes/analysis`, `PROXIES`), by
+  their place beside the page. So the Viewer must be opened from the archive, not from a copy of the page.
+- **Who writes it.** The Rushes app on a Mac (`runner.py` `viewer()`), after the catalogue's daily copy, after an
+  update, and when Setup changes. The lists are made on the Mac first and put on the archive whole. The page says
+  the date of the catalogue it shows.
+- **Pulls and requests.** The Viewer cannot write to the archive, so a pull made there is kept in that browser.
+  *Send to an editor…* writes it as a request in an email: plain words, between `===== RUSHES REQUEST =====` and
+  `===== END OF REQUEST =====`, each clip by its name and its number in the catalogue. The editors (name and
+  address) are set in Setup → The Viewer. In Rushes, *Pulls → Paste a request…* takes the whole email
+  (`pulls.php` `action=request`), reads only between the two lines, and makes an ordinary pull. A clip whose
+  number and name do not both agree is named as missing.
+
 ## Bringing footage in
 
 The helper works through its list in this order: cards, then tidy-ups, then

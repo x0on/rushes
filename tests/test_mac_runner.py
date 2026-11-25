@@ -306,6 +306,33 @@ class MacJobs(unittest.TestCase):
         self.assertIn("nothing was done", self.log())
 
 
+class TheViewer(MacJobs):
+    """runner.py viewer(): Search for people without Rushes, written onto the archive after the catalogue's daily copy."""
+    def test_written_once_for_each_copy_and_never_half(self):
+        import sqlite3, glob
+        os.makedirs(os.path.join(self.a, "VIDEOS"))
+        db = sqlite3.connect(os.path.join(self.web, "db-copy.sqlite"))
+        db.executescript("""CREATE TABLE files (id INTEGER PRIMARY KEY, path TEXT, name TEXT, ext TEXT, kind TEXT, bytes INTEGER, dept TEXT, year TEXT, event TEXT);
+            CREATE TABLE media (file_id INTEGER PRIMARY KEY, width, height, fps, codec, duration, proxy_at, recorded, timecode, reel, camera, asis);
+            CREATE TABLE labels (path TEXT PRIMARY KEY, label TEXT, why TEXT, vkey TEXT, vrank INTEGER);
+            CREATE TABLE moments (fp, path, kind, shot, start_s, end_s, what, on_screen, themes, tags, shot_size, people, ages, light, part_of_day, mood, language, model, hay, comp);""")
+        db.execute("INSERT INTO files (path, name, kind, bytes) VALUES (?, 'a.mov', 'video', 9)", (self.a + "/VIDEOS/a.mov",))
+        db.execute("INSERT INTO moments (fp, path, kind, shot, start_s, end_s, what, hay) VALUES ('ab', ?, 'shot', 0, 0, 1, 'A kite', 'a kite')", (self.a + "/VIDEOS/a.mov",))
+        db.commit(); db.close()
+        asked = []
+        self.r.get = lambda path, timeout: asked.append(path) or '<html class="vw">RUSHES_LIST</html>'
+        self.r.viewer()
+        self.assertEqual(asked, ["/db/find.php?viewer=1"])
+        self.assertEqual(open(os.path.join(self.a, "Rushes Viewer.html")).read(), '<html class="vw">RUSHES_LIST</html>')
+        self.assertEqual(sorted(os.listdir(os.path.join(self.a, "_rushes", "viewer"))), ["files.js", "info.js", "moments.js", "words.js"], "the lists, and nothing half written")
+        self.assertFalse(glob.glob(os.path.join(self.web, "*viewer-lists*")) or glob.glob(os.path.join(self.web, "*.js")), "the catalogue's words are never left in the web folder")
+        self.r.viewer(); self.assertEqual(len(asked), 1, "the same copy, the same Rushes, the same settings: not made again")
+        os.utime(os.path.join(self.web, "db-copy.sqlite"), (1, 1)); self.r.viewer(); self.assertEqual(len(asked), 2, "a new copy of the catalogue: made again")
+        self.r.get = lambda path, timeout: "Sign in"
+        os.utime(os.path.join(self.web, "db-copy.sqlite"), (2, 2)); self.r.viewer()
+        self.assertIn("RUSHES_LIST", open(os.path.join(self.a, "Rushes Viewer.html")).read(), "a page that is not the Viewer never takes its place")
+
+
 class Rescue(unittest.TestCase):
     """Rescue: broken copies in the archive found (empty, too small, another file's data inside) and, ticked,
     replaced by their good copy, read back byte for byte; the broken one goes to Recently Removed."""

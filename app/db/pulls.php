@@ -5,6 +5,7 @@
 //   GET  ?p=<slug>                     one pull and its clips
 //   GET  ?places=1                     where a pull can be copied to, and this Rushes' version
 //   POST action=create name made_by    a new pull  → {slug}
+//   POST action=request text           a pull from a request the Viewer wrote (an email's words, pasted whole) → {slug, n, missing}
 //   POST action=add    p path          add a clip (a path search knows)
 //   POST action=remove p rel           take one out
 //   POST action=move   p rel dir=up|down
@@ -78,6 +79,48 @@ if ($act === 'create') {
     $st->execute();
     activity_add('out', "Started the pull “{$name}”", $by);
     out(['slug' => $slug, 'name' => $name]);
+}
+
+// A request from the Viewer (db/viewer.js request()): someone without Rushes gathered clips there and sent them in an
+// email. The email is pasted whole; only what is between the two lines of = is read, so a greeting, a signature
+// and the mail program's own marks (> before a quoted line, a long line folded) do no harm. Each clip is named by
+// its number in the catalogue and its name: both must agree, or the clip is said to be missing, never guessed.
+if ($act === 'request') {
+    $text = preg_replace('/^[ \t>|]+/m', '', str_replace(["\r\n", "\r", "\u{a0}"], ["\n", "\n", ' '], (string)($_POST['text'] ?? '')));
+    if (!preg_match('/=+\s*RUSHES REQUEST\s*=+(.*?)=+\s*END OF REQUEST\s*=+/s', $text, $m))
+        bail(400, 'No request found in that text. Copy the whole email, from the line “===== RUSHES REQUEST =====” to “===== END OF REQUEST =====”.');
+    $body = $m[1]; $head = [];
+    foreach (['From', 'For', 'Pull', 'Note', 'Clips'] as $k)
+        if (preg_match('/^' . $k . ':[ \t]*(.*)$/m', $body, $x)) $head[$k] = clean($x[1], 200);
+    $flat = preg_replace('/\s+/', ' ', $body);                 // a name folded over two lines is one name again
+    preg_match_all('/(?<![\w#])(\d+)\. (.+?) \[#(\d+)\]/u', $flat, $clips, PREG_SET_ORDER);
+    $said = (int)($head['Clips'] ?? 0);
+    if (!$clips || $said !== count($clips))
+        bail(400, 'The request says ' . $said . ' clip' . ($said === 1 ? '' : 's') . ', and ' . count($clips) . ' could be read: part of it is missing. Copy the whole email again.');
+    $same = fn(string $a, string $b) => mb_strtolower(preg_replace('/\s+/', '', $a)) === mb_strtolower(preg_replace('/\s+/', '', $b));
+    $st = $db->prepare('SELECT path, name, kind, bytes FROM files WHERE id = ?'); $found = []; $missing = [];
+    foreach ($clips as $c) {
+        $st->bindValue(1, (int)$c[3]); $f = $st->execute()->fetchArray(SQLITE3_ASSOC); $st->reset();
+        if ($f && str_starts_with($f['path'], $root) && $same($f['name'], $c[2])) $found[] = $f; else $missing[] = clean($c[2], 200);
+    }
+    if (!$found) bail(400, 'None of its ' . count($clips) . ' clips is in this catalogue any more (they may have been moved or renamed since the request was written): ' . implode(', ', array_slice($missing, 0, 5)) . '.');
+    $from = $head['From'] ?? ''; $what = ($head['Pull'] ?? '') ?: 'clips';
+    $name = clean('Request' . ($from !== '' ? ' from ' . $from : '') . ': ' . $what, 80);
+    $base = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $name) ?: 'pull')), '-') ?: 'pull';
+    $slug = substr($base, 0, 40) . '-' . substr(bin2hex(random_bytes(3)), 0, 5);
+    $db->exec('BEGIN');
+    $in = $db->prepare('INSERT INTO pulls (slug, name, made_by, created, updated) VALUES (?,?,?,?,?)');
+    foreach ([$slug, $name, clean($from, 60), time(), time()] as $i => $v) $in->bindValue($i + 1, $v);
+    $in->execute(); $id = $db->lastInsertRowID();
+    $it = $db->prepare('INSERT OR IGNORE INTO pull_items (pull_id, rel, name, kind, bytes, pos, added) VALUES (?,?,?,?,?,?,?)');
+    foreach ($found as $n => $f) {
+        foreach ([$id, substr($f['path'], strlen($root)), $f['name'], $f['kind'], $f['bytes'], $n + 1, time()] as $i => $v) $it->bindValue($i + 1, $v);
+        $it->execute(); $it->reset();
+    }
+    $db->exec('COMMIT');
+    activity_add('out', "Made the pull “{$name}” from a request" . (($head['Note'] ?? '') !== '' ? ' (' . $head['Note'] . ')' : '') . ': ' . count($found) . ' clip' . (count($found) === 1 ? '' : 's')
+        . ($missing ? ', ' . count($missing) . ' not found' : ''), activity_who());
+    out(['slug' => $slug, 'name' => $name, 'n' => count($found), 'missing' => $missing, 'from' => $from, 'note' => $head['Note'] ?? '']);
 }
 
 $p = pull_by_slug((string)($_POST['p'] ?? ''));

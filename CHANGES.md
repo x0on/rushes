@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.0 — November 2026
+
+- **The Viewer: Search for the people who have no Rushes.** A page on the archive itself, **Rushes Viewer.html** at its top, opened by a double click from any computer that reaches the archive: nothing to install, nothing running, no questions, and it works with the Mac off. It is Rushes' own Search (the grid, the filters, the pages, a click to play, a double click for the large view), so what changes in Search changes there. It shows the videos and pictures inside the archive, as they were at the last daily copy of the catalogue, and says that date at its top. The Rushes app on a Mac writes it again each day, after an update, and when Setup changes. It answers as Rushes does: a test asks both the same questions and fails when one answer differs.
+- **A pull made in the Viewer is sent to an editor as a request.** The pull is kept in that person's browser (the Viewer cannot write anywhere). **Send to an editor…** asks their name once, which editor, and what it is for, and opens an email with the request in it, between two lines of =====. The editors' names and addresses are typed in **Setup → The Viewer**, nowhere else.
+- **Paste a request.** In Search, and in the Premiere panel: **Pulls → Paste a request…**, paste the whole email. Only the part between the two lines is read, so a greeting, a signature and a mail program's quote marks do no harm. It becomes a pull, "Request from …", to copy and import as any other. A clip that is no longer in the catalogue under that name is said to be missing, never guessed; a request with a part cut off makes nothing and says so.
+- **A double click opens the video large from anywhere on its picture.** 0.14.5 opened it only from the picture's edges: a browser's player keeps a click on its middle to itself, so the second click was never heard. The player's controls now come half a second after the video starts.
+
 ## 0.14.5 — November 2026
 
 - **A folder is asked for by its own name.** Previews for *Harbor Master's Office* were refused with "found no folder Harbor Masters Office": the name was stripped of its apostrophe on the way to the part that makes them, as it was of any mark outside a short list (# ! @ [ ] and more), so a folder that does not exist was looked for. Names are no longer altered; the same for one video's preview asked for from Search, which was refused outright for such a folder. (The NAS version still has the old rule.)

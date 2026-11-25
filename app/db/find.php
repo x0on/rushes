@@ -333,6 +333,12 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .vw [data-act="copy"], .vw [data-do="copy"], .vw [data-do="proxy"], .vw #pullsDd a[href="/pull.php"] { display: none !important }
   .vw-note { color: var(--muted); font-size: 12.5px; margin-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .vw .pullbar { gap: 8px } .vw #ppList { left: 0 }
+  dialog#reqDlg { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; background: var(--surface); color: var(--fg) }
+  dialog#reqDlg::backdrop { background: rgba(10, 22, 21, .6) }
+  #reqDlg .dh { display: flex; align-items: center; margin: 0 0 8px } #reqDlg .dh b { flex: 1; font-size: 15px }
+  #reqDlg textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--mono, ui-monospace, monospace); padding: 9px 10px; margin: 0 0 10px;
+    border: 1px solid var(--line); border-radius: var(--radius-sm, 8px); background: var(--bg); color: var(--fg); resize: vertical }
+  #rqSaid { color: var(--muted); font-size: 12.5px; flex-basis: 100% }
   dialog#vwDlg { width: min(460px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; background: var(--surface); color: var(--fg) }
   dialog#vwDlg::backdrop { background: rgba(10, 22, 21, .6) }
   #vwDlg .dh { display: flex; align-items: center; margin: 0 0 8px } #vwDlg .dh b { flex: 1; font-size: 15px } #vwDlg label.f { margin-bottom: 10px }
@@ -1469,9 +1475,38 @@ $('pBtn').onclick = async function () {
     return '<a href="/pull.php?p=' + encodeURIComponent(p.slug) + '"' + (on ? ' class="on" title="the one being filled"' : '') + '>' +
       (on ? '● ' : '') + esc(p.name) + '<span class="n">' + p.n + '</span></a>'; }).join('') +
     (pulls.length ? '<hr>' : '') +
-    '<button id="pdNew">Fill another pull…</button><a href="/pull.php">All pulls</a>';
+    '<button id="pdNew">Fill another pull…</button>' + (RUSHES.viewer ? '' : '<button id="pdReq" title="A request someone sent from the Viewer, in an email">Paste a request…</button>') + '<a href="/pull.php">All pulls</a>';
   $('pdNew').onclick = function () { dd.hidden = true; pending = null; openPullDlg(); };
+  if ($('pdReq')) $('pdReq').onclick = function () { dd.hidden = true; pasteRequest(); };
 };
+// A request from the Viewer: someone without Rushes gathered clips there and sent them in an email. The email's words
+// are pasted here whole (pulls.php action=request reads only what is between the two lines of =), and the pull it
+// makes is the one being filled: to copy, and inside Premiere to import, as any other.
+function pasteRequest() {
+  let d = $('reqDlg');
+  if (!d) {
+    d = document.createElement('dialog'); d.id = 'reqDlg'; document.body.appendChild(d);
+    d.innerHTML = '<div class="dh"><b>Paste a request</b><button type="button" class="ghost" id="rqClose">Close</button></div>' +
+      '<p class="note" style="margin:0 0 10px">Copy the whole email someone sent from the Viewer and paste it here. Only the part between the two lines of ===== is read.</p>' +
+      '<textarea id="rqText" rows="9" aria-label="The email\'s words" placeholder="===== RUSHES REQUEST =====&#10;…&#10;===== END OF REQUEST ====="></textarea>' +
+      '<div class="vw-go"><button class="btn" id="rqGo">Make the pull</button><span id="rqSaid" role="status"></span></div>';
+    $('rqClose').onclick = function () { d.close(); };
+    $('rqGo').onclick = async function () {
+      const b = this; b.disabled = true; $('rqSaid').textContent = 'Reading…';
+      try {
+        const j = await pullPost({ action: 'request', text: $('rqText').value });
+        const miss = j.missing.length ? ' ' + j.missing.length + ' not found in the catalogue: ' + j.missing.join(', ') + '.' : '';
+        $('rqText').value = ''; pending = null;
+        if (miss) { $('rqSaid').textContent = '✓ ' + j.name + ': ' + j.n + ' clip' + (j.n === 1 ? '' : 's') + '.' + miss; }
+        else d.close();
+        await usePull({ slug: j.slug, name: j.name });
+        say('✓ ' + j.name + ': ' + j.n + ' clip' + (j.n === 1 ? '' : 's') + (j.note ? ' · ' + j.note : '') + '.' + miss);
+      } catch (e) { $('rqSaid').textContent = e.message; }
+      b.disabled = false;
+    };
+  }
+  $('rqSaid').textContent = ''; d.showModal(); $('rqText').focus();
+}
 // Clips (#ppClips, #ppList, on the pull's bar inside Premiere and in the Viewer): what is in the pull, each with a way out of it
 function clipsList(said) {
   const enc = encodeURIComponent;
@@ -1679,13 +1714,13 @@ if (RUSHES.viewer) (function () {
     $('vwMail').onclick = function () {
       const t = text(); if (!t) return;
       if (!eds.length) return copy(t, '✓ The request is copied: paste it into an email to your editor.');
-      const e = eds[+$('vwTo').value], head = 'mailto:' + encodeURIComponent(e.email) + '?subject=' + encodeURIComponent('Rushes request: ' + d.pull.name) + '&body=';
+      const e = eds[+$('vwTo').value], head = 'mailto:' + e.email + '?subject=' + encodeURIComponent('Rushes request: ' + d.pull.name) + '&body=';
       const hello = 'Hi ' + e.name + ',\n\nCould you bring these into the edit?' + ($('vwNote').value.trim() ? ' ' + $('vwNote').value.trim() : '') + '\n\n';
       // ponytail: a link holds about 1,800 characters in every mail program; a longer request goes by the clipboard
       let body = hello + t + '\n\nThanks,\n' + $('vwFrom').value.trim(), long = false;
-      if (encodeURIComponent(body).length > 1800) { long = true; body = hello + '(Paste the request here: it is copied. Ctrl+V, or ⌘V on a Mac.)\n\nThanks,\n' + $('vwFrom').value.trim(); }
+      if (encodeURIComponent(body.replace(/\n/g, '\r\n')).length > 1800) { long = true; body = hello + '(Paste the request here: it is copied. Ctrl+V, or ⌘V on a Mac.)\n\nThanks,\n' + $('vwFrom').value.trim(); }
       copy(t, long ? '✓ The email is opening. This request is long: it is copied, paste it into the email (Ctrl+V).' : '✓ The email is opening, with the request in it. Press Send there.');
-      location.href = head + encodeURIComponent(body);
+      location.href = head + encodeURIComponent(body.replace(/\n/g, '\r\n'));       // a line end as mail programs on Windows read it
     };
     dlg.showModal(); ($('vwFrom').value ? $('vwNote') : $('vwFrom')).focus();
   };

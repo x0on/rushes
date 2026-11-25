@@ -190,4 +190,21 @@ JS
 grep -q "^PASS q=still&byname=1 .* 1 videos" "$R/agree.txt" && grep -q "^PASS q=%CE%B5.* 1 videos" "$R/agree.txt" && grep -q "^PASS q=stil&byname=1 .* 0 videos" "$R/agree.txt" \
   && ok "a word beside a curly quote, a word in another alphabet: found, and only whole" || no "odd letters: $(grep 'still\|%CE\|stil&' "$R/agree.txt")"
 ok "stills and previews from where the page is; a pull kept in the browser; the request as an editor's Rushes reads it"
+# the request, as it arrives in an email: quoted by the mail program, a long name folded, a greeting and a signature around it
+python3 - "$R/request.txt" > "$R/mail.txt" <<'PY'
+import sys
+t = open(sys.argv[1]).read().replace("1. Kite Promo.mp4 [", "1. Kite\nPromo.mp4 [")
+print("Hi Alex,\r\n\r\nCould you bring these in?\r\n\r\n" + "\r\n".join("> " + l for l in t.split("\n")) + "\r\n\r\nThanks,\r\nSam\r\n--\r\n1. Not a clip [#1]\r\nSent from my phone")
+PY
+P() { curl -s --data-urlencode "text@$1" -d action=request "$U/db/pulls.php"; }
+X=$(P "$R/mail.txt"); S=$(echo "$X" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("slug",""))')
+echo "$X" | grep -q '"name":"Request from Sam Rivera: Recap video","n":2,"missing":\[\]' && ok "Rushes reads the request out of the email around it, and makes the pull" || no "request: $X"
+curl -s "$U/db/pulls.php?p=$S" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert [i["name"] for i in d["items"]] == ["Kite Promo.mp4", "A001C003_250101.mov"], d' && ok "its clips, in the order asked" || no "its clips"
+sed 's/A001C003_250101.mov/Something else.mov/' "$R/request.txt" > "$R/renamed.txt"
+P "$R/renamed.txt" | grep -q '"n":1,"missing":\["Something else.mov"\]' && ok "a clip whose name and number do not agree is said to be missing, never guessed" || no "missing: $(P "$R/renamed.txt")"
+grep -v "^2\. " "$R/request.txt" > "$R/cut.txt"
+case "$(P "$R/cut.txt")" in *"says 2 clips, and 1 could be read"*) ok "a request with a part missing makes nothing" ;; *) no "cut: $(P "$R/cut.txt")" ;; esac
+printf 'Hi, can you send me the kite video?' > "$R/none.txt"
+case "$(P "$R/none.txt")" in *"No request found"*) ok "an email with no request in it says so" ;; *) no "none" ;; esac
+[ "$(curl -s "$U/db/pulls.php?list=1" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["pulls"]))')" = 2 ] && ok "and only the requests that could be read made a pull" || no "how many pulls"
 echo "viewer: all checks pass"

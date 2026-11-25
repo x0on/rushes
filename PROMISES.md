@@ -45,5 +45,8 @@ A promise is not taken away by taking its check away: changing a line here is a 
 
 ## Safety
 
+- The Viewer answers a search as Rushes does: the same videos, files, counts, order and pages. — `tests/test_viewer.sh`: “the Viewer answers as Rushes does”
+- The Viewer holds only the archive's own videos and pictures; its lists are never left where Rushes' web server could hand them out. — `tests/test_mac_runner.py`: “test_written_once_for_each_copy_and_never_half”
+- A request pasted into Rushes makes a pull only from clips whose number and name both agree; a request with a part missing makes nothing. — `tests/test_viewer.sh`: “a request with a part missing makes nothing”
 - A file someone sends in is never run, whatever its name. — `tests/test_router.sh`: “was run”
 - The helper runs only code signed with the release key. — `tests/test_menu.py`: “test_installed_when_newer_and_signed”
