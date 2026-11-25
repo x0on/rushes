@@ -61,6 +61,7 @@ through a VPN. Putting it directly on the internet is not supported yet.
 | pick up the project (person or AI) | [HANDOFF.md](HANDOFF.md) |
 | report a security problem | [SECURITY.md](SECURITY.md) |
 | see what it is built from | [CREDITS.md](CREDITS.md) |
+| see how its open-source parts are chosen, credited and watched | [OPEN-SOURCE-POLICY.md](OPEN-SOURCE-POLICY.md) |
 
 ## License
 
