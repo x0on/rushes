@@ -27,6 +27,7 @@ come later ([ROADMAP.md → Order](ROADMAP.md#order)).
 | [HOW-IT-WORKS.md](HOW-IT-WORKS.md) | What every part does today, in detail |
 | [ROADMAP.md](ROADMAP.md) | Proven vs built vs not built, known problems, the order, what was set aside, what was decided and why |
 | [DEVELOPING.md](DEVELOPING.md) | Where the code is, the six rules, tests, signing, building, releasing |
+| [OPEN-SOURCE-POLICY.md](OPEN-SOURCE-POLICY.md) | Read before adding or updating any part made by others: how it is chosen, recorded and watched |
 | [CHANGES.md](CHANGES.md) | Every version, newest first |
 | [INSTALL.md](INSTALL.md) | Installing, for people |
 
