@@ -126,7 +126,7 @@ class Parts(unittest.TestCase):
         asked = re.search(r"AI_PACKAGES = \[(.*)\]\n", ingest).group(1)
         for k in ("mlx-vlm", "mlx-whisper", "scenedetect", "huggingface_hub"):
             self.assertRegex(asked, re.escape(k) + r"(\[[^\]]*\])?==" + re.escape(self.parts[k]["version"]) + '"', f"{k} is asked for at the version listed")
-        self.assertNotRegex(asked, r'"[^"=]+"', "no describing tool without a version")
+        for one in re.findall(r'"([^"]+)"', asked): self.assertIn("==", one, "no describing tool without a version")
         self.assertIn(f'mlx=={self.parts["MLX"]["version"]} ', ingest)
 
     def test_every_part_is_credited_and_every_shipped_part_has_a_license_text_named(self):
