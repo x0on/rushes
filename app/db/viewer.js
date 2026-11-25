@@ -97,13 +97,14 @@ function scan(q) {
   for (let w = 0; w < n; w++) {
     const forms = words[w].filter(Boolean);
     // every place the word is written, in the whole text of the words; a place counts when the word stands whole there
-    forms.forEach(function (f) {
-      for (let pos = HT.indexOf(f), li = 0; pos >= 0; pos = HT.indexOf(f, pos)) {
-        while (HS[li + 1] <= pos) li++;
-        if (edge(HT, pos) && edge(HT, pos + f.length)) { had[li] |= 1 << w; pos = HS[li + 1]; }
-        else pos++;
-      }
-    });
+    // (one pattern of all its forms finds the places; whether it stands whole is checked here, form by form, as the catalogue's \b does)
+    const re = new RegExp(forms.map(function (f) { return f.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&'); }).join('|') || '$^', 'g');
+    for (let m, li = 0; (m = re.exec(HT)); ) {
+      const pos = m.index;
+      while (HS[li + 1] <= pos) li++;
+      if (edge(HT, pos) && forms.some(function (f) { return HT.startsWith(f, pos) && edge(HT, pos + f.length); })) { had[li] |= 1 << w; re.lastIndex = HS[li + 1]; }
+      else re.lastIndex = pos + 1;
+    }
     // the few moments with a letter that does not fit a byte: their words as they are
     ODD.forEach(function (li) {
       const h = mline(li), from = h.lastIndexOf('\t') + 1;
