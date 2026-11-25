@@ -208,9 +208,10 @@ function search(g) {
         if (cond.length ? s : sc.hits[i] > 0) mine.push(i);
       }
       if (!shot || (sc.n && bits !== sc.full) || !mine.length) return;
-      const ms = mine.map(function (i) { const m = mrow(i); m.hits = sc.hits[i]; return m; });
-      ms.sort(function (a, b) { return b.hits - a.hits || cmp(a.kind, b.kind) || a.start_s - b.start_s; });
-      const v = ms[0]; v.found = ms.map(function (m) { return m.start_s; }).sort(function (a, b) { return a - b; });
+      // the video's own row is its best moment (most words; a shot before what is said; the earliest), read whole only then
+      const ms = mine.map(function (i) { const c = mcols(i, 5); return [sc.hits[i], c[2], +c[4] || 0, i]; });
+      ms.sort(function (a, b) { return b[0] - a[0] || cmp(a[1], b[1]) || a[2] - b[2]; });
+      const v = mrow(ms[0][3]); v.hits = ms[0][0]; v.found = ms.map(function (m) { return m[2]; }).sort(function (a, b) { return a - b; });
       vids.push(v);
     });
     vids.sort(function (a, b) { return b.hits - a.hits || b.found.length - a.found.length || cmp(a.path, b.path); });
