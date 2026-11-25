@@ -1,0 +1,21 @@
+# Looks for security problems in the PHP on every push and every pull request (CodeQL cannot read PHP).
+# It reports only what a change adds: the flags that were there on 25 November 2026 were each read and found safe
+# (the security review of that day). A red mark here is a question to look at, not a stop: it is not a required check.
+name: php-scan
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  php-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the whole history: the scan compares with the commit before the change
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -q semgrep==1.187.0
+      - name: New security flags in the PHP
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: sh tests/php-scan.sh "$BASE"
