@@ -26,7 +26,7 @@ it touching the archive until Try again — the same breaker as runner.sh.
 Proxies are made here too (proxies(), as proxy.sh does on a NAS, with the
 same records), on the Mac's media engine, in software when it cannot.
 """
-import hashlib, json, os, platform, re, shutil, sqlite3, subprocess, tempfile, threading, time, urllib.request
+import hashlib, json, os, platform, re, shutil, sqlite3, subprocess, tempfile, threading, time, urllib.parse, urllib.request
 import transfer_state as ts          # the careful file operations (beside this file, in the app and in _rushes)
 
 HERE = os.path.dirname(os.path.abspath(__file__))       # dedupe.sh and verify.sh are beside this file
@@ -156,7 +156,7 @@ def viewer_lists(cat, root, out, say=print):
     (gzip, base64); written whole under another name first, so a page opened meanwhile reads yesterday's."""
     import base64, gzip, io
     root = root.rstrip("/"); own = (root + "/PROXIES/", root + "/_")       # Rushes' own: previews, its records
-    db = sqlite3.connect(f"file:{cat}?mode=ro", uri=True, timeout=30)
+    db = sqlite3.connect("file:" + urllib.parse.quote(cat) + "?mode=ro&immutable=1", uri=True)    # a copy nothing writes to: read as it is, wherever it lies
     like = root.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"
     # a line each, a tab between its columns: a tab inside one (a version's key has them) travels as \x1f, a line end as a space
     flat = lambda v: "" if v is None else re.sub(r"[\r\n]", " ", str(v)).replace("\t", "\x1f")
