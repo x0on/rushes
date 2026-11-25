@@ -204,6 +204,11 @@ for x in PARTS:
     shutil.copy(src, os.path.join(C, "Resources", "LICENSES", x["license_file"]))
 
 
+# Rushes' own license, as the repository has it: named once LICENSE.md is there, never before
+OWN_LICENSE = ("Rushes Community License 1.0 (LICENSE.md)" if os.path.exists(os.path.join(HERE, "..", "LICENSE.md"))
+               else "source-available; its license is being prepared (README.md)")
+
+
 def sbom(path):
     """The parts list, as CycloneDX 1.5 (a format scanners and auditors read): every part with its exact version,
     license, where it comes from, its fingerprint where the code pins one, and whether it is inside the app or
@@ -222,7 +227,7 @@ def sbom(path):
     doc = {"bomFormat": "CycloneDX", "specVersion": "1.5", "serialNumber": "urn:uuid:" + str(uuid.uuid4()), "version": 1,
            "metadata": {"timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "component": {"type": "application", "name": NAME, "version": VERSION, "bom-ref": NAME,
-                                      "licenses": [{"license": {"name": "source-available; its license is being prepared (README.md)"}}],
+                                      "licenses": [{"license": {"name": OWN_LICENSE}}],
                                       "externalReferences": [{"type": "vcs", "url": "https://github.com/x0on/rushes"}]}},
            "components": [comp(x) for x in PARTS]}
     with open(path, "w", encoding="utf-8") as f: json.dump(doc, f, indent=1, ensure_ascii=False)
