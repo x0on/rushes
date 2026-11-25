@@ -37,6 +37,7 @@ the Manage page's password.
 ## How Rushes is checked
 
 - Every push is scanned by CodeQL, and again every week.
+- The PHP is scanned by Semgrep on every push, for what a change adds.
 - Every change must pass the tests before it reaches main.
 - Every release is signed (app/release.sig) and checked before an update is
   taken.

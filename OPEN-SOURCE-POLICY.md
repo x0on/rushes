@@ -138,6 +138,8 @@ from outside (footage, uploads)? Does it reach the network? What can it change?
 **Finding known holes.**
 - GitHub dependency alerts, on.
 - CodeQL on every push and every week (Python, JavaScript, C, the workflow).
+- Semgrep on every push and every pull request, for the PHP, which CodeQL
+  cannot read. It reports what a change adds.
 - At each release, every part on that release's list is checked against the
   public vulnerability databases (osv.dev and the part's own security page).
 
