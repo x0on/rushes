@@ -197,6 +197,7 @@ t = open(sys.argv[1]).read().replace("1. Kite Promo.mp4 [", "1. Kite\nPromo.mp4 
 print("Hi Alex,\r\n\r\nCould you bring these in?\r\n\r\n" + "\r\n".join("> " + l for l in t.split("\n")) + "\r\n\r\nThanks,\r\nSam\r\n--\r\n1. Not a clip [#1]\r\nSent from my phone")
 PY
 P() { curl -s --data-urlencode "text@$1" -d action=request "$U/db/pulls.php"; }
+curl -s -d action=create --data-urlencode "name=Música en el Parque: ¡Año Nuevo!" -H "Origin: $U" "$U/db/pulls.php" | grep -q '"slug":"musica-en-el-parque-ano-nuevo-' && ok "a pull's link: its name without accents, by Rushes' own list (no iconv)" || no "slug: $(curl -s -d action=create --data-urlencode "name=Música" "$U/db/pulls.php")"
 X=$(P "$R/mail.txt"); S=$(echo "$X" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("slug",""))')
 echo "$X" | grep -q '"name":"Request from Sam Rivera: Recap video","n":2,"missing":\[\]' && ok "Rushes reads the request out of the email around it, and makes the pull" || no "request: $X"
 curl -s "$U/db/pulls.php?p=$S" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert [i["name"] for i in d["items"]] == ["Kite Promo.mp4", "A001C003_250101.mov"], d' && ok "its clips, in the order asked" || no "its clips"
@@ -206,7 +207,7 @@ grep -v "^2\. " "$R/request.txt" > "$R/cut.txt"
 case "$(P "$R/cut.txt")" in *"says 2 clips, and 1 could be read"*) ok "a request with a part missing makes nothing" ;; *) no "cut: $(P "$R/cut.txt")" ;; esac
 printf 'Hi, can you send me the kite video?' > "$R/none.txt"
 case "$(P "$R/none.txt")" in *"No request found"*) ok "an email with no request in it says so" ;; *) no "none" ;; esac
-[ "$(curl -s "$U/db/pulls.php?list=1" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["pulls"]))')" = 2 ] && ok "and only the requests that could be read made a pull" || no "how many pulls"
+[ "$(curl -s "$U/db/pulls.php?list=1" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["pulls"]))')" = 3 ] && ok "and only the requests that could be read made a pull" || no "how many pulls"
 # Setup → The Viewer: each editor a name and an address, in fields of their own
 SV() { curl -s -o /dev/null -c "$R/jar" -b "$R/jar" -d _pass=rushes "$U/db/admin.php"; curl -s -L -b "$R/jar" -d _save=1 -d name=Rushes "$@" "$U/setup.php"; }
 SV --data-urlencode "v_name[0]=Alex" --data-urlencode "v_mail[0]=alex@example.org" --data-urlencode "v_name[1]=Jo Lee" --data-urlencode "v_mail[1]=jo.lee@example.org" --data-urlencode "v_name[2]=" --data-urlencode "v_mail[2]=" > /dev/null

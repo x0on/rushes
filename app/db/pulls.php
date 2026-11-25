@@ -23,6 +23,14 @@ $db = db();
 function out($x) { echo json_encode($x, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); exit; }
 function bail(int $c, string $why) { http_response_code($c); out(['error' => $why]); }
 function clean(string $s, int $max): string { return mb_substr(trim(preg_replace('/[\x00-\x1f]+/', ' ', $s)), 0, $max); }
+// A pull's name as the start of its link: small letters and digits, a - for anything else. Accented letters lose
+// their accent ("Música" → musica) by a list of its own, so this needs no library for it (it used iconv, which
+// Rushes' own PHP no longer carries: one part less to ship and to keep patched).
+function slug_base(string $name): string {
+    static $plain = ['á'=>'a','à'=>'a','â'=>'a','ä'=>'a','ã'=>'a','å'=>'a','é'=>'e','è'=>'e','ê'=>'e','ë'=>'e','í'=>'i','ì'=>'i','î'=>'i','ï'=>'i',
+                     'ó'=>'o','ò'=>'o','ô'=>'o','ö'=>'o','õ'=>'o','ø'=>'o','ú'=>'u','ù'=>'u','û'=>'u','ü'=>'u','ñ'=>'n','ç'=>'c','ß'=>'ss','æ'=>'ae','œ'=>'oe'];
+    return trim(preg_replace('/[^a-z0-9]+/', '-', strtr(mb_strtolower($name), $plain)), '-') ?: 'pull';
+}
 function pull_by_slug(string $slug) {
     $st = db()->prepare('SELECT * FROM pulls WHERE slug = ?');
     $st->bindValue(1, $slug);
@@ -71,7 +79,7 @@ if ($act === 'create') {
     if ($name === '') bail(400, 'Give the pull a name.');
     // A short readable link: the name, then a few random letters so two pulls
     // called "Council" never collide.
-    $base = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $name) ?: 'pull')), '-') ?: 'pull';
+    $base = slug_base($name);
     $slug = substr($base, 0, 40) . '-' . substr(bin2hex(random_bytes(3)), 0, 5);
     $by = clean((string)($_POST['made_by'] ?? ''), 60) ?: activity_who();     // the name this browser was given, if none is typed
     $st = $db->prepare('INSERT INTO pulls (slug, name, made_by, created, updated) VALUES (?,?,?,?,?)');
@@ -106,7 +114,7 @@ if ($act === 'request') {
     if (!$found) bail(400, 'None of its ' . count($clips) . ' clips is in this catalogue any more (they may have been moved or renamed since the request was written): ' . implode(', ', array_slice($missing, 0, 5)) . '.');
     $from = $head['From'] ?? ''; $what = ($head['Pull'] ?? '') ?: 'clips';
     $name = clean('Request' . ($from !== '' ? ' from ' . $from : '') . ': ' . $what, 80);
-    $base = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $name) ?: 'pull')), '-') ?: 'pull';
+    $base = slug_base($name);
     $slug = substr($base, 0, 40) . '-' . substr(bin2hex(random_bytes(3)), 0, 5);
     $db->exec('BEGIN');
     $in = $db->prepare('INSERT INTO pulls (slug, name, made_by, created, updated) VALUES (?,?,?,?,?)');
