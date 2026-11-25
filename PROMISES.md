@@ -53,5 +53,6 @@ A promise is not taken away by taking its check away: changing a line here is a 
 - The parts list says what the code really downloads, at the versions it downloads them, and every part in it is credited. — `tests/test_agree.py`: “test_the_list_says_what_the_code_fetches”
 - Until a helper is paired, its doors answer only the machine Rushes runs on. — `tests/test_pair.sh`: “not paired yet: a helper on another machine is given nothing”
 - An app is never built, and a release never passes unseen, without xxHash: the build stops, and what is inside each release is checked on GitHub. — `tests/test_agree.py`: “test_a_build_without_xxhash_is_refused_and_a_release_without_it_shows”
+- A helper that proves its copies without XXH3 is said, in Activity and on Overview; and Check copies never starts reading the archive by itself the first time it can. — `tests/test_helper.sh`: “the first time XXH3 is there, Check copies is ready and switched off”
 - A file someone sends in is never run, whatever its name. — `tests/test_router.sh`: “was run”
 - The helper runs only code signed with the release key. — `tests/test_menu.py`: “test_installed_when_newer_and_signed”

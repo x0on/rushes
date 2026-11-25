@@ -7,6 +7,7 @@ Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
 - **Copies are proven with XXH3-128 again, and get their ASC MHL record.** The part that computes it (xxHash) was not in the app: it went missing from the build's folder between 3 October and 9 November, the build said nothing, and the app fell back to another fingerprint (BLAKE2) and said nothing either. Every copy made meanwhile was verified as it was made, just as safely. What was lost: no ASC MHL record was written, and **Check copies** did nothing. xxHash is back inside the app.
 - **It cannot go missing unseen again.** The build stops when xxHash, or any license text, is not there; it then opens the app it has built and looks for every part, and keeps that as a report beside the zip (`Rushes <version> build report.txt`). GitHub looks into every published release the same way (Actions → *what is inside the release*): a release lacking a part shows red, with the line that says which.
+- **Check copies waits for you.** It could run at last, and on a large archive it reads for days (every older copy, against its original). The first time this version runs, it is switched off and Activity says so: turn it on in Overview when you want it to start, and off again whenever you like; it keeps its place.
 - **Rushes says which fingerprint it uses.** Overview, beside the helper: *copies proven with XXH3-128 (ASC MHL)*. An app built without it says so in amber there, on the Check copies switch, and once in Activity.
 
 ## 0.15.2 — November 2026

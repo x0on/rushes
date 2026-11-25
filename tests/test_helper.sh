@@ -242,4 +242,15 @@ printf '2026-11-04 10:00\tanalysed\t/Volumes/VIDEO/Meadow Park\t40\t0\t60\tasked
 check 'call GET "{}" "{}" db/state.php | python3 -c "import json,sys; d=[x for x in json.load(sys.stdin)[\"happening\"] if x[\"lane\"]==\"describe\"]; assert d and d[0][\"detail\"].startswith(\"1 folder \"), d"' \
       'the top bar counts the folders really waiting: one described already, one waiting (listed twice) is one'
 rm -f "$ROOT/app/ingest-queue.tsv"
+# which fingerprint the helper proves its copies with: said, never assumed (xxHash was once missing from the app, unseen)
+rep() { ORIGIN=http://nas.test call POST "{}" "{\"volumes\":\"\",\"proof\":\"$1\"}" db/report.php >/dev/null; }
+rep blake2b
+check 'grep -q "BLAKE2, not XXH3" "$ROOT/app/activity.tsv" && call GET "{}" "{}" db/state.php | grep -q "\"proof\":\"blake2b\""' 'a helper without XXH3 is said: in Activity once, and to Overview'
+rep blake2b; check '[ "$(grep -c "BLAKE2, not XXH3" "$ROOT/app/activity.tsv")" = 1 ]' 'said once, not every minute'
+rep xxh128
+check 'grep -q "\"check_paused\":true" "$ROOT/app/helper-control.json" && grep -q "ready and switched off" "$ROOT/app/activity.tsv" && call GET "{}" "{}" db/state.php | grep -q "\"proof\":\"xxh128\""' \
+      'the first time XXH3 is there, Check copies is ready and switched off: reading the archive again starts when the owner says'
+python3 -c "import json,sys; f=sys.argv[1]; c=json.load(open(f)); c['check_paused']=False; json.dump(c,open(f,'w'))" "$ROOT/app/helper-control.json"
+rep blake2b; rep xxh128
+check 'python3 -c "import json,sys; assert json.load(open(sys.argv[1]))[\"check_paused\"] is False" "$ROOT/app/helper-control.json"' 'switched on, it is never switched off again by itself'
 echo "Helper tests complete."

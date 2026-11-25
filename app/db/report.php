@@ -39,6 +39,15 @@ $how  = in_array($_POST['how'] ?? '', ['service', 'window'], true) ? $_POST['how
 // (then no ASC MHL record is written and no copy is checked later: said on Overview, and once in Activity).
 $proof = in_array($_POST['proof'] ?? '', ['xxh128', 'blake2b'], true) ? $_POST['proof'] : '';
 $was = ''; foreach (@file(web_dir() . '/helper-volumes.tsv') ?: [] as $l) if (str_starts_with($l, "proof\t")) $was = trim(substr($l, 6));
+// The first time a helper says XXH3: Check copies could run at last, and would start reading the archive against
+// its originals, for days on a large one, with nobody having asked. It is switched off once, and said in
+// Activity: turning it on (Overview → Check copies) is the owner's to do. Never switched off again after that.
+if ($proof === 'xxh128' && $was !== 'xxh128' && !is_file(web_dir() . '/proof-offered')) {
+    require_once __DIR__ . '/activity.php';
+    $c = helper_control(); $c['check_paused'] = true; helper_control_save($c);
+    @file_put_contents(web_dir() . '/proof-offered', date('c') . "\n");
+    activity_add('changed', 'Copies are proven with XXH3-128 from now on, each with its ASC MHL record. Check copies (reading older copies again, against their originals) is ready and switched off: turn it on in Overview when you want it to start.', 'Rushes');
+}
 if ($proof === 'blake2b' && $was !== 'blake2b') {
     require_once __DIR__ . '/activity.php';
     activity_add('changed', 'The helper proves its copies with BLAKE2, not XXH3: this app was built without it. Copies are still verified as they are made, but no ASC MHL record is written and Check copies does nothing. Update Rushes.', 'Rushes');
