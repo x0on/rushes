@@ -743,8 +743,8 @@ class Runner:
         return shutil.which("ffmpeg")
 
     # The same pinned ffmpeg Install the AI brings (ingest.py AI_GET), checked against its fingerprint
-    FFMPEG_GET = ("https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffmpeg.zip",
-                  "1f66e9a690a7f1c9e60b012379f8869c11818d1797f45b21dbb2f2564ba61ae1")
+    FFMPEG_GET = ("https://github.com/x0on/rushes-parts/releases/download/ffmpeg-9.1-1/ffmpeg-9.1-macos-arm64.zip",
+                  "30830523c209f83ce76029af1de01d4c9bffd026c693579befbb326f789ae7ed")
 
     def get_ffmpeg(self, only):
         """No ffmpeg on this Mac: the pinned one, downloaded once, so nobody opens Terminal. -> its path, or None."""
@@ -753,7 +753,7 @@ class Runner:
             return None
         d = os.path.expanduser("~/archive-pilot/ai/bin"); os.makedirs(d, exist_ok=True)
         dest, part, h = os.path.join(d, "ffmpeg"), os.path.join(d, "ffmpeg.zip.part"), hashlib.sha256()
-        self.proxy_state(state="planning", only=only, step="downloading ffmpeg, the tool that makes proxies (26 MB), once")
+        self.proxy_state(state="planning", only=only, step="downloading ffmpeg, the tool that makes proxies (11 MB), once")
         try:
             with urllib.request.urlopen(self.FFMPEG_GET[0], timeout=60) as r, open(part, "wb") as f:
                 for b in iter(lambda: r.read(1 << 20), b""):
@@ -838,6 +838,17 @@ class Runner:
         return bool(v and v[1] == "h264" and re.search(r"yuv(j)?420p[,(]", v[2] + ",") and min(int(v[3]), int(v[4])) <= 1080   # the short side: a phone's 1080x1920 is HD
                     and br and int(br[1]) <= 10000 and all(a in ("aac", "mp3") for a in sound))
 
+    def soft_encoder(self, ff, h):
+        """H.264 in software, with what this ffmpeg has: x264 where it is built in (Homebrew's, a NAS's), else
+        OpenH264 (the FFmpeg Rushes downloads is compiled without any GPL part: github.com/x0on/rushes-parts).
+        OpenH264 has no quality setting like x264's, so it is given a rate: 6 Mbit/s at 720p, 10 at 1080p."""
+        if getattr(self, "_soft", None) is None:
+            r = subprocess.run([ff, "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+            self._soft = "libx264" if " libx264 " in r else "libopenh264" if " libopenh264 " in r else "libx264"
+        if self._soft == "libopenh264":
+            return ["-c:v", "libopenh264", "-b:v", "10M" if h >= 1080 else "6M"]
+        return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]
+
     def encode(self, ff, src, out, h, b, engine):
         """One proxy: on the media engine, else in software. -> (made, how). Stop ends it at once."""
         nice = ["nice", "-n", "15"] if shutil.which("nice") else []      # copies, search and editors come first
@@ -849,7 +860,7 @@ class Runner:
         if engine and b != "sw":
             tries.append(("video chip", ["-hwaccel", "videotoolbox", "-i", src, "-vf", fit, "-c:v", "h264_videotoolbox",
                                          "-b:v", f"{b}M", "-maxrate", f"{int(b) * 3 // 2}M"]))
-        tries.append(("software", ["-i", src, "-vf", fit, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]))
+        tries.append(("software", ["-i", src, "-vf", fit, *self.soft_encoder(ff, h)]))
         err, stalls = "", []
         for k, (how, args) in enumerate(tries):
             if self.proxy_halt.is_set():

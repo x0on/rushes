@@ -12,8 +12,8 @@ its own work: the helper's comes from Rushes (signed releases), the Watcher's
 Runs on Linux or a Mac. Needs, next to this file or on the PATH:
   - the two python-build-standalone "install_only_stripped" tarballs named in PBS below
     (github.com/astral-sh/python-build-standalone/releases)
-  - for Rushes Helper, the two static PHP tarballs named in PHP below (static-php.dev,
-    the "common" build: dl.static-php.dev/static-php-cli/common/), for Rushes on a Mac
+  - for Rushes Helper, the two PHP tarballs named in PHP below, as github.com/x0on/rushes-parts compiles and
+    publishes them (from php.net's source, with only what Rushes uses), for Rushes on a Mac
   - python3.12, to precompile the standard library
   - zig, to compile the launcher for both chips (pip install ziglang)
   - rcodesign, to sign it (github.com/indygreg/apple-platform-rs, apple-codesign)
@@ -35,7 +35,7 @@ APP = os.path.join(OUT, NAME + ".app")
 C = os.path.join(APP, "Contents")
 PBS = "cpython-3.12.16+20261124-{}-apple-darwin-install_only_stripped.tar.gz"
 ARCHES = {"arm64": "aarch64", "x86_64": "x86_64"}
-PHP = "php-8.5.8-cli-macos-{}.tar.gz"
+PHP = "php-8.5.13-cli-macos-{}.tar.gz"
 # Rushes on a Mac (HOW-IT-WORKS.md): the pages, without what only runs elsewhere
 # (the NAS's scripts, the helper's code, which goes in on its own, below).
 NOT_PAGES = (".htaccess", "router.php", "release.sig", "settings.json")     # settings: each Mac's own, never one from here
@@ -79,7 +79,8 @@ DROP_LIB = ["test", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3", 
             "pydoc_data", "unittest/test", "site-packages", "config-3.12-darwin", "turtle.py"]
 
 
-import json
+import json, hashlib
+PHP_SHA = next(x for x in json.load(open(os.path.join(HERE, "parts.json"), encoding="utf-8"))["parts"] if x["name"] == "PHP")["sha256"]
 WHEELS = next(x for x in json.load(open(os.path.join(HERE, "parts.json"), encoding="utf-8"))["parts"] if x["name"] == "python-xxhash")["sha256"]
 
 
@@ -177,6 +178,9 @@ else:
     shutil.copytree(os.path.join(HERE, "..", "app"), os.path.join(C, "Resources", "pages"),
                     ignore=lambda d, names: [n for n in names if n in NOT_PAGES or n == "__pycache__" or n.endswith((".py", ".sh", ".tsv", ".sqlite", ".db"))])
     for a, z in ARCHES.items():
+        # the PHP github.com/x0on/rushes-parts compiled, and no other: checked against the fingerprint parts.json names
+        if hashlib.sha256(open(os.path.join(TOP, PHP.format(z)), "rb").read()).hexdigest() != PHP_SHA[PHP.format(z)]:
+            sys.exit(f"build.py: {PHP.format(z)} is not the one parts.json names (its fingerprint differs). Not built.")
         with tarfile.open(os.path.join(TOP, PHP.format(z))) as t:
             m = t.getmember("php"); m.name = f"php-{a}"
             t.extract(m, os.path.join(C, "Resources"), filter="tar")

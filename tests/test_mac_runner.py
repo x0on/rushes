@@ -306,6 +306,17 @@ class MacJobs(unittest.TestCase):
         self.assertIn("nothing was done", self.log())
 
 
+class SoftwareProxies(MacJobs):
+    def test_in_software_with_the_encoder_this_ffmpeg_has(self):
+        ff = os.path.join(self.t, "ff"); enc = os.path.join(self.t, "enc.txt")
+        open(ff, "w").write(f"#!/bin/sh\ncat '{enc}'\n"); os.chmod(ff, 0o755)
+        open(enc, "w").write(" V....D libx264              H.264\n V....D libopenh264          OpenH264\n")
+        self.assertEqual(self.r.soft_encoder(ff, 720)[:2], ["-c:v", "libx264"], "x264 where the ffmpeg has it")
+        self.r._soft = None; open(enc, "w").write(" V....D libopenh264          OpenH264\n V....D h264_videotoolbox    VideoToolbox\n")
+        self.assertEqual(self.r.soft_encoder(ff, 720), ["-c:v", "libopenh264", "-b:v", "6M"], "OpenH264 with the FFmpeg Rushes downloads (no GPL part), at a rate")
+        self.assertEqual(self.r.soft_encoder(ff, 1080)[-1], "10M")
+
+
 class JobFile(unittest.TestCase):
     def test_the_first_line_that_names_a_field_counts(self):
         f = runner.Runner.job_fields(["ACTION=transfer\n", "DEST=/a/x\n", "ACTION=pull-copy\n", "TO=/tmp/anywhere\n", "no equals\n"])

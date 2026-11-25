@@ -3,6 +3,14 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.5 — November 2026
+
+- **FFmpeg and PHP are compiled from their own source, in the open.** A new public repository, github.com/x0on/rushes-parts, holds the recipes; GitHub compiles them and publishes each program with its fingerprint, its license texts and the list of what went in. Nobody stands between the source and the program any more, and a security release is one changed version number.
+- **PHP 8.5.13** (was 8.5.8, five security releases behind): php.net's source, checked against the fingerprint php.net publishes, with only what Rushes' pages use. About thirty built-in libraries become four (SQLite, zlib, libzip, and what PHP's own source carries), none of them LGPL. The app's parts list goes from 45 parts to 20.
+- **FFmpeg 9.1 without any GPL part** (LGPL), from ffmpeg.org's source, used only if FFmpeg's own release key signed it. Proxies are made on the Mac's video chip as before; when it cannot be used, OpenH264 does it in software (before: x264).
+- **The build checks PHP's fingerprint** before it goes into the app, as it does xxHash's.
+- **The parts list names Rushes' own license** once `LICENSE.md` is in the repository.
+
 ## 0.15.4 — November 2026
 
 - **The Viewer: Download this preview.** In the large view, and in the right-click menu of a video: it opens the video and says how to take a copy, beside the player. A page opened from a folder is not allowed to save a file itself (the browser plays it instead), so the browser's own player does it: right-click the video → **Save video as…**, or **⋮** → **Download**. What is saved is the preview, an MP4 any computer opens. A picture says *right-click → Save image as…*; a video with no preview says to ask an editor for it, with a pull.

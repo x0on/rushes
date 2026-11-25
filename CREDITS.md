@@ -78,15 +78,14 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | Python 3.12 | The language the helper is written in; a private copy inside the app | Inside Rushes Helper | PSF License | python.org |
 | python-build-standalone | The ready-to-ship build of that Python | Inside Rushes Helper | MPL-2.0 | github.com/astral-sh/python-build-standalone (Astral) |
-| PHP 8.5 | Runs Rushes' pages and its own small web server, when the archive is a drive on this Mac; a private copy inside the app | Inside Rushes Helper | PHP License (with the open-source libraries built into it: SQLite, zlib, libxml2, OpenSSL, curl and others, each under its own license) | php.net |
-| static-php-cli | The ready-to-ship, self-contained build of that PHP | Inside Rushes Helper | MIT | github.com/crazywhalecc/static-php-cli |
+| PHP 8.5 | Runs Rushes' pages and its own small web server, when the archive is a drive on this Mac; a private copy inside the app, compiled from php.net's source with only what Rushes uses (SQLite, zlib, libzip, and the PCRE2, Lexbor and uriparser PHP's source carries) | Inside Rushes Helper | PHP License 3.01 | php.net; compiled by github.com/x0on/rushes-parts, in the open, from its recipe there |
 | xxHash (python-xxhash) | The XXH3-128 fingerprint that proves each copy matches its original — the one ASC MHL and professional copy tools read | Inside Rushes Helper | BSD-2-Clause | Yann Collet (xxHash); github.com/ifduyue/python-xxhash |
 | macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive and shows the window for choosing the archive; caffeinate keeps the Mac awake while a copy or describing runs; scutil gives the computer's name for pairing; xattr and pbpaste help find the Rushes address during setup (where the app was downloaded from, the clipboard); AppKit and WebKit draw the window; open | Part of macOS | Apple | Apple |
 
 The exact version of each part, with its license and where it is downloaded from, is in `mac/parts.json`, and goes
 with every release as a parts list (`Rushes <version>.cdx.json`, CycloneDX). The license text of every part shipped
-inside the app is in the app itself: `Rushes.app/Contents/Resources/LICENSES`. PHP carries about thirty libraries
-built into it (OpenSSL, curl, SQLite, zlib, libxml2 …): they are named one by one in the parts list.
+inside the app is in the app itself: `Rushes.app/Contents/Resources/LICENSES`. FFmpeg and PHP are compiled from their
+projects' own source, in the open, by github.com/x0on/rushes-parts: nobody stands between the source and the program.
 
 ## On this Mac: describing footage
 
@@ -98,7 +97,7 @@ built into it (OpenSSL, curl, SQLite, zlib, libxml2 …): they are named one by 
 | mlx-vlm | Runs the vision model with MLX | This Mac | MIT | Prince Canuma — github.com/Blaizzy/mlx-vlm |
 | mlx-whisper | Runs Whisper with MLX | This Mac | MIT | Apple — github.com/ml-explore/mlx-examples |
 | PySceneDetect | Cuts footage into shots | This Mac | BSD-3-Clause | Brandon Castellano — github.com/Breakthrough/PySceneDetect |
-| FFmpeg | Reads frames and sound from video, and makes proxies on a Mac that has no FFmpeg of its own. Not inside the app: downloaded when needed, version 9.1, checked against its fingerprint | This Mac | GPL-3.0-or-later (this build includes x264 and x265) | ffmpeg.org; built by Martin Riedl — ffmpeg.martin-riedl.de, his build scripts at gitlab.com/martinr92/ffmpeg |
+| FFmpeg | Reads frames and sound from video, and makes proxies on a Mac that has no FFmpeg of its own. Not inside the app: downloaded when needed, version 9.1, checked against its fingerprint. Compiled from ffmpeg.org's signed source with OpenH264 (Cisco, BSD-2-Clause) and no GPL part | This Mac | LGPL-2.1-or-later | ffmpeg.org; compiled by github.com/x0on/rushes-parts, in the open, from its recipe there |
 | Hugging Face Hub | Where the models are downloaded from the first time, if they are not already on the Mac (by the MLX libraries; no footage is sent) | Download only | — | huggingface.co |
 
 ## On the archive machine
@@ -116,6 +115,7 @@ built into it (OpenSSL, curl, SQLite, zlib, libxml2 …): they are named one by 
 
 | Part | What it does in Rushes | Where it runs | License | Where it comes from |
 |---|---|---|---|---|
+| static-php-cli | Compiles PHP from its source, in github.com/x0on/rushes-parts | GitHub's build machines | MIT | github.com/crazywhalecc/static-php-cli |
 | Zig | Compiles the app's small launcher for both Mac chips | The build machine | MIT | ziglang.org |
 | apple-codesign (rcodesign) | Signs the app | The build machine | MPL-2.0 | Gregory Szorc — github.com/indygreg/apple-platform-rs |
 | Python 3.12 and zip | Precompile the app's Python, and pack the app | The build machine | PSF License; Info-ZIP | python.org; info-zip.org |

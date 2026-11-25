@@ -3054,17 +3054,16 @@ def watch(root, every=20):
 # archive's _rushes/analysis, and reports progress as "@@ {json}" lines.
 AI = HOME / "ai"        # what Install the AI puts on this Mac (Manage → Describe): its own Python, ffmpeg, the tools
 # Each download pinned and checked against its fingerprint before it is used.
-# FFmpeg 9.1 as Martin Riedl builds it (ffmpeg.martin-riedl.de: signed, its build scripts public), since 0.15.2;
-# before, 6.0 from 2023. ponytail: his address for 9.1; if it ever goes, Install says the download failed, and
-# the answer is the FFmpeg Rushes builds itself from FFmpeg's own source (planned).
+# FFmpeg 9.1, compiled from ffmpeg.org's signed source by github.com/x0on/rushes-parts (its recipe is that
+# repository; no GPL part), since 0.15.5. Before: Martin Riedl's build of 9.1 (0.15.2), and 6.0 from 2023.
 AI_GET = {
     "python": ("https://github.com/astral-sh/python-build-standalone/releases/download/20261124/"
                "cpython-3.12.16%2B20261124-aarch64-apple-darwin-install_only_stripped.tar.gz",
                "9d6d9d0d85feda3f9cb4eb3e048f0fed21ed280feda087927eaa4fbc7124826f"),
-    "ffmpeg":  ("https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffmpeg.zip",
-                "1f66e9a690a7f1c9e60b012379f8869c11818d1797f45b21dbb2f2564ba61ae1"),
-    "ffprobe": ("https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffprobe.zip",
-                "6ef2df5f575042923a28537ab37adf936f28bf3e7b85de23a1447ed447ec1dbd"),
+    "ffmpeg":  ("https://github.com/x0on/rushes-parts/releases/download/ffmpeg-9.1-1/ffmpeg-9.1-macos-arm64.zip",
+                "30830523c209f83ce76029af1de01d4c9bffd026c693579befbb326f789ae7ed"),
+    "ffprobe": ("https://github.com/x0on/rushes-parts/releases/download/ffmpeg-9.1-1/ffprobe-9.1-macos-arm64.zip",
+                "5708a72a0203cf4a4fa0fe0f1c9903a58fdda44b2916342a518013e9a4e07994"),
 }
 # The describing tools, each at one version: the ones the archive this was made for describes with. Before 0.15.2
 # every install took whatever was newest that day, so no list could say what a Mac ran. AI_PACKAGES is what is
@@ -3152,7 +3151,7 @@ def install_ai():
     for n in ("ffmpeg", "ffprobe"):
         b = AI / "bin" / n
         if b.exists(): continue
-        step(f"Downloading {n} (26 MB) …")
+        step(f"Downloading {n} (11 MB) …")
         fetch(n, AI / "bin" / (n + ".zip"))
         with zipfile.ZipFile(AI / "bin" / (n + ".zip")) as z, z.open(n) as g, open(str(b) + ".part", "wb") as f:   # the one program inside, by its name
             shutil.copyfileobj(g, f)
