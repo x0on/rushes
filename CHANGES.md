@@ -3,6 +3,13 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.6 — November 2026
+
+- **Search: the kind of file is a row of tabs** under the search box (Everything, Videos, Images, Audio, Project files), each with how many were found, in place of the menu inside the box. Same in the Viewer and the Premiere panel.
+- **Search: one list.** The pages no longer explain themselves ("pages 1–8: found by what they show…"). Where the videos found by what they show end, one line says "Also found by name", once. What is found, and its order, did not change.
+- **Search: one place to look at a result.** While the large view is open, Properties steps aside and stops playing; it is back when the large view closes.
+- **The parts list names libmbfl** (LGPL-2.1+), the library inside PHP's mbstring. It was inside the app since PHP was first shipped and on no list; its license text now goes in the LICENSES folder, and CREDITS.md says what the license asks.
+
 ## 0.15.5 — November 2026
 
 - **FFmpeg and PHP are compiled from their own source, in the open.** A new public repository, github.com/x0on/rushes-parts, holds the recipes; GitHub compiles them and publishes each program with its fingerprint, its license texts and the list of what went in. Nobody stands between the source and the program any more, and a security release is one changed version number.

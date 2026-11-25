@@ -90,6 +90,17 @@
    "note": "the copy PHP's source carries"
   },
   {
+   "name": "libmbfl",
+   "version": "1.3.2",
+   "license": "LGPL-2.1-or-later",
+   "where": "in the app",
+   "url": "https://github.com/php/php-src/tree/php-8.5.13/ext/mbstring/libmbfl",
+   "credits": "PHP 8.5",
+   "inside": "PHP",
+   "license_file": "libmbfl.txt",
+   "note": "the copy PHP's source carries, inside mbstring: names in every alphabet. LGPL: anyone may rebuild PHP with their own libmbfl from the public recipe at github.com/x0on/rushes-parts"
+  },
+  {
    "name": "uriparser",
    "version": "1.0.3",
    "license": "BSD-3-Clause",

@@ -78,7 +78,7 @@ damaged copies and resuming, and every file it copies is checked as above.
 |---|---|---|---|---|
 | Python 3.12 | The language the helper is written in; a private copy inside the app | Inside Rushes Helper | PSF License | python.org |
 | python-build-standalone | The ready-to-ship build of that Python | Inside Rushes Helper | MPL-2.0 | github.com/astral-sh/python-build-standalone (Astral) |
-| PHP 8.5 | Runs Rushes' pages and its own small web server, when the archive is a drive on this Mac; a private copy inside the app, compiled from php.net's source with only what Rushes uses (SQLite, zlib, libzip, and the PCRE2, Lexbor and uriparser PHP's source carries) | Inside Rushes Helper | PHP License 3.01 | php.net; compiled by github.com/x0on/rushes-parts, in the open, from its recipe there |
+| PHP 8.5 | Runs Rushes' pages and its own small web server, when the archive is a drive on this Mac; a private copy inside the app, compiled from php.net's source with only what Rushes uses (SQLite, zlib, libzip, and the PCRE2, Lexbor, uriparser and libmbfl PHP's source carries) | Inside Rushes Helper | PHP License 3.01; libmbfl inside it is LGPL-2.1+ | php.net; compiled by github.com/x0on/rushes-parts, in the open, from its recipe there |
 | xxHash (python-xxhash) | The XXH3-128 fingerprint that proves each copy matches its original — the one ASC MHL and professional copy tools read | Inside Rushes Helper | BSD-2-Clause | Yann Collet (xxHash); github.com/ifduyue/python-xxhash |
 | macOS | Its file sharing (SMB) is how the helper reads the source drives and writes to the archive over the network; launchctl runs the background service; ditto copies the app into Applications; osascript connects a dropped network drive and shows the window for choosing the archive; caffeinate keeps the Mac awake while a copy or describing runs; scutil gives the computer's name for pairing; xattr and pbpaste help find the Rushes address during setup (where the app was downloaded from, the clipboard); AppKit and WebKit draw the window; open | Part of macOS | Apple | Apple |
 
@@ -89,7 +89,7 @@ projects' own source, in the open, by github.com/x0on/rushes-parts: nobody stand
 
 ### What to know about these parts
 
-Three things that are true today, written down so nobody has to find them out:
+Four things that are true today, written down so nobody has to find them out:
 
 - **A Mac's own FFmpeg comes first.** Where a Mac already has FFmpeg (Homebrew's, for one), Rushes uses it, and
   downloads its own only where there is none. An FFmpeg Rushes did not supply is not in the parts list: Rushes
@@ -102,6 +102,10 @@ Three things that are true today, written down so nobody has to find them out:
   the one part still behind its newer releases. The security problems fixed since need a crafted database or
   crafted queries; Rushes opens only its own catalogue, with its own queries. To be moved forward in the recipe
   (github.com/x0on/rushes-parts).
+- **One part inside PHP is LGPL: libmbfl.** It is what lets PHP read names in every alphabet, and PHP's own
+  source carries it. Its license asks two things: that its text goes with the app (it does, in the LICENSES
+  folder), and that anyone can swap in their own copy (they can: the recipe that compiles PHP is public, at
+  github.com/x0on/rushes-parts). Nothing about safety or speed.
 
 ## On this Mac: describing footage
 

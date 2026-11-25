@@ -66,9 +66,13 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .q { position: relative; flex: 1; display: flex; align-items: center; min-width: 0;
        border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface) }
   .q:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--sel-bg) }
-  .q select { width: auto; flex: none; border: 0; border-right: 1px solid var(--line); background: none; color: var(--fg);
-              font: 600 13.5px var(--font); padding: 12px 10px 12px 14px; cursor: pointer; border-radius: var(--radius) 0 0 var(--radius) }
-  .q select:focus { outline: none }
+  /* the scope: tabs under the search box, the one looked through underlined */
+  .scope { display: flex; flex-wrap: wrap; gap: 2px 4px; margin: -6px 0 10px; border-bottom: 1px solid var(--line-soft) }
+  .scope button { border: 0; background: none; color: var(--muted); font: 600 13px var(--font); padding: 7px 10px 8px; cursor: pointer;
+                  border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 6px 6px 0 0 }
+  .scope button:hover { color: var(--fg); background: var(--raised) }
+  .scope button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent) }
+  .scope small { font-weight: 500; color: var(--faint); margin-left: 3px; font-variant-numeric: tabular-nums }
   .q .mag { margin: 0 0 0 12px; color: var(--faint); display: block; flex: none }
   .q .mag svg { width: 17px; height: 17px; display: block }
   .q input { flex: 1; min-width: 0; padding: 12px 14px 12px 10px; font: 15px var(--font); border: 0; background: none; color: var(--fg) }
@@ -141,7 +145,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .results:has(> #inspect[hidden]) { grid-template-columns: minmax(0, 1fr) }   /* only before anything is found */
   @media (max-width: 1100px) { .results { grid-template-columns: minmax(0, 1fr) } .inspect { display: none } }
   @media (max-width: 640px) { .shoot .sh .n { display: none } .row { gap: 8px; padding-left: 10px; padding-right: 10px }
-                              .q select { max-width: 110px } .plain span { display: none }
+                              .plain span { display: none }
                               .with-rail { grid-template-columns: 44px minmax(0, 1fr) } #filters { position: fixed; z-index: 15; left: 44px; top: 0; bottom: 0; width: 280px } }
   /* ── the grid: every picture the same size, square corners, columns that line up ── */
   .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tile, 220px), 1fr)); gap: 4px; margin: 0 0 18px }
@@ -326,6 +330,11 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .pd-new { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px }
   #pullDlg label.f { margin-bottom: 10px }
 
+  /* one way to look at a result at a time: Properties steps aside while the large view is open, and is back after */
+  body:has(dialog#big[open]) #inspect { visibility: hidden }
+  .wall-h.also { display: flex; align-items: center; gap: 12px; color: var(--muted) }
+  .wall-h.also::before, .wall-h.also::after { content: ""; flex: 1; border-top: 1px solid var(--line) }
+
   /* ── the Viewer: Search alone, opened from the archive; nothing that only Rushes can do ── */
   .vw .topbar a.tab, .vw .topbar .pulse, .vw .topbar .slow, .vw #hMenu, .vw #hHere, .vw #hWho, .vw #pbOpen,
   .vw [data-act="copy"], .vw [data-do="copy"], .vw [data-do="proxy"], .vw #pullsDd a[href="/pull.php"] { display: none !important }
@@ -356,7 +365,8 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
   .pp .pad { padding: 8px 10px 0 }
   html.pp .work { padding-bottom: 0 !important }   /* room left for the pull's bar where it floats; here it has a place of its own */
   .pp .sbar { margin-bottom: 6px; gap: 6px }
-  .pp .q select { font-size: 12.5px; padding: 7px 6px 7px 9px } .pp .q input { font-size: 13px; padding: 7px 10px 7px 8px }
+  .pp .q input { font-size: 13px; padding: 7px 10px 7px 8px }
+  .pp .scope { margin: -2px 0 6px } .pp .scope button { font-size: 12px; padding: 4px 7px 5px }
   .pp .statline { font-size: 12px }
   .pp .btn, .pp .ghost, .pp .plain { font-size: 12px; border-radius: 4px }
   .pp .pullbar, .pp #pullbar[hidden] { position: relative; left: auto; bottom: auto; transform: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
@@ -400,7 +410,7 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
     <div class="pad">
       <div class="sbar">
         <div class="q">
-          <select id="kind" aria-label="Kind of file" title="The kind of file">
+          <select id="kind" aria-label="Kind of file" hidden>
             <option value="all">Everything</option><option value="video">Videos</option><option value="image">Images</option>
             <option value="audio">Audio</option><option value="project">Project files</option>
           </select>
@@ -414,6 +424,8 @@ if ($PP && empty($_COOKIE['rushes_who'])) setcookie('rushes_who', 'Premiere', ['
           <div class="dd" id="pullsDd" hidden></div>
         </div>
       </div>
+      <!-- What is looked through: everything, or one kind. Tabs, each with how many were found (drawScope) -->
+      <div class="scope" id="scope" role="tablist" aria-label="What to look through"></div>
       <div class="statline"><span id="stat">Start typing.</span><span id="active"></span>
         <span id="selbar" hidden><b id="selN"></b><button class="btn" id="selAdd"></button><button class="ghost" id="selClear">Clear</button></span>
         <span class="said" role="status"></span>
@@ -550,7 +562,7 @@ function drawFilters() {
         : '<p class="note">' + (f.k === 'mood' ? 'Once footage is described, its moods are here.' : 'None yet.') + '</p>';
       return '<details' + (f.closed && !on ? '' : ' open') + '><summary>' + esc(f.t) + (on ? '<small>' + esc(on) + '</small>' : '') + '</summary><div class="opts">' + body + '</div></details>';
     }).join('');
-  $('fClear').onclick = function () { resetF(); kind = 'all'; $('kind').value = 'all'; drawFilters(); run(); };
+  $('fClear').onclick = function () { resetF(); kind = 'all'; $('kind').value = 'all'; drawScope(); drawFilters(); run(); };
   $('filters').querySelectorAll('input[type=radio]').forEach(function (i) {
     i.onchange = function () {
       const k = i.name.slice(2);
@@ -575,7 +587,21 @@ fetch('search.php?facets=1').then(function (r) { return r.json(); }).then(functi
   drawFilters();
 }).catch(function () {});
 
-$('kind').onchange = function () { kind = this.value; run(); };
+$('kind').onchange = function () { kind = this.value; drawScope(); run(); };
+// The scope, as tabs under the search box: Everything, or one kind of file. Each says how many the last search
+// found of it, where that is known: a search of everything counts every kind; a search of one kind counts that one.
+let SCOPE = {};
+function drawScope() {
+  $('scope').innerHTML = Array.from($('kind').options).map(function (o) {
+    const n = SCOPE[o.value];
+    return '<button type="button" role="tab" aria-selected="' + (o.value === kind) + '" data-scope="' + o.value + '">' + esc(o.textContent) +
+      (n === undefined ? '' : ' <small>' + n.toLocaleString() + '</small>') + '</button>'; }).join('');
+}
+$('scope').onclick = function (e) {
+  const b = e.target.closest('[data-scope]'); if (!b || b.dataset.scope === kind) return;
+  $('kind').value = b.dataset.scope; $('kind').onchange();
+};
+drawScope();
 function showFilters(on) {
   $('filters').hidden = !on; $('fBtn').setAttribute('aria-pressed', on); store('filters', on ? '1' : '');
 }
@@ -585,7 +611,6 @@ showFilters(store('filters') === '1');
 // Every filter that is on, beside the count, with its ✕: a closed panel never hides one.
 function drawActive() {
   const on = [];
-  if (kind !== 'all') on.push(['kind', '', $('kind').selectedOptions[0].textContent]);
   FILTERS.forEach(function (f) {
     if (f.one && F[f.k] && f.k !== 'sort') on.push([f.k, '', labelOf(f, F[f.k])]);
     if (f.many) F[f.k].forEach(function (v) { on.push([f.k, v, f.t + ': ' + labelOf(f, v)]); });
@@ -612,7 +637,7 @@ async function run(more) {
   drawActive();
   const words = $('q').value.trim();
   if (!words && !filtering() && kind === 'all') {
-    total = 0; videos = { count: 0, moments: 0, rows: [] }; $('stat').textContent = 'Start typing.';
+    total = 0; videos = { count: 0, moments: 0, rows: [] }; $('stat').textContent = 'Start typing.'; SCOPE = {}; drawScope();
     clearSel(); quiet($('inspect')); $('inspect').hidden = true; return draw();
   }
   const p = new URLSearchParams({ q: words, kind: kind, limit: PAGE, offset: offset, byname: 1 });
@@ -641,6 +666,11 @@ async function run(more) {
     (vc ? vc.toLocaleString() + ' video' + (vc === 1 ? '' : 's') + ' · ' + (videos.moments || 0).toLocaleString() + ' moment' + (videos.moments === 1 ? '' : 's') + ' in the footage · ' : '') +
     (total ? total.toLocaleString() + ' file' + (total === 1 ? '' : 's') + (d.bytes ? ' · ' + tb(d.bytes) : '')
            : vc ? 'no file names match' : '0 files');
+  // how many of each kind, for the tabs: every video found by what it shows is a video found
+  SCOPE = {};
+  if (kind === 'all') { Array.from($('kind').options).forEach(function (o) { SCOPE[o.value] = (d.counts || {})[o.value] || 0; }); SCOPE.all = total + vc; SCOPE.video = (SCOPE.video || 0) + vc; }
+  else SCOPE[kind] = total + vc;
+  drawScope();
   if (!more) clearSel();
   draw();
   remember(words);
@@ -672,11 +702,8 @@ function pager() {
   const want = {}; [0, n - 1, page - 2, page - 1, page, page + 1, page + 2, vp - 1, vp].forEach(function (i) { if (i >= 0 && i < n) want[i] = 1; });
   let nums = '', last = -1;
   Object.keys(want).map(Number).sort(function (a, b) { return a - b; }).forEach(function (i) { if (i > last + 1) nums += '<span class="dim">…</span>'; nums += btn(i, i + 1, i < vp ? 'found by what it shows' : 'found by name'); last = i; });
-  const fp = n - vp;
   return '<nav class="pager" aria-label="Pages of results">' + btn(page - 1, '‹', 'The page before') + nums + btn(page + 1, '›', 'The next page') +
-    '<span class="note">Page ' + (page + 1) + ' of ' + n.toLocaleString() + ' · ' +
-      (vp && fp ? 'pages 1' + (vp > 1 ? '–' + vp : '') + ': found by what they show · ' + (fp > 1 ? 'pages ' + (vp + 1) + '–' + n : 'page ' + n) + ': found by name'
-                : vp ? 'found by what they show' : 'found by name') + '</span></nav>';
+    '<span class="note">Page ' + (page + 1) + ' of ' + n.toLocaleString() + '</span></nav>';
 }
 
 function fail(what, detail) {
@@ -861,13 +888,14 @@ function draw() {
   // taking it out of the box widens it again. Offered, never applied by itself.
   if ((videos.suggest || []).length) html += '<div class="sugg">Narrow it: ' + videos.suggest.map(function (x) {
     return '<button class="fchip" data-sugg="' + esc(x[0]) + '" title="' + x[1].toLocaleString() + ' of these videos">' + esc(x[0]) + '</button>'; }).join('') + '</div>';
-  // One page, one grid: a page of videos found by what they show, or (after those) a page found by name
+  // One page, one grid: a page of videos found by what they show, or (after those) a page found by name. It is one
+  // list: where the first kind ends and the second begins, on that page only, a line says so.
+  if (vPages() && page === vPages()) html += '<div class="wall-h also" title="From here on: the words are in the name or the folder, not (yet) in what the footage shows">Also found by name</div>';
   if (page < vPages()) {
     html += view === 'list' ? videoRows(vshow) : '<div class="wall">' + vshow.map(function (x) { return videoTile(x[0], x[1]); }).join('') + '</div>';
   } else if (view === 'wall') {
     const pics = files.filter(function (r) { return r.kind === 'video' || r.kind === 'image'; });
     const rest = files.filter(function (r) { return r.kind !== 'video' && r.kind !== 'image'; });
-    if (vPages()) html += '<div class="wall-h">Found by name: these have the words in their name or folder, not (yet) in what they show</div>';
     if (pics.length) html += '<div class="wall">' + pics.map(fileTile).join('') + '</div>';
     if (rest.length) html += (pics.length ? '<div class="wall-h">Other files</div>' : '') + listHTML(rest);
   } else html += listHTML(files);
@@ -1351,6 +1379,7 @@ async function loadVersions(box, st, where) {
 // The big view: a double-click; ‹ › walk through what was found without closing
 let bigAt = -1;
 function openBig(el, dl) {
+  quiet($('inspect'));                               // one place to look: what Properties was playing stops, and it steps aside (CSS) while this is open
   const all = items(); bigAt = all.indexOf(el);
   $('bigPrev').disabled = bigAt <= 0; $('bigNext').disabled = bigAt >= all.length - 1;
   if (!$('big').open) $('big').showModal();
@@ -1592,7 +1621,7 @@ if (RUSHES.premiere) (function () {
     return label;
   }
   const ready = function () { $('ppGo').disabled = busy || !PULL || !$('ppTo').value; };
-  ownMenu($('kind')); const toLabel = ownMenu($('ppTo'), 'up right');
+  const toLabel = ownMenu($('ppTo'), 'up right');
   const wasRefresh = refreshPull;
   refreshPull = async function () { await wasRefresh(); ready(); if (!$('ppList').hidden) clips(); };
 
@@ -1698,7 +1727,7 @@ if (RUSHES.premiere) (function () {
 if (RUSHES.viewer) (function () {
   const q = $('q'), ph = q.placeholder, bar = $('pullbar');
   q.disabled = true; q.placeholder = 'Reading the catalogue…';
-  $('kind').querySelectorAll('option[value="audio"], option[value="project"]').forEach(function (o) { o.remove(); });
+  $('kind').querySelectorAll('option[value="audio"], option[value="project"]').forEach(function (o) { o.remove(); }); drawScope();
   const brand = document.querySelector('.topbar .brand'); if (brand) brand.removeAttribute('href');
   VIEWER.missing = function (what) { q.placeholder = 'The catalogue is not beside this page'; $('stat').textContent = 'This page reads its lists from _rushes/viewer, beside it on the archive, and "' + what + '" is not there. Open the Viewer from the archive itself, not a copy of it.'; };
   VIEWER.ready.then(function (info) {

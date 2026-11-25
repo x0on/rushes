@@ -127,7 +127,9 @@ class Parts(unittest.TestCase):
         self.assertIn("x0on/rushes-parts", ff["url"]); self.assertIn("x0on/rushes-parts", php["url"], "FFmpeg and PHP are the ones compiled from source, in the open")
         self.assertEqual(sorted(php["sha256"]), [f"php-{php['version']}-cli-macos-{c}.tar.gz" for c in ("aarch64", "x86_64")], "PHP for each chip, each with its fingerprint")
         self.assertIn("is not the one parts.json names", build)
-        self.assertFalse([n for n in self.parts if n in ("GMP", "libiconv")], "no LGPL library inside PHP")
+        self.assertFalse([n for n in self.parts if n in ("GMP", "libiconv")], "GMP and libiconv are not inside PHP")
+        # 0.15.6: mbstring is built in, and it carries libmbfl (LGPL). It was inside the app and on no list.
+        self.assertEqual(self.parts["libmbfl"].get("license_file"), "libmbfl.txt", "libmbfl is inside PHP's mbstring: listed, with its license text")
         asked = re.search(r"AI_PACKAGES = \[(.*)\]\n", ingest).group(1)
         for k in ("mlx-vlm", "mlx-whisper", "scenedetect", "huggingface_hub"):
             self.assertRegex(asked, re.escape(k) + r"(\[[^\]]*\])?==" + re.escape(self.parts[k]["version"]) + '"', f"{k} is asked for at the version listed")
