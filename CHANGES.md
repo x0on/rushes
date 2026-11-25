@@ -3,6 +3,10 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.1 — November 2026
+
+- **The Viewer's editors: a field for the name and a field for the address.** Setup asked for both on one line with a comma between, which nobody types that way: two addresses pasted in were refused, and nothing was saved. Each editor is a row now, name beside address, with an empty row to add one; emptying a row takes that editor out. What is missing is said by the editor's own name.
+
 ## 0.15.0 — November 2026
 
 - **The Viewer: Search for the people who have no Rushes.** A page on the archive itself, **Rushes Viewer.html** at its top, opened by a double click from any computer that reaches the archive: nothing to install, nothing running, no questions, and it works with the Mac off. It is Rushes' own Search (the grid, the filters, the pages, a click to play, a double click for the large view), so what changes in Search changes there. It shows the videos and pictures inside the archive, as they were at the last daily copy of the catalogue, and says that date at its top. The Rushes app on a Mac writes it again each day, after an update, and when Setup changes. It answers as Rushes does: a test asks both the same questions and fails when one answer differs.

@@ -207,4 +207,11 @@ case "$(P "$R/cut.txt")" in *"says 2 clips, and 1 could be read"*) ok "a request
 printf 'Hi, can you send me the kite video?' > "$R/none.txt"
 case "$(P "$R/none.txt")" in *"No request found"*) ok "an email with no request in it says so" ;; *) no "none" ;; esac
 [ "$(curl -s "$U/db/pulls.php?list=1" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["pulls"]))')" = 2 ] && ok "and only the requests that could be read made a pull" || no "how many pulls"
+# Setup → The Viewer: each editor a name and an address, in fields of their own
+SV() { curl -s -o /dev/null -c "$R/jar" -b "$R/jar" -d _pass=rushes "$U/db/admin.php"; curl -s -L -b "$R/jar" -d _save=1 -d name=Rushes "$@" "$U/setup.php"; }
+SV --data-urlencode "v_name[0]=Alex" --data-urlencode "v_mail[0]=alex@example.org" --data-urlencode "v_name[1]=Jo Lee" --data-urlencode "v_mail[1]=jo.lee@example.org" --data-urlencode "v_name[2]=" --data-urlencode "v_mail[2]=" > /dev/null
+curl -s "$U/db/find.php?viewer=1" | grep -q '"editors":\[{"name":"Alex","email":"alex@example.org"},{"name":"Jo Lee","email":"jo.lee@example.org"}\]' && ok "editors typed in Setup, a name and an address each, reach the Viewer" || no "setup editors: $(grep -o '"viewer":.*' "$W/settings.json")"
+SV --data-urlencode "v_name[0]=" --data-urlencode "v_mail[0]=alex@example.org" | grep -q "alex@example.org needs a name beside it" && ok "an address without a name: said plainly, nothing saved" || no "half a row"
+SV --data-urlencode "v_name[0]=Alex" --data-urlencode "v_mail[0]=alex@example.org" --data-urlencode "v_name[1]=" --data-urlencode "v_mail[1]=" > /dev/null
+curl -s "$U/db/find.php?viewer=1" | grep -q '"editors":\[{"name":"Alex","email":"alex@example.org"}\]' && ok "a row emptied takes that editor out" || no "taking one out"
 echo "viewer: all checks pass"

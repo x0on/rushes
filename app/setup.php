@@ -159,14 +159,16 @@ if (($_POST['_save'] ?? '') === '1') {
     }
     $s['sources'] = $kept;
 
-    // The Viewer's editors: who a request can be sent to, a line each ("Name, address"). Only here, in this
-    // archive's own settings: the Viewer's page carries them to the people who open it.
-    if (isset($_POST['v_editors'])) {
+    // The Viewer's editors: who a request can be sent to, a name and an address each, in fields of their own.
+    // Only here, in this archive's own settings: the Viewer's page carries them to the people who open it.
+    // A row left empty is no editor (that is how one is taken out); a row half filled says what is missing.
+    if (isset($_POST['v_name'])) {
         $eds = [];
-        foreach (preg_split('/\R/', (string)$_POST['v_editors']) as $l) {
-            [$n, $m] = array_map('trim', explode(',', $l, 2) + ['', '']);
+        foreach ((array)$_POST['v_name'] as $i => $n) {
+            $n = trim((string)$n); $m = trim((string)($_POST['v_mail'][$i] ?? ''));
             if ($n === '' && $m === '') continue;
-            if ($n === '' || !filter_var($m, FILTER_VALIDATE_EMAIL)) { $bad[] = 'The Viewer\'s editors: “' . mb_substr($l, 0, 60) . '” is not a name, a comma and an email address.'; continue; }
+            if ($n === '') { $bad[] = 'The Viewer: ' . $m . ' needs a name beside it, the one people will choose.'; continue; }
+            if (!filter_var($m, FILTER_VALIDATE_EMAIL)) { $bad[] = 'The Viewer: ' . $n . ($m === '' ? ' needs an email address.' : '’s address, “' . mb_substr($m, 0, 60) . '”, is not an email address.'); continue; }
             $eds[] = ['name' => mb_substr($n, 0, 60), 'email' => $m];
         }
         $s['viewer']['editors'] = $eds;
@@ -373,6 +375,10 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
   details.sub[open] > summary .val { display: none }
   details.sub { padding-left: 22px } details.sub > summary { margin-left: -22px }
   label.f > small { display: block; color: var(--muted); font-size: 12px; margin-top: 5px }
+  /* the Viewer's editors: a name and an address side by side, a row each */
+  .veds > span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); font-weight: 650; margin: 0 0 5px }
+  .veds .row2 { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr); gap: 8px; margin: 0 0 8px; max-width: 720px }
+  .veds input[type=email] { width: 100%; padding: 9px 11px; font: 13.5px var(--font); color: var(--fg); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg) }
   .tools-h { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 650; margin: 26px 0 10px }
   /* the structure section */
   h3.sub-h { font-size: 13px; font-weight: 650; margin: 22px 0 6px; padding-top: 16px; border-top: 1px solid var(--line-soft) }
@@ -1035,8 +1041,14 @@ $shelfShown = !shelf_chosen() ? '(the folder you choose above)' : (shelf_is_top(
         <summary><h2>The Viewer<?= $tip('Search for the people who have no Rushes: a page the Rushes app on a Mac writes onto the archive each day (“Rushes Viewer.html”, at its top). They open it from there, look, gather clips, and send them to an editor as a request in an email. The editor pastes that email into Search (Pulls → Paste a request).') ?><?= $here_('viewer') ?></h2>
           <span class="val"><?= $veds ? $e(implode(', ', array_column($veds, 'name'))) : 'No editor to send requests to yet' ?></span>
           <span class="chg">Change</span></summary>
-        <label class="f"><span>The editors a request can be sent to<?= $tip('A line each: the name, a comma, the email address. The names are what people choose from in the Viewer; the address is where their email goes. They are written into the Viewer the next time it is made.') ?></span>
-          <textarea name="v_editors" rows="3" style="min-height:0" placeholder="Alex, alex@example.org"><?= $e(implode("\n", array_map(fn($x) => ($x['name'] ?? '') . ', ' . ($x['email'] ?? ''), $veds))) ?></textarea></label>
+        <div class="f veds"><span>The editors a request can be sent to<?= $tip('The name is what people choose from in the Viewer; the address is where their email goes. To take an editor out, empty both fields. They are written into the Viewer the next time it is made, a minute or two after saving.') ?></span>
+          <?php foreach (array_merge($veds, [['name' => '', 'email' => '']]) as $i => $x): ?>
+          <div class="row2">
+            <input type="text" name="v_name[<?= $i ?>]" value="<?= $e($x['name'] ?? '') ?>" placeholder="<?= $i < count($veds) ? 'Name' : 'Add an editor: the name' ?>" aria-label="Editor’s name" maxlength="60">
+            <input type="email" name="v_mail[<?= $i ?>]" value="<?= $e($x['email'] ?? '') ?>" placeholder="Email address" aria-label="Editor’s email address">
+          </div>
+          <?php endforeach ?>
+        </div>
         <div class="btns sec-save"><button class="btn" type="submit">Save</button></div>
       </details>
 
