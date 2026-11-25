@@ -43,6 +43,30 @@
    "license_file": "static-php-cli.txt"
   },
   {
+   "name": "python-xxhash",
+   "version": "4.1.0",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://pypi.org/project/xxhash/4.1.0/",
+   "credits": "xxHash (python-xxhash)",
+   "sha256": {
+    "xxhash-4.1.0-cp312-cp312-macosx_11_0_arm64.whl": "163e47667ae6449ddbcb58aff4b9a32e937473cdca927fe74e0685919b226d88",
+    "xxhash-4.1.0-cp312-cp312-macosx_10_13_x86_64.whl": "05bf1466e7eab5980d21bd4b40613d551ab0076543fb82d7568222e11641712d"
+   },
+   "license_file": "python-xxhash.txt"
+  },
+  {
+   "name": "xxHash",
+   "version": "",
+   "license": "BSD-2-Clause",
+   "where": "in the app",
+   "url": "https://github.com/Cyan4973/xxHash",
+   "credits": "xxHash (python-xxhash)",
+   "license_file": "xxHash.txt",
+   "inside": "python-xxhash",
+   "note": "the version python-xxhash 4.1.0 carries"
+  },
+  {
    "name": "OpenSSL",
    "version": "3.6.2",
    "license": "Apache-2.0",

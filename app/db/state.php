@@ -692,7 +692,7 @@ echo json_encode([
             // its drive report is late while it works: a drive not answering (said on the page, not hidden)
             'drives_late' => ($hv['at'] && !$hv['fresh'] && $mac && !$mac_stale) || $hv['stuck'] !== '',
             'drive_stuck' => $hv['stuck'],
-            'how'     => $hv['how'], 'ver' => $hv['ver'],
+            'how'     => $hv['how'], 'ver' => $hv['ver'], 'proof' => $hv['proof'],
             // the version on the archive; a helper with another one updates itself
             'current' => (waiting_read() ?? ['helper' => ''])['helper'],
             'paused'  => (bool)$ctl['paused'],

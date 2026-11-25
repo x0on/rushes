@@ -363,12 +363,13 @@ function dedupe_rules_write(): ?array {
 // What the helper reported. 'fresh' is false once it has been quiet for a
 // minute and a half — the helper stopped, so the list may be out of date.
 function helper_volumes(): array {
-    $vols = []; $at = 0; $os = ''; $ver = ''; $how = ''; $host = ''; $an = []; $stuck = '';
+    $vols = []; $at = 0; $os = ''; $ver = ''; $proof = ''; $how = ''; $host = ''; $an = []; $stuck = '';
     foreach (@file(web_dir() . '/helper-volumes.tsv') ?: [] as $l) {
         $f = explode("\t", rtrim($l, "\n"));
         if ($f[0] === 'at') $at = (int)$f[1];
         elseif ($f[0] === 'os') $os = $f[1];
         elseif ($f[0] === 'ver') $ver = $f[1] ?? '';
+        elseif ($f[0] === 'proof') $proof = $f[1] ?? '';
         elseif ($f[0] === 'how') $how = $f[1] ?? '';
         elseif ($f[0] === 'host') $host = $f[1] ?? '';
         elseif ($f[0] === 'stuck') $stuck = $f[1] ?? '';
@@ -397,7 +398,7 @@ function helper_volumes(): array {
     }
     unset($v);
     return ['at' => $at, 'os' => $os, 'fresh' => $at && time() - $at < 90,
-            'ver' => $ver, 'how' => $how, 'host' => $host, 'analysis' => $an, 'stuck' => $stuck,
+            'ver' => $ver, 'proof' => $proof, 'how' => $how, 'host' => $host, 'analysis' => $an, 'stuck' => $stuck,
             'vols' => array_values($vols)];
 }
 

@@ -3,6 +3,12 @@
 One number for all of Rushes: the pages, the helper's code, Rushes Helper and
 Rushes Watcher (`app/VERSION`; see [DEVELOPING.md](DEVELOPING.md#versions)).
 
+## 0.15.3 — November 2026
+
+- **Copies are proven with XXH3-128 again, and get their ASC MHL record.** The part that computes it (xxHash) was not in the app: it went missing from the build's folder between 3 October and 9 November, the build said nothing, and the app fell back to another fingerprint (BLAKE2) and said nothing either. Every copy made meanwhile was verified as it was made, just as safely. What was lost: no ASC MHL record was written, and **Check copies** did nothing. xxHash is back inside the app.
+- **It cannot go missing unseen again.** The build stops when xxHash, or any license text, is not there; it then opens the app it has built and looks for every part, and keeps that as a report beside the zip (`Rushes <version> build report.txt`). GitHub looks into every published release the same way (Actions → *what is inside the release*): a release lacking a part shows red, with the line that says which.
+- **Rushes says which fingerprint it uses.** Overview, beside the helper: *copies proven with XXH3-128 (ASC MHL)*. An app built without it says so in amber there, on the Check copies switch, and once in Activity.
+
 ## 0.15.2 — November 2026
 
 - **Newer parts, for their security fixes.** The Python inside the app goes from 3.12.11 to 3.12.16. FFmpeg, where Rushes downloads it (Install the AI, or the first proxy on a Mac that has none), goes from 6.0 of 2023 to 9.1, now from Martin Riedl's builds, checked against his published fingerprint as before. PHP stays at 8.5.8: php.net is further on, but the ready-made builds Rushes uses stop there. It moves when Rushes builds PHP itself.

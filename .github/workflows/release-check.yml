@@ -1,0 +1,31 @@
+# Every published release is opened and looked into: is every part that should be inside the app really inside it?
+# (mac/check_app.py). A release that lacks one shows red here, under Actions → "what is inside the release", and
+# the lines say which. It exists because a part once went missing from the build and nothing said so.
+name: what is inside the release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release to look into (v0.15.3)
+        required: true
+permissions:
+  contents: read
+jobs:
+  inside:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - name: Download the release's apps
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release download "$TAG" --pattern "Rushes*.zip" --dir got
+      - name: What is inside each
+        run: |
+          bad=0
+          for z in got/*.zip; do python3 mac/check_app.py "$z" || bad=1; echo; done
+          exit $bad

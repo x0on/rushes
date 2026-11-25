@@ -2156,6 +2156,7 @@ def report_forever(every=20):
             stuck = watch_feeding() or _net_stuck[0] or (_looking[0] if late or (not at and _looking[0]) else "")
             body = urllib.parse.urlencode({"volumes": "\n".join(lines), "os": sys.platform,
                                            "an": ("ready" if py else "missing" if apple_chip() else "nochip") + "\t" + os.path.basename(model.rstrip("/")) + "\t" + (speech or ""),
+                                           "proof": new_fingerprint()[1],     # which fingerprint proves its copies: said, never assumed
                                            "ver": VERSION, "how": "service" if "--service" in sys.argv else "window",
                                            "host": platform.node(), "stuck": stuck}).encode()
             urllib.request.urlopen(NAS_URL + "/db/report.php", data=body, timeout=15).read()

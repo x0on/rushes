@@ -35,13 +35,21 @@ foreach (explode("\n", $raw) as $l) {
 $os  = preg_replace('/[^a-z0-9]/', '', strtolower((string)($_POST['os'] ?? '')));
 $ver  = preg_replace('/[^a-f0-9]/', '', (string)($_POST['ver'] ?? ''));
 $how  = in_array($_POST['how'] ?? '', ['service', 'window'], true) ? $_POST['how'] : '';
+// The fingerprint its copies are proven with: xxh128 as intended, blake2b when the app was built without XXH3
+// (then no ASC MHL record is written and no copy is checked later: said on Overview, and once in Activity).
+$proof = in_array($_POST['proof'] ?? '', ['xxh128', 'blake2b'], true) ? $_POST['proof'] : '';
+$was = ''; foreach (@file(web_dir() . '/helper-volumes.tsv') ?: [] as $l) if (str_starts_with($l, "proof\t")) $was = trim(substr($l, 6));
+if ($proof === 'blake2b' && $was !== 'blake2b') {
+    require_once __DIR__ . '/activity.php';
+    activity_add('changed', 'The helper proves its copies with BLAKE2, not XXH3: this app was built without it. Copies are still verified as they are made, but no ASC MHL record is written and Check copies does nothing. Update Rushes.', 'Rushes');
+}
 $host = substr(preg_replace('/[^A-Za-z0-9 ._-]/', '', (string)($_POST['host'] ?? '')), 0, 60);
 // a drive it has been waiting on for minutes, named, so the page can say which
 $stuck = substr(str_replace(["\t", "\n"], ' ', (string)($_POST['stuck'] ?? '')), 0, 300);
 // Whether it can describe footage, and with which models: shown on Describe.
 $an = implode("\t", array_map(fn($x) => substr(preg_replace('/[^A-Za-z0-9 ._\/-]/', '', $x), 0, 120),
                                array_slice(explode("\t", (string)($_POST['an'] ?? '')), 0, 3)));
-$out = "at\t" . time() . "\nos\t$os\nver\t$ver\nhow\t$how\nhost\t$host\nan\t$an\nstuck\t$stuck\n" . implode("\n", $keep) . "\n";
+$out = "at\t" . time() . "\nos\t$os\nver\t$ver\nproof\t$proof\nhow\t$how\nhost\t$host\nan\t$an\nstuck\t$stuck\n" . implode("\n", $keep) . "\n";
 
 // Beside, then rename: a page reading half a list would offer half the drives.
 $f = web_dir() . '/helper-volumes.tsv';

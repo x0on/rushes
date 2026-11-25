@@ -79,6 +79,10 @@ DROP_LIB = ["test", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3", 
             "pydoc_data", "unittest/test", "site-packages", "config-3.12-darwin", "turtle.py"]
 
 
+import json
+WHEELS = next(x for x in json.load(open(os.path.join(HERE, "parts.json"), encoding="utf-8"))["parts"] if x["name"] == "python-xxhash")["sha256"]
+
+
 def run(*a, **k):
     print("+", " ".join(a)); subprocess.run(a, check=True, **k)
 
@@ -133,11 +137,18 @@ for a, z in ARCHES.items():
     # Python packages the helper uses beyond Python itself, as ready-made wheels
     # for this chip, next to this file (pip download --only-binary=:all:
     # --platform macosx_11_0_arm64 / macosx_10_9_x86_64 --python-version 3.12 xxhash).
-    for w in [] if WATCHER else os.listdir(TOP):            # the Watcher needs nothing beyond Python
-        if w.endswith(".whl") and ("-cp312-" in w) and ({"arm64": "arm64", "x86_64": "x86_64"}[a] in w or "universal2" in w):
-            with zipfile.ZipFile(os.path.join(TOP, w)) as zf:
-                zf.extractall(site)
-            print(f"  {a}: {w}")
+    # Exactly the wheels parts.json names, each checked against its fingerprint. One missing stops the build: built
+    # without xxHash (the wheels were not beside this file, and nothing said so) the app fell back to another
+    # fingerprint, wrote no ASC MHL record and checked no copy later, from October to November 2026.
+    import hashlib
+    for w, want in ({} if WATCHER else WHEELS).items():     # the Watcher needs nothing beyond Python
+        if a not in w: continue
+        f = os.path.join(TOP, w)
+        if not os.path.exists(f): sys.exit(f"build.py: {w} is not beside build.py (pip download --only-binary=:all: --platform … xxhash=={w.split('-')[1]}). Not built.")
+        if hashlib.sha256(open(f, "rb").read()).hexdigest() != want: sys.exit(f"build.py: {w} is not the one parts.json names (its fingerprint differs). Not built.")
+        with zipfile.ZipFile(f) as zf:
+            zf.extractall(site)
+        print(f"  {a}: {w}")
     dyn = os.path.join(std, "lib-dynload")
     for f in os.listdir(dyn):
         if f.startswith(("_tkinter", "_test", "_xxtest", "_ctypes_test")) or "xxlimited" in f:
@@ -184,10 +195,6 @@ import json, uuid, datetime
 PARTS = json.load(open(os.path.join(HERE, "parts.json"), encoding="utf-8"))["parts"]
 if WATCHER:                                        # the Watcher carries Python and nothing else
     PARTS = [x for x in PARTS if x["name"] in ("CPython", "python-build-standalone")]
-# ponytail: python-xxhash is not in the list because the app is built without it (no wheel beside this file; the
-# helper then uses BLAKE2). A build that carries the wheel must add it to parts.json and licenses/ first:
-if not WATCHER and any(w.startswith("xxhash-") and w.endswith(".whl") for w in os.listdir(TOP)) and not any(x["name"] == "python-xxhash" for x in PARTS):
-    sys.exit("build.py: an xxhash wheel is beside build.py, but python-xxhash is not in parts.json. Add it (and its license text), or take the wheel away. Not built.")
 os.makedirs(os.path.join(C, "Resources", "LICENSES"))
 for x in PARTS:
     if x["where"] != "in the app" or not x.get("license_file"): continue
@@ -256,3 +263,5 @@ z = os.path.join(OUT, NAME + ".zip")
 run("zip", "-qry", z, NAME + ".app", cwd=OUT)
 print(f"\n{z}: {os.path.getsize(z) / 1e6:.1f} MB")
 sbom(os.path.join(OUT, f"{NAME} {VERSION}.cdx.json"))
+# and what is really inside what was built, looked for in the zip itself: kept beside it as the build's report
+run(sys.executable, os.path.join(HERE, "check_app.py"), z, os.path.join(OUT, f"{NAME} {VERSION} build report.txt"))

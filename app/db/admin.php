@@ -1895,15 +1895,19 @@ function drawHelper(d) {
   const late = h.drives_late ? (h.drive_stuck ? h.drive_stuck.split('/').pop() + ' is not answering (' + h.drive_stuck + ')' : 'a connected drive is not answering') +
     ', so cards plugged in now may not show in Ingest — eject it in Finder, or connect it again' : '';
   const ask = h.fresh ? '' : ' Switches work once it is heard from again.';
+  // which fingerprint proves its copies: XXH3-128 as intended, or BLAKE2 from an app built without XXH3 (said, never silent)
+  const proven = h.proof === 'xxh128' ? ' · copies proven with XXH3-128 (ASC MHL)' : '';
+  const weak = h.proof === 'blake2b' ? 'This app was built without XXH3, so its copies are proven with BLAKE2: verified as they are made, but no ASC MHL record is written and Check copies does nothing. Update Rushes.' : '';
   const now = Date.now();
   el.innerHTML = (h.label
       ? '<div class="hgrp">Rushes Helper on ' + esc(h.label) + '</div>' +
         '<div class="row"><span class="dot ' + (h.fresh ? (h.paused ? '' : 'ok') : 'off') + '"></span><div class="t">' +
-          esc([how, seen].filter(Boolean).join(' · ') + updating + doing) + (late ? '<small>' + esc(late) + '</small>' : '') + '</div>' +
+          esc([how, seen].filter(Boolean).join(' · ') + updating + doing + proven) + (late ? '<small>' + esc(late) + '</small>' : '') +
+          (weak ? '<small class="amber"><b>' + esc(weak) + '</b></small>' : '') + '</div>' +
           '<button class="btn quiet" data-h="nudge">Try again now</button></div>' +
         sw(!h.paused, ['resume', 'pause'], 'Copy footage', 'Off pauses copying at its next safe point; nothing is lost.' + ask, !h.fresh) +
         sw(!h.describe_paused, ['describe-resume', 'describe-pause'], 'Describe footage', 'Off pauses describing; files already described are kept. Copying is not affected.' + ask, !h.fresh) +
-        sw(!h.check_paused, ['check-resume', 'check-pause'], 'Check copies', 'When there is nothing to copy, copies are read again against their fingerprints. Off pauses it; where it got to is kept.' + ask, !h.fresh) +
+        sw(!h.check_paused, ['check-resume', 'check-pause'], 'Check copies', (weak ? 'Not running: no ASC MHL record to check against (see above). ' : '') + 'When there is nothing to copy, copies are read again against their fingerprints. Off pauses it; where it got to is kept.' + ask, !h.fresh) +
         sw(!h.no_reconnect, ['reconnect-on', 'reconnect-off'], 'Reconnect network drives by itself', 'When a drive drops, the helper connects it again once the server answers. Off: you connect drives in Finder.', false)
       : '') +
     '<div class="hgrp" style="margin-top:10px">' + (ON_MAC ? 'On this Mac' : 'On the server') + '</div>' +

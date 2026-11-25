@@ -140,6 +140,32 @@ class Parts(unittest.TestCase):
         self.assertIn('sys.exit(f"build.py: no license text for', build, "the build stops without one")
         self.assertIn('.cdx.json")', build, "and writes the parts list beside the app")
 
+    def test_a_build_without_xxhash_is_refused_and_a_release_without_it_shows(self):
+        # the part that went missing once (October–November 2026): the build stops, the app that lacks it fails its check
+        import io, zipfile, tempfile
+        sys.path.insert(0, os.path.join(self.root, "mac")); import check_app
+        build = self.rd("mac", "build.py")
+        self.assertIn("xxh", self.parts["python-xxhash"]["name"]); self.assertEqual(self.parts["python-xxhash"]["where"], "in the app")
+        self.assertEqual(len(self.parts["python-xxhash"]["sha256"]), 2, "a wheel for each chip, each with its fingerprint")
+        self.assertIn('is not beside build.py', build); self.assertIn('"check_app.py"), z,', build, "what was built is looked into before it is handed over")
+        self.assertIn("mac/check_app.py", self.rd(".github", "workflows", "release-check.yml"), "and every published release is, on GitHub")
+        self.assertIn("xxhash==" + self.parts["python-xxhash"]["version"], self.rd(".github", "workflows", "tests.yml"), "the checks run with the same xxHash, so with the fingerprint the app uses")
+        import ingest; self.assertEqual(ingest.new_fingerprint()[1], "xxh128", "and these checks are running with it now")
+        def app(with_xx):
+            f = os.path.join(tempfile.mkdtemp(), "Rushes.zip"); R = "Rushes.app/Contents/Resources/"
+            with zipfile.ZipFile(f, "w") as z:
+                z.writestr("Rushes.app/Contents/Info.plist", "x")
+                for n in ["rushes_helper.py", "CREDITS.md", "pages/VERSION", "pages/db/find.php", "pages/db/viewer.js", "runner.py", "ingest.py", "analyze.py", "release.py",
+                          "php-arm64", "php-x86_64", "python-arm64/bin/python3", "python-x86_64/bin/python3"]: z.writestr(R + n, "0.0.0")
+                z.writestr(R + "release.sig", "rushes-release 1\n")
+                for x in self.parts.values():
+                    if x["where"] == "in the app" and x.get("license_file"): z.writestr(R + "LICENSES/" + x["license_file"], "L" * 300)
+                if with_xx:
+                    for c in ("arm64", "x86_64"): z.writestr(R + f"python-{c}/lib/python3.12/site-packages/xxhash/_xxhash.cpython-312-darwin.so", "so")
+            return check_app.check(f)
+        self.assertFalse([l for l in app(True) if l.startswith("FAIL")], "an app with every part passes")
+        self.assertEqual([l[:21] for l in app(False) if l.startswith("FAIL")], ["FAIL xxHash for arm64", "FAIL xxHash for x86_6"], "one without xxHash fails, and says which part")
+
     def test_what_credits_says_ships_in_the_app_is_in_the_list(self):
         rows = [l.split("|") for l in self.rd("CREDITS.md").splitlines() if "| Inside Rushes Helper |" in l]
         self.assertGreater(len(rows), 3)
